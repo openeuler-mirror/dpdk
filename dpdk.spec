@@ -90,6 +90,7 @@ cp -ar ./%{target}/lib/librte_ethdev.so* $RPM_BUILD_ROOT/lib64/
 cp -ar ./%{target}/lib/librte_mbuf.so* $RPM_BUILD_ROOT/lib64/
 cp -ar ./%{target}/lib/librte_cmdline.so* $RPM_BUILD_ROOT/lib64/
 cp -ar ./%{target}/lib/librte_net.so* $RPM_BUILD_ROOT/lib64/
+cp -ar ./%{target}/lib/librte_meter.so* $RPM_BUILD_ROOT/lib64/
 
 sed -ri 's,(RTE_MACHINE=).*,\1%{machine},' %{target}/.config
 sed -ri 's,(RTE_APP_TEST=).*,\1n,'         %{target}/.config
@@ -158,3 +159,5 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Wed May 27 2020 openEuler dpdk version-release
+-first package
