@@ -1,10 +1,16 @@
 Name: dpdk
 Version: 19.11
-Release: 0
+Release: 1
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  19.11
 Source: %{name}-%{version}.tar.xz
+
+Patch0: CVE-2020-10725.patch
+Patch1: CVE-2020-10722.patch
+Patch2: CVE-2020-10723.patch
+Patch3: CVE-2020-10724.patch
+Patch4: CVE-2020-10726.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -57,7 +63,12 @@ Requires:       dpdk = %{version}
 This package contains the pdump tool for capture the dpdk network packets.
 
 %prep
-%setup -q
+%setup -q -n %{name}-%{version}
+%patch0 -p1
+%patch1 -p1
+%patch2 -p1
+%patch3 -p1
+%patch4 -p1
 
 %build
 namer=%{kern_devel_ver}
@@ -159,5 +170,8 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Wed May 27 2020 chenxiang<rose.chen@huawei.com> - 19.11-1
+-fix CVE-2020-10722 CVE-2020-10723 CVE-2020-10724 CVE-2020-10725
+
 * Wed May 27 2020 openEuler dpdk version-release
 -first package
