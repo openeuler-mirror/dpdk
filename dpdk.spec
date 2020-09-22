@@ -33,6 +33,9 @@ BuildRequires: numactl-devel libconfig-devel
 BuildRequires: module-init-tools uname-build-checks libnl3 libmnl
 BuildRequires: glibc glibc-devel libibverbs libibverbs-devel libmnl-devel
 BuildRequires: texlive
+
+Requires: pyelftools
+
 %define kern_devel_ver   %(uname -r)
 %description
 DPDK core includes kernel modules, core libraries and tools.
