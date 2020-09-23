@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 19.11
-Release: 1
+Release: 2
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  19.11
@@ -33,6 +33,9 @@ BuildRequires: numactl-devel libconfig-devel
 BuildRequires: module-init-tools uname-build-checks libnl3 libmnl
 BuildRequires: glibc glibc-devel libibverbs libibverbs-devel libmnl-devel
 BuildRequires: texlive
+
+Requires: python3-pyelftools
+
 %define kern_devel_ver   %(uname -r)
 %description
 DPDK core includes kernel modules, core libraries and tools.
@@ -170,6 +173,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Wed Sep 23 2020 hubble_zhu<hubble_zhu@qq.com> - 19.11-2
+-Add requires for dpdk-pmdinfo
+
 * Wed May 27 2020 chenxiang<rose.chen@huawei.com> - 19.11-1
 -fix CVE-2020-10722 CVE-2020-10723 CVE-2020-10724 CVE-2020-10725
 
