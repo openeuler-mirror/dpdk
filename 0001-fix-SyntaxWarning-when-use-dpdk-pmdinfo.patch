@@ -1,0 +1,37 @@
+From 01a36309d05433defc97c81d27eccd781f1fbae3 Mon Sep 17 00:00:00 2001
+From: hubble_zhu <hubble_zhu@qq.com>
+Date: Fri, 25 Sep 2020 10:14:09 +0800
+Subject: [PATCH] fix SyntaxWarning when use dpdk-pmdinfo
+
+---
+ usertools/dpdk-pmdinfo.py | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/usertools/dpdk-pmdinfo.py b/usertools/dpdk-pmdinfo.py
+index 069a3bf..12f2073 100755
+--- a/usertools/dpdk-pmdinfo.py
++++ b/usertools/dpdk-pmdinfo.py
+@@ -539,7 +539,7 @@ def scan_for_autoload_pmds(dpdk_path):
+         return
+ 
+     (autoload_path, scannedfile) = readelf.search_for_autoload_path()
+-    if (autoload_path is None or autoload_path is ""):
++    if not autoload_path:
+         if (raw_output is False):
+             print("No autoload path configured in %s" % dpdk_path)
+         return
+@@ -561,7 +561,10 @@ def main(stream=None):
+ 
+     pcifile_default = "./pci.ids"  # For unknown OS's assume local file
+     if platform.system() == 'Linux':
+-        pcifile_default = "/usr/share/hwdata/pci.ids"
++        # hwdata is the legacy location, misc is supported going forward
++        pcifile_default = "/usr/share/misc/pci.ids"
++        if not os.path.exists(pcifile_default):
++            pcifile_default = "/usr/share/hwdata/pci.ids"
+     elif platform.system() == 'FreeBSD':
+         pcifile_default = "/usr/local/share/pciids/pci.ids"
+         if not os.path.exists(pcifile_default):
+-- 
+2.23.0
+
