@@ -1,0 +1,5 @@
+version_control: git
+src_repo: git://dpdk.org/dpdk-stable
+tag_prefix: v
+seperator: .
+
