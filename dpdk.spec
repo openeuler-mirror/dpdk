@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 19.11
-Release: 4
+Release: 5
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  19.11
@@ -11,6 +11,8 @@ Patch1: CVE-2020-10722.patch
 Patch2: CVE-2020-10723.patch
 Patch3: CVE-2020-10724.patch
 Patch4: CVE-2020-10726.patch
+Patch5: kni-fix-build-with-Linux-5.6.patch
+Patch6: v2-kni-fix-build-with-Linux-5.9.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -72,6 +74,8 @@ This package contains the pdump tool for capture the dpdk network packets.
 %patch2 -p1
 %patch3 -p1
 %patch4 -p1
+%patch5 -p1
+%patch6 -p1
 
 %build
 namer=%{kern_devel_ver}
@@ -173,6 +177,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Fri Nov 20 2020 seuzw<930zhaowei@163.com> - 19.11-5
+-kni: fix build with Linux 5.6 and 5.9
+
 * Wed Sep 23 2020 hubble_zhu<hubble_zhu@qq.com> - 19.11-4
 -update pyelftools to python3-pyelftools 
 
