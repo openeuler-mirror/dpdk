@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 19.11
-Release: 3
+Release: 4
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  19.11
@@ -11,8 +11,10 @@ Patch1: CVE-2020-10722.patch
 Patch2: CVE-2020-10723.patch
 Patch3: CVE-2020-10724.patch
 Patch4: CVE-2020-10726.patch
-
-Patch5: 0001-fix-SyntaxWarning-when-use-dpdk-pmdinfo.patch 
+Patch5: 0001-fix-SyntaxWarning-when-use-dpdk-pmdinfo.patch
+Patch6: CVE-2020-14378.patch
+Patch7: CVE-2020-14376-CVE-2020-14377.patch
+Patch8: fix-pool-allocation.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -75,8 +77,9 @@ This package contains the pdump tool for capture the dpdk network packets.
 %patch3 -p1
 %patch4 -p1
 %patch5 -p1
-
-
+%patch6 -p1
+%patch7 -p1
+%patch8 -p1
 
 %build
 namer=%{kern_devel_ver}
@@ -178,6 +181,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Wed Nov 25 2020 chxssg<chxssg@qq.com> - 19.11-4
+-fix CVE-2020-14376 CVE-2020-14377 CVE-2020-14378
+
 * Fri Sep 25 2020 hubble_zhu<hubble_zhu@qq.com> - 19.11-3
 -fix SyntaxWarning when use dpdk-pmdinfo
 
