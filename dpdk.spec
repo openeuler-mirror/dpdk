@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 19.11
-Release: 6
+Release: 7
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  19.11
@@ -16,6 +16,8 @@ Patch6: v2-kni-fix-build-with-Linux-5.9.patch
 Patch7: CVE-2020-14378.patch
 Patch8: CVE-2020-14376-CVE-2020-14377.patch
 Patch9: fix-pool-allocation.patch  
+Patch10: CVE-2020-14374.patch
+Patch11: CVE-2020-14375.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -82,6 +84,8 @@ This package contains the pdump tool for capture the dpdk network packets.
 %patch7 -p1
 %patch8 -p1
 %patch9 -p1
+%patch10 -p1
+%patch11 -p1
 
 %build
 namer=%{kern_devel_ver}
@@ -183,6 +187,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Mon Dec 28 2020 huangliming<huangliming5@huawei.com> - 19.11-7
+-fix CVE-2020-14374 CVE-2020-14375
+
 * Wed Nov 25 2020 chxssg<chxssg@qq.com> - 19.11-6
 -fix CVE-2020-14376 CVE-2020-14377 CVE-2020-14378
 
