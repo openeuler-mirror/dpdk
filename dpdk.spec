@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 19.11
-Release: 6
+Release: 7
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  19.11
@@ -16,6 +16,7 @@ Patch6: CVE-2020-14376-CVE-2020-14377.patch
 Patch7: fix-pool-allocation.patch
 Patch8: CVE-2020-14374.patch
 Patch9: CVE-2020-14375.patch
+Patch10: fix-populate-with-small-virtual-chunks.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -82,6 +83,7 @@ This package contains the pdump tool for capture the dpdk network packets.
 %patch7 -p1
 %patch8 -p1
 %patch9 -p1
+%patch10 -p1
 
 %build
 namer=%{kern_devel_ver}
@@ -184,6 +186,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Thu Jan 28 2021 huangliming<huangliming5@huawei.com> - 19.11-7
+- fix populate with small virtual chunks
+
 * Thu Jan 28 2021 huangliming<huangliming5@huawei.com> - 19.11-6
 -fix yum update dpdk-tools conflict with dpdk-devel
 

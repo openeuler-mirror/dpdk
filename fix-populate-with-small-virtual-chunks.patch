@@ -1,0 +1,112 @@
+From 43503c59adee6cae7069da23e105c24e044bf72c Mon Sep 17 00:00:00 2001
+From: Olivier Matz <olivier.matz@6wind.com>
+Date: Fri, 17 Jan 2020 15:57:52 +0100
+Subject: mempool: fix populate with small virtual chunks
+
+To populate a mempool with a virtual area, the mempool code calls
+rte_mempool_populate_iova() for each iova-contiguous area. It happens
+(rarely) that this area is too small to store one object. In this case,
+rte_mempool_populate_iova() returns an error, which is forwarded by
+rte_mempool_populate_virt().
+
+This case should not throw an error in rte_mempool_populate_virt().
+Instead, the area that is too small should just be ignored.
+
+To fix this issue, change the return value of
+rte_mempool_populate_iova() to 0 when no object can be populated,
+so it can be ignored by the caller. As this would be an API/ABI change,
+only do this modification internally for now.
+
+Fixes: 354788b60cfd ("mempool: allow populating with unaligned virtual area")
+Cc: stable@dpdk.org
+
+Signed-off-by: Olivier Matz <olivier.matz@6wind.com>
+Tested-by: Anatoly Burakov <anatoly.burakov@intel.com>
+Tested-by: Alvin Zhang <alvinx.zhang@intel.com>
+
+Conflict:NA
+Reference:http://git.dpdk.org/dpdk/patch/?id=43503c59adee6cae7069da23e105c24e044bf72c
+Signed-off-by:wuchangsheng <wuchangsheng2@huawei.com>
+---
+ lib/librte_mempool/rte_mempool.c | 30 +++++++++++++++++++++++++-----
+ 1 file changed, 25 insertions(+), 5 deletions(-)
+
+diff --git a/lib/librte_mempool/rte_mempool.c b/lib/librte_mempool/rte_mempool.c
+index aea5972..08906df 100644
+--- a/lib/librte_mempool/rte_mempool.c
++++ b/lib/librte_mempool/rte_mempool.c
+@@ -297,8 +297,8 @@ mempool_ops_alloc_once(struct rte_mempool *mp)
+  * zone. Return the number of objects added, or a negative value
+  * on error.
+  */
+-int
+-rte_mempool_populate_iova(struct rte_mempool *mp, char *vaddr,
++static int
++__rte_mempool_populate_iova(struct rte_mempool *mp, char *vaddr,
+ 	rte_iova_t iova, size_t len, rte_mempool_memchunk_free_cb_t *free_cb,
+ 	void *opaque)
+ {
+@@ -332,7 +332,7 @@ rte_mempool_populate_iova(struct rte_mempool *mp, char *vaddr,
+ 		off = RTE_PTR_ALIGN_CEIL(vaddr, RTE_MEMPOOL_ALIGN) - vaddr;
+ 
+ 	if (off > len) {
+-		ret = -EINVAL;
++		ret = 0;
+ 		goto fail;
+ 	}
+ 
+@@ -343,7 +343,7 @@ rte_mempool_populate_iova(struct rte_mempool *mp, char *vaddr,
+ 
+ 	/* not enough room to store one object */
+ 	if (i == 0) {
+-		ret = -EINVAL;
++		ret = 0;
+ 		goto fail;
+ 	}
+ 
+@@ -356,6 +356,21 @@ fail:
+ 	return ret;
+ }
+ 
++int
++rte_mempool_populate_iova(struct rte_mempool *mp, char *vaddr,
++	rte_iova_t iova, size_t len, rte_mempool_memchunk_free_cb_t *free_cb,
++	void *opaque)
++{
++	int ret;
++
++	ret = __rte_mempool_populate_iova(mp, vaddr, iova, len, free_cb,
++					opaque);
++	if (ret == 0)
++		ret = -EINVAL;
++
++	return ret;
++}
++
+ static rte_iova_t
+ get_iova(void *addr)
+ {
+@@ -406,8 +421,10 @@ rte_mempool_populate_virt(struct rte_mempool *mp, char *addr,
+ 				break;
+ 		}
+ 
+-		ret = rte_mempool_populate_iova(mp, addr + off, iova,
++		ret = __rte_mempool_populate_iova(mp, addr + off, iova,
+ 			phys_len, free_cb, opaque);
++		if (ret == 0)
++			continue;
+ 		if (ret < 0)
+ 			goto fail;
+ 		/* no need to call the free callback for next chunks */
+@@ -415,6 +432,9 @@ rte_mempool_populate_virt(struct rte_mempool *mp, char *addr,
+ 		cnt += ret;
+ 	}
+ 
++	if (cnt == 0)
++		return -EINVAL;
++
+ 	return cnt;
+ 
+  fail:
+-- 
+cgit v1.0
