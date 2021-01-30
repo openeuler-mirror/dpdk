@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 19.11
-Release: 6
+Release: 7
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  19.11
@@ -155,6 +155,7 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 %dir %{_datadir}/dpdk
 %{_datadir}/dpdk/usertools/*.py
 %{_datadir}/dpdk/usertools/*.sh
+%{_sbindir}/dpdk-devbind
 /lib/modules/%{kern_devel_ver}/extra/dpdk/*
 /lib64/librte*.so*
 
@@ -164,13 +165,13 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 %{_datadir}/dpdk/buildtools
 %{_datadir}/dpdk/%{target}
 %{_datadir}/dpdk/examples
-%{_sbindir}/*
 %{_bindir}/*
 %{_libdir}/*
 %dir /usr/include/%{name}-%{version}/
 /usr/include/%{name}-%{version}/*
 %dir /usr/include/dpdk/
 /usr/include/dpdk/*
+%exclude /usr/bin/dpdk-pdump
 
 %files doc
 #%doc %{_docdir}/dpdk
@@ -187,6 +188,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Thu Jan 28 2021 huangliming<huangliming5@huawei.com> - 19.11-7
+-fix yum update dpdk-tools conflict with dpdk-devel
+
 * Thu Jan 28 2021 huangliming<huangliming5@huawei.com> - 19.11-6
 - fix compilation error of max-inline-insns-single-o2 limit reached
 
