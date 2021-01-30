@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 19.11
-Release: 5
+Release: 6
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  19.11
@@ -17,6 +17,7 @@ Patch7: CVE-2020-14376-CVE-2020-14377.patch
 Patch8: fix-pool-allocation.patch
 Patch9: CVE-2020-14374.patch
 Patch10: CVE-2020-14375.patch
+Patch11: fix-compilation-error-of-max-inline-insns-single-o2-.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -84,6 +85,7 @@ This package contains the pdump tool for capture the dpdk network packets.
 %patch8 -p1
 %patch9 -p1
 %patch10 -p1
+%patch11 -p1
 
 %build
 namer=%{kern_devel_ver}
@@ -185,6 +187,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Thu Jan 28 2021 huangliming<huangliming5@huawei.com> - 19.11-6
+- fix compilation error of max-inline-insns-single-o2 limit reached
+
 * Tue Dec 1 2020 chxssg<chxssg@qq.com> - 19.11-5
 -fix CVE-2020-14374 CVE-2020-14375
 
