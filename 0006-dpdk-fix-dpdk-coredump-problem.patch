@@ -1,0 +1,35 @@
+From a78efd329d52e1adf813eb1b76352c2680b75961 Mon Sep 17 00:00:00 2001
+From: zhuhengbo <zhuhengbo1@huawei.com>
+Date: Thu, 19 Mar 2020 17:49:53 +0800
+Subject: [PATCH] dpdk: modification summary
+
+Signed-off-by: zhuhengbo <zhuhengbo1@huawei.com>
+---
+ lib/librte_eal/linux/eal/eal_interrupts.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/lib/librte_eal/linux/eal/eal_interrupts.c b/lib/librte_eal/linux/eal/eal_interrupts.c
+index 1955324..3d73cce 100644
+--- a/lib/librte_eal/linux/eal/eal_interrupts.c
++++ b/lib/librte_eal/linux/eal/eal_interrupts.c
+@@ -1070,7 +1070,7 @@ eal_intr_thread_main(__rte_unused void *arg)
+ 		 */
+ 		if (epoll_ctl(pfd, EPOLL_CTL_ADD, intr_pipe.readfd,
+ 						&pipe_event) < 0) {
+-			rte_panic("Error adding fd to %d epoll_ctl, %s\n",
++			RTE_LOG(ERR, EAL, "Error adding fd to %d epoll_ctl, %s\n",
+ 					intr_pipe.readfd, strerror(errno));
+ 		}
+ 		numfds++;
+@@ -1089,7 +1089,7 @@ eal_intr_thread_main(__rte_unused void *arg)
+ 			 */
+ 			if (epoll_ctl(pfd, EPOLL_CTL_ADD,
+ 					src->intr_handle.fd, &ev) < 0){
+-				rte_panic("Error adding fd %d epoll_ctl, %s\n",
++				RTE_LOG(ERR, EAL, "Error adding fd %d epoll_ctl, %s\n",
+ 					src->intr_handle.fd, strerror(errno));
+ 			}
+ 			else
+-- 
+2.19.1
+

@@ -1,0 +1,73 @@
+From c2d29472c3ddd1b2d66f34ae4025c9e074913eaa Mon Sep 17 00:00:00 2001
+From: zhuhengbo <zhuhengbo1@huawei.com>
+Date: Thu, 19 Mar 2020 17:38:13 +0800
+Subject: [PATCH] dpdk: master core donot set affinity in libstorage
+
+Signed-off-by: zhuhengbo <zhuhengbo1@huawei.com>
+---
+ lib/librte_eal/common/eal_private.h   |  6 ++++++
+ lib/librte_eal/linux/eal/eal.c        | 12 ++++++++++++
+ lib/librte_eal/linux/eal/eal_thread.c |  2 +-
+ 3 files changed, 19 insertions(+), 1 deletion(-)
+
+diff --git a/lib/librte_eal/common/eal_private.h b/lib/librte_eal/common/eal_private.h
+index 8a9d493..597fd02 100644
+--- a/lib/librte_eal/common/eal_private.h
++++ b/lib/librte_eal/common/eal_private.h
+@@ -444,4 +444,10 @@ rte_option_usage(void);
+ uint64_t
+ eal_get_baseaddr(void);
+ 
++/**
++  * Determine whether the master core needs to set affinity.
++  * The master thread in the LibStorage application cannot set affinity.
++  **/
++bool
++eal_is_master_set_affinity(void);
+ #endif /* _EAL_PRIVATE_H_ */
+diff --git a/lib/librte_eal/linux/eal/eal.c b/lib/librte_eal/linux/eal/eal.c
+index a3bb9c6..8bb1842 100644
+--- a/lib/librte_eal/linux/eal/eal.c
++++ b/lib/librte_eal/linux/eal/eal.c
+@@ -103,6 +103,13 @@ static char runtime_dir[PATH_MAX];
+ 
+ static const char *default_runtime_dir = "/var/run";
+ 
++static bool master_set_affinity = true;
++bool
++eal_is_master_set_affinity(void)
++{
++	return master_set_affinity;
++}
++
+ int
+ eal_create_runtime_dir(void)
+ {
+@@ -985,6 +992,11 @@ rte_eal_init(int argc, char **argv)
+ 	strlcpy(logid, p ? p + 1 : argv[0], sizeof(logid));
+ 	thread_id = pthread_self();
+ 
++	/* Master thread don't set affinity in LibStorage application */
++	if (strstr(logid, "LibStorage") != NULL) {
++		master_set_affinity = false;
++	}
++
+ 	eal_reset_internal_config(&internal_config);
+ 
+ 	/* set log level as early as possible */
+diff --git a/lib/librte_eal/linux/eal/eal_thread.c b/lib/librte_eal/linux/eal/eal_thread.c
+index 379773b..5b06108 100644
+--- a/lib/librte_eal/linux/eal/eal_thread.c
++++ b/lib/librte_eal/linux/eal/eal_thread.c
+@@ -84,7 +84,7 @@ void eal_thread_init_master(unsigned lcore_id)
+ 	RTE_PER_LCORE(_lcore_id) = lcore_id;
+ 
+ 	/* set CPU affinity */
+-	if (eal_thread_set_affinity() < 0)
++	if (eal_is_master_set_affinity() && eal_thread_set_affinity() < 0)
+ 		rte_panic("cannot set affinity\n");
+ }
+ 
+-- 
+2.19.1
+
