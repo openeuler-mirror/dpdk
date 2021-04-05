@@ -1,0 +1,188 @@
+From 8b1f62be35c36c78793d3fd3935b9898cf957673 Mon Sep 17 00:00:00 2001
+From: wuchangsheng <wuchangsheng2@huawei.com>
+Date: Tue, 30 Mar 2021 19:45:21 +0800
+Subject: [PATCH] dpdk-support-gazelle-11-eal-memory-add-sec
+
+---
+ lib/librte_eal/linux/eal/eal_memory.c | 99 +++++++++++++++++++++++----
+ 1 file changed, 87 insertions(+), 12 deletions(-)
+
+diff --git a/lib/librte_eal/linux/eal/eal_memory.c b/lib/librte_eal/linux/eal/eal_memory.c
+index db70ac8..ac81f43 100644
+--- a/lib/librte_eal/linux/eal/eal_memory.c
++++ b/lib/librte_eal/linux/eal/eal_memory.c
+@@ -1880,9 +1880,9 @@ getFileSize(int fd)
+  * in order to form a contiguous block in the virtual memory space
+  */
+ static int
+-eal_legacy_hugepage_attach(void)
++eal_legacy_hugepage_attach(const int switch_pri_and_sec, const int sec_idx)
+ {
+-	struct rte_mem_config *mcfg = rte_eal_get_configuration()->mem_config;
++	struct rte_mem_config *mcfg = NULL;
+ 	struct hugepage_file *hp = NULL;
+ 	unsigned int num_hp = 0;
+ 	unsigned int i = 0;
+@@ -1890,6 +1890,22 @@ eal_legacy_hugepage_attach(void)
+ 	off_t size = 0;
+ 	int fd, fd_hugepage = -1;
+ 
++	struct rte_config *rte_cfg = NULL;
++	struct internal_config *internal_cfg = NULL;
++	char *runtime_dir = NULL;
++
++	if (!switch_pri_and_sec) {
++		runtime_dir = rte_eal_get_runtime_dir();
++		rte_cfg = rte_eal_get_configuration();
++		internal_cfg = &internal_config;
++	} else {
++		runtime_dir = rte_eal_sec_get_runtime_dir(sec_idx);
++		rte_cfg = rte_eal_sec_get_configuration(sec_idx);
++		internal_cfg = rte_eal_sec_get_internal_config(sec_idx);
++	}
++	
++	mcfg = rte_cfg->mem_config;
++
+ 	if (aslr_enabled() > 0) {
+ 		RTE_LOG(WARNING, EAL, "WARNING: Address Space Layout Randomization "
+ 				"(ASLR) is enabled in the kernel.\n");
+@@ -1897,10 +1913,10 @@ eal_legacy_hugepage_attach(void)
+ 				"into secondary processes\n");
+ 	}
+ 
+-	fd_hugepage = open(eal_hugepage_data_path(), O_RDONLY);
++	fd_hugepage = open(eal_sec_hugepage_data_path(runtime_dir), O_RDONLY);
+ 	if (fd_hugepage < 0) {
+ 		RTE_LOG(ERR, EAL, "Could not open %s\n",
+-				eal_hugepage_data_path());
++				eal_sec_hugepage_data_path(runtime_dir));
+ 		goto error;
+ 	}
+ 
+@@ -1908,7 +1924,7 @@ eal_legacy_hugepage_attach(void)
+ 	hp = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd_hugepage, 0);
+ 	if (hp == MAP_FAILED) {
+ 		RTE_LOG(ERR, EAL, "Could not mmap %s\n",
+-				eal_hugepage_data_path());
++				eal_sec_hugepage_data_path(runtime_dir));
+ 		goto error;
+ 	}
+ 
+@@ -1955,13 +1971,13 @@ eal_legacy_hugepage_attach(void)
+ 		}
+ 
+ 		/* find segment data */
+-		msl = rte_mem_virt2memseg_list(map_addr);
++		msl = rte_sec_mem_virt2memseg_list(map_addr, rte_cfg);
+ 		if (msl == NULL) {
+ 			RTE_LOG(DEBUG, EAL, "%s(): Cannot find memseg list\n",
+ 				__func__);
+ 			goto fd_error;
+ 		}
+-		ms = rte_mem_virt2memseg(map_addr, msl);
++		ms = rte_sec_mem_virt2memseg(map_addr, msl, rte_cfg);
+ 		if (ms == NULL) {
+ 			RTE_LOG(DEBUG, EAL, "%s(): Cannot find memseg\n",
+ 				__func__);
+@@ -1976,8 +1992,16 @@ eal_legacy_hugepage_attach(void)
+ 			goto fd_error;
+ 		}
+ 
++		/* No hugefile lock is required in PRI_AND_SEC mode, close it 
++		 * to avoid opening too much fd.
++		 */
++		if (internal_cfg->pri_and_sec) {
++			close(fd);
++			fd = -1;
++		}
++
+ 		/* store segment fd internally */
+-		if (eal_memalloc_set_seg_fd(msl_idx, ms_idx, fd) < 0)
++		if (eal_sec_memalloc_set_seg_fd(msl_idx, ms_idx, fd, switch_pri_and_sec, sec_idx) < 0)
+ 			RTE_LOG(ERR, EAL, "Could not store segment fd: %s\n",
+ 				rte_strerror(rte_errno));
+ 	}
+@@ -2026,10 +2050,17 @@ rte_eal_hugepage_init(void)
+ }
+ 
+ int
+-rte_eal_hugepage_attach(void)
++rte_eal_hugepage_attach(const int switch_pri_and_sec, const int sec_idx)
+ {
+-	return internal_config.legacy_mem ?
+-			eal_legacy_hugepage_attach() :
++	struct internal_config *internal_cfg;
++	
++	if (!switch_pri_and_sec)
++		internal_cfg = &internal_config;
++	else
++		internal_cfg = rte_eal_sec_get_internal_config(sec_idx);
++	
++	return internal_cfg->legacy_mem ?
++			eal_legacy_hugepage_attach(switch_pri_and_sec, sec_idx) :
+ 			eal_hugepage_attach();
+ }
+ 
+@@ -2238,6 +2269,50 @@ memseg_primary_init_32(void)
+ 	return 0;
+ }
+ 
++static int
++eal_sec_set_num_pages(struct internal_config *internal_cfg,
++	struct hugepage_info *used_hp)
++{
++	int ret;
++	int hp_sz_idx;
++	uint64_t memory[RTE_MAX_NUMA_NODES];
++
++	if (!internal_cfg || !used_hp) {
++		return -1;
++	}
++
++	for (hp_sz_idx = 0;
++			hp_sz_idx < (int) internal_cfg->num_hugepage_sizes;
++			hp_sz_idx++) {
++		struct hugepage_info *hpi;
++		hpi = &internal_cfg->hugepage_info[hp_sz_idx];
++		used_hp[hp_sz_idx].hugepage_sz = hpi->hugepage_sz;
++	}
++
++	for (hp_sz_idx = 0; hp_sz_idx < RTE_MAX_NUMA_NODES; hp_sz_idx++)
++		memory[hp_sz_idx] = internal_cfg->socket_mem[hp_sz_idx];
++
++	ret = calc_num_pages_per_socket(memory,
++			internal_cfg->hugepage_info, used_hp,
++			internal_cfg->num_hugepage_sizes);
++
++	return ret;
++}
++
++static int
++eal_sec_get_num_pages(const struct hugepage_info *used_hp,
++		uint64_t hugepage_sz, int socket)
++{
++	int hp_sz_idx;
++	
++	for (hp_sz_idx = 0; hp_sz_idx < MAX_HUGEPAGE_SIZES; hp_sz_idx++) {
++		if (used_hp[hp_sz_idx].hugepage_sz == hugepage_sz)
++			return used_hp[hp_sz_idx].num_pages[socket];
++	}
++	
++	return 0;
++}
++
+ static int __rte_unused
+ memseg_primary_init(void)
+ {
+@@ -2424,7 +2499,7 @@ memseg_primary_init(void)
+ 			}
+ 			msl = &mcfg->memsegs[msl_idx++];
+ 
+-			if (alloc_memseg_list(msl, pagesz, n_segs,
++			if (alloc_memseg_list(msl, pagesz, cur_n_segs,
+ 					socket_id, cur_seglist))
+ 				goto out;
+ 
+-- 
+2.23.0
+
