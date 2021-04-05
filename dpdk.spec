@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 19.11
-Release: 7
+Release: 8
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  19.11
@@ -17,6 +17,28 @@ Patch7: fix-pool-allocation.patch
 Patch8: CVE-2020-14374.patch
 Patch9: CVE-2020-14375.patch
 Patch10: fix-populate-with-small-virtual-chunks.patch
+Patch11: 0001-dpdk-add-secure-compile-option-and-fPIC-option.patch
+Patch12: 0002-dpdk-add-secure-option-in-makefile.patch
+Patch13: 0003-dpdk-bugfix-the-deadlock-in-rte_eal_init.patch
+Patch14: 0004-dpdk-master-core-donot-set-affinity-in-libstorage.patch
+Patch15: 0005-dpdk-change-the-log-level-in-prepare_numa.patch
+Patch16: 0006-dpdk-fix-dpdk-coredump-problem.patch
+Patch17: 0007-dpdk-add-secure-compile-option-in-pmdinfogen-Makefil.patch
+Patch18: 0008-dpdk-fix-cpu-flag-error-in-Intel-R-Xeon-R-CPU-E5-262.patch
+Patch19: 0009-dpdk-support-gazelle-01-include.patch
+Patch20: 0009-dpdk-support-gazelle-02-include-base.patch
+Patch21: 0009-dpdk-support-gazelle-03-memory.patch
+Patch22: 0009-dpdk-support-gazelle-04-cfg-options.patch
+Patch23: 0009-dpdk-support-gazelle-05-fbarray-hugepageinfo.patch
+Patch24: 0009-dpdk-support-gazelle-06-memalloc.patch
+Patch25: 0009-dpdk-support-gazelle-07-eal-add-sec-attach.patch
+Patch26: 0009-dpdk-support-gazelle-08-eal-add-config.patch
+Patch27: 0009-dpdk-support-gazelle-09-eal-add-libnetapi.patch
+Patch28: 0009-dpdk-support-gazelle-10-eal-memory-inter-config.patch
+Patch29: 0009-dpdk-support-gazelle-11-eal-memory-add-sec.patch
+Patch30: 0010-dpdk-fix-error-in-clearing-secondary-process-memseg-lists.patch
+Patch31: 0011-dpdk-fix-coredump-when-primary-process-attach-without-shared-file.patch
+Patch32: 0012-dpdk-fix-fbarray-memseg-destory-error-during-detach.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -73,11 +95,33 @@ This package contains the pdump tool for capture the dpdk network packets.
 
 %prep
 %setup -q -n %{name}-%{version}
+%patch11 -p1
+%patch12 -p1
+%patch13 -p1
+%patch14 -p1
+%patch15 -p1
+%patch16 -p1
+%patch17 -p1
+%patch18 -p1
 %patch0 -p1
 %patch1 -p1
 %patch2 -p1
 %patch3 -p1
 %patch4 -p1
+%patch19 -p1
+%patch20 -p1
+%patch21 -p1
+%patch22 -p1
+%patch23 -p1
+%patch24 -p1
+%patch25 -p1
+%patch26 -p1
+%patch27 -p1
+%patch28 -p1
+%patch29 -p1
+%patch30 -p1
+%patch31 -p1
+%patch32 -p1
 %patch5 -p1
 %patch6 -p1
 %patch7 -p1
@@ -186,6 +230,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Mon Apr 5 2021 wu-changsheng<851744572@qq.com> - 19.11-8
+- add support for gazelle
+
 * Thu Jan 28 2021 huangliming<huangliming5@huawei.com> - 19.11-7
 - fix populate with small virtual chunks
 

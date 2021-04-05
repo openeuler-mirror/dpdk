@@ -1,0 +1,194 @@
+From d3021c3a436580dfcca2156f110c7d9125798021 Mon Sep 17 00:00:00 2001
+From: wuchangsheng <wuchangsheng2@huawei.com>
+Date: Tue, 30 Mar 2021 17:16:05 +0800
+Subject: [PATCH] dpdk-support-gazelle-08-eal-add-config
+
+---
+ lib/librte_eal/linux/eal/eal.c | 92 ++++++++++++++++++++++++++++------
+ 1 file changed, 76 insertions(+), 16 deletions(-)
+
+diff --git a/lib/librte_eal/linux/eal/eal.c b/lib/librte_eal/linux/eal/eal.c
+index 735afcd..2de9914 100644
+--- a/lib/librte_eal/linux/eal/eal.c
++++ b/lib/librte_eal/linux/eal/eal.c
+@@ -569,6 +569,45 @@ rte_config_init(void)
+ 	return 0;
+ }
+ 
++static void
++rte_sec_config_init(const int sec_idx)
++{
++	int mem_cfg_fd = -1;
++	int mmap_flags = PROT_READ | PROT_WRITE;
++
++	struct rte_config *rte_cfg = rte_eal_sec_get_configuration(sec_idx);
++	struct internal_config *internal_cfg = rte_eal_sec_get_internal_config(sec_idx);
++
++	rte_cfg->process_type = internal_cfg->process_type;
++
++	__rte_eal_config_attach(mmap_flags, &mem_cfg_fd,
++				rte_eal_sec_get_runtime_dir(sec_idx),
++				internal_cfg, rte_cfg);
++
++	close(mem_cfg_fd);
++}
++
++static int
++eal_sec_config_cleanup(const int sec_idx)
++{
++	int ret;
++	struct rte_config *lc_rte_cfg = rte_eal_sec_get_configuration(sec_idx);
++	struct internal_config *lc_internal_cfg = rte_eal_sec_get_internal_config(sec_idx);
++	char *lc_runtime_dir = rte_eal_sec_get_runtime_dir(sec_idx);
++
++	ret = munmap(lc_rte_cfg->mem_config, sizeof(*lc_rte_cfg->mem_config));
++	if (ret < 0) {
++		RTE_LOG(ERR, EAL, "Failed to unmap config memory!\n");
++		return -1;
++	}
++
++	memset(lc_rte_cfg, 0, sizeof(*lc_rte_cfg));
++	memset(lc_internal_cfg, 0, sizeof(*lc_internal_cfg));
++	memset(lc_runtime_dir, 0, PATH_MAX);
++
++	return 0;
++}
++
+ /* Unlocks hugepage directories that were locked by eal_hugepage_info_init */
+ static void
+ eal_hugedirs_unlock(void)
+@@ -604,6 +643,7 @@ eal_usage(const char *prgname)
+ 	       "  --"OPT_LEGACY_MEM"        Legacy memory mode (no dynamic allocation, contiguous segments)\n"
+ 	       "  --"OPT_SINGLE_FILE_SEGMENTS" Put all hugepage memory in single files\n"
+ 	       "  --"OPT_MATCH_ALLOCATIONS" Free hugepages exactly as allocated\n"
++	       "  --"OPT_MAP_PERFECT"       Map virtual addresses according to configured hugepage size\n"
+ 	       "\n");
+ 	/* Allow the application to print its usage message too if hook is set */
+ 	if ( rte_application_usage_hook ) {
+@@ -731,7 +771,9 @@ eal_log_level_parse(int argc, char **argv)
+ 
+ /* Parse the argument given in the command line of the application */
+ static int
+-eal_parse_args(int argc, char **argv)
++__eal_parse_args(int argc, char **argv, char *runtime_dir, const int buflen,
++		struct internal_config *internal_cfg,
++		struct rte_config *rte_cfg)
+ {
+ 	int opt, ret;
+ 	char **argvopt;
+@@ -762,7 +804,7 @@ eal_parse_args(int argc, char **argv)
+ 			goto out;
+ 		}
+ 
+-		ret = eal_parse_common_option(opt, optarg, &internal_config);
++		ret = eal_parse_common_option(opt, optarg, internal_cfg);
+ 		/* common parser is not happy */
+ 		if (ret < 0) {
+ 			eal_usage(prgname);
+@@ -785,9 +827,9 @@ eal_parse_args(int argc, char **argv)
+ 				RTE_LOG(ERR, EAL, "Could not store hugepage directory\n");
+ 			else {
+ 				/* free old hugepage dir */
+-				if (internal_config.hugepage_dir != NULL)
+-					free(internal_config.hugepage_dir);
+-				internal_config.hugepage_dir = hdir;
++				if (internal_cfg->hugepage_dir != NULL)
++					free(internal_cfg->hugepage_dir);
++				internal_cfg->hugepage_dir = hdir;
+ 			}
+ 			break;
+ 		}
+@@ -798,34 +840,34 @@ eal_parse_args(int argc, char **argv)
+ 				RTE_LOG(ERR, EAL, "Could not store file prefix\n");
+ 			else {
+ 				/* free old prefix */
+-				if (internal_config.hugefile_prefix != NULL)
+-					free(internal_config.hugefile_prefix);
+-				internal_config.hugefile_prefix = prefix;
++				if (internal_cfg->hugefile_prefix != NULL)
++					free(internal_cfg->hugefile_prefix);
++				internal_cfg->hugefile_prefix = prefix;
+ 			}
+ 			break;
+ 		}
+ 		case OPT_SOCKET_MEM_NUM:
+ 			if (eal_parse_socket_arg(optarg,
+-					internal_config.socket_mem) < 0) {
++					internal_cfg->socket_mem) < 0) {
+ 				RTE_LOG(ERR, EAL, "invalid parameters for --"
+ 						OPT_SOCKET_MEM "\n");
+ 				eal_usage(prgname);
+ 				ret = -1;
+ 				goto out;
+ 			}
+-			internal_config.force_sockets = 1;
++			internal_cfg->force_sockets = 1;
+ 			break;
+ 
+ 		case OPT_SOCKET_LIMIT_NUM:
+ 			if (eal_parse_socket_arg(optarg,
+-					internal_config.socket_limit) < 0) {
++					internal_cfg->socket_limit) < 0) {
+ 				RTE_LOG(ERR, EAL, "invalid parameters for --"
+ 						OPT_SOCKET_LIMIT "\n");
+ 				eal_usage(prgname);
+ 				ret = -1;
+ 				goto out;
+ 			}
+-			internal_config.force_socket_limits = 1;
++			internal_cfg->force_socket_limits = 1;
+ 			break;
+ 
+ 		case OPT_VFIO_INTR_NUM:
+@@ -839,7 +881,7 @@ eal_parse_args(int argc, char **argv)
+ 			break;
+ 
+ 		case OPT_CREATE_UIO_DEV_NUM:
+-			internal_config.create_uio_dev = 1;
++			internal_cfg->create_uio_dev = 1;
+ 			break;
+ 
+ 		case OPT_MBUF_POOL_OPS_NAME_NUM:
+@@ -849,11 +891,11 @@ eal_parse_args(int argc, char **argv)
+ 				RTE_LOG(ERR, EAL, "Could not store mbuf pool ops name\n");
+ 			else {
+ 				/* free old ops name */
+-				if (internal_config.user_mbuf_pool_ops_name !=
++				if (internal_cfg->user_mbuf_pool_ops_name !=
+ 						NULL)
+-					free(internal_config.user_mbuf_pool_ops_name);
++					free(internal_cfg->user_mbuf_pool_ops_name);
+ 
+-				internal_config.user_mbuf_pool_ops_name =
++				internal_cfg->user_mbuf_pool_ops_name =
+ 						ops_name;
+ 			}
+ 			break;
+@@ -914,6 +956,24 @@ eal_parse_args(int argc, char **argv)
+ 	return ret;
+ }
+ 
++static int
++eal_parse_args(int argc, char **argv)
++{
++	return __eal_parse_args(argc, argv,
++				rte_eal_get_runtime_dir(), PATH_MAX,
++				&internal_config,
++				rte_eal_get_configuration());
++}
++
++static int
++eal_sec_parse_args(int argc, char **argv, const int sec_idx)
++{
++	return __eal_parse_args(argc, argv,
++				rte_eal_sec_get_runtime_dir(sec_idx), PATH_MAX,
++				rte_eal_sec_get_internal_config(sec_idx),
++				rte_eal_sec_get_configuration(sec_idx));
++}
++
+ static int
+ check_socket(const struct rte_memseg_list *msl, void *arg)
+ {
+-- 
+2.23.0
+
