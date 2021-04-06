@@ -1,0 +1,176 @@
+From 8eea6474f37eff51eb6f9a178ec6790cf5bed53a Mon Sep 17 00:00:00 2001
+From: wuchangsheng <wuchangsheng2@huawei.com>
+Date: Tue, 30 Mar 2021 16:27:35 +0800
+Subject: [PATCH] dpdk-support-gazelle-03-cfg-options
+
+---
+ config/rte_config.h                        |  3 +-
+ lib/librte_eal/common/eal_common_options.c | 46 ++++++++++++++++++----
+ lib/librte_eal/common/eal_internal_cfg.h   |  2 +
+ lib/librte_eal/common/eal_options.h        |  7 +++-
+ 4 files changed, 49 insertions(+), 9 deletions(-)
+
+diff --git a/config/rte_config.h b/config/rte_config.h
+index d30786b..b848b1c 100644
+--- a/config/rte_config.h
++++ b/config/rte_config.h
+@@ -39,7 +39,8 @@
+ #define RTE_MAX_MEMSEG_PER_TYPE 32768
+ #define RTE_MAX_MEM_MB_PER_TYPE 65536
+ #define RTE_MAX_MEM_MB 524288
+-#define RTE_MAX_MEMZONE 2560
++#define RTE_MAX_MEMZONE 65535
++#define RTE_MAX_SECONDARY 256
+ #define RTE_MAX_TAILQ 32
+ #define RTE_LOG_DP_LEVEL RTE_LOG_INFO
+ #define RTE_BACKTRACE 1
+diff --git a/lib/librte_eal/common/eal_common_options.c b/lib/librte_eal/common/eal_common_options.c
+index a7f9c5f..34f4199 100644
+--- a/lib/librte_eal/common/eal_common_options.c
++++ b/lib/librte_eal/common/eal_common_options.c
+@@ -82,6 +82,7 @@ eal_long_options[] = {
+ 	{OPT_LEGACY_MEM,        0, NULL, OPT_LEGACY_MEM_NUM       },
+ 	{OPT_SINGLE_FILE_SEGMENTS, 0, NULL, OPT_SINGLE_FILE_SEGMENTS_NUM},
+ 	{OPT_MATCH_ALLOCATIONS, 0, NULL, OPT_MATCH_ALLOCATIONS_NUM},
++	{OPT_MAP_PERFECT,       0, NULL, OPT_MAP_PERFECT_NUM      },
+ 	{0,                     0, NULL, 0                        }
+ };
+ 
+@@ -221,6 +222,7 @@ eal_reset_internal_config(struct internal_config *internal_cfg)
+ 	internal_cfg->user_mbuf_pool_ops_name = NULL;
+ 	CPU_ZERO(&internal_cfg->ctrl_cpuset);
+ 	internal_cfg->init_complete = 0;
++	internal_cfg->map_perfect = 0;
+ }
+ 
+ static int
+@@ -1097,7 +1099,7 @@ eal_parse_iova_mode(const char *name)
+ }
+ 
+ static int
+-eal_parse_base_virtaddr(const char *arg)
++eal_parse_base_virtaddr(const char *arg, struct internal_config *conf)
+ {
+ 	char *end;
+ 	uint64_t addr;
+@@ -1120,7 +1122,7 @@ eal_parse_base_virtaddr(const char *arg)
+ 	 * it can align to 2MB for x86. So this alignment can also be used
+ 	 * on x86 and other architectures.
+ 	 */
+-	internal_config.base_virtaddr =
++	conf->base_virtaddr =
+ 		RTE_PTR_ALIGN_CEIL((uintptr_t)addr, (size_t)RTE_PGSIZE_16M);
+ 
+ 	return 0;
+@@ -1440,7 +1442,7 @@ eal_parse_common_option(int opt, const char *optarg,
+ 		}
+ 		break;
+ 	case OPT_BASE_VIRTADDR_NUM:
+-		if (eal_parse_base_virtaddr(optarg) < 0) {
++		if (eal_parse_base_virtaddr(optarg, conf) < 0) {
+ 			RTE_LOG(ERR, EAL, "invalid parameter for --"
+ 					OPT_BASE_VIRTADDR "\n");
+ 			return -1;
+@@ -1553,11 +1555,33 @@ eal_adjust_config(struct internal_config *internal_cfg)
+ }
+ 
+ int
+-eal_check_common_options(struct internal_config *internal_cfg)
++eal_sec_adjust_config(struct internal_config *internal_cfg)
+ {
+-	struct rte_config *cfg = rte_eal_get_configuration();
++	struct internal_config *internal_cfg_head;
++	internal_cfg->process_type = RTE_PROC_SECONDARY;
++
++	internal_cfg_head = rte_eal_sec_get_internal_config(0);
++	for (int i = 0; i < RTE_MAX_SECONDARY; ++i) {
++		if (!internal_cfg_head[i].pri_and_sec)
++			continue;
++		if (internal_cfg == &internal_cfg_head[i])
++			continue;
++		if (!strcmp(internal_cfg_head[i].hugefile_prefix, internal_cfg->hugefile_prefix))
++			return -EALREADY;
++	}
++
++	for (int i = 0; i < RTE_MAX_NUMA_NODES; i++)
++		internal_cfg->memory += internal_cfg->socket_mem[i];
++
++	return 0;
++}
+ 
+-	if (cfg->lcore_role[cfg->master_lcore] != ROLE_RTE) {
++int
++eal_check_common_options(struct internal_config *internal_cfg,
++		struct rte_config *cfg)
++{
++	if (!internal_cfg->pri_and_sec &&
++			cfg->lcore_role[cfg->master_lcore] != ROLE_RTE) {
+ 		RTE_LOG(ERR, EAL, "Master lcore is not enabled for DPDK\n");
+ 		return -1;
+ 	}
+@@ -1602,7 +1626,7 @@ eal_check_common_options(struct internal_config *internal_cfg)
+ 			"be specified together with --"OPT_NO_HUGE"\n");
+ 		return -1;
+ 	}
+-	if (internal_config.force_socket_limits && internal_config.legacy_mem) {
++	if (internal_cfg->force_socket_limits && internal_config.legacy_mem) {
+ 		RTE_LOG(ERR, EAL, "Option --"OPT_SOCKET_LIMIT
+ 			" is only supported in non-legacy memory mode\n");
+ 	}
+@@ -1635,6 +1659,14 @@ eal_check_common_options(struct internal_config *internal_cfg)
+ 			"-m or --"OPT_SOCKET_MEM"\n");
+ 	}
+ 
++	if (internal_cfg->map_perfect || internal_cfg->pri_and_sec) {
++		if (!internal_cfg->legacy_mem || internal_cfg->in_memory || internal_cfg->no_hugetlbfs) {
++			RTE_LOG(ERR, EAL, "Option --"OPT_LEGACY_MEM" or "OPT_IN_MEMORY" or "OPT_NO_HUGE" "
++					"is not compatible with --"OPT_MAP_PERFECT" and "OPT_PRI_AND_SEC"\n");
++			return -1;
++		}
++	}
++
+ 	return 0;
+ }
+ 
+diff --git a/lib/librte_eal/common/eal_internal_cfg.h b/lib/librte_eal/common/eal_internal_cfg.h
+index a42f349..50d5da1 100644
+--- a/lib/librte_eal/common/eal_internal_cfg.h
++++ b/lib/librte_eal/common/eal_internal_cfg.h
+@@ -82,6 +82,8 @@ struct internal_config {
+ 	rte_cpuset_t ctrl_cpuset;         /**< cpuset for ctrl threads */
+ 	volatile unsigned int init_complete;
+ 	/**< indicates whether EAL has completed initialization */
++	volatile unsigned pri_and_sec;
++	volatile unsigned map_perfect;
+ };
+ extern struct internal_config internal_config; /**< Global EAL configuration. */
+ 
+diff --git a/lib/librte_eal/common/eal_options.h b/lib/librte_eal/common/eal_options.h
+index 9855429..b42d41d 100644
+--- a/lib/librte_eal/common/eal_options.h
++++ b/lib/librte_eal/common/eal_options.h
+@@ -69,6 +69,10 @@ enum {
+ 	OPT_IOVA_MODE_NUM,
+ #define OPT_MATCH_ALLOCATIONS  "match-allocations"
+ 	OPT_MATCH_ALLOCATIONS_NUM,
++#define OPT_PRI_AND_SEC        "pri-and-sec"
++	OPT_PRI_AND_SEC_NUM,
++#define OPT_MAP_PERFECT        "map-perfect"
++	OPT_MAP_PERFECT_NUM,
+ 	OPT_LONG_MAX_NUM
+ };
+ 
+@@ -79,8 +83,9 @@ int eal_parse_common_option(int opt, const char *argv,
+ 			    struct internal_config *conf);
+ int eal_option_device_parse(void);
+ int eal_adjust_config(struct internal_config *internal_cfg);
++int eal_sec_adjust_config(struct internal_config *internal_cfg);
+ int eal_cleanup_config(struct internal_config *internal_cfg);
+-int eal_check_common_options(struct internal_config *internal_cfg);
++int eal_check_common_options(struct internal_config *internal_cfg, struct rte_config *cfg);
+ void eal_common_usage(void);
+ enum rte_proc_type_t eal_proc_type_detect(void);
+ int eal_plugins_init(void);
+-- 
+2.23.0
+
