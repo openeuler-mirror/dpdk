@@ -1,0 +1,72 @@
+From dee3ff16473b956d8cfca15baa419e5dfdf47130 Mon Sep 17 00:00:00 2001
+From: zhuhengbo <zhuhengbo1@huawei.com>
+Date: Thu, 19 Mar 2020 17:14:25 +0800
+Subject: [PATCH] dpdk: bugfix the deadlock in rte_eal_init when executes this
+ function concurrently
+
+Signed-off-by: zhuhengbo <zhuhengbo1@huawei.com>
+---
+ lib/librte_eal/linux/eal/eal.c | 14 +++++++++-----
+ 1 file changed, 9 insertions(+), 5 deletions(-)
+
+diff --git a/lib/librte_eal/linux/eal/eal.c b/lib/librte_eal/linux/eal/eal.c
+index c4233ec..a3bb9c6 100644
+--- a/lib/librte_eal/linux/eal/eal.c
++++ b/lib/librte_eal/linux/eal/eal.c
+@@ -1128,7 +1128,7 @@ rte_eal_init(int argc, char **argv)
+ 			rte_eal_init_alert("Cannot get hugepage information.");
+ 			rte_errno = EACCES;
+ 			rte_atomic32_clear(&run_once);
+-			return -1;
++			goto out;
+ 		}
+ 	}
+ 
+@@ -1152,7 +1152,7 @@ rte_eal_init(int argc, char **argv)
+ 		rte_eal_init_alert("Cannot init logging.");
+ 		rte_errno = ENOMEM;
+ 		rte_atomic32_clear(&run_once);
+-		return -1;
++		goto out;
+ 	}
+ 
+ #ifdef VFIO_PRESENT
+@@ -1160,7 +1160,7 @@ rte_eal_init(int argc, char **argv)
+ 		rte_eal_init_alert("Cannot init VFIO");
+ 		rte_errno = EAGAIN;
+ 		rte_atomic32_clear(&run_once);
+-		return -1;
++		goto out;
+ 	}
+ #endif
+ 	/* in secondary processes, memory init may allocate additional fbarrays
+@@ -1170,13 +1170,13 @@ rte_eal_init(int argc, char **argv)
+ 	if (rte_eal_memzone_init() < 0) {
+ 		rte_eal_init_alert("Cannot init memzone");
+ 		rte_errno = ENODEV;
+-		return -1;
++		goto out;
+ 	}
+ 
+ 	if (rte_eal_memory_init() < 0) {
+ 		rte_eal_init_alert("Cannot init memory");
+ 		rte_errno = ENOMEM;
+-		return -1;
++		goto out;
+ 	}
+ 
+ 	/* the directories are locked during eal_hugepage_info_init */
+@@ -1297,6 +1297,10 @@ rte_eal_init(int argc, char **argv)
+ 	rte_option_init();
+ 
+ 	return fctret;
++
++out:
++	eal_hugedirs_unlock();
++	return -1;
+ }
+ 
+ static int
+-- 
+2.19.1
+
