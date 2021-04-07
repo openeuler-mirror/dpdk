@@ -1,0 +1,26 @@
+From e7c97339d38f9d2655ca7834a99cc95b7427dd5c Mon Sep 17 00:00:00 2001
+From: zhuhengbo <zhuhengbo1@huawei.com>
+Date: Thu, 19 Mar 2020 17:53:22 +0800
+Subject: [PATCH] dpdk: add secure compile option in pmdinfogen Makefile
+
+Signed-off-by: zhuhengbo <zhuhengbo1@huawei.com>
+---
+ buildtools/pmdinfogen/Makefile | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/buildtools/pmdinfogen/Makefile b/buildtools/pmdinfogen/Makefile
+index a97a764..af41c74 100644
+--- a/buildtools/pmdinfogen/Makefile
++++ b/buildtools/pmdinfogen/Makefile
+@@ -15,6 +15,8 @@ HOSTAPP = dpdk-pmdinfogen
+ SRCS-y += pmdinfogen.c
+ 
+ HOST_CFLAGS += $(HOST_WERROR_FLAGS) -g
++HOST_CFLAGS += -fPIE -fPIC -fstack-protector-strong -D_FORTIFY_SOURCE=2 -O2 -Wall -Werror
+ HOST_CFLAGS += -I$(RTE_OUTPUT)/include
+ 
++HOST_LDFLAGS += -Wl,-z,relro,-z,now -pie
+ include $(RTE_SDK)/mk/rte.hostapp.mk
+-- 
+2.19.1
+
