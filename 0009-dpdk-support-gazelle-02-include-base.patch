@@ -1,0 +1,189 @@
+From 8b468249a77d0dc7af6732bcbc4881dba388135d Mon Sep 17 00:00:00 2001
+From: wuchangsheng <wuchangsheng2@huawei.com>
+Date: Tue, 30 Mar 2021 16:25:39 +0800
+Subject: [PATCH] dpdk-support-gazelle-02-include-base
+
+---
+ config/common_base                     |  3 +-
+ lib/librte_eal/common/eal_filesystem.h | 56 ++++++++++++++++++++++----
+ lib/librte_eal/common/eal_private.h    | 25 +++++++++++-
+ 3 files changed, 74 insertions(+), 10 deletions(-)
+
+diff --git a/config/common_base b/config/common_base
+index 7dec7ed..57b1349 100644
+--- a/config/common_base
++++ b/config/common_base
+@@ -95,7 +95,8 @@ CONFIG_RTE_MAX_MEMSEG_PER_TYPE=32768
+ CONFIG_RTE_MAX_MEM_MB_PER_TYPE=131072
+ # global maximum usable amount of VA, in megabytes
+ CONFIG_RTE_MAX_MEM_MB=524288
+-CONFIG_RTE_MAX_MEMZONE=2560
++CONFIG_RTE_MAX_MEMZONE=65535
++CONFIG_RTE_MAX_SECONDARY=256
+ CONFIG_RTE_MAX_TAILQ=32
+ CONFIG_RTE_ENABLE_ASSERT=n
+ CONFIG_RTE_LOG_DP_LEVEL=RTE_LOG_INFO
+diff --git a/lib/librte_eal/common/eal_filesystem.h b/lib/librte_eal/common/eal_filesystem.h
+index 5d21f07..e65a183 100644
+--- a/lib/librte_eal/common/eal_filesystem.h
++++ b/lib/librte_eal/common/eal_filesystem.h
+@@ -23,7 +23,8 @@
+ 
+ /* sets up platform-specific runtime data dir */
+ int
+-eal_create_runtime_dir(void);
++eal_create_runtime_dir(char *runtime_dir, const int buflen,
++		const struct internal_config *conf);
+ 
+ int
+ eal_clean_runtime_dir(void);
+@@ -34,15 +35,27 @@ eal_get_hugefile_prefix(void);
+ 
+ #define RUNTIME_CONFIG_FNAME "config"
+ static inline const char *
+-eal_runtime_config_path(void)
++__eal_runtime_config_path(const char *runtime_dir)
+ {
+ 	static char buffer[PATH_MAX]; /* static so auto-zeroed */
+ 
+-	snprintf(buffer, sizeof(buffer), "%s/%s", rte_eal_get_runtime_dir(),
++	snprintf(buffer, sizeof(buffer), "%s/%s", runtime_dir,
+ 			RUNTIME_CONFIG_FNAME);
+ 	return buffer;
+ }
+ 
++static inline const char *
++eal_runtime_config_path(void)
++{
++	return __eal_runtime_config_path(rte_eal_get_runtime_dir());
++}
++
++static inline const char *
++eal_sec_runtime_config_path(const char *runtime_dir)
++{
++	return __eal_runtime_config_path(runtime_dir);
++}
++
+ /** Path of primary/secondary communication unix socket file. */
+ #define MP_SOCKET_FNAME "mp_socket"
+ static inline const char *
+@@ -57,12 +70,29 @@ eal_mp_socket_path(void)
+ 
+ #define FBARRAY_NAME_FMT "%s/fbarray_%s"
+ static inline const char *
+-eal_get_fbarray_path(char *buffer, size_t buflen, const char *name) {
+-	snprintf(buffer, buflen, FBARRAY_NAME_FMT, rte_eal_get_runtime_dir(),
++__eal_get_fbarray_path(char *buffer, size_t buflen, const char *name,
++		const char *runtime_dir)
++{
++	snprintf(buffer, buflen, FBARRAY_NAME_FMT, runtime_dir,
+ 			name);
+ 	return buffer;
+ }
+ 
++static inline const char *
++eal_get_fbarray_path(char *buffer, size_t buflen, const char *name)
++{
++	return __eal_get_fbarray_path(buffer, buflen, name, 
++			rte_eal_get_runtime_dir());
++}
++
++static inline const char *
++eal_sec_get_fbarray_path(char *buffer, size_t buflen,
++		const char *name, const char *runtime_dir)
++{
++	return __eal_get_fbarray_path(buffer, buflen, name, 
++			runtime_dir);
++}
++
+ /** Path of hugepage info file. */
+ #define HUGEPAGE_INFO_FNAME "hugepage_info"
+ static inline const char *
+@@ -78,15 +108,27 @@ eal_hugepage_info_path(void)
+ /** Path of hugepage data file. */
+ #define HUGEPAGE_DATA_FNAME "hugepage_data"
+ static inline const char *
+-eal_hugepage_data_path(void)
++__eal_hugepage_data_path(const char *runtime_dir)
+ {
+ 	static char buffer[PATH_MAX]; /* static so auto-zeroed */
+ 
+-	snprintf(buffer, sizeof(buffer), "%s/%s", rte_eal_get_runtime_dir(),
++	snprintf(buffer, sizeof(buffer), "%s/%s", runtime_dir,
+ 			HUGEPAGE_DATA_FNAME);
+ 	return buffer;
+ }
+ 
++static inline const char *
++eal_hugepage_data_path(void)
++{
++	return __eal_hugepage_data_path(rte_eal_get_runtime_dir());
++}
++
++static inline const char *
++eal_sec_hugepage_data_path(const char *runtime_dir)
++{
++	return __eal_hugepage_data_path(runtime_dir);
++}
++
+ /** String format for hugepage map files. */
+ #define HUGEFILE_FMT "%s/%smap_%d"
+ static inline const char *
+diff --git a/lib/librte_eal/common/eal_private.h b/lib/librte_eal/common/eal_private.h
+index 597fd02..1fd32a9 100644
+--- a/lib/librte_eal/common/eal_private.h
++++ b/lib/librte_eal/common/eal_private.h
+@@ -113,7 +113,8 @@ int rte_eal_cpu_init(void);
+  * @return
+  *   0 on success, negative on error
+  */
+-int rte_eal_memseg_init(void);
++//int rte_eal_memseg_init(void);
++int rte_eal_memseg_init(const int switch_pri_and_sec, const int sec_idx);
+ 
+ /**
+  * Map memory
+@@ -127,6 +128,9 @@ int rte_eal_memseg_init(void);
+  */
+ int rte_eal_memory_init(void);
+ 
++int rte_eal_sec_memory_init(const int sec_idx);
++int rte_eal_sec_memory_cleanup(const int sec_idx);
++
+ /**
+  * Configure timers
+  *
+@@ -291,7 +295,8 @@ int rte_eal_hugepage_init(void);
+  *
+  * This function is private to the EAL.
+  */
+-int rte_eal_hugepage_attach(void);
++//int rte_eal_hugepage_attach(void);
++int rte_eal_hugepage_attach(const int switch_pri_and_sec, const int sec_idx);
+ 
+ /**
+  * Find a bus capable of identifying a device.
+@@ -450,4 +455,20 @@ eal_get_baseaddr(void);
+   **/
+ bool
+ eal_is_master_set_affinity(void);
++
++
++/****** APIs for libnet ******/
++#include <rte_memory.h>
++
++struct rte_memseg *
++rte_sec_mem_virt2memseg(const void *addr, const struct rte_memseg_list *msl, 
++		const struct rte_config *rte_cfg);
++
++struct rte_memseg_list *
++rte_sec_mem_virt2memseg_list(const void *addr, const struct rte_config *rte_cfg);
++
++int
++rte_sec_memseg_list_walk_thread_unsafe(rte_memseg_list_walk_t func, void *arg,
++		struct rte_config *rte_cfg);
++
+ #endif /* _EAL_PRIVATE_H_ */
+-- 
+2.23.0
+
