@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 19.11
-Release: 11
+Release: 12
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  19.11
@@ -20,6 +20,7 @@ Patch10: CVE-2020-14374.patch
 Patch11: CVE-2020-14375.patch
 Patch12: fix-compilation-error-of-max-inline-insns-single-o2-.patch
 Patch13: fix-populate-with-small-virtual-chunks.patch
+Patch14: 0001-dpdk-optimize-the-efficiency-of-dpdk.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -36,12 +37,10 @@ ExclusiveArch: i686 x86_64 aarch64
 %global config x86_64-%{machine}-linux-gcc
 %endif
 
-BuildRequires: kernel-devel, kernel, libpcap-devel
-BuildRequires: kernel-source
+BuildRequires: kernel-devel, libpcap-devel
 BuildRequires: numactl-devel libconfig-devel
 BuildRequires: module-init-tools uname-build-checks libnl3 libmnl
 BuildRequires: glibc glibc-devel libibverbs libibverbs-devel libmnl-devel
-BuildRequires: texlive
 
 Requires: python3-pyelftools
 
@@ -90,16 +89,22 @@ This package contains the pdump tool for capture the dpdk network packets.
 %patch11 -p1
 %patch12 -p1
 %patch13 -p1
+%patch14 -p1
 
 %build
 namer=%{kern_devel_ver}
 export RTE_KERNELDIR=/lib/modules/${namer}/build
 export EXTRA_CFLAGS="-fstack-protector-strong"
 make O=%{target} T=%{config} config
-#make .so libraries for spdk
-sed -ri 's,(CONFIG_RTE_BUILD_SHARED_LIB=).*,\1y,' %{target}/.config
+#make .so lnd .a ibraries for spdk
+sed -ri 's,(RTE_BUILD_BOTH_STATIC_AND_SHARED_LIBS=).*,\1y,' %{target}/.config
 sed -ri 's,(CONFIG_RTE_LIB_LIBOS=).*,\1n,' %{target}/.config
-make O=%{target} %{?_smp_mflags}
+sed -ri 's,(RTE_MACHINE=).*,\1%{machine},' %{target}/.config
+sed -ri 's,(RTE_APP_TEST=).*,\1n,'         %{target}/.config
+sed -ri 's,(RTE_NEXT_ABI=).*,\1n,'         %{target}/.config
+sed -ri 's,(LIBRTE_VHOST=).*,\1y,'         %{target}/.config
+#sed -ri 's,(LIBRTE_PMD_PCAP=).*,\1y,'      %{target}/.config
+make O=%{target} -j16
 
 %install
 namer=%{kern_devel_ver}
@@ -125,21 +130,7 @@ cp -ar ./%{target}/lib/librte_cmdline.so* $RPM_BUILD_ROOT/lib64/
 cp -ar ./%{target}/lib/librte_net.so* $RPM_BUILD_ROOT/lib64/
 cp -ar ./%{target}/lib/librte_meter.so* $RPM_BUILD_ROOT/lib64/
 
-sed -ri 's,(RTE_MACHINE=).*,\1%{machine},' %{target}/.config
-sed -ri 's,(RTE_APP_TEST=).*,\1n,'         %{target}/.config
-sed -ri 's,(RTE_BUILD_SHARED_LIB=).*,\1n,' %{target}/.config
-sed -ri 's,(RTE_NEXT_ABI=).*,\1n,'         %{target}/.config
-sed -ri 's,(LIBRTE_VHOST=).*,\1y,'         %{target}/.config
-#sed -ri 's,(LIBRTE_PMD_PCAP=).*,\1y,'      %{target}/.config
-sed -ri 's,(CONFIG_RTE_BUILD_SHARED_LIB=).*,\1n,' %{target}/.config
-make O=%{target} %{?_smp_mflags}
 #make O=%{target} doc
-
-make install O=%{target} RTE_KERNELDIR=/lib/modules/${namer}/build \
-	kerneldir=/lib/modules/${namer}/extra/dpdk DESTDIR=%{buildroot} \
-	prefix=%{_prefix} bindir=%{_bindir} sbindir=%{_sbindir} \
-	includedir=%{_includedir}/dpdk libdir=%{_libdir} \
-	datadir=%{_datadir}/dpdk docdir=%{_docdir}/dpdk
 
 mkdir -p $RPM_BUILD_ROOT/usr/include/%{name}-%{version}/
 ln -s /usr/share/dpdk/mk $RPM_BUILD_ROOT/usr/include/%{name}-%{version}/
@@ -193,6 +184,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Mon May 24 2021 renmingshuai <renmingshuai@huawei.com> - 19.11-12
+- optimize the efficiency of compiling dpdk
+
 * Mon Mar 15 2021 wutao <wutao61@huawei.com> - 19.11-11
 - add fstack-protector-strong gcc flags
 
