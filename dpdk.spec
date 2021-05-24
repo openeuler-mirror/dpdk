@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 19.11
-Release: 11
+Release: 12
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  19.11
@@ -138,6 +138,7 @@ This package contains the pdump tool for capture the dpdk network packets.
 %build
 namer=%{kern_devel_ver}
 export RTE_KERNELDIR=/lib/modules/${namer}/build
+export EXTRA_CFLAGS="-fstack-protector-strong"
 make O=%{target} T=%{config} config
 #make .so libraries for spdk
 sed -ri 's,(CONFIG_RTE_BUILD_SHARED_LIB=).*,\1y,' %{target}/.config
@@ -236,6 +237,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Mon May 24 2021 wutao <wutao612huawei.com> - 19.11-12
+- add fstack-protector-strong gcc flags
+
 * Mon Apr 5 2021 wu-changsheng<851744572@qq.com> - 19.11-11
 - add support for gazelle
 
