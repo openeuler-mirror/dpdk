@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 19.11
-Release: 10
+Release: 11
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  19.11
@@ -56,6 +56,7 @@ ExclusiveArch: i686 x86_64 aarch64
 %global config x86_64-%{machine}-linux-gcc
 %endif
 
+BuildRequires: gcc
 BuildRequires: kernel-devel, libpcap-devel
 BuildRequires: numactl-devel libconfig-devel
 BuildRequires: module-init-tools uname-build-checks libnl3 libmnl
@@ -222,6 +223,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Tue Jun 08 2021 huangliming<huangliming5@huawei.com> - 19.11-11
+- add gcc BuildRequires
+
 * Mon May 24 2021 renmingshuai <renmingshuai@huawei.com> - 19.11-10
 - optimize the efficiency of compiling dpdk
 
