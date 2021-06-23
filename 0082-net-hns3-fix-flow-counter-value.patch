@@ -1,0 +1,53 @@
+From c75bc1ba60e3af6a8751048a912a01175d940833 Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Wed, 31 Mar 2021 18:01:40 +0800
+Subject: [PATCH 082/189] net/hns3: fix flow counter value
+
+User could create flow rules with specified counter by the action of
+RTE_FLOW_ACTION_TYPE_COUNT, but the counter may retain the original
+value when create.
+
+This patch fix the bug by read the counter when creating the rule
+because the counter is read-clear.
+
+Fixes: fcba820d9b9e ("net/hns3: support flow director")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_flow.c | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/drivers/net/hns3/hns3_flow.c b/drivers/net/hns3/hns3_flow.c
+index a016857..3cca416 100644
+--- a/drivers/net/hns3/hns3_flow.c
++++ b/drivers/net/hns3/hns3_flow.c
+@@ -158,7 +158,10 @@ hns3_counter_new(struct rte_eth_dev *dev, uint32_t shared, uint32_t id,
+ {
+ 	struct hns3_adapter *hns = dev->data->dev_private;
+ 	struct hns3_pf *pf = &hns->pf;
++	struct hns3_hw *hw = &hns->hw;
+ 	struct hns3_flow_counter *cnt;
++	uint64_t value;
++	int ret;
+ 
+ 	cnt = hns3_counter_lookup(dev, id);
+ 	if (cnt) {
+@@ -171,6 +174,13 @@ hns3_counter_new(struct rte_eth_dev *dev, uint32_t shared, uint32_t id,
+ 		return 0;
+ 	}
+ 
++	/* Clear the counter by read ops because the counter is read-clear */
++	ret = hns3_get_count(hw, id, &value);
++	if (ret)
++		return rte_flow_error_set(error, EIO,
++					  RTE_FLOW_ERROR_TYPE_HANDLE, NULL,
++					  "Clear counter failed!");
++
+ 	cnt = rte_zmalloc("hns3 counter", sizeof(*cnt), 0);
+ 	if (cnt == NULL)
+ 		return rte_flow_error_set(error, ENOMEM,
+-- 
+2.7.4
+

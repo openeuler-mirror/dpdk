@@ -1,0 +1,74 @@
+From 3405d3daec40b258341eeccc5e07c0a9cfd29e6e Mon Sep 17 00:00:00 2001
+From: Lijun Ou <oulijun@huawei.com>
+Date: Thu, 14 Jan 2021 21:33:37 +0800
+Subject: [PATCH 018/189] net/hns3: remove unused assignment for RSS key
+
+The default RSS key does not need to be configured repeatedly
+when call hns3_dev_configure function with the NULL RSS key
+because the default RSS key has been configured when the PMD
+driver run hns3_do_start function with starting device.
+
+Besides, it will not overwrite the initialized key if
+rte_eth_dev_configure API will be called directly and RSS key is NULL
+after init PMD driver.
+
+Therefore, the assignment for RSS key in hns3_dev_configure
+function is unnecessary.
+
+Signed-off-by: Lijun Ou <oulijun@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev.c    | 6 ------
+ drivers/net/hns3/hns3_ethdev_vf.c | 6 ------
+ 2 files changed, 12 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 2bc28ef..449d967 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -2316,7 +2316,6 @@ hns3_dev_configure(struct rte_eth_dev *dev)
+ 	struct rte_eth_conf *conf = &dev->data->dev_conf;
+ 	enum rte_eth_rx_mq_mode mq_mode = conf->rxmode.mq_mode;
+ 	struct hns3_hw *hw = &hns->hw;
+-	struct hns3_rss_conf *rss_cfg = &hw->rss_info;
+ 	uint16_t nb_rx_q = dev->data->nb_rx_queues;
+ 	uint16_t nb_tx_q = dev->data->nb_tx_queues;
+ 	struct rte_eth_rss_conf rss_conf;
+@@ -2363,11 +2362,6 @@ hns3_dev_configure(struct rte_eth_dev *dev)
+ 		conf->rxmode.offloads |= DEV_RX_OFFLOAD_RSS_HASH;
+ 		rss_conf = conf->rx_adv_conf.rss_conf;
+ 		hw->rss_dis_flag = false;
+-		if (rss_conf.rss_key == NULL) {
+-			rss_conf.rss_key = rss_cfg->key;
+-			rss_conf.rss_key_len = HNS3_RSS_KEY_SIZE;
+-		}
+-
+ 		ret = hns3_dev_rss_hash_update(dev, &rss_conf);
+ 		if (ret)
+ 			goto cfg_err;
+diff --git a/drivers/net/hns3/hns3_ethdev_vf.c b/drivers/net/hns3/hns3_ethdev_vf.c
+index ee89505..bb4ec6b 100644
+--- a/drivers/net/hns3/hns3_ethdev_vf.c
++++ b/drivers/net/hns3/hns3_ethdev_vf.c
+@@ -773,7 +773,6 @@ hns3vf_dev_configure(struct rte_eth_dev *dev)
+ {
+ 	struct hns3_adapter *hns = dev->data->dev_private;
+ 	struct hns3_hw *hw = &hns->hw;
+-	struct hns3_rss_conf *rss_cfg = &hw->rss_info;
+ 	struct rte_eth_conf *conf = &dev->data->dev_conf;
+ 	enum rte_eth_rx_mq_mode mq_mode = conf->rxmode.mq_mode;
+ 	uint16_t nb_rx_q = dev->data->nb_rx_queues;
+@@ -816,11 +815,6 @@ hns3vf_dev_configure(struct rte_eth_dev *dev)
+ 		conf->rxmode.offloads |= DEV_RX_OFFLOAD_RSS_HASH;
+ 		hw->rss_dis_flag = false;
+ 		rss_conf = conf->rx_adv_conf.rss_conf;
+-		if (rss_conf.rss_key == NULL) {
+-			rss_conf.rss_key = rss_cfg->key;
+-			rss_conf.rss_key_len = HNS3_RSS_KEY_SIZE;
+-		}
+-
+ 		ret = hns3_dev_rss_hash_update(dev, &rss_conf);
+ 		if (ret)
+ 			goto cfg_err;
+-- 
+2.7.4
+

@@ -1,0 +1,58 @@
+From 9450e23dc1f006db7bcc28b7452a838a171453a2 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Sat, 17 Apr 2021 17:54:55 +0800
+Subject: [PATCH 124/189] net/hns3: remove redundant mailbox response
+
+Some mbx messages do not need to reply with data. In this case,
+it is no need to set the response data address and the response
+length.
+
+This patch removes these redundant codes from mbx messages that do
+not need be replied.
+
+Fixes: a5475d61fa34 ("net/hns3: support VF")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev_vf.c | 6 ++----
+ 1 file changed, 2 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_ethdev_vf.c b/drivers/net/hns3/hns3_ethdev_vf.c
+index 16cc111..a4577de 100644
+--- a/drivers/net/hns3/hns3_ethdev_vf.c
++++ b/drivers/net/hns3/hns3_ethdev_vf.c
+@@ -1511,7 +1511,6 @@ static void
+ hns3vf_request_link_info(struct hns3_hw *hw)
+ {
+ 	struct hns3_vf *vf = HNS3_DEV_HW_TO_VF(hw);
+-	uint8_t resp_msg;
+ 	bool send_req;
+ 	int ret;
+ 
+@@ -1524,7 +1523,7 @@ hns3vf_request_link_info(struct hns3_hw *hw)
+ 		return;
+ 
+ 	ret = hns3_send_mbx_msg(hw, HNS3_MBX_GET_LINK_STATUS, 0, NULL, 0, false,
+-				&resp_msg, sizeof(resp_msg));
++				NULL, 0);
+ 	if (ret) {
+ 		hns3_err(hw, "failed to fetch link status, ret = %d", ret);
+ 		return;
+@@ -1756,11 +1755,10 @@ hns3vf_keep_alive_handler(void *param)
+ 	struct rte_eth_dev *eth_dev = (struct rte_eth_dev *)param;
+ 	struct hns3_adapter *hns = eth_dev->data->dev_private;
+ 	struct hns3_hw *hw = &hns->hw;
+-	uint8_t respmsg;
+ 	int ret;
+ 
+ 	ret = hns3_send_mbx_msg(hw, HNS3_MBX_KEEP_ALIVE, 0, NULL, 0,
+-				false, &respmsg, sizeof(uint8_t));
++				false, NULL, 0);
+ 	if (ret)
+ 		hns3_err(hw, "VF sends keeping alive cmd failed(=%d)",
+ 			 ret);
+-- 
+2.7.4
+

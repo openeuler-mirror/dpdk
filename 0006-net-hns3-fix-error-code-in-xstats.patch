@@ -1,0 +1,38 @@
+From 8cbd6fc2895cdbb0a64c2d2a31e53ff4b0608752 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Wed, 6 Jan 2021 11:46:29 +0800
+Subject: [PATCH 006/189] net/hns3: fix error code in xstats
+
+The ethdev API has processed the failure to obtain
+xstats statistics. Therefore, driver should return
+an error code instead of 0 in 'hns3_dev_xstats_get'
+API.
+
+Fixes: 8839c5e202f3 ("net/hns3: support device stats")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Lijun Ou <oulijun@huawei.com>
+---
+ drivers/net/hns3/hns3_stats.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_stats.c b/drivers/net/hns3/hns3_stats.c
+index 1597af3..42ec9b8 100644
+--- a/drivers/net/hns3/hns3_stats.c
++++ b/drivers/net/hns3/hns3_stats.c
+@@ -739,9 +739,9 @@ hns3_dev_xstats_get(struct rte_eth_dev *dev, struct rte_eth_xstat *xstats,
+ 	if (!hns->is_vf) {
+ 		/* Update Mac stats */
+ 		ret = hns3_query_update_mac_stats(dev);
+-		if (ret) {
++		if (ret < 0) {
+ 			hns3_err(hw, "Update Mac stats fail : %d", ret);
+-			return 0;
++			return ret;
+ 		}
+ 
+ 		/* Get MAC stats from hw->hw_xstats.mac_stats struct */
+-- 
+2.7.4
+

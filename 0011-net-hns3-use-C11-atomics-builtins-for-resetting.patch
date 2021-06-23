@@ -1,0 +1,209 @@
+From ec2a9e9b56f0bfd4d0926c9f59183d682de9670e Mon Sep 17 00:00:00 2001
+From: Lijun Ou <oulijun@huawei.com>
+Date: Thu, 14 Jan 2021 21:33:30 +0800
+Subject: [PATCH 011/189] net/hns3: use C11 atomics builtins for resetting
+
+Use C11 atomic builtins with explicit ordering instead of
+rte_atomic ops with the resetting member of hns3_reset_data
+structure.
+
+Signed-off-by: Lijun Ou <oulijun@huawei.com>
+---
+ drivers/net/hns3/hns3_dcb.c       |  5 +++--
+ drivers/net/hns3/hns3_ethdev.c    |  8 ++++----
+ drivers/net/hns3/hns3_ethdev.h    |  2 +-
+ drivers/net/hns3/hns3_ethdev_vf.c | 12 ++++++------
+ drivers/net/hns3/hns3_intr.c      |  8 ++++----
+ drivers/net/hns3/hns3_rxtx.c      |  2 +-
+ 6 files changed, 19 insertions(+), 18 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_dcb.c b/drivers/net/hns3/hns3_dcb.c
+index fb50179..b32d5af 100644
+--- a/drivers/net/hns3/hns3_dcb.c
++++ b/drivers/net/hns3/hns3_dcb.c
+@@ -633,7 +633,7 @@ hns3_set_rss_size(struct hns3_hw *hw, uint16_t nb_rx_q)
+ 	 * and configured directly to the hardware in the RESET_STAGE_RESTORE
+ 	 * stage of the reset process.
+ 	 */
+-	if (rte_atomic16_read(&hw->reset.resetting) == 0) {
++	if (__atomic_load_n(&hw->reset.resetting, __ATOMIC_RELAXED) == 0) {
+ 		for (i = 0; i < HNS3_RSS_IND_TBL_SIZE; i++)
+ 			rss_cfg->rss_indirection_tbl[i] =
+ 							i % hw->alloc_rss_size;
+@@ -1562,7 +1562,8 @@ hns3_dcb_configure(struct hns3_adapter *hns)
+ 	int ret;
+ 
+ 	hns3_dcb_cfg_validate(hns, &num_tc, &map_changed);
+-	if (map_changed || rte_atomic16_read(&hw->reset.resetting)) {
++	if (map_changed ||
++	    __atomic_load_n(&hw->reset.resetting,  __ATOMIC_RELAXED)) {
+ 		ret = hns3_dcb_info_update(hns, num_tc);
+ 		if (ret) {
+ 			hns3_err(hw, "dcb info update failed: %d", ret);
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index bf633a3..d0d1d3a 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -1017,7 +1017,7 @@ hns3_init_vlan_config(struct hns3_adapter *hns)
+ 	 * ensure that the hardware configuration remains unchanged before and
+ 	 * after reset.
+ 	 */
+-	if (rte_atomic16_read(&hw->reset.resetting) == 0) {
++	if (__atomic_load_n(&hw->reset.resetting, __ATOMIC_RELAXED) == 0) {
+ 		hw->port_base_vlan_cfg.state = HNS3_PORT_BASE_VLAN_DISABLE;
+ 		hw->port_base_vlan_cfg.pvid = HNS3_INVALID_PVID;
+ 	}
+@@ -1041,7 +1041,7 @@ hns3_init_vlan_config(struct hns3_adapter *hns)
+ 	 * we will restore configurations to hardware in hns3_restore_vlan_table
+ 	 * and hns3_restore_vlan_conf later.
+ 	 */
+-	if (rte_atomic16_read(&hw->reset.resetting) == 0) {
++	if (__atomic_load_n(&hw->reset.resetting, __ATOMIC_RELAXED) == 0) {
+ 		ret = hns3_vlan_pvid_configure(hns, HNS3_INVALID_PVID, 0);
+ 		if (ret) {
+ 			hns3_err(hw, "pvid set fail in pf, ret =%d", ret);
+@@ -4872,7 +4872,7 @@ hns3_dev_start(struct rte_eth_dev *dev)
+ 	int ret;
+ 
+ 	PMD_INIT_FUNC_TRACE();
+-	if (rte_atomic16_read(&hw->reset.resetting))
++	if (__atomic_load_n(&hw->reset.resetting, __ATOMIC_RELAXED))
+ 		return -EBUSY;
+ 
+ 	rte_spinlock_lock(&hw->lock);
+@@ -5018,7 +5018,7 @@ hns3_dev_stop(struct rte_eth_dev *dev)
+ 	rte_delay_ms(hw->tqps_num);
+ 
+ 	rte_spinlock_lock(&hw->lock);
+-	if (rte_atomic16_read(&hw->reset.resetting) == 0) {
++	if (__atomic_load_n(&hw->reset.resetting, __ATOMIC_RELAXED) == 0) {
+ 		hns3_stop_tqps(hw);
+ 		hns3_do_stop(hns);
+ 		hns3_unmap_rx_interrupt(dev);
+diff --git a/drivers/net/hns3/hns3_ethdev.h b/drivers/net/hns3/hns3_ethdev.h
+index 31f78a1..0d86683 100644
+--- a/drivers/net/hns3/hns3_ethdev.h
++++ b/drivers/net/hns3/hns3_ethdev.h
+@@ -350,7 +350,7 @@ struct hns3_reset_data {
+ 	enum hns3_reset_stage stage;
+ 	rte_atomic16_t schedule;
+ 	/* Reset flag, covering the entire reset process */
+-	rte_atomic16_t resetting;
++	uint16_t resetting;
+ 	/* Used to disable sending cmds during reset */
+ 	rte_atomic16_t disable_cmd;
+ 	/* The reset level being processed */
+diff --git a/drivers/net/hns3/hns3_ethdev_vf.c b/drivers/net/hns3/hns3_ethdev_vf.c
+index ef03fb1..c126384 100644
+--- a/drivers/net/hns3/hns3_ethdev_vf.c
++++ b/drivers/net/hns3/hns3_ethdev_vf.c
+@@ -898,7 +898,7 @@ hns3vf_dev_mtu_set(struct rte_eth_dev *dev, uint16_t mtu)
+ 	 * MTU value issued by hns3 VF PMD driver must be less than or equal to
+ 	 * PF's MTU.
+ 	 */
+-	if (rte_atomic16_read(&hw->reset.resetting)) {
++	if (__atomic_load_n(&hw->reset.resetting, __ATOMIC_RELAXED)) {
+ 		hns3_err(hw, "Failed to set mtu during resetting");
+ 		return -EIO;
+ 	}
+@@ -1438,7 +1438,7 @@ hns3vf_request_link_info(struct hns3_hw *hw)
+ 	uint8_t resp_msg;
+ 	int ret;
+ 
+-	if (rte_atomic16_read(&hw->reset.resetting))
++	if (__atomic_load_n(&hw->reset.resetting, __ATOMIC_RELAXED))
+ 		return;
+ 	ret = hns3_send_mbx_msg(hw, HNS3_MBX_GET_LINK_STATUS, 0, NULL, 0, false,
+ 				&resp_msg, sizeof(resp_msg));
+@@ -1471,7 +1471,7 @@ hns3vf_vlan_filter_set(struct rte_eth_dev *dev, uint16_t vlan_id, int on)
+ 	struct hns3_hw *hw = &hns->hw;
+ 	int ret;
+ 
+-	if (rte_atomic16_read(&hw->reset.resetting)) {
++	if (__atomic_load_n(&hw->reset.resetting, __ATOMIC_RELAXED)) {
+ 		hns3_err(hw,
+ 			 "vf set vlan id failed during resetting, vlan_id =%u",
+ 			 vlan_id);
+@@ -1510,7 +1510,7 @@ hns3vf_vlan_offload_set(struct rte_eth_dev *dev, int mask)
+ 	unsigned int tmp_mask;
+ 	int ret = 0;
+ 
+-	if (rte_atomic16_read(&hw->reset.resetting)) {
++	if (__atomic_load_n(&hw->reset.resetting, __ATOMIC_RELAXED)) {
+ 		hns3_err(hw, "vf set vlan offload failed during resetting, "
+ 			     "mask = 0x%x", mask);
+ 		return -EIO;
+@@ -1957,7 +1957,7 @@ hns3vf_dev_stop(struct rte_eth_dev *dev)
+ 	rte_delay_ms(hw->tqps_num);
+ 
+ 	rte_spinlock_lock(&hw->lock);
+-	if (rte_atomic16_read(&hw->reset.resetting) == 0) {
++	if (__atomic_load_n(&hw->reset.resetting, __ATOMIC_RELAXED) == 0) {
+ 		hns3_stop_tqps(hw);
+ 		hns3vf_do_stop(hns);
+ 		hns3vf_unmap_rx_interrupt(dev);
+@@ -2188,7 +2188,7 @@ hns3vf_dev_start(struct rte_eth_dev *dev)
+ 	int ret;
+ 
+ 	PMD_INIT_FUNC_TRACE();
+-	if (rte_atomic16_read(&hw->reset.resetting))
++	if (__atomic_load_n(&hw->reset.resetting, __ATOMIC_RELAXED))
+ 		return -EBUSY;
+ 
+ 	rte_spinlock_lock(&hw->lock);
+diff --git a/drivers/net/hns3/hns3_intr.c b/drivers/net/hns3/hns3_intr.c
+index 99c500d..51f19b4 100644
+--- a/drivers/net/hns3/hns3_intr.c
++++ b/drivers/net/hns3/hns3_intr.c
+@@ -1761,7 +1761,7 @@ hns3_reset_init(struct hns3_hw *hw)
+ 	hw->reset.stage = RESET_STAGE_NONE;
+ 	hw->reset.request = 0;
+ 	hw->reset.pending = 0;
+-	rte_atomic16_init(&hw->reset.resetting);
++	hw->reset.resetting = 0;
+ 	rte_atomic16_init(&hw->reset.disable_cmd);
+ 	hw->reset.wait_data = rte_zmalloc("wait_data",
+ 					  sizeof(struct hns3_wait_data), 0);
+@@ -2011,7 +2011,7 @@ hns3_reset_pre(struct hns3_adapter *hns)
+ 	int ret;
+ 
+ 	if (hw->reset.stage == RESET_STAGE_NONE) {
+-		rte_atomic16_set(&hns->hw.reset.resetting, 1);
++		__atomic_store_n(&hns->hw.reset.resetting, 1, __ATOMIC_RELAXED);
+ 		hw->reset.stage = RESET_STAGE_DOWN;
+ 		ret = hw->reset.ops->stop_service(hns);
+ 		gettimeofday(&tv, NULL);
+@@ -2098,7 +2098,7 @@ hns3_reset_post(struct hns3_adapter *hns)
+ 		/* IMP will wait ready flag before reset */
+ 		hns3_notify_reset_ready(hw, false);
+ 		hns3_clear_reset_level(hw, &hw->reset.pending);
+-		rte_atomic16_clear(&hns->hw.reset.resetting);
++		__atomic_store_n(&hns->hw.reset.resetting, 0, __ATOMIC_RELAXED);
+ 		hw->reset.attempts = 0;
+ 		hw->reset.stats.success_cnt++;
+ 		hw->reset.stage = RESET_STAGE_NONE;
+@@ -2223,7 +2223,7 @@ hns3_reset_process(struct hns3_adapter *hns, enum hns3_reset_level new_level)
+ 			hw->reset.mbuf_deferred_free = false;
+ 		}
+ 		rte_spinlock_unlock(&hw->lock);
+-		rte_atomic16_clear(&hns->hw.reset.resetting);
++		__atomic_store_n(&hns->hw.reset.resetting, 0, __ATOMIC_RELAXED);
+ 		hw->reset.stage = RESET_STAGE_NONE;
+ 		gettimeofday(&tv, NULL);
+ 		timersub(&tv, &hw->reset.start_time, &tv_delta);
+diff --git a/drivers/net/hns3/hns3_rxtx.c b/drivers/net/hns3/hns3_rxtx.c
+index 5ac36b3..0badfc9 100644
+--- a/drivers/net/hns3/hns3_rxtx.c
++++ b/drivers/net/hns3/hns3_rxtx.c
+@@ -3744,7 +3744,7 @@ void hns3_set_rxtx_function(struct rte_eth_dev *eth_dev)
+ 	eth_tx_prep_t prep = NULL;
+ 
+ 	if (hns->hw.adapter_state == HNS3_NIC_STARTED &&
+-	    rte_atomic16_read(&hns->hw.reset.resetting) == 0) {
++	    __atomic_load_n(&hns->hw.reset.resetting, __ATOMIC_RELAXED) == 0) {
+ 		eth_dev->rx_pkt_burst = hns3_get_rx_function(eth_dev);
+ 		eth_dev->tx_pkt_burst = hns3_get_tx_function(eth_dev, &prep);
+ 		eth_dev->tx_pkt_prepare = prep;
+-- 
+2.7.4
+

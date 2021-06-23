@@ -1,0 +1,210 @@
+From e5b9ec998c2de659f177332bcdb4868116063b17 Mon Sep 17 00:00:00 2001
+From: "Min Hu (Connor)" <humin29@huawei.com>
+Date: Thu, 4 Mar 2021 15:44:44 +0800
+Subject: [PATCH 048/189] net/hns3: add bytes stats
+
+In current HNS3 PMD, Rx/Tx bytes from packet stats are not
+implemented.
+
+This patch implemented Rx/Tx bytes using soft counters.
+
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+Signed-off-by: Lijun Ou <oulijun@huawei.com>
+---
+ drivers/net/hns3/hns3_rxtx.c          | 16 ++++++++++++++++
+ drivers/net/hns3/hns3_rxtx_vec_neon.h |  9 +++++++++
+ drivers/net/hns3/hns3_rxtx_vec_sve.c  |  8 ++++++++
+ drivers/net/hns3/hns3_stats.c         | 18 ++++++++++++++----
+ 4 files changed, 47 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_rxtx.c b/drivers/net/hns3/hns3_rxtx.c
+index df97018..897e5fa 100644
+--- a/drivers/net/hns3/hns3_rxtx.c
++++ b/drivers/net/hns3/hns3_rxtx.c
+@@ -2181,6 +2181,9 @@ hns3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, uint16_t nb_pkts)
+ 					       cksum_err);
+ 		hns3_rxd_to_vlan_tci(rxq, rxm, l234_info, &rxd);
+ 
++		/* Increment bytes counter  */
++		rxq->basic_stats.bytes += rxm->pkt_len;
++
+ 		rx_pkts[nb_rx++] = rxm;
+ 		continue;
+ pkt_err:
+@@ -2401,6 +2404,9 @@ hns3_recv_scattered_pkts(void *rx_queue,
+ 					       cksum_err);
+ 		hns3_rxd_to_vlan_tci(rxq, first_seg, l234_info, &rxd);
+ 
++		/* Increment bytes counter */
++		rxq->basic_stats.bytes += first_seg->pkt_len;
++
+ 		rx_pkts[nb_rx++] = first_seg;
+ 		first_seg = NULL;
+ 		continue;
+@@ -3516,6 +3522,11 @@ hns3_tx_fill_hw_ring(struct hns3_tx_queue *txq,
+ 	for (i = 0; i < mainpart; i += PER_LOOP_NUM) {
+ 		hns3_tx_backup_4mbuf(tx_entry + i, pkts + i);
+ 		hns3_tx_setup_4bd(txdp + i, pkts + i);
++
++		/* Increment bytes counter */
++		uint32_t j;
++		for (j = 0; j < PER_LOOP_NUM; j++)
++			txq->basic_stats.bytes += pkts[i + j]->pkt_len;
+ 	}
+ 	if (unlikely(leftover > 0)) {
+ 		for (i = 0; i < leftover; i++) {
+@@ -3523,6 +3534,9 @@ hns3_tx_fill_hw_ring(struct hns3_tx_queue *txq,
+ 					     pkts + mainpart + i);
+ 			hns3_tx_setup_1bd(txdp + mainpart + i,
+ 					  pkts + mainpart + i);
++
++			/* Increment bytes counter */
++			txq->basic_stats.bytes += pkts[mainpart + i]->pkt_len;
+ 		}
+ 	}
+ }
+@@ -3661,6 +3675,8 @@ hns3_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
+ 		desc->tx.tp_fe_sc_vld_ra_ri |=
+ 				 rte_cpu_to_le_16(BIT(HNS3_TXD_FE_B));
+ 
++		/* Increment bytes counter */
++		txq->basic_stats.bytes += tx_pkt->pkt_len;
+ 		nb_hold += i;
+ 		txq->next_to_use = tx_next_use;
+ 		txq->tx_bd_ready -= i;
+diff --git a/drivers/net/hns3/hns3_rxtx_vec_neon.h b/drivers/net/hns3/hns3_rxtx_vec_neon.h
+index a693b4b..68f098f 100644
+--- a/drivers/net/hns3/hns3_rxtx_vec_neon.h
++++ b/drivers/net/hns3/hns3_rxtx_vec_neon.h
+@@ -61,6 +61,9 @@ hns3_xmit_fixed_burst_vec(void *__restrict tx_queue,
+ 		for (i = 0; i < n; i++, tx_pkts++, tx_desc++) {
+ 			hns3_vec_tx(tx_desc, *tx_pkts);
+ 			tx_entry[i].mbuf = *tx_pkts;
++
++			/* Increment bytes counter */
++			txq->basic_stats.bytes += (*tx_pkts)->pkt_len;
+ 		}
+ 
+ 		nb_commit -= n;
+@@ -72,6 +75,9 @@ hns3_xmit_fixed_burst_vec(void *__restrict tx_queue,
+ 	for (i = 0; i < nb_commit; i++, tx_pkts++, tx_desc++) {
+ 		hns3_vec_tx(tx_desc, *tx_pkts);
+ 		tx_entry[i].mbuf = *tx_pkts;
++
++		/* Increment bytes counter */
++		txq->basic_stats.bytes += (*tx_pkts)->pkt_len;
+ 	}
+ 
+ 	next_to_use += nb_commit;
+@@ -116,6 +122,9 @@ hns3_desc_parse_field(struct hns3_rx_queue *rxq,
+ 		if (likely(bd_base_info & BIT(HNS3_RXD_L3L4P_B)))
+ 			hns3_rx_set_cksum_flag(pkt, pkt->packet_type,
+ 					       cksum_err);
++
++		/* Increment bytes counter */
++		rxq->basic_stats.bytes += pkt->pkt_len;
+ 	}
+ 
+ 	return retcode;
+diff --git a/drivers/net/hns3/hns3_rxtx_vec_sve.c b/drivers/net/hns3/hns3_rxtx_vec_sve.c
+index 8c2c8f6..947c19f 100644
+--- a/drivers/net/hns3/hns3_rxtx_vec_sve.c
++++ b/drivers/net/hns3/hns3_rxtx_vec_sve.c
+@@ -58,6 +58,9 @@ hns3_desc_parse_field_sve(struct hns3_rx_queue *rxq,
+ 		if (likely(key->bd_base_info[i] & BIT(HNS3_RXD_L3L4P_B)))
+ 			hns3_rx_set_cksum_flag(rx_pkts[i],
+ 					rx_pkts[i]->packet_type, cksum_err);
++
++		/* Increment bytes counter */
++		rxq->basic_stats.bytes += rx_pkts[i]->pkt_len;
+ 	}
+ 
+ 	return retcode;
+@@ -408,6 +411,11 @@ hns3_tx_fill_hw_ring_sve(struct hns3_tx_queue *txq,
+ 		svst1_scatter_u64offset_u64(pg, (uint64_t *)&txdp->tx.paylen,
+ 					    offsets, svdup_n_u64(valid_bit));
+ 
++		/* Increment bytes counter */
++		uint32_t idx;
++		for (idx = 0; idx < svcntd(); idx++)
++			txq->basic_stats.bytes += pkts[idx]->pkt_len;
++
+ 		/* update index for next loop */
+ 		i += svcntd();
+ 		pkts += svcntd();
+diff --git a/drivers/net/hns3/hns3_stats.c b/drivers/net/hns3/hns3_stats.c
+index e0e40ca..777d36a 100644
+--- a/drivers/net/hns3/hns3_stats.c
++++ b/drivers/net/hns3/hns3_stats.c
+@@ -358,6 +358,7 @@ static const struct hns3_xstats_name_offset hns3_tx_queue_strings[] = {
+ 			    HNS3_NUM_RESET_XSTATS)
+ 
+ static void hns3_tqp_stats_clear(struct hns3_hw *hw);
++static void hns3_tqp_basic_stats_clear(struct rte_eth_dev *dev);
+ 
+ /*
+  * Query all the MAC statistics data of Network ICL command ,opcode id: 0x0034.
+@@ -543,16 +544,26 @@ hns3_stats_get(struct rte_eth_dev *eth_dev, struct rte_eth_stats *rte_stats)
+ 		return ret;
+ 	}
+ 
+-	/* Get the error stats of received packets */
++	/* Get the error stats and bytes of received packets */
+ 	for (i = 0; i < eth_dev->data->nb_rx_queues; i++) {
+ 		rxq = eth_dev->data->rx_queues[i];
+ 		if (rxq) {
+ 			cnt = rxq->err_stats.l2_errors +
+ 				rxq->err_stats.pkt_len_errors;
+ 			rte_stats->ierrors += cnt;
++
++			rte_stats->ibytes += rxq->basic_stats.bytes;
+ 		}
+ 	}
+ 
++	/* Get the bytes of received packets */
++	struct hns3_tx_queue *txq;
++	for (i = 0; i < eth_dev->data->nb_tx_queues; i++) {
++		txq = eth_dev->data->tx_queues[i];
++		if (txq)
++			rte_stats->obytes += txq->basic_stats.bytes;
++	}
++
+ 	rte_stats->oerrors = 0;
+ 	/*
+ 	 * If HW statistics are reset by stats_reset, but a lot of residual
+@@ -623,6 +634,7 @@ hns3_stats_reset(struct rte_eth_dev *eth_dev)
+ 	 * their source.
+ 	 */
+ 	hns3_tqp_stats_clear(hw);
++	hns3_tqp_basic_stats_clear(eth_dev);
+ 
+ 	return 0;
+ }
+@@ -807,7 +819,6 @@ hns3_rxq_basic_stats_get(struct rte_eth_dev *dev, struct rte_eth_xstat *xstats,
+ 		rxq_stats->packets =
+ 			stats->rcb_rx_ring_pktnum[i] > rxq_stats->errors ?
+ 			stats->rcb_rx_ring_pktnum[i] - rxq_stats->errors : 0;
+-		rxq_stats->bytes = 0;
+ 		for (j = 0; j < HNS3_NUM_RXQ_BASIC_STATS; j++) {
+ 			val = (char *)rxq_stats +
+ 				hns3_rxq_basic_stats_strings[j].offset;
+@@ -836,7 +847,7 @@ hns3_txq_basic_stats_get(struct rte_eth_dev *dev, struct rte_eth_xstat *xstats,
+ 
+ 		txq_stats = &txq->basic_stats;
+ 		txq_stats->packets = stats->rcb_tx_ring_pktnum[i];
+-		txq_stats->bytes = 0;
++
+ 		for (j = 0; j < HNS3_NUM_TXQ_BASIC_STATS; j++) {
+ 			val = (char *)txq_stats +
+ 				hns3_txq_basic_stats_strings[j].offset;
+@@ -1328,7 +1339,6 @@ hns3_dev_xstats_reset(struct rte_eth_dev *dev)
+ 	if (ret)
+ 		return ret;
+ 
+-	hns3_tqp_basic_stats_clear(dev);
+ 	hns3_tqp_dfx_stats_clear(dev);
+ 
+ 	/* Clear reset stats */
+-- 
+2.7.4
+

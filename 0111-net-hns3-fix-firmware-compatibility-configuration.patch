@@ -1,0 +1,278 @@
+From a74108b0e8f10b207b2b253c5511efd519d071a3 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Tue, 13 Apr 2021 21:47:14 +0800
+Subject: [PATCH 111/189] net/hns3: fix firmware compatibility configuration
+
+The firmware compatibility configuration in PF driver is used to
+maintain the compatibility of some features of the driver and
+firmware, and requires firmware to enable these features. Currently,
+the configuration is in hns3_init_hardware(), which is a little back.
+Because firmware may clear some configurations (such as, MAC related)
+after receiving the command. And firmware can not be aware of some
+default initializations (such as, flow control) before executing the
+command to set the copper PHY when the PHY is controlled by firmware.
+Therefore, it is recommended that no other hardware resources are
+configured before the compatibility configuration. And it should be
+moved to hns3_cmd_init(), which is responsible for the firmware
+command initialization of driver.
+
+In addition, the driver needs to perform corresponding processing
+if the command fails to be sent.
+1) If firmware fails to take over the copper PHY, the copper port fails
+   to initialize.
+2) If fails to enable the report of link events, the device does not
+   support the LSC capability.
+
+Fixes: bff6ebfe30d4 ("net/hns3: refactor PF LSC event report")
+Fixes: bac6a0644121 ("net/hns3: fix link status change from firmware")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_cmd.c    | 116 +++++++++++++++++++++++++++++++++++++++++
+ drivers/net/hns3/hns3_ethdev.c |  56 --------------------
+ 2 files changed, 116 insertions(+), 56 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_cmd.c b/drivers/net/hns3/hns3_cmd.c
+index 41e2caa..15bf781 100644
+--- a/drivers/net/hns3/hns3_cmd.c
++++ b/drivers/net/hns3/hns3_cmd.c
+@@ -526,9 +526,99 @@ hns3_cmd_init_queue(struct hns3_hw *hw)
+ 	return ret;
+ }
+ 
++static void
++hns3_update_dev_lsc_cap(struct hns3_hw *hw, int fw_compact_cmd_result)
++{
++	struct rte_eth_dev *dev = &rte_eth_devices[hw->data->port_id];
++
++	if (hw->adapter_state != HNS3_NIC_UNINITIALIZED)
++		return;
++
++	if (fw_compact_cmd_result != 0) {
++		/*
++		 * If fw_compact_cmd_result is not zero, it means firmware don't
++		 * support link status change interrupt.
++		 * Framework already set RTE_ETH_DEV_INTR_LSC bit because driver
++		 * declared RTE_PCI_DRV_INTR_LSC in drv_flags. It need to clear
++		 * the RTE_ETH_DEV_INTR_LSC capability when detect firmware
++		 * don't support link status change interrupt.
++		 */
++		dev->data->dev_flags &= ~RTE_ETH_DEV_INTR_LSC;
++	}
++}
++
++static int
++hns3_apply_fw_compat_cmd_result(struct hns3_hw *hw, int result)
++{
++	if (result != 0 && hns3_dev_copper_supported(hw)) {
++		hns3_err(hw, "firmware fails to initialize the PHY, ret = %d.",
++			 result);
++		return result;
++	}
++
++	hns3_update_dev_lsc_cap(hw, result);
++
++	return 0;
++}
++
++static int
++hns3_firmware_compat_config(struct hns3_hw *hw, bool is_init)
++{
++	struct hns3_firmware_compat_cmd *req;
++	struct hns3_cmd_desc desc;
++	uint32_t compat = 0;
++
++#if defined(RTE_HNS3_ONLY_1630_FPGA)
++	/* If resv reg enabled phy driver of imp is not configured, driver
++	 * will use temporary phy driver.
++	 */
++	struct rte_pci_device *pci_dev;
++	struct rte_eth_dev *eth_dev;
++	uint8_t revision;
++	int ret;
++
++	eth_dev = &rte_eth_devices[hw->data->port_id];
++	pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
++	/* Get PCI revision id */
++	ret = rte_pci_read_config(pci_dev, &revision, HNS3_PCI_REVISION_ID_LEN,
++				  HNS3_PCI_REVISION_ID);
++	if (ret != HNS3_PCI_REVISION_ID_LEN) {
++		PMD_INIT_LOG(ERR, "failed to read pci revision id, ret = %d",
++			     ret);
++		return -EIO;
++	}
++	if (revision == PCI_REVISION_ID_HIP09_A) {
++		struct hns3_pf *pf = HNS3_DEV_HW_TO_PF(hw);
++		if (hns3_dev_copper_supported(hw) == 0 || pf->is_tmp_phy) {
++			PMD_INIT_LOG(ERR, "***use temp phy driver in dpdk***");
++			pf->is_tmp_phy = true;
++			hns3_set_bit(hw->capability,
++				     HNS3_DEV_SUPPORT_COPPER_B, 1);
++			return 0;
++		}
++
++		PMD_INIT_LOG(ERR, "***use phy driver in imp***");
++	}
++#endif
++
++	hns3_cmd_setup_basic_desc(&desc, HNS3_OPC_FIRMWARE_COMPAT_CFG, false);
++	req = (struct hns3_firmware_compat_cmd *)desc.data;
++
++	if (is_init) {
++		hns3_set_bit(compat, HNS3_LINK_EVENT_REPORT_EN_B, 1);
++		hns3_set_bit(compat, HNS3_NCSI_ERROR_REPORT_EN_B, 0);
++		if (hns3_dev_copper_supported(hw))
++			hns3_set_bit(compat, HNS3_FIRMWARE_PHY_DRIVER_EN_B, 1);
++	}
++	req->compat = rte_cpu_to_le_32(compat);
++
++	return hns3_cmd_send(hw, &desc, 1);
++}
++
+ int
+ hns3_cmd_init(struct hns3_hw *hw)
+ {
++	struct hns3_adapter *hns = HNS3_DEV_HW_TO_ADAPTER(hw);
+ 	uint32_t version;
+ 	int ret;
+ 
+@@ -575,6 +665,27 @@ hns3_cmd_init(struct hns3_hw *hw)
+ 		     hns3_get_field(version, HNS3_FW_VERSION_BYTE0_M,
+ 				    HNS3_FW_VERSION_BYTE0_S));
+ 
++	if (hns->is_vf)
++		return 0;
++
++	/*
++	 * Requiring firmware to enable some features, firber port can still
++	 * work without it, but copper port can't work because the firmware
++	 * fails to take over the PHY.
++	 */
++	ret = hns3_firmware_compat_config(hw, true);
++	if (ret)
++		PMD_INIT_LOG(WARNING, "firmware compatible features not "
++			     "supported, ret = %d.", ret);
++
++	/*
++	 * Perform some corresponding operations based on the firmware
++	 * compatibility configuration result.
++	 */
++	ret = hns3_apply_fw_compat_cmd_result(hw, ret);
++	if (ret)
++		goto err_cmd_init;
++
+ 	return 0;
+ 
+ err_cmd_init:
+@@ -602,6 +713,11 @@ hns3_cmd_destroy_queue(struct hns3_hw *hw)
+ void
+ hns3_cmd_uninit(struct hns3_hw *hw)
+ {
++	struct hns3_adapter *hns = HNS3_DEV_HW_TO_ADAPTER(hw);
++
++	if (!hns->is_vf)
++		(void)hns3_firmware_compat_config(hw, false);
++
+ 	__atomic_store_n(&hw->reset.disable_cmd, 1, __ATOMIC_RELAXED);
+ 
+ 	/*
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 5e7ac54..7bae923 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -4118,28 +4118,6 @@ hns3_buffer_alloc(struct hns3_hw *hw)
+ }
+ 
+ static int
+-hns3_firmware_compat_config(struct hns3_hw *hw, bool is_init)
+-{
+-	struct hns3_firmware_compat_cmd *req;
+-	struct hns3_cmd_desc desc;
+-	uint32_t compat = 0;
+-
+-	hns3_cmd_setup_basic_desc(&desc, HNS3_OPC_FIRMWARE_COMPAT_CFG, false);
+-	req = (struct hns3_firmware_compat_cmd *)desc.data;
+-
+-	if (is_init) {
+-		hns3_set_bit(compat, HNS3_LINK_EVENT_REPORT_EN_B, 1);
+-		hns3_set_bit(compat, HNS3_NCSI_ERROR_REPORT_EN_B, 0);
+-		if (hw->mac.media_type == HNS3_MEDIA_TYPE_COPPER)
+-			hns3_set_bit(compat, HNS3_FIRMWARE_PHY_DRIVER_EN_B, 1);
+-	}
+-
+-	req->compat = rte_cpu_to_le_32(compat);
+-
+-	return hns3_cmd_send(hw, &desc, 1);
+-}
+-
+-static int
+ hns3_mac_init(struct hns3_hw *hw)
+ {
+ 	struct hns3_adapter *hns = HNS3_DEV_HW_TO_ADAPTER(hw);
+@@ -4815,28 +4793,6 @@ hns3_service_handler(void *param)
+ 	rte_eal_alarm_set(HNS3_SERVICE_INTERVAL, hns3_service_handler, eth_dev);
+ }
+ 
+-static void
+-hns3_update_dev_lsc_cap(struct hns3_hw *hw,
+-			int fw_compact_cmd_result)
+-{
+-	struct rte_eth_dev *dev = &rte_eth_devices[hw->data->port_id];
+-
+-	if (hw->adapter_state != HNS3_NIC_UNINITIALIZED)
+-		return;
+-
+-	if (fw_compact_cmd_result != 0) {
+-		/*
+-		 * If fw_compact_cmd_result is not zero, it means firmware don't
+-		 * support link status change interrupt.
+-		 * Framework already set RTE_ETH_DEV_INTR_LSC bit because driver
+-		 * declared RTE_PCI_DRV_INTR_LSC in drv_flags. It need to clear
+-		 * the RTE_ETH_DEV_INTR_LSC capability when detect firmware
+-		 * don't support link status change interrupt.
+-		 */
+-		dev->data->dev_flags &= ~RTE_ETH_DEV_INTR_LSC;
+-	}
+-}
+-
+ static int
+ hns3_init_hardware(struct hns3_adapter *hns)
+ {
+@@ -4916,16 +4872,6 @@ hns3_init_hardware(struct hns3_adapter *hns)
+ 		goto err_mac_init;
+ 	}
+ 
+-	/*
+-	 * Requiring firmware to enable some features, driver can
+-	 * still work without it.
+-	 */
+-	ret = hns3_firmware_compat_config(hw, true);
+-	if (ret)
+-		PMD_INIT_LOG(WARNING, "firmware compatible features not "
+-			     "supported, ret = %d.", ret);
+-	hns3_update_dev_lsc_cap(hw, ret);
+-
+ 	return 0;
+ 
+ err_mac_init:
+@@ -5073,7 +5019,6 @@ hns3_init_pf(struct rte_eth_dev *eth_dev)
+ err_enable_intr:
+ 	hns3_fdir_filter_uninit(hns);
+ err_fdir:
+-	(void)hns3_firmware_compat_config(hw, false);
+ 	hns3_uninit_umv_space(hw);
+ err_init_hw:
+ 	hns3_tqp_stats_uninit(hw);
+@@ -5108,7 +5053,6 @@ hns3_uninit_pf(struct rte_eth_dev *eth_dev)
+ 	(void)hns3_config_gro(hw, false);
+ 	hns3_promisc_uninit(hw);
+ 	hns3_fdir_filter_uninit(hns);
+-	(void)hns3_firmware_compat_config(hw, false);
+ 	hns3_uninit_umv_space(hw);
+ 	hns3_tqp_stats_uninit(hw);
+ 	hns3_config_mac_tnl_int(hw, false);
+-- 
+2.7.4
+

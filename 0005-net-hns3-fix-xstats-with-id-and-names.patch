@@ -1,0 +1,85 @@
+From 094b7303b76507e93d4b8e1eaa7e0c819362b67a Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Wed, 6 Jan 2021 11:46:28 +0800
+Subject: [PATCH 005/189] net/hns3: fix xstats with id and names
+
+Currently, validity check for ids and values in the
+hns3_dev_xstats_get_by_id API is incorrect, which will
+cause a problem. Namely, if the ID range of the xstats
+stats item does not include the basic stats item, the
+app can not obtain the corresponding xstats statistics
+in hns3_dev_xstats_get_by_id.
+
+Similarly, the hns3_dev_xstats_get_names_by_id interface
+also has a problem.
+
+Although the input parameter verification code cannot be
+executed due to the implementation of the ethdev framework
+interface, the driver needs to ensure the correctness of
+the input parameters.
+
+Fixes: 8839c5e202f3 ("net/hns3: support device stats")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Lijun Ou <oulijun@huawei.com>
+---
+ drivers/net/hns3/hns3_stats.c | 24 ++++++++++++++++++++++--
+ 1 file changed, 22 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_stats.c b/drivers/net/hns3/hns3_stats.c
+index 91168ac..1597af3 100644
+--- a/drivers/net/hns3/hns3_stats.c
++++ b/drivers/net/hns3/hns3_stats.c
+@@ -933,9 +933,13 @@ hns3_dev_xstats_get_by_id(struct rte_eth_dev *dev, const uint64_t *ids,
+ 	uint32_t i;
+ 	int ret;
+ 
+-	if (ids == NULL || size < cnt_stats)
++	if (ids == NULL && values == NULL)
+ 		return cnt_stats;
+ 
++	if (ids == NULL)
++		if (size < cnt_stats)
++			return cnt_stats;
++
+ 	/* Update tqp stats by read register */
+ 	ret = hns3_update_tqp_stats(hw);
+ 	if (ret) {
+@@ -957,6 +961,15 @@ hns3_dev_xstats_get_by_id(struct rte_eth_dev *dev, const uint64_t *ids,
+ 		return -EINVAL;
+ 	}
+ 
++	if (ids == NULL && values != NULL) {
++		for (i = 0; i < cnt_stats; i++)
++			memcpy(&values[i], &values_copy[i].value,
++			       sizeof(values[i]));
++
++		rte_free(values_copy);
++		return cnt_stats;
++	}
++
+ 	for (i = 0; i < size; i++) {
+ 		if (ids[i] >= cnt_stats) {
+ 			hns3_err(hw, "ids[%u] (%" PRIx64 ") is invalid, "
+@@ -1005,9 +1018,16 @@ hns3_dev_xstats_get_names_by_id(struct rte_eth_dev *dev,
+ 	uint64_t len;
+ 	uint32_t i;
+ 
+-	if (ids == NULL || xstats_names == NULL)
++	if (xstats_names == NULL)
+ 		return cnt_stats;
+ 
++	if (ids == NULL) {
++		if (size < cnt_stats)
++			return cnt_stats;
++
++		return hns3_dev_xstats_get_names(dev, xstats_names, cnt_stats);
++	}
++
+ 	len = cnt_stats * sizeof(struct rte_eth_xstat_name);
+ 	names_copy = rte_zmalloc("hns3_xstats_names", len, 0);
+ 	if (names_copy == NULL) {
+-- 
+2.7.4
+

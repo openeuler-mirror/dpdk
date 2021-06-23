@@ -1,0 +1,226 @@
+From e0e251dbada5ce120c8f7a6d1b517865fcbc29ce Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Thu, 15 Apr 2021 11:52:00 +0800
+Subject: [PATCH 120/189] net/hns3: support masking device capability
+
+This patch supports runtime config of mask device capability, it was
+used to mask the capability which queried from firmware.
+
+The device argument key is "dev_caps_mask" which takes hexadecimal
+bitmask where each bit represents whether mask corresponding capability.
+
+Its main purpose is to debug and avoid problems.
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ doc/guides/nics/hns3.rst          |  9 ++++++
+ drivers/net/hns3/hns3_cmd.c       | 67 +++++++++++++++++++++++++++++++++++++++
+ drivers/net/hns3/hns3_ethdev.c    | 24 +++++++++++++-
+ drivers/net/hns3/hns3_ethdev.h    |  4 +++
+ drivers/net/hns3/hns3_ethdev_vf.c |  3 +-
+ 5 files changed, 105 insertions(+), 2 deletions(-)
+
+diff --git a/doc/guides/nics/hns3.rst b/doc/guides/nics/hns3.rst
+index d722509..477f03c 100644
+--- a/doc/guides/nics/hns3.rst
++++ b/doc/guides/nics/hns3.rst
+@@ -84,6 +84,15 @@ Runtime Config Options
+   be first checked, if meets, use the ``vec``. Then, ``simple``, at last
+   ``common``.
+ 
++- ``dev_caps_mask`` (default ``0``)
++
++  Used to mask the capability which queried from firmware.
++  This args take hexadecimal bitmask where each bit represents whether mask
++  corresponding capability. eg. If the capability is 0xFFFF queried from
++  firmware, and the args value is 0xF which means the bit0~bit3 should be
++  masked off, then the capability will be 0xFFF0.
++  Its main purpose is to debug and avoid problems.
++
+ Driver compilation and testing
+ ------------------------------
+ 
+diff --git a/drivers/net/hns3/hns3_cmd.c b/drivers/net/hns3/hns3_cmd.c
+index f3588ab..5eb8789 100644
+--- a/drivers/net/hns3/hns3_cmd.c
++++ b/drivers/net/hns3/hns3_cmd.c
+@@ -416,6 +416,68 @@ hns3_cmd_send(struct hns3_hw *hw, struct hns3_cmd_desc *desc, int num)
+ 	return retval;
+ }
+ 
++static const char *
++hns3_get_caps_name(uint32_t caps_id)
++{
++	const struct {
++		enum HNS3_CAPS_BITS caps;
++		const char *name;
++	} dev_caps[] = {
++		{ HNS3_CAPS_UDP_GSO_B,         "udp_gso"         },
++		{ HNS3_CAPS_ATR_B,             "atr"             },
++		{ HNS3_CAPS_FD_QUEUE_REGION_B, "fd_queue_region" },
++		{ HNS3_CAPS_PTP_B,             "ptp"             },
++		{ HNS3_CAPS_INT_QL_B,          "int_ql"          },
++		{ HNS3_CAPS_SIMPLE_BD_B,       "simple_bd"       },
++		{ HNS3_CAPS_TX_PUSH_B,         "tx_push"         },
++		{ HNS3_CAPS_PHY_IMP_B,         "phy_imp"         },
++		{ HNS3_CAPS_TQP_TXRX_INDEP_B,  "tqp_txrx_indep"  },
++		{ HNS3_CAPS_HW_PAD_B,          "hw_pad"          },
++		{ HNS3_CAPS_STASH_B,           "stash"           },
++		{ HNS3_CAPS_UDP_TUNNEL_CSUM_B, "udp_tunnel_csum" },
++		{ HNS3_CAPS_RAS_IMP_B,         "ras_imp"         },
++		{ HNS3_CAPS_FEC_B,             "fec"             },
++		{ HNS3_CAPS_PAUSE_B,           "pause"           },
++		{ HNS3_CAPS_RXD_ADV_LAYOUT_B,  "rxd_adv_layout"  }
++	};
++	uint32_t i;
++
++	for (i = 0; i < RTE_DIM(dev_caps); i++) {
++		if (dev_caps[i].caps == caps_id)
++			return dev_caps[i].name;
++	}
++
++	return "unknown";
++}
++
++static void
++hns3_mask_capability(struct hns3_hw *hw,
++		     struct hns3_query_version_cmd *cmd)
++{
++#define MAX_CAPS_BIT	64
++
++	struct hns3_adapter *hns = HNS3_DEV_HW_TO_ADAPTER(hw);
++	uint64_t caps_org, caps_new, caps_masked;
++	uint32_t i;
++
++	if (hns->dev_caps_mask == 0)
++		return;
++
++	memcpy(&caps_org, &cmd->caps[0], sizeof(caps_org));
++	caps_org = rte_le_to_cpu_64(caps_org);
++	caps_new = caps_org ^ (caps_org & hns->dev_caps_mask);
++	caps_masked = caps_org ^ caps_new;
++	caps_new = rte_cpu_to_le_64(caps_new);
++	memcpy(&cmd->caps[0], &caps_new, sizeof(caps_new));
++
++	for (i = 0; i < MAX_CAPS_BIT; i++) {
++		if (!(caps_masked & BIT_ULL(i)))
++			continue;
++		hns3_info(hw, "mask capabiliy: id-%u, name-%s.",
++			  i, hns3_get_caps_name(i));
++	}
++}
++
+ static void
+ hns3_parse_capability(struct hns3_hw *hw,
+ 		      struct hns3_query_version_cmd *cmd)
+@@ -485,6 +547,11 @@ hns3_cmd_query_firmware_version_and_capability(struct hns3_hw *hw)
+ 		return ret;
+ 
+ 	hw->fw_version = rte_le_to_cpu_32(resp->firmware);
++	/*
++	 * Make sure mask the capability before parse capability because it
++	 * may overwrite resp's data.
++	 */
++	hns3_mask_capability(hw, resp);
+ 	hns3_parse_capability(hw, resp);
+ 
+ 	return 0;
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 893b357..c75aa9c 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -7209,6 +7209,19 @@ hns3_get_io_hint_func_name(uint32_t hint)
+ 	}
+ }
+ 
++static int
++hns3_parse_dev_caps_mask(const char *key, const char *value, void *extra_args)
++{
++	uint64_t val;
++
++	RTE_SET_USED(key);
++
++	val = strtoull(value, NULL, 16);
++	*(uint64_t *)extra_args = val;
++
++	return 0;
++}
++
+ void
+ hns3_parse_devargs(struct rte_eth_dev *dev)
+ {
+@@ -7216,6 +7229,7 @@ hns3_parse_devargs(struct rte_eth_dev *dev)
+ 	uint32_t rx_func_hint = HNS3_IO_FUNC_HINT_NONE;
+ 	uint32_t tx_func_hint = HNS3_IO_FUNC_HINT_NONE;
+ 	struct hns3_hw *hw = &hns->hw;
++	uint64_t dev_caps_mask = 0;
+ 	struct rte_kvargs *kvlist;
+ 
+ 	if (dev->device->devargs == NULL)
+@@ -7229,6 +7243,8 @@ hns3_parse_devargs(struct rte_eth_dev *dev)
+ 			   &hns3_parse_io_hint_func, &rx_func_hint);
+ 	rte_kvargs_process(kvlist, HNS3_DEVARG_TX_FUNC_HINT,
+ 			   &hns3_parse_io_hint_func, &tx_func_hint);
++	rte_kvargs_process(kvlist, HNS3_DEVARG_DEV_CAPS_MASK,
++			   &hns3_parse_dev_caps_mask, &dev_caps_mask);
+ 	rte_kvargs_free(kvlist);
+ 
+ 	if (rx_func_hint != HNS3_IO_FUNC_HINT_NONE)
+@@ -7239,6 +7255,11 @@ hns3_parse_devargs(struct rte_eth_dev *dev)
+ 		hns3_warn(hw, "parsed %s = %s.", HNS3_DEVARG_TX_FUNC_HINT,
+ 			  hns3_get_io_hint_func_name(tx_func_hint));
+ 	hns->tx_func_hint = tx_func_hint;
++
++	if (dev_caps_mask != 0)
++		hns3_warn(hw, "parsed %s = 0x%" PRIx64 ".",
++			  HNS3_DEVARG_DEV_CAPS_MASK, dev_caps_mask);
++	hns->dev_caps_mask = dev_caps_mask;
+ }
+ 
+ static const struct eth_dev_ops hns3_eth_dev_ops = {
+@@ -7506,6 +7527,7 @@ RTE_PMD_REGISTER_PCI_TABLE(net_hns3, pci_id_hns3_map);
+ RTE_PMD_REGISTER_KMOD_DEP(net_hns3, "* igb_uio | vfio-pci");
+ RTE_PMD_REGISTER_PARAM_STRING(net_hns3,
+ 		HNS3_DEVARG_RX_FUNC_HINT "=vec|sve|simple|common "
+-		HNS3_DEVARG_TX_FUNC_HINT "=vec|sve|simple|common ");
++		HNS3_DEVARG_TX_FUNC_HINT "=vec|sve|simple|common "
++		HNS3_DEVARG_DEV_CAPS_MASK "=<1-65535> ");
+ RTE_LOG_REGISTER(hns3_logtype_init, pmd.net.hns3.init, NOTICE);
+ RTE_LOG_REGISTER(hns3_logtype_driver, pmd.net.hns3.driver, NOTICE);
+diff --git a/drivers/net/hns3/hns3_ethdev.h b/drivers/net/hns3/hns3_ethdev.h
+index 4a855de..271eadb 100644
+--- a/drivers/net/hns3/hns3_ethdev.h
++++ b/drivers/net/hns3/hns3_ethdev.h
+@@ -833,6 +833,8 @@ struct hns3_adapter {
+ 	uint32_t rx_func_hint;
+ 	uint32_t tx_func_hint;
+ 
++	uint64_t dev_caps_mask;
++
+ 	struct hns3_ptype_table ptype_tbl __rte_cache_min_aligned;
+ };
+ 
+@@ -847,6 +849,8 @@ enum {
+ #define HNS3_DEVARG_RX_FUNC_HINT	"rx_func_hint"
+ #define HNS3_DEVARG_TX_FUNC_HINT	"tx_func_hint"
+ 
++#define HNS3_DEVARG_DEV_CAPS_MASK	"dev_caps_mask"
++
+ #define HNS3_DEV_SUPPORT_DCB_B			0x0
+ #define HNS3_DEV_SUPPORT_COPPER_B		0x1
+ #define HNS3_DEV_SUPPORT_UDP_GSO_B		0x2
+diff --git a/drivers/net/hns3/hns3_ethdev_vf.c b/drivers/net/hns3/hns3_ethdev_vf.c
+index efc614b..16cc111 100644
+--- a/drivers/net/hns3/hns3_ethdev_vf.c
++++ b/drivers/net/hns3/hns3_ethdev_vf.c
+@@ -3075,4 +3075,5 @@ RTE_PMD_REGISTER_PCI_TABLE(net_hns3_vf, pci_id_hns3vf_map);
+ RTE_PMD_REGISTER_KMOD_DEP(net_hns3_vf, "* igb_uio | vfio-pci");
+ RTE_PMD_REGISTER_PARAM_STRING(net_hns3_vf,
+ 		HNS3_DEVARG_RX_FUNC_HINT "=vec|sve|simple|common "
+-		HNS3_DEVARG_TX_FUNC_HINT "=vec|sve|simple|common ");
++		HNS3_DEVARG_TX_FUNC_HINT "=vec|sve|simple|common "
++		HNS3_DEVARG_DEV_CAPS_MASK "=<1-65535> ");
+-- 
+2.7.4
+

@@ -1,0 +1,338 @@
+From 458bb9377c72010ed41f4d2faedad2bd08562cd1 Mon Sep 17 00:00:00 2001
+From: Chengchang Tang <tangchengchang@huawei.com>
+Date: Wed, 3 Feb 2021 20:23:53 +0800
+Subject: [PATCH 039/189] net/hns3: use C11 atomics
+
+Replace all the atomic type with C11 atomic builtins in hns3
+PMD.
+
+Signed-off-by: Chengchang Tang <tangchengchang@huawei.com>
+Signed-off-by: Lijun Ou <oulijun@huawei.com>
+---
+ drivers/net/hns3/hns3_cmd.c       | 13 +++++++------
+ drivers/net/hns3/hns3_ethdev.c    | 21 ++++++++++++---------
+ drivers/net/hns3/hns3_ethdev.h    |  4 ++--
+ drivers/net/hns3/hns3_ethdev_vf.c | 19 +++++++++++--------
+ drivers/net/hns3/hns3_intr.c      | 22 ++++++++++++++--------
+ drivers/net/hns3/hns3_mbx.c       |  4 ++--
+ 6 files changed, 48 insertions(+), 35 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_cmd.c b/drivers/net/hns3/hns3_cmd.c
+index a6ea072..9393978 100644
+--- a/drivers/net/hns3/hns3_cmd.c
++++ b/drivers/net/hns3/hns3_cmd.c
+@@ -202,7 +202,8 @@ hns3_cmd_csq_clean(struct hns3_hw *hw)
+ 		hns3_err(hw, "wrong cmd head (%u, %u-%u)", head,
+ 			    csq->next_to_use, csq->next_to_clean);
+ 		if (rte_eal_process_type() == RTE_PROC_PRIMARY) {
+-			rte_atomic16_set(&hw->reset.disable_cmd, 1);
++			__atomic_store_n(&hw->reset.disable_cmd, 1,
++					 __ATOMIC_RELAXED);
+ 			hns3_schedule_delayed_reset(HNS3_DEV_HW_TO_ADAPTER(hw));
+ 		}
+ 
+@@ -311,7 +312,7 @@ static int hns3_cmd_poll_reply(struct hns3_hw *hw)
+ 		if (hns3_cmd_csq_done(hw))
+ 			return 0;
+ 
+-		if (rte_atomic16_read(&hw->reset.disable_cmd)) {
++		if (__atomic_load_n(&hw->reset.disable_cmd, __ATOMIC_RELAXED)) {
+ 			hns3_err(hw,
+ 				 "Don't wait for reply because of disable_cmd");
+ 			return -EBUSY;
+@@ -358,7 +359,7 @@ hns3_cmd_send(struct hns3_hw *hw, struct hns3_cmd_desc *desc, int num)
+ 	int retval;
+ 	uint32_t ntc;
+ 
+-	if (rte_atomic16_read(&hw->reset.disable_cmd))
++	if (__atomic_load_n(&hw->reset.disable_cmd, __ATOMIC_RELAXED))
+ 		return -EBUSY;
+ 
+ 	rte_spinlock_lock(&hw->cmq.csq.lock);
+@@ -535,7 +536,7 @@ hns3_cmd_init(struct hns3_hw *hw)
+ 		ret = -EBUSY;
+ 		goto err_cmd_init;
+ 	}
+-	rte_atomic16_clear(&hw->reset.disable_cmd);
++	__atomic_store_n(&hw->reset.disable_cmd, 0, __ATOMIC_RELAXED);
+ 
+ 	ret = hns3_cmd_query_firmware_version_and_capability(hw);
+ 	if (ret) {
+@@ -557,7 +558,7 @@ hns3_cmd_init(struct hns3_hw *hw)
+ 	return 0;
+ 
+ err_cmd_init:
+-	rte_atomic16_set(&hw->reset.disable_cmd, 1);
++	__atomic_store_n(&hw->reset.disable_cmd, 1, __ATOMIC_RELAXED);
+ 	return ret;
+ }
+ 
+@@ -583,7 +584,7 @@ hns3_cmd_uninit(struct hns3_hw *hw)
+ {
+ 	rte_spinlock_lock(&hw->cmq.csq.lock);
+ 	rte_spinlock_lock(&hw->cmq.crq.lock);
+-	rte_atomic16_set(&hw->reset.disable_cmd, 1);
++	__atomic_store_n(&hw->reset.disable_cmd, 1, __ATOMIC_RELAXED);
+ 	hns3_cmd_clear_regs(hw);
+ 	rte_spinlock_unlock(&hw->cmq.crq.lock);
+ 	rte_spinlock_unlock(&hw->cmq.csq.lock);
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index df7220b..f54b7c2 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -130,7 +130,7 @@ hns3_proc_imp_reset_event(struct hns3_adapter *hns, bool is_delay,
+ {
+ 	struct hns3_hw *hw = &hns->hw;
+ 
+-	rte_atomic16_set(&hw->reset.disable_cmd, 1);
++	__atomic_store_n(&hw->reset.disable_cmd, 1, __ATOMIC_RELAXED);
+ 	hns3_atomic_set_bit(HNS3_IMP_RESET, &hw->reset.pending);
+ 	*vec_val = BIT(HNS3_VECTOR0_IMPRESET_INT_B);
+ 	if (!is_delay) {
+@@ -150,7 +150,7 @@ hns3_proc_global_reset_event(struct hns3_adapter *hns, bool is_delay,
+ {
+ 	struct hns3_hw *hw = &hns->hw;
+ 
+-	rte_atomic16_set(&hw->reset.disable_cmd, 1);
++	__atomic_store_n(&hw->reset.disable_cmd, 1, __ATOMIC_RELAXED);
+ 	hns3_atomic_set_bit(HNS3_GLOBAL_RESET, &hw->reset.pending);
+ 	*vec_val = BIT(HNS3_VECTOR0_GLOBALRESET_INT_B);
+ 	if (!is_delay) {
+@@ -5070,7 +5070,7 @@ hns3_do_stop(struct hns3_adapter *hns)
+ 		return ret;
+ 	hw->mac.link_status = ETH_LINK_DOWN;
+ 
+-	if (rte_atomic16_read(&hw->reset.disable_cmd) == 0) {
++	if (__atomic_load_n(&hw->reset.disable_cmd, __ATOMIC_RELAXED) == 0) {
+ 		hns3_configure_all_mac_addr(hns, true);
+ 		ret = hns3_reset_all_tqps(hns);
+ 		if (ret) {
+@@ -5613,7 +5613,7 @@ hns3_prepare_reset(struct hns3_adapter *hns)
+ 		 * any mailbox handling or command to firmware is only valid
+ 		 * after hns3_cmd_init is called.
+ 		 */
+-		rte_atomic16_set(&hw->reset.disable_cmd, 1);
++		__atomic_store_n(&hw->reset.disable_cmd, 1, __ATOMIC_RELAXED);
+ 		hw->reset.stats.request_cnt++;
+ 		break;
+ 	case HNS3_IMP_RESET:
+@@ -5673,7 +5673,7 @@ hns3_stop_service(struct hns3_adapter *hns)
+ 	 * from table space. Hence, for function reset software intervention is
+ 	 * required to delete the entries
+ 	 */
+-	if (rte_atomic16_read(&hw->reset.disable_cmd) == 0)
++	if (__atomic_load_n(&hw->reset.disable_cmd, __ATOMIC_RELAXED) == 0)
+ 		hns3_configure_all_mc_mac_addr(hns, true);
+ 	rte_spinlock_unlock(&hw->lock);
+ 
+@@ -5795,8 +5795,10 @@ hns3_reset_service(void *param)
+ 	 * The interrupt may have been lost. It is necessary to handle
+ 	 * the interrupt to recover from the error.
+ 	 */
+-	if (rte_atomic16_read(&hns->hw.reset.schedule) == SCHEDULE_DEFERRED) {
+-		rte_atomic16_set(&hns->hw.reset.schedule, SCHEDULE_REQUESTED);
++	if (__atomic_load_n(&hw->reset.schedule, __ATOMIC_RELAXED) ==
++			    SCHEDULE_DEFERRED) {
++		__atomic_store_n(&hw->reset.schedule, SCHEDULE_REQUESTED,
++				  __ATOMIC_RELAXED);
+ 		hns3_err(hw, "Handling interrupts in delayed tasks");
+ 		hns3_interrupt_handler(&rte_eth_devices[hw->data->port_id]);
+ 		reset_level = hns3_get_reset_level(hns, &hw->reset.pending);
+@@ -5805,7 +5807,7 @@ hns3_reset_service(void *param)
+ 			hns3_atomic_set_bit(HNS3_IMP_RESET, &hw->reset.pending);
+ 		}
+ 	}
+-	rte_atomic16_set(&hns->hw.reset.schedule, SCHEDULE_NONE);
++	__atomic_store_n(&hw->reset.schedule, SCHEDULE_NONE, __ATOMIC_RELAXED);
+ 
+ 	/*
+ 	 * Check if there is any ongoing reset in the hardware. This status can
+@@ -6325,7 +6327,8 @@ hns3_dev_init(struct rte_eth_dev *eth_dev)
+ 
+ 	hw->adapter_state = HNS3_NIC_INITIALIZED;
+ 
+-	if (rte_atomic16_read(&hns->hw.reset.schedule) == SCHEDULE_PENDING) {
++	if (__atomic_load_n(&hw->reset.schedule, __ATOMIC_RELAXED) ==
++			    SCHEDULE_PENDING) {
+ 		hns3_err(hw, "Reschedule reset service after dev_init");
+ 		hns3_schedule_reset(hns);
+ 	} else {
+diff --git a/drivers/net/hns3/hns3_ethdev.h b/drivers/net/hns3/hns3_ethdev.h
+index 547e991..cf42ef1 100644
+--- a/drivers/net/hns3/hns3_ethdev.h
++++ b/drivers/net/hns3/hns3_ethdev.h
+@@ -352,11 +352,11 @@ enum hns3_schedule {
+ 
+ struct hns3_reset_data {
+ 	enum hns3_reset_stage stage;
+-	rte_atomic16_t schedule;
++	uint16_t schedule;
+ 	/* Reset flag, covering the entire reset process */
+ 	uint16_t resetting;
+ 	/* Used to disable sending cmds during reset */
+-	rte_atomic16_t disable_cmd;
++	uint16_t disable_cmd;
+ 	/* The reset level being processed */
+ 	enum hns3_reset_level level;
+ 	/* Reset level set, each bit represents a reset level */
+diff --git a/drivers/net/hns3/hns3_ethdev_vf.c b/drivers/net/hns3/hns3_ethdev_vf.c
+index 1b1989e..42cee37 100644
+--- a/drivers/net/hns3/hns3_ethdev_vf.c
++++ b/drivers/net/hns3/hns3_ethdev_vf.c
+@@ -1059,7 +1059,7 @@ hns3vf_check_event_cause(struct hns3_adapter *hns, uint32_t *clearval)
+ 		rst_ing_reg = hns3_read_dev(hw, HNS3_FUN_RST_ING);
+ 		hns3_warn(hw, "resetting reg: 0x%x", rst_ing_reg);
+ 		hns3_atomic_set_bit(HNS3_VF_RESET, &hw->reset.pending);
+-		rte_atomic16_set(&hw->reset.disable_cmd, 1);
++		__atomic_store_n(&hw->reset.disable_cmd, 1, __ATOMIC_RELAXED);
+ 		val = hns3_read_dev(hw, HNS3_VF_RST_ING);
+ 		hns3_write_dev(hw, HNS3_VF_RST_ING, val | HNS3_VF_RST_ING_BIT);
+ 		val = cmdq_stat_reg & ~BIT(HNS3_VECTOR0_RST_INT_B);
+@@ -1934,7 +1934,7 @@ hns3vf_do_stop(struct hns3_adapter *hns)
+ 
+ 	hw->mac.link_status = ETH_LINK_DOWN;
+ 
+-	if (rte_atomic16_read(&hw->reset.disable_cmd) == 0) {
++	if (__atomic_load_n(&hw->reset.disable_cmd, __ATOMIC_RELAXED) == 0) {
+ 		hns3vf_configure_mac_addr(hns, true);
+ 		ret = hns3_reset_all_tqps(hns);
+ 		if (ret) {
+@@ -2410,7 +2410,7 @@ hns3vf_prepare_reset(struct hns3_adapter *hns)
+ 		ret = hns3_send_mbx_msg(hw, HNS3_MBX_RESET, 0, NULL,
+ 					0, true, NULL, 0);
+ 	}
+-	rte_atomic16_set(&hw->reset.disable_cmd, 1);
++	__atomic_store_n(&hw->reset.disable_cmd, 1, __ATOMIC_RELAXED);
+ 
+ 	return ret;
+ }
+@@ -2449,7 +2449,7 @@ hns3vf_stop_service(struct hns3_adapter *hns)
+ 	 * from table space. Hence, for function reset software intervention is
+ 	 * required to delete the entries.
+ 	 */
+-	if (rte_atomic16_read(&hw->reset.disable_cmd) == 0)
++	if (__atomic_load_n(&hw->reset.disable_cmd, __ATOMIC_RELAXED) == 0)
+ 		hns3vf_configure_all_mc_mac_addr(hns, true);
+ 	rte_spinlock_unlock(&hw->lock);
+ 
+@@ -2621,8 +2621,10 @@ hns3vf_reset_service(void *param)
+ 	 * The interrupt may have been lost. It is necessary to handle
+ 	 * the interrupt to recover from the error.
+ 	 */
+-	if (rte_atomic16_read(&hns->hw.reset.schedule) == SCHEDULE_DEFERRED) {
+-		rte_atomic16_set(&hns->hw.reset.schedule, SCHEDULE_REQUESTED);
++	if (__atomic_load_n(&hw->reset.schedule, __ATOMIC_RELAXED) ==
++			    SCHEDULE_DEFERRED) {
++		__atomic_store_n(&hw->reset.schedule, SCHEDULE_REQUESTED,
++				 __ATOMIC_RELAXED);
+ 		hns3_err(hw, "Handling interrupts in delayed tasks");
+ 		hns3vf_interrupt_handler(&rte_eth_devices[hw->data->port_id]);
+ 		reset_level = hns3vf_get_reset_level(hw, &hw->reset.pending);
+@@ -2631,7 +2633,7 @@ hns3vf_reset_service(void *param)
+ 			hns3_atomic_set_bit(HNS3_VF_RESET, &hw->reset.pending);
+ 		}
+ 	}
+-	rte_atomic16_set(&hns->hw.reset.schedule, SCHEDULE_NONE);
++	__atomic_store_n(&hw->reset.schedule, SCHEDULE_NONE, __ATOMIC_RELAXED);
+ 
+ 	/*
+ 	 * Hardware reset has been notified, we now have to poll & check if
+@@ -2854,7 +2856,8 @@ hns3vf_dev_init(struct rte_eth_dev *eth_dev)
+ 
+ 	hw->adapter_state = HNS3_NIC_INITIALIZED;
+ 
+-	if (rte_atomic16_read(&hns->hw.reset.schedule) == SCHEDULE_PENDING) {
++	if (__atomic_load_n(&hw->reset.schedule, __ATOMIC_RELAXED) ==
++			    SCHEDULE_PENDING) {
+ 		hns3_err(hw, "Reschedule reset service after dev_init");
+ 		hns3_schedule_reset(hns);
+ 	} else {
+diff --git a/drivers/net/hns3/hns3_intr.c b/drivers/net/hns3/hns3_intr.c
+index 51f19b4..88ce4c6 100644
+--- a/drivers/net/hns3/hns3_intr.c
++++ b/drivers/net/hns3/hns3_intr.c
+@@ -1762,7 +1762,7 @@ hns3_reset_init(struct hns3_hw *hw)
+ 	hw->reset.request = 0;
+ 	hw->reset.pending = 0;
+ 	hw->reset.resetting = 0;
+-	rte_atomic16_init(&hw->reset.disable_cmd);
++	__atomic_store_n(&hw->reset.disable_cmd, 0, __ATOMIC_RELAXED);
+ 	hw->reset.wait_data = rte_zmalloc("wait_data",
+ 					  sizeof(struct hns3_wait_data), 0);
+ 	if (!hw->reset.wait_data) {
+@@ -1779,7 +1779,8 @@ hns3_schedule_reset(struct hns3_adapter *hns)
+ 
+ 	/* Reschedule the reset process after successful initialization */
+ 	if (hw->adapter_state == HNS3_NIC_UNINITIALIZED) {
+-		rte_atomic16_set(&hns->hw.reset.schedule, SCHEDULE_PENDING);
++		__atomic_store_n(&hw->reset.schedule, SCHEDULE_PENDING,
++				 __ATOMIC_RELAXED);
+ 		return;
+ 	}
+ 
+@@ -1787,11 +1788,14 @@ hns3_schedule_reset(struct hns3_adapter *hns)
+ 		return;
+ 
+ 	/* Schedule restart alarm if it is not scheduled yet */
+-	if (rte_atomic16_read(&hns->hw.reset.schedule) == SCHEDULE_REQUESTED)
++	if (__atomic_load_n(&hw->reset.schedule, __ATOMIC_RELAXED) ==
++			SCHEDULE_REQUESTED)
+ 		return;
+-	if (rte_atomic16_read(&hns->hw.reset.schedule) == SCHEDULE_DEFERRED)
++	if (__atomic_load_n(&hw->reset.schedule, __ATOMIC_RELAXED) ==
++			SCHEDULE_DEFERRED)
+ 		rte_eal_alarm_cancel(hw->reset.ops->reset_service, hns);
+-	rte_atomic16_set(&hns->hw.reset.schedule, SCHEDULE_REQUESTED);
++	__atomic_store_n(&hw->reset.schedule, SCHEDULE_REQUESTED,
++			 __ATOMIC_RELAXED);
+ 
+ 	rte_eal_alarm_set(SWITCH_CONTEXT_US, hw->reset.ops->reset_service, hns);
+ }
+@@ -1808,9 +1812,11 @@ hns3_schedule_delayed_reset(struct hns3_adapter *hns)
+ 		return;
+ 	}
+ 
+-	if (rte_atomic16_read(&hns->hw.reset.schedule) != SCHEDULE_NONE)
++	if (__atomic_load_n(&hw->reset.schedule, __ATOMIC_RELAXED) !=
++			    SCHEDULE_NONE)
+ 		return;
+-	rte_atomic16_set(&hns->hw.reset.schedule, SCHEDULE_DEFERRED);
++	__atomic_store_n(&hw->reset.schedule, SCHEDULE_DEFERRED,
++			 __ATOMIC_RELAXED);
+ 	rte_eal_alarm_set(DEFERRED_SCHED_US, hw->reset.ops->reset_service, hns);
+ }
+ 
+@@ -1983,7 +1989,7 @@ hns3_reset_err_handle(struct hns3_adapter *hns)
+ 	 * Regardless of whether the execution is successful or not, the
+ 	 * flow after execution must be continued.
+ 	 */
+-	if (rte_atomic16_read(&hw->reset.disable_cmd))
++	if (__atomic_load_n(&hw->reset.disable_cmd, __ATOMIC_RELAXED))
+ 		(void)hns3_cmd_init(hw);
+ reset_fail:
+ 	hw->reset.attempts = 0;
+diff --git a/drivers/net/hns3/hns3_mbx.c b/drivers/net/hns3/hns3_mbx.c
+index 3e44e3b..e745843 100644
+--- a/drivers/net/hns3/hns3_mbx.c
++++ b/drivers/net/hns3/hns3_mbx.c
+@@ -83,7 +83,7 @@ hns3_get_mbx_resp(struct hns3_hw *hw, uint16_t code0, uint16_t code1,
+ 	end = now + HNS3_MAX_RETRY_MS;
+ 	while ((hw->mbx_resp.head != hw->mbx_resp.tail + hw->mbx_resp.lost) &&
+ 	       (now < end)) {
+-		if (rte_atomic16_read(&hw->reset.disable_cmd)) {
++		if (__atomic_load_n(&hw->reset.disable_cmd, __ATOMIC_RELAXED)) {
+ 			hns3_err(hw, "Don't wait for mbx respone because of "
+ 				 "disable_cmd");
+ 			return -EBUSY;
+@@ -369,7 +369,7 @@ hns3_dev_handle_mbx_msg(struct hns3_hw *hw)
+ 	int i;
+ 
+ 	while (!hns3_cmd_crq_empty(hw)) {
+-		if (rte_atomic16_read(&hw->reset.disable_cmd))
++		if (__atomic_load_n(&hw->reset.disable_cmd, __ATOMIC_RELAXED))
+ 			return;
+ 
+ 		desc = &crq->desc[crq->next_to_use];
+-- 
+2.7.4
+

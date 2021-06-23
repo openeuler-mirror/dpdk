@@ -1,0 +1,30 @@
+From 465efdb2120519aba339a2754afaf71e7bf34ec5 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Thu, 15 Apr 2021 14:45:15 +0800
+Subject: [PATCH 177/189] app/testpmd: add link autoneg status display
+
+This patch adds link autoneg status display in port_infos_display().
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+Acked-by: Xiaoyun Li <xiaoyun.li@intel.com>
+---
+ app/test-pmd/config.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/app/test-pmd/config.c b/app/test-pmd/config.c
+index 3f6c864..d4ec3ff 100644
+--- a/app/test-pmd/config.c
++++ b/app/test-pmd/config.c
+@@ -618,6 +618,8 @@ port_infos_display(portid_t port_id)
+ 	printf("Link speed: %s\n", rte_eth_link_speed_to_str(link.link_speed));
+ 	printf("Link duplex: %s\n", (link.link_duplex == ETH_LINK_FULL_DUPLEX) ?
+ 	       ("full-duplex") : ("half-duplex"));
++	printf("Autoneg status: %s\n", (link.link_autoneg == ETH_LINK_AUTONEG) ?
++	       ("On") : ("Off"));
+ 
+ 	if (!rte_eth_dev_get_mtu(port_id, &mtu))
+ 		printf("MTU: %u\n", mtu);
+-- 
+2.7.4
+

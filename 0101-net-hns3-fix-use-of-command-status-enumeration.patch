@@ -1,0 +1,99 @@
+From 1e3415f3ba207dfb012e5f4fab96bb5760419fae Mon Sep 17 00:00:00 2001
+From: Chengchang Tang <tangchengchang@huawei.com>
+Date: Tue, 13 Apr 2021 19:50:04 +0800
+Subject: [PATCH 101/189] net/hns3: fix use of command status enumeration
+
+The type of return value of hns3_cmd_send is int, some function declare
+the return value as hns3_cmd_status.
+
+This patch fix the incorrect use of the enum hns3_cmd_status.
+
+Fixes: 737f30e1c3ab ("net/hns3: support command interface with firmware")
+Fixes: 02a7b55657b2 ("net/hns3: support Rx interrupt")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengchang Tang <tangchengchang@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_cmd.c    |  2 +-
+ drivers/net/hns3/hns3_cmd.h    |  9 +--------
+ drivers/net/hns3/hns3_ethdev.c | 12 ++++++------
+ 3 files changed, 8 insertions(+), 15 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_cmd.c b/drivers/net/hns3/hns3_cmd.c
+index 1bf1c32..58833ce 100644
+--- a/drivers/net/hns3/hns3_cmd.c
++++ b/drivers/net/hns3/hns3_cmd.c
+@@ -450,7 +450,7 @@ hns3_build_api_caps(void)
+ 	return rte_cpu_to_le_32(api_caps);
+ }
+ 
+-static enum hns3_cmd_status
++static int
+ hns3_cmd_query_firmware_version_and_capability(struct hns3_hw *hw)
+ {
+ 	struct hns3_query_version_cmd *resp;
+diff --git a/drivers/net/hns3/hns3_cmd.h b/drivers/net/hns3/hns3_cmd.h
+index 5d1fb67..9a975b8 100644
+--- a/drivers/net/hns3/hns3_cmd.h
++++ b/drivers/net/hns3/hns3_cmd.h
+@@ -56,13 +56,6 @@ enum hns3_cmd_return_status {
+ 	HNS3_CMD_ROH_CHECK_FAIL = 12
+ };
+ 
+-enum hns3_cmd_status {
+-	HNS3_STATUS_SUCCESS     = 0,
+-	HNS3_ERR_CSQ_FULL       = -1,
+-	HNS3_ERR_CSQ_TIMEOUT    = -2,
+-	HNS3_ERR_CSQ_ERROR      = -3,
+-};
+-
+ struct hns3_misc_vector {
+ 	uint8_t *addr;
+ 	int vector_irq;
+@@ -72,7 +65,7 @@ struct hns3_cmq {
+ 	struct hns3_cmq_ring csq;
+ 	struct hns3_cmq_ring crq;
+ 	uint16_t tx_timeout;
+-	enum hns3_cmd_status last_status;
++	enum hns3_cmd_return_status last_status;
+ };
+ 
+ enum hns3_opcode_type {
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 85e54ae..a06fdc9 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -2310,11 +2310,11 @@ hns3_bind_ring_with_vector(struct hns3_hw *hw, uint16_t vector_id, bool en,
+ 	struct hns3_cmd_desc desc;
+ 	struct hns3_ctrl_vector_chain_cmd *req =
+ 		(struct hns3_ctrl_vector_chain_cmd *)desc.data;
+-	enum hns3_cmd_status status;
+ 	enum hns3_opcode_type op;
+ 	uint16_t tqp_type_and_id = 0;
+ 	uint16_t type;
+ 	uint16_t gl;
++	int ret;
+ 
+ 	op = en ? HNS3_OPC_ADD_RING_TO_VECTOR : HNS3_OPC_DEL_RING_TO_VECTOR;
+ 	hns3_cmd_setup_basic_desc(&desc, op, false);
+@@ -2337,11 +2337,11 @@ hns3_bind_ring_with_vector(struct hns3_hw *hw, uint16_t vector_id, bool en,
+ 		       gl);
+ 	req->tqp_type_and_id[0] = rte_cpu_to_le_16(tqp_type_and_id);
+ 	req->int_cause_num = 1;
+-	status = hns3_cmd_send(hw, &desc, 1);
+-	if (status) {
+-		hns3_err(hw, "%s TQP %u fail, vector_id is %u, status is %d.",
+-			 en ? "Map" : "Unmap", queue_id, vector_id, status);
+-		return status;
++	ret = hns3_cmd_send(hw, &desc, 1);
++	if (ret) {
++		hns3_err(hw, "%s TQP %u fail, vector_id = %u, ret = %d.",
++			 en ? "Map" : "Unmap", queue_id, vector_id, ret);
++		return ret;
+ 	}
+ 
+ 	return 0;
+-- 
+2.7.4
+

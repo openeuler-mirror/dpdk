@@ -1,0 +1,63 @@
+From b4cc7885926cc27da1934c457e4d3ebb43926056 Mon Sep 17 00:00:00 2001
+From: Chengchang Tang <tangchengchang@huawei.com>
+Date: Sat, 10 Apr 2021 09:11:18 +0800
+Subject: [PATCH 094/189] net/hns3: fix timing in resetting queues
+
+During the task queue pairs reset, the getimeofday is used to obtain the
+timestamp to determine whether the command execution times out. But
+gettimeofday is not monotonous, it can be modified by system
+administrators, so the timing may not be accurate or even cause the loop
+to wait consistently.
+And actually, in this scenario, it is not necessary to obtain the
+timestamp.
+
+This patch removes the operation of obtaining the timestamp from the task
+queue pairs reset function.
+
+Fixes: bba636698316 ("net/hns3: support Rx/Tx and related operations")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengchang Tang <tangchengchang@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_rxtx.c | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_rxtx.c b/drivers/net/hns3/hns3_rxtx.c
+index 46d6943..b864350 100644
+--- a/drivers/net/hns3/hns3_rxtx.c
++++ b/drivers/net/hns3/hns3_rxtx.c
+@@ -625,8 +625,8 @@ static int
+ hns3pf_reset_tqp(struct hns3_hw *hw, uint16_t queue_id)
+ {
+ #define HNS3_TQP_RESET_TRY_MS	200
++	uint16_t wait_time = 0;
+ 	uint8_t reset_status;
+-	uint64_t end;
+ 	int ret;
+ 
+ 	/*
+@@ -639,17 +639,18 @@ hns3pf_reset_tqp(struct hns3_hw *hw, uint16_t queue_id)
+ 		hns3_err(hw, "Send reset tqp cmd fail, ret = %d", ret);
+ 		return ret;
+ 	}
+-	end = get_timeofday_ms() + HNS3_TQP_RESET_TRY_MS;
++
+ 	do {
+ 		/* Wait for tqp hw reset */
+ 		rte_delay_ms(HNS3_POLL_RESPONE_MS);
++		wait_time += HNS3_POLL_RESPONE_MS;
+ 		ret = hns3_get_tqp_reset_status(hw, queue_id, &reset_status);
+ 		if (ret)
+ 			goto tqp_reset_fail;
+ 
+ 		if (reset_status)
+ 			break;
+-	} while (get_timeofday_ms() < end);
++	} while (wait_time < HNS3_TQP_RESET_TRY_MS);
+ 
+ 	if (!reset_status) {
+ 		ret = -ETIMEDOUT;
+-- 
+2.7.4
+

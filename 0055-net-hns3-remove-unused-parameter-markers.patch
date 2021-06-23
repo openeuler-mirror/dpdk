@@ -1,0 +1,35 @@
+From 82c54c157d1cb684ef41a0ccdec0be4ecfa64a31 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Thu, 4 Mar 2021 15:44:51 +0800
+Subject: [PATCH 055/189] net/hns3: remove unused parameter markers
+
+All input parameters in the "hns3_dev_xstats_get_by_id" API are used,
+so the rte_unused flag of some variables should be deleted.
+
+Fixes: 3213d584b698 ("net/hns3: fix xstats with id and names")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Lijun Ou <oulijun@huawei.com>
+---
+ drivers/net/hns3/hns3_stats.h | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_stats.h b/drivers/net/hns3/hns3_stats.h
+index 01b4f36..70a9c5b 100644
+--- a/drivers/net/hns3/hns3_stats.h
++++ b/drivers/net/hns3/hns3_stats.h
+@@ -156,8 +156,8 @@ int hns3_dev_xstats_get_names(struct rte_eth_dev *dev,
+ 			      struct rte_eth_xstat_name *xstats_names,
+ 			      __rte_unused unsigned int size);
+ int hns3_dev_xstats_get_by_id(struct rte_eth_dev *dev,
+-			      __rte_unused const uint64_t *ids,
+-			      __rte_unused uint64_t *values,
++			      const uint64_t *ids,
++			      uint64_t *values,
+ 			      uint32_t size);
+ int hns3_dev_xstats_get_names_by_id(struct rte_eth_dev *dev,
+ 				    struct rte_eth_xstat_name *xstats_names,
+-- 
+2.7.4
+

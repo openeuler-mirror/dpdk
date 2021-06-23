@@ -1,0 +1,113 @@
+From 670af503ac76c38183c532f3d6163a3a832f51d9 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Wed, 28 Apr 2021 14:40:41 +0800
+Subject: [PATCH 183/189] app/testpmd: fix DCB forwarding configuration
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+After DCB mode is configured, the operations of port stop and port start
+change the value of the global variable "dcb_test", As a result, the
+forwarding configuration from DCB to RSS mode, namely,
+“dcb_fwd_config_setup()” to "rss_fwd_config_setup()".
+
+Currently, the 'dcb_flag' field in struct 'rte_port' indicates whether
+the port is configured with DCB. And it is sufficient to have
+'dcb_config' as a global variable to control the DCB test status. So
+this patch deletes the "dcb_test".
+
+In addition, setting 'dcb_config' at the end of init_port_dcb_config()
+in case that ports fail to enter DCB mode.
+
+Fixes: 900550de04a7 ("app/testpmd: add dcb support")
+Fixes: ce8d561418d4 ("app/testpmd: add port configuration settings")
+Fixes: 7741e4cf16c0 ("app/testpmd: VMDq and DCB updates")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Lijun Ou <oulijun@huawei.com>
+Acked-by: Xiaoyun Li <xiaoyun.li@intel.com>
+---
+ app/test-pmd/testpmd.c | 18 ++++--------------
+ app/test-pmd/testpmd.h |  1 -
+ 2 files changed, 4 insertions(+), 15 deletions(-)
+
+diff --git a/app/test-pmd/testpmd.c b/app/test-pmd/testpmd.c
+index 33a060d..e55d986 100644
+--- a/app/test-pmd/testpmd.c
++++ b/app/test-pmd/testpmd.c
+@@ -245,9 +245,6 @@ uint16_t mb_mempool_cache = DEF_MBUF_CACHE; /**< Size of mbuf mempool cache. */
+ /* current configuration is in DCB or not,0 means it is not in DCB mode */
+ uint8_t dcb_config = 0;
+ 
+-/* Whether the dcb is in testing status */
+-uint8_t dcb_test = 0;
+-
+ /*
+  * Configurable number of RX/TX queues.
+  */
+@@ -2141,8 +2138,7 @@ start_packet_forwarding(int with_tx_first)
+ 		return;
+ 	}
+ 
+-
+-	if(dcb_test) {
++	if (dcb_config) {
+ 		for (i = 0; i < nb_fwd_ports; i++) {
+ 			pt_id = fwd_ports_ids[i];
+ 			port = &ports[pt_id];
+@@ -2450,8 +2446,6 @@ start_port(portid_t pid)
+ 	if (port_id_is_invalid(pid, ENABLED_WARN))
+ 		return 0;
+ 
+-	if(dcb_config)
+-		dcb_test = 1;
+ 	RTE_ETH_FOREACH_DEV(pi) {
+ 		if (pid != pi && pid != (portid_t)RTE_PORT_ALL)
+ 			continue;
+@@ -2689,11 +2683,6 @@ stop_port(portid_t pid)
+ 	portid_t peer_pl[RTE_MAX_ETHPORTS];
+ 	int peer_pi;
+ 
+-	if (dcb_test) {
+-		dcb_test = 0;
+-		dcb_config = 0;
+-	}
+-
+ 	if (port_id_is_invalid(pid, ENABLED_WARN))
+ 		return;
+ 
+@@ -3519,8 +3508,6 @@ init_port_dcb_config(portid_t pid,
+ 	rte_port = &ports[pid];
+ 
+ 	memset(&port_conf, 0, sizeof(struct rte_eth_conf));
+-	/* Enter DCB configuration status */
+-	dcb_config = 1;
+ 
+ 	port_conf.rxmode = rte_port->dev_conf.rxmode;
+ 	port_conf.txmode = rte_port->dev_conf.txmode;
+@@ -3588,6 +3575,9 @@ init_port_dcb_config(portid_t pid,
+ 
+ 	rte_port->dcb_flag = 1;
+ 
++	/* Enter DCB configuration status */
++	dcb_config = 1;
++
+ 	return 0;
+ }
+ 
+diff --git a/app/test-pmd/testpmd.h b/app/test-pmd/testpmd.h
+index 5f23162..303bed8 100644
+--- a/app/test-pmd/testpmd.h
++++ b/app/test-pmd/testpmd.h
+@@ -423,7 +423,6 @@ extern uint64_t noisy_lkup_num_reads;
+ extern uint64_t noisy_lkup_num_reads_writes;
+ 
+ extern uint8_t dcb_config;
+-extern uint8_t dcb_test;
+ 
+ extern uint32_t mbuf_data_size_n;
+ extern uint16_t mbuf_data_size[MAX_SEGS_BUFFER_SPLIT];
+-- 
+2.7.4
+

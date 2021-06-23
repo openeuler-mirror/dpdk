@@ -1,0 +1,64 @@
+From 0114915c86b2cadefe4c0323f28868c4f11be2f2 Mon Sep 17 00:00:00 2001
+From: Ruifeng Wang <ruifeng.wang@arm.com>
+Date: Tue, 12 Jan 2021 02:57:05 +0000
+Subject: [PATCH 003/189] net/hns3: fix build with SVE
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Building with SVE extension enabled stopped with error:
+
+ error: ACLE function ‘svwhilelt_b64_s32’ requires ISA extension ‘sve’
+   18 | #define PG64_256BIT  svwhilelt_b64(0, 4)
+
+This is caused by unintentional cflags reset.
+Fixed the issue by not touching cflags, and using flags defined by
+compiler.
+
+Fixes: 952ebacce4f2 ("net/hns3: support SVE Rx")
+Cc: stable@dpdk.org
+
+Signed-off-by: Ruifeng Wang <ruifeng.wang@arm.com>
+Reviewed-by: Honnappa Nagarahalli <honnappa.nagarahalli@arm.com>
+---
+ drivers/net/hns3/hns3_rxtx.c | 4 ++--
+ drivers/net/hns3/meson.build | 1 -
+ 2 files changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_rxtx.c b/drivers/net/hns3/hns3_rxtx.c
+index 88d3bab..5ac36b3 100644
+--- a/drivers/net/hns3/hns3_rxtx.c
++++ b/drivers/net/hns3/hns3_rxtx.c
+@@ -10,7 +10,7 @@
+ #include <rte_io.h>
+ #include <rte_net.h>
+ #include <rte_malloc.h>
+-#if defined(RTE_ARCH_ARM64) && defined(CC_SVE_SUPPORT)
++#if defined(RTE_ARCH_ARM64) && defined(__ARM_FEATURE_SVE)
+ #include <rte_cpuflags.h>
+ #endif
+ 
+@@ -2467,7 +2467,7 @@ hns3_rx_burst_mode_get(struct rte_eth_dev *dev, __rte_unused uint16_t queue_id,
+ static bool
+ hns3_check_sve_support(void)
+ {
+-#if defined(RTE_ARCH_ARM64) && defined(CC_SVE_SUPPORT)
++#if defined(RTE_ARCH_ARM64) && defined(__ARM_FEATURE_SVE)
+ 	if (rte_cpu_get_flag_enabled(RTE_CPUFLAG_SVE))
+ 		return true;
+ #endif
+diff --git a/drivers/net/hns3/meson.build b/drivers/net/hns3/meson.build
+index 45cee34..5674d98 100644
+--- a/drivers/net/hns3/meson.build
++++ b/drivers/net/hns3/meson.build
+@@ -32,7 +32,6 @@ deps += ['hash']
+ if arch_subdir == 'arm' and dpdk_conf.get('RTE_ARCH_64')
+ 	sources += files('hns3_rxtx_vec.c')
+ 	if cc.get_define('__ARM_FEATURE_SVE', args: machine_args) != ''
+-		cflags = ['-DCC_SVE_SUPPORT']
+ 		sources += files('hns3_rxtx_vec_sve.c')
+ 	endif
+ endif
+-- 
+2.7.4
+

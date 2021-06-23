@@ -1,0 +1,34 @@
+From 67137c61da758dd22b8a5f9cda9e32fcd9034892 Mon Sep 17 00:00:00 2001
+From: "Min Hu (Connor)" <humin29@huawei.com>
+Date: Tue, 20 Apr 2021 16:59:49 +0800
+Subject: [PATCH 130/189] net/hns3: fix traffic management support check
+
+params->leaf.cman has enum type which is not isomorphic with boolean
+type, however it is used as a boolean expression.
+
+This patch fixed it.
+
+Fixes: c09c7847d892 ("net/hns3: support traffic management")
+Cc: stable@dpdk.org
+
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_tm.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/net/hns3/hns3_tm.c b/drivers/net/hns3/hns3_tm.c
+index bcae57a..f7bfc25 100644
+--- a/drivers/net/hns3/hns3_tm.c
++++ b/drivers/net/hns3/hns3_tm.c
+@@ -385,7 +385,7 @@ hns3_tm_leaf_node_param_check(struct rte_eth_dev *dev __rte_unused,
+ 		return -EINVAL;
+ 	}
+ 
+-	if (params->leaf.cman) {
++	if (params->leaf.cman != RTE_TM_CMAN_TAIL_DROP) {
+ 		error->type = RTE_TM_ERROR_TYPE_NODE_PARAMS_CMAN;
+ 		error->message = "congestion management not supported";
+ 		return -EINVAL;
+-- 
+2.7.4
+

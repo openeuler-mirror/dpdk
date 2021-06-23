@@ -1,0 +1,32 @@
+From 59aed028f457ad2f029b85d48bcdf9c9678b3b07 Mon Sep 17 00:00:00 2001
+From: Hongbo Zheng <zhenghongbo3@huawei.com>
+Date: Wed, 31 Mar 2021 18:01:43 +0800
+Subject: [PATCH 085/189] net/hns3: delete redundant blank line
+
+Delete redundant blank line in "hns3vf_check_event_cause" to
+solve the static warning.
+
+Fixes: a5475d61fa34 ("net/hns3: support VF")
+Cc: stable@dpdk.org
+
+Signed-off-by: Hongbo Zheng <zhenghongbo3@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev_vf.c | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/drivers/net/hns3/hns3_ethdev_vf.c b/drivers/net/hns3/hns3_ethdev_vf.c
+index 22281c8..2a302e5 100644
+--- a/drivers/net/hns3/hns3_ethdev_vf.c
++++ b/drivers/net/hns3/hns3_ethdev_vf.c
+@@ -1064,7 +1064,6 @@ hns3vf_check_event_cause(struct hns3_adapter *hns, uint32_t *clearval)
+ 
+ 	/* Fetch the events from their corresponding regs */
+ 	cmdq_stat_reg = hns3_read_dev(hw, HNS3_VECTOR0_CMDQ_STAT_REG);
+-
+ 	if (BIT(HNS3_VECTOR0_RST_INT_B) & cmdq_stat_reg) {
+ 		rst_ing_reg = hns3_read_dev(hw, HNS3_FUN_RST_ING);
+ 		hns3_warn(hw, "resetting reg: 0x%x", rst_ing_reg);
+-- 
+2.7.4
+

@@ -1,0 +1,54 @@
+From dbeadbf0ac1368fa07822b025a3f1bf10a450b43 Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Sat, 8 May 2021 15:40:57 +0800
+Subject: [PATCH 161/189] net/hns3: fix TM QCN error event report by MSI-X
+
+The TM QCN error event should report by RAS other than MSIX.
+
+Also this patch adds fifo int enable configuration before the TM QCN
+error event is enabled.
+
+Fixes: f53a793bb7c2 ("net/hns3: add more hardware error types")
+Fixes: 3903c05382c5 ("net/hns3: remove read when enabling TM QCN error event")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_intr.c | 5 ++++-
+ drivers/net/hns3/hns3_intr.h | 2 ++
+ 2 files changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/net/hns3/hns3_intr.c b/drivers/net/hns3/hns3_intr.c
+index 0140260..854cb1d 100644
+--- a/drivers/net/hns3/hns3_intr.c
++++ b/drivers/net/hns3/hns3_intr.c
+@@ -1783,8 +1783,11 @@ enable_tm_err_intr(struct hns3_adapter *hns, bool en)
+ 
+ 	/* configure TM QCN hw errors */
+ 	hns3_cmd_setup_basic_desc(&desc, HNS3_OPC_TM_QCN_MEM_INT_CFG, false);
+-	if (en)
++	desc.data[0] = rte_cpu_to_le_32(HNS3_TM_QCN_ERR_INT_TYPE);
++	if (en) {
++		desc.data[0] |= rte_cpu_to_le_32(HNS3_TM_QCN_FIFO_INT_EN);
+ 		desc.data[1] = rte_cpu_to_le_32(HNS3_TM_QCN_MEM_ERR_INT_EN);
++	}
+ 
+ 	ret = hns3_cmd_send(hw, &desc, 1);
+ 	if (ret)
+diff --git a/drivers/net/hns3/hns3_intr.h b/drivers/net/hns3/hns3_intr.h
+index a140ca1..4dfc807 100644
+--- a/drivers/net/hns3/hns3_intr.h
++++ b/drivers/net/hns3/hns3_intr.h
+@@ -77,6 +77,8 @@
+ #define HNS3_NCSI_ERR_INT_EN			0x3
+ 
+ #define HNS3_TM_SCH_ECC_ERR_INT_EN		0x3
++#define HNS3_TM_QCN_ERR_INT_TYPE		0x29
++#define HNS3_TM_QCN_FIFO_INT_EN			0xFFFF00
+ #define HNS3_TM_QCN_MEM_ERR_INT_EN		0xFFFFFF
+ 
+ #define HNS3_RESET_PROCESS_MS			200
+-- 
+2.7.4
+

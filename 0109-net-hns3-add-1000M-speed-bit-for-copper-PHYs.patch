@@ -1,0 +1,32 @@
+From 8000e1aa7b8666b401153b6e31519b62d1423aa3 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Tue, 13 Apr 2021 21:47:12 +0800
+Subject: [PATCH 109/189] net/hns3: add 1000M speed bit for copper PHYs
+
+The bit(5) of supported, advertising and lp_advertising for copper
+PHYs obtained from the firmware indicates 1000M full-duplex. This
+speed capability bit is missing in the current codes.
+
+Fixes: 2e4859f3b362 ("net/hns3: support PF device with copper PHYs")
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_cmd.h | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/net/hns3/hns3_cmd.h b/drivers/net/hns3/hns3_cmd.h
+index 9a975b8..a7dd2b5 100644
+--- a/drivers/net/hns3/hns3_cmd.h
++++ b/drivers/net/hns3/hns3_cmd.h
+@@ -679,6 +679,7 @@ struct hns3_firmware_compat_cmd {
+ #define HNS3_PHY_LINK_SPEED_10M_BIT		BIT(1)
+ #define HNS3_PHY_LINK_SPEED_100M_HD_BIT		BIT(2)
+ #define HNS3_PHY_LINK_SPEED_100M_BIT		BIT(3)
++#define HNS3_PHY_LINK_SPEED_1000M_BIT		BIT(5)
+ #define HNS3_PHY_LINK_MODE_AUTONEG_BIT		BIT(6)
+ #define HNS3_PHY_LINK_MODE_PAUSE_BIT		BIT(13)
+ #define HNS3_PHY_LINK_MODE_ASYM_PAUSE_BIT	BIT(14)
+-- 
+2.7.4
+

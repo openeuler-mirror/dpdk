@@ -1,0 +1,40 @@
+From 6c80dd7d227149ba1e2a06be8a87a2295e5b2e5f Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Mon, 10 May 2021 21:38:13 +0800
+Subject: [PATCH 165/189] net/hns3: fail setting FEC if one bit mode is not
+ supported
+
+If the FEC mode was not supported, it should return error code.
+
+This patch also adds a space when log error info.
+
+Fixes: 9bf2ea8dbc65 ("net/hns3: support FEC")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 44e6c5b..7ecd15b 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -6988,9 +6988,11 @@ hns3_fec_set(struct rte_eth_dev *dev, uint32_t mode)
+ 		return ret;
+ 
+ 	/* HNS3 PMD driver only support one bit set mode, e.g. 0x1, 0x4 */
+-	if (!is_fec_mode_one_bit_set(mode))
+-		hns3_err(hw, "FEC mode(0x%x) not supported in HNS3 PMD,"
++	if (!is_fec_mode_one_bit_set(mode)) {
++		hns3_err(hw, "FEC mode(0x%x) not supported in HNS3 PMD, "
+ 			     "FEC mode should be only one bit set", mode);
++		return -EINVAL;
++	}
+ 
+ 	/*
+ 	 * Check whether the configured mode is within the FEC capability.
+-- 
+2.7.4
+

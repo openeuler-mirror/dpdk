@@ -1,0 +1,70 @@
+From 64c98e007bf57084bab1be0256d5d8cabf8e5b29 Mon Sep 17 00:00:00 2001
+From: Lijun Ou <oulijun@huawei.com>
+Date: Fri, 22 Jan 2021 18:18:46 +0800
+Subject: [PATCH 026/189] net/hns3: fix memory leak on secondary process exit
+
+The secondary process is applied a memory for the process_private
+during initialization. Therefore, the memory needs to be released
+when exiting.
+
+Fixes: c203571b3602 ("net/hns3: register and add log interface")
+Cc: stable@dpdk.org
+
+Signed-off-by: Lijun Ou <oulijun@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev.c    |  7 +++++--
+ drivers/net/hns3/hns3_ethdev_vf.c | 12 +++++++++---
+ 2 files changed, 14 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 817d1dc..2a5689c 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -6263,8 +6263,11 @@ hns3_dev_uninit(struct rte_eth_dev *eth_dev)
+ 
+ 	PMD_INIT_FUNC_TRACE();
+ 
+-	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
+-		return -EPERM;
++	if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
++		rte_free(eth_dev->process_private);
++		eth_dev->process_private = NULL;
++		return 0;
++	}
+ 
+ 	if (hw->adapter_state < HNS3_NIC_CLOSING)
+ 		hns3_dev_close(eth_dev);
+diff --git a/drivers/net/hns3/hns3_ethdev_vf.c b/drivers/net/hns3/hns3_ethdev_vf.c
+index 3a1d4cb..948d914 100644
+--- a/drivers/net/hns3/hns3_ethdev_vf.c
++++ b/drivers/net/hns3/hns3_ethdev_vf.c
+@@ -1971,8 +1971,11 @@ hns3vf_dev_close(struct rte_eth_dev *eth_dev)
+ 	struct hns3_hw *hw = &hns->hw;
+ 	int ret = 0;
+ 
+-	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
++	if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
++		rte_free(eth_dev->process_private);
++		eth_dev->process_private = NULL;
+ 		return 0;
++	}
+ 
+ 	if (hw->adapter_state == HNS3_NIC_STARTED)
+ 		ret = hns3vf_dev_stop(eth_dev);
+@@ -2839,8 +2842,11 @@ hns3vf_dev_uninit(struct rte_eth_dev *eth_dev)
+ 
+ 	PMD_INIT_FUNC_TRACE();
+ 
+-	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
+-		return -EPERM;
++	if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
++		rte_free(eth_dev->process_private);
++		eth_dev->process_private = NULL;
++		return 0;
++	}
+ 
+ 	if (hw->adapter_state < HNS3_NIC_CLOSING)
+ 		hns3vf_dev_close(eth_dev);
+-- 
+2.7.4
+

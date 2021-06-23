@@ -1,0 +1,63 @@
+From e1dc71a6850185aef917b37495c41a6da8017cee Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Fri, 30 Apr 2021 14:28:49 +0800
+Subject: [PATCH 150/189] net/hns3: log flow director configuration
+
+The rte flow interface does not support the API of the capability
+set. Therefore, fdir configuration logs are added to facilitate
+debugging.
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_fdir.c | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/drivers/net/hns3/hns3_fdir.c b/drivers/net/hns3/hns3_fdir.c
+index 06c9a94..06dd51b 100644
+--- a/drivers/net/hns3/hns3_fdir.c
++++ b/drivers/net/hns3/hns3_fdir.c
+@@ -336,6 +336,8 @@ int hns3_init_fd_config(struct hns3_adapter *hns)
+ 	    BIT(INNER_IP_PROTO) | BIT(INNER_IP_TOS) |
+ 	    BIT(INNER_SRC_IP) | BIT(INNER_DST_IP) |
+ 	    BIT(INNER_SRC_PORT) | BIT(INNER_DST_PORT);
++	hns3_dbg(hw, "fdir tuple: inner<vlan_tag1 eth_type ip_src ip_dst "
++		  "ip_proto ip_tos l4_src_port l4_dst_port>");
+ 
+ 	/* If use max 400bit key, we can support tuples for ether type */
+ 	if (pf->fdir.fd_cfg.max_key_length == MAX_KEY_LENGTH) {
+@@ -345,6 +347,9 @@ int hns3_init_fd_config(struct hns3_adapter *hns)
+ 		    BIT(OUTER_DST_PORT) | BIT(INNER_VLAN_TAG2) |
+ 		    BIT(OUTER_TUN_VNI) | BIT(OUTER_TUN_FLOW_ID) |
+ 		    BIT(OUTER_ETH_TYPE) | BIT(OUTER_IP_PROTO);
++		hns3_dbg(hw, "fdir tuple more: inner<dst_mac src_mac "
++			  "vlan_tag2 sctp_tag> outer<eth_type ip_proto "
++			  "l4_src_port l4_dst_port tun_vni tun_flow_id>");
+ 	}
+ 
+ 	/* roce_type is used to filter roce frames
+@@ -352,6 +357,7 @@ int hns3_init_fd_config(struct hns3_adapter *hns)
+ 	 */
+ 	key_cfg->meta_data_active = BIT(DST_VPORT) | BIT(TUNNEL_PACKET) |
+ 	    BIT(VLAN_NUMBER);
++	hns3_dbg(hw, "fdir meta data: dst_vport tunnel_packet vlan_number");
+ 
+ 	ret = hns3_get_fd_allocation(hw,
+ 				     &pf->fdir.fd_cfg.rule_num[HNS3_FD_STAGE_1],
+@@ -361,6 +367,13 @@ int hns3_init_fd_config(struct hns3_adapter *hns)
+ 	if (ret)
+ 		return ret;
+ 
++	hns3_dbg(hw, "fdir: stage1<rules-%u counters-%u> stage2<rules-%u "
++		  "counters=%u>",
++		  pf->fdir.fd_cfg.rule_num[HNS3_FD_STAGE_1],
++		  pf->fdir.fd_cfg.cnt_num[HNS3_FD_STAGE_1],
++		  pf->fdir.fd_cfg.rule_num[HNS3_FD_STAGE_2],
++		  pf->fdir.fd_cfg.cnt_num[HNS3_FD_STAGE_2]);
++
+ 	return hns3_set_fd_key_config(hns);
+ }
+ 
+-- 
+2.7.4
+

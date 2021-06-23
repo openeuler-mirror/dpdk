@@ -1,0 +1,177 @@
+From 4d90ba638f71a610da429d136fec5f3ebc076f97 Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Sat, 10 Apr 2021 09:11:17 +0800
+Subject: [PATCH 093/189] net/hns3: fix some packet types
+
+Currently, the packet type calculated by
+vlan/ovlan/l3id/l4id/ol3id/ol4id fields have the following problems:
+1) Identify error when exist VLAN strip which will lead to the data
+   buffer has non VLAN header but mbuf's ptype have L2_ETHER_VLAN flag.
+2) Some packet identifies error, eg: hardware report it's RARP or
+   unknown packet, but ptype will marked with L2_ETHER .
+
+So driver will calculate packet type only by l3id/l4id/ol3id/ol4id
+fields.
+
+Fixes: 0e98d5e6d9c3 ("net/hns3: fix packet type report in Rx")
+Fixes: bba636698316 ("net/hns3: support Rx/Tx and related operations")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev.h |  4 +--
+ drivers/net/hns3/hns3_rxtx.c   | 60 +++++++++++++-----------------------------
+ drivers/net/hns3/hns3_rxtx.h   | 14 ++++------
+ 3 files changed, 24 insertions(+), 54 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_ethdev.h b/drivers/net/hns3/hns3_ethdev.h
+index cd15bf3..47d998d 100644
+--- a/drivers/net/hns3/hns3_ethdev.h
++++ b/drivers/net/hns3/hns3_ethdev.h
+@@ -682,12 +682,10 @@ struct hns3_ptype_table {
+ 	 * The next fields used to calc packet-type by the
+ 	 * L3_ID/L4_ID/OL3_ID/OL4_ID from the Rx descriptor.
+ 	 */
+-	uint32_t l2l3table[HNS3_L2TBL_NUM][HNS3_L3TBL_NUM];
++	uint32_t l3table[HNS3_L3TBL_NUM];
+ 	uint32_t l4table[HNS3_L4TBL_NUM];
+-	uint32_t inner_l2table[HNS3_L2TBL_NUM];
+ 	uint32_t inner_l3table[HNS3_L3TBL_NUM];
+ 	uint32_t inner_l4table[HNS3_L4TBL_NUM];
+-	uint32_t ol2table[HNS3_OL2TBL_NUM];
+ 	uint32_t ol3table[HNS3_OL3TBL_NUM];
+ 	uint32_t ol4table[HNS3_OL4TBL_NUM];
+ 
+diff --git a/drivers/net/hns3/hns3_rxtx.c b/drivers/net/hns3/hns3_rxtx.c
+index 4ea6b8b..46d6943 100644
+--- a/drivers/net/hns3/hns3_rxtx.c
++++ b/drivers/net/hns3/hns3_rxtx.c
+@@ -2003,32 +2003,12 @@ hns3_dev_supported_ptypes_get(struct rte_eth_dev *dev)
+ static void
+ hns3_init_non_tunnel_ptype_tbl(struct hns3_ptype_table *tbl)
+ {
+-	tbl->l2l3table[0][0] = RTE_PTYPE_L2_ETHER | RTE_PTYPE_L3_IPV4;
+-	tbl->l2l3table[0][1] = RTE_PTYPE_L2_ETHER | RTE_PTYPE_L3_IPV6;
+-	tbl->l2l3table[0][2] = RTE_PTYPE_L2_ETHER_ARP;
+-	tbl->l2l3table[0][3] = RTE_PTYPE_L2_ETHER;
+-	tbl->l2l3table[0][4] = RTE_PTYPE_L2_ETHER | RTE_PTYPE_L3_IPV4_EXT;
+-	tbl->l2l3table[0][5] = RTE_PTYPE_L2_ETHER | RTE_PTYPE_L3_IPV6_EXT;
+-	tbl->l2l3table[0][6] = RTE_PTYPE_L2_ETHER_LLDP;
+-	tbl->l2l3table[0][15] = RTE_PTYPE_L2_ETHER;
+-
+-	tbl->l2l3table[1][0] = RTE_PTYPE_L2_ETHER_VLAN | RTE_PTYPE_L3_IPV4;
+-	tbl->l2l3table[1][1] = RTE_PTYPE_L2_ETHER_VLAN | RTE_PTYPE_L3_IPV6;
+-	tbl->l2l3table[1][2] = RTE_PTYPE_L2_ETHER_ARP;
+-	tbl->l2l3table[1][3] = RTE_PTYPE_L2_ETHER_VLAN;
+-	tbl->l2l3table[1][4] = RTE_PTYPE_L2_ETHER_VLAN | RTE_PTYPE_L3_IPV4_EXT;
+-	tbl->l2l3table[1][5] = RTE_PTYPE_L2_ETHER_VLAN | RTE_PTYPE_L3_IPV6_EXT;
+-	tbl->l2l3table[1][6] = RTE_PTYPE_L2_ETHER_LLDP;
+-	tbl->l2l3table[1][15] = RTE_PTYPE_L2_ETHER_VLAN;
+-
+-	tbl->l2l3table[2][0] = RTE_PTYPE_L2_ETHER_QINQ | RTE_PTYPE_L3_IPV4;
+-	tbl->l2l3table[2][1] = RTE_PTYPE_L2_ETHER_QINQ | RTE_PTYPE_L3_IPV6;
+-	tbl->l2l3table[2][2] = RTE_PTYPE_L2_ETHER_ARP;
+-	tbl->l2l3table[2][3] = RTE_PTYPE_L2_ETHER_QINQ;
+-	tbl->l2l3table[2][4] = RTE_PTYPE_L2_ETHER_QINQ | RTE_PTYPE_L3_IPV4_EXT;
+-	tbl->l2l3table[2][5] = RTE_PTYPE_L2_ETHER_QINQ | RTE_PTYPE_L3_IPV6_EXT;
+-	tbl->l2l3table[2][6] = RTE_PTYPE_L2_ETHER_LLDP;
+-	tbl->l2l3table[2][15] = RTE_PTYPE_L2_ETHER_QINQ;
++	tbl->l3table[0] = RTE_PTYPE_L2_ETHER | RTE_PTYPE_L3_IPV4;
++	tbl->l3table[1] = RTE_PTYPE_L2_ETHER | RTE_PTYPE_L3_IPV6;
++	tbl->l3table[2] = RTE_PTYPE_L2_ETHER_ARP;
++	tbl->l3table[4] = RTE_PTYPE_L2_ETHER | RTE_PTYPE_L3_IPV4_EXT;
++	tbl->l3table[5] = RTE_PTYPE_L2_ETHER | RTE_PTYPE_L3_IPV6_EXT;
++	tbl->l3table[6] = RTE_PTYPE_L2_ETHER_LLDP;
+ 
+ 	tbl->l4table[0] = RTE_PTYPE_L4_UDP;
+ 	tbl->l4table[1] = RTE_PTYPE_L4_TCP;
+@@ -2041,17 +2021,17 @@ hns3_init_non_tunnel_ptype_tbl(struct hns3_ptype_table *tbl)
+ static void
+ hns3_init_tunnel_ptype_tbl(struct hns3_ptype_table *tbl)
+ {
+-	tbl->inner_l2table[0] = RTE_PTYPE_INNER_L2_ETHER;
+-	tbl->inner_l2table[1] = RTE_PTYPE_INNER_L2_ETHER_VLAN;
+-	tbl->inner_l2table[2] = RTE_PTYPE_INNER_L2_ETHER_QINQ;
+-
+-	tbl->inner_l3table[0] = RTE_PTYPE_INNER_L3_IPV4;
+-	tbl->inner_l3table[1] = RTE_PTYPE_INNER_L3_IPV6;
++	tbl->inner_l3table[0] = RTE_PTYPE_INNER_L2_ETHER |
++				RTE_PTYPE_INNER_L3_IPV4;
++	tbl->inner_l3table[1] = RTE_PTYPE_INNER_L2_ETHER |
++				RTE_PTYPE_INNER_L3_IPV6;
+ 	/* There is not a ptype for inner ARP/RARP */
+ 	tbl->inner_l3table[2] = RTE_PTYPE_UNKNOWN;
+ 	tbl->inner_l3table[3] = RTE_PTYPE_UNKNOWN;
+-	tbl->inner_l3table[4] = RTE_PTYPE_INNER_L3_IPV4_EXT;
+-	tbl->inner_l3table[5] = RTE_PTYPE_INNER_L3_IPV6_EXT;
++	tbl->inner_l3table[4] = RTE_PTYPE_INNER_L2_ETHER |
++				RTE_PTYPE_INNER_L3_IPV4_EXT;
++	tbl->inner_l3table[5] = RTE_PTYPE_INNER_L2_ETHER |
++				RTE_PTYPE_INNER_L3_IPV6_EXT;
+ 
+ 	tbl->inner_l4table[0] = RTE_PTYPE_INNER_L4_UDP;
+ 	tbl->inner_l4table[1] = RTE_PTYPE_INNER_L4_TCP;
+@@ -2062,16 +2042,12 @@ hns3_init_tunnel_ptype_tbl(struct hns3_ptype_table *tbl)
+ 	tbl->inner_l4table[4] = RTE_PTYPE_UNKNOWN;
+ 	tbl->inner_l4table[5] = RTE_PTYPE_INNER_L4_ICMP;
+ 
+-	tbl->ol2table[0] = RTE_PTYPE_L2_ETHER;
+-	tbl->ol2table[1] = RTE_PTYPE_L2_ETHER_VLAN;
+-	tbl->ol2table[2] = RTE_PTYPE_L2_ETHER_QINQ;
+-
+-	tbl->ol3table[0] = RTE_PTYPE_L3_IPV4;
+-	tbl->ol3table[1] = RTE_PTYPE_L3_IPV6;
++	tbl->ol3table[0] = RTE_PTYPE_L2_ETHER | RTE_PTYPE_L3_IPV4;
++	tbl->ol3table[1] = RTE_PTYPE_L2_ETHER | RTE_PTYPE_L3_IPV6;
+ 	tbl->ol3table[2] = RTE_PTYPE_UNKNOWN;
+ 	tbl->ol3table[3] = RTE_PTYPE_UNKNOWN;
+-	tbl->ol3table[4] = RTE_PTYPE_L3_IPV4_EXT;
+-	tbl->ol3table[5] = RTE_PTYPE_L3_IPV6_EXT;
++	tbl->ol3table[4] = RTE_PTYPE_L2_ETHER | RTE_PTYPE_L3_IPV4_EXT;
++	tbl->ol3table[5] = RTE_PTYPE_L2_ETHER | RTE_PTYPE_L3_IPV6_EXT;
+ 
+ 	tbl->ol4table[0] = RTE_PTYPE_UNKNOWN;
+ 	tbl->ol4table[1] = RTE_PTYPE_TUNNEL_VXLAN;
+diff --git a/drivers/net/hns3/hns3_rxtx.h b/drivers/net/hns3/hns3_rxtx.h
+index eebbebf..44d0ca7 100644
+--- a/drivers/net/hns3/hns3_rxtx.h
++++ b/drivers/net/hns3/hns3_rxtx.h
+@@ -635,8 +635,8 @@ hns3_rx_calc_ptype(struct hns3_rx_queue *rxq, const uint32_t l234_info,
+ 		   const uint32_t ol_info)
+ {
+ 	const struct hns3_ptype_table * const ptype_tbl = rxq->ptype_tbl;
+-	uint32_t l2id, l3id, l4id;
+-	uint32_t ol3id, ol4id, ol2id;
++	uint32_t ol3id, ol4id;
++	uint32_t l3id, l4id;
+ 	uint32_t ptype;
+ 
+ 	if (rxq->ptype_en) {
+@@ -647,20 +647,16 @@ hns3_rx_calc_ptype(struct hns3_rx_queue *rxq, const uint32_t l234_info,
+ 
+ 	ol4id = hns3_get_field(ol_info, HNS3_RXD_OL4ID_M, HNS3_RXD_OL4ID_S);
+ 	ol3id = hns3_get_field(ol_info, HNS3_RXD_OL3ID_M, HNS3_RXD_OL3ID_S);
+-	ol2id = hns3_get_field(ol_info, HNS3_RXD_OVLAN_M, HNS3_RXD_OVLAN_S);
+-	l2id = hns3_get_field(l234_info, HNS3_RXD_VLAN_M, HNS3_RXD_VLAN_S);
+ 	l3id = hns3_get_field(l234_info, HNS3_RXD_L3ID_M, HNS3_RXD_L3ID_S);
+ 	l4id = hns3_get_field(l234_info, HNS3_RXD_L4ID_M, HNS3_RXD_L4ID_S);
+ 
+ 	if (unlikely(ptype_tbl->ol4table[ol4id]))
+-		return ptype_tbl->inner_l2table[l2id] |
+-			ptype_tbl->inner_l3table[l3id] |
++		return ptype_tbl->inner_l3table[l3id] |
+ 			ptype_tbl->inner_l4table[l4id] |
+ 			ptype_tbl->ol3table[ol3id] |
+-			ptype_tbl->ol4table[ol4id] | ptype_tbl->ol2table[ol2id];
++			ptype_tbl->ol4table[ol4id];
+ 	else
+-		return ptype_tbl->l2l3table[l2id][l3id] |
+-			ptype_tbl->l4table[l4id];
++		return ptype_tbl->l3table[l3id] | ptype_tbl->l4table[l4id];
+ }
+ 
+ void hns3_dev_rx_queue_release(void *queue);
+-- 
+2.7.4
+

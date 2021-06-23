@@ -1,0 +1,33 @@
+From e1cf907216bf8fdb15a94a7c9918b1f6772afebb Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Mon, 10 May 2021 21:38:10 +0800
+Subject: [PATCH 162/189] net/hns3: fix mailbox message ID in log
+
+The mailbox message id is uint8_t, but the unsupported mailbox message
+id was logged by uint16.
+
+Fixes: 463e748964f5 ("net/hns3: support mailbox")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_mbx.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/net/hns3/hns3_mbx.c b/drivers/net/hns3/hns3_mbx.c
+index 3d019b9..0c2e03b 100644
+--- a/drivers/net/hns3/hns3_mbx.c
++++ b/drivers/net/hns3/hns3_mbx.c
+@@ -540,7 +540,7 @@ hns3_dev_handle_mbx_msg(struct hns3_hw *hw)
+ 			break;
+ 		default:
+ 			hns3_err(hw, "received unsupported(%u) mbx msg",
+-				 req->msg[0]);
++				 opcode);
+ 			break;
+ 		}
+ 
+-- 
+2.7.4
+

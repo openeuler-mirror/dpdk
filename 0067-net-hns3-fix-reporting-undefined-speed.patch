@@ -1,0 +1,57 @@
+From 3a77c6eecf9089843c3f4452139c07ffe5c6823d Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Tue, 23 Mar 2021 21:45:51 +0800
+Subject: [PATCH 067/189] net/hns3: fix reporting undefined speed
+
+There may be a case in future that the speed obtained from firmware
+is undefined (such as, 400G or other rate), and link status of device is
+up. At this case, PMD driver will reports 100Mbps to the user in the
+"hns3_dev_link_update" API, which is unreasonable. Besides, if the
+speed from firmware is zero, driver should report zero instead of
+100Mbps.
+
+Fixes: 59fad0f32135 ("net/hns3: support link update operation")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev.c    | 5 ++++-
+ drivers/net/hns3/hns3_ethdev_vf.c | 5 ++++-
+ 2 files changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 12cc3ac..55e2f07 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -2725,7 +2725,10 @@ hns3_dev_link_update(struct rte_eth_dev *eth_dev,
+ 		new_link.link_speed = mac->link_speed;
+ 		break;
+ 	default:
+-		new_link.link_speed = ETH_SPEED_NUM_100M;
++		if (mac->link_status)
++			new_link.link_speed = ETH_SPEED_NUM_UNKNOWN;
++		else
++			new_link.link_speed = ETH_SPEED_NUM_NONE;
+ 		break;
+ 	}
+ 
+diff --git a/drivers/net/hns3/hns3_ethdev_vf.c b/drivers/net/hns3/hns3_ethdev_vf.c
+index 6404264..26f0698 100644
+--- a/drivers/net/hns3/hns3_ethdev_vf.c
++++ b/drivers/net/hns3/hns3_ethdev_vf.c
+@@ -2123,7 +2123,10 @@ hns3vf_dev_link_update(struct rte_eth_dev *eth_dev,
+ 		new_link.link_speed = mac->link_speed;
+ 		break;
+ 	default:
+-		new_link.link_speed = ETH_SPEED_NUM_100M;
++		if (mac->link_status)
++			new_link.link_speed = ETH_SPEED_NUM_UNKNOWN;
++		else
++			new_link.link_speed = ETH_SPEED_NUM_NONE;
+ 		break;
+ 	}
+ 
+-- 
+2.7.4
+

@@ -1,0 +1,48 @@
+From 35469e7e3c26afc79f340b8477bf7ce1dc65746e Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Thu, 4 Mar 2021 15:44:47 +0800
+Subject: [PATCH 051/189] net/hns3: fix device capabilities for copper media
+ type
+
+The configuration operation for PHY is implemented by firmware. And
+a capability flag will be report to driver, which means the firmware
+supports the PHY driver.  However, the current implementation only
+supports obtaining the capability bit, but some basic functions of
+copper ports in driver, such as, the query of link status and link
+info, are not supported.
+
+Therefore, it is necessary for driver to set the copper capability
+bit to zero when the firmware supports the configuration of the PHY.
+
+Fixes: 438752358158 ("net/hns3: get device capability from firmware")
+Fixes: 95e50325864c ("net/hns3: support copper media type")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+---
+ drivers/net/hns3/hns3_cmd.c | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/net/hns3/hns3_cmd.c b/drivers/net/hns3/hns3_cmd.c
+index 0590898..f0bc177 100644
+--- a/drivers/net/hns3/hns3_cmd.c
++++ b/drivers/net/hns3/hns3_cmd.c
+@@ -423,8 +423,14 @@ static void hns3_parse_capability(struct hns3_hw *hw,
+ 		hns3_set_bit(hw->capability, HNS3_DEV_SUPPORT_PTP_B, 1);
+ 	if (hns3_get_bit(caps, HNS3_CAPS_TX_PUSH_B))
+ 		hns3_set_bit(hw->capability, HNS3_DEV_SUPPORT_TX_PUSH_B, 1);
++	/*
++	 * Currently, the query of link status and link info on copper ports
++	 * are not supported. So it is necessary for driver to set the copper
++	 * capability bit to zero when the firmware supports the configuration
++	 * of the PHY.
++	 */
+ 	if (hns3_get_bit(caps, HNS3_CAPS_PHY_IMP_B))
+-		hns3_set_bit(hw->capability, HNS3_DEV_SUPPORT_COPPER_B, 1);
++		hns3_set_bit(hw->capability, HNS3_DEV_SUPPORT_COPPER_B, 0);
+ 	if (hns3_get_bit(caps, HNS3_CAPS_TQP_TXRX_INDEP_B))
+ 		hns3_set_bit(hw->capability, HNS3_DEV_SUPPORT_INDEP_TXRX_B, 1);
+ 	if (hns3_get_bit(caps, HNS3_CAPS_STASH_B))
+-- 
+2.7.4
+

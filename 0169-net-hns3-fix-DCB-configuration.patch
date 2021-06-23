@@ -1,0 +1,198 @@
+From c8817a4d8e42476b08fdcfc0a2b931e3d2fecc59 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Sat, 15 May 2021 08:52:36 +0800
+Subject: [PATCH 169/189] net/hns3: fix DCB configuration
+
+Currently, the DCB configuration takes effect in the dev_start stage, and
+the mapping between TCs and queues are also updated in this stage.
+However, the DCB configuration is delivered in the dev_configure stage.
+
+If the configuration fails, it should be intercepted in this stage. If
+the configuration succeeds, the user should be able to obtain the
+corresponding updated information, such as the mapping between TCs and
+queues. So this patch moves DCB configuration to dev_configure.
+
+Fixes: 62e3ccc2b94c ("net/hns3: support flow control")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_dcb.c    | 35 +++++---------------------
+ drivers/net/hns3/hns3_dcb.h    |  2 +-
+ drivers/net/hns3/hns3_ethdev.c | 56 +++++++++++++++++++++++-------------------
+ 3 files changed, 38 insertions(+), 55 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_dcb.c b/drivers/net/hns3/hns3_dcb.c
+index 1547942..624bf40 100644
+--- a/drivers/net/hns3/hns3_dcb.c
++++ b/drivers/net/hns3/hns3_dcb.c
+@@ -1615,8 +1615,7 @@ hns3_dcb_configure(struct hns3_adapter *hns)
+ 	int ret;
+ 
+ 	hns3_dcb_cfg_validate(hns, &num_tc, &map_changed);
+-	if (map_changed ||
+-	    __atomic_load_n(&hw->reset.resetting,  __ATOMIC_RELAXED)) {
++	if (map_changed) {
+ 		ret = hns3_dcb_info_update(hns, num_tc);
+ 		if (ret) {
+ 			hns3_err(hw, "dcb info update failed: %d", ret);
+@@ -1712,14 +1711,18 @@ hns3_dcb_init(struct hns3_hw *hw)
+ 	return 0;
+ }
+ 
+-static int
++int
+ hns3_update_queue_map_configure(struct hns3_adapter *hns)
+ {
+ 	struct hns3_hw *hw = &hns->hw;
++	enum rte_eth_rx_mq_mode mq_mode = hw->data->dev_conf.rxmode.mq_mode;
+ 	uint16_t nb_rx_q = hw->data->nb_rx_queues;
+ 	uint16_t nb_tx_q = hw->data->nb_tx_queues;
+ 	int ret;
+ 
++	if ((uint32_t)mq_mode & ETH_MQ_RX_DCB_FLAG)
++		return 0;
++
+ 	ret = hns3_dcb_update_tc_queue_mapping(hw, nb_rx_q, nb_tx_q);
+ 	if (ret) {
+ 		hns3_err(hw, "failed to update tc queue mapping, ret = %d.",
+@@ -1733,32 +1736,6 @@ hns3_update_queue_map_configure(struct hns3_adapter *hns)
+ 	return ret;
+ }
+ 
+-int
+-hns3_dcb_cfg_update(struct hns3_adapter *hns)
+-{
+-	struct hns3_hw *hw = &hns->hw;
+-	enum rte_eth_rx_mq_mode mq_mode = hw->data->dev_conf.rxmode.mq_mode;
+-	int ret;
+-
+-	if ((uint32_t)mq_mode & ETH_MQ_RX_DCB_FLAG) {
+-		ret = hns3_dcb_configure(hns);
+-		if (ret)
+-			hns3_err(hw, "Failed to config dcb: %d", ret);
+-	} else {
+-		/*
+-		 * Update queue map without PFC configuration,
+-		 * due to queues reconfigured by user.
+-		 */
+-		ret = hns3_update_queue_map_configure(hns);
+-		if (ret)
+-			hns3_err(hw,
+-				 "Failed to update queue mapping configure: %d",
+-				 ret);
+-	}
+-
+-	return ret;
+-}
+-
+ static void
+ hns3_get_fc_mode(struct hns3_hw *hw, enum rte_eth_fc_mode mode)
+ {
+diff --git a/drivers/net/hns3/hns3_dcb.h b/drivers/net/hns3/hns3_dcb.h
+index 0d25d3b..279f163 100644
+--- a/drivers/net/hns3/hns3_dcb.h
++++ b/drivers/net/hns3/hns3_dcb.h
+@@ -207,7 +207,7 @@ int hns3_dcb_pfc_enable(struct rte_eth_dev *dev,
+ int hns3_queue_to_tc_mapping(struct hns3_hw *hw, uint16_t nb_rx_q,
+ 			     uint16_t nb_tx_q);
+ 
+-int hns3_dcb_cfg_update(struct hns3_adapter *hns);
++int hns3_update_queue_map_configure(struct hns3_adapter *hns);
+ int hns3_port_shaper_update(struct hns3_hw *hw, uint32_t speed);
+ int hns3_pg_shaper_rate_cfg(struct hns3_hw *hw, uint8_t pg_id, uint32_t rate);
+ int hns3_pri_shaper_rate_cfg(struct hns3_hw *hw, uint8_t tc_no, uint32_t rate);
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 88b2cfd..351dc59 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -2274,24 +2274,6 @@ hns3_check_mq_mode(struct rte_eth_dev *dev)
+ }
+ 
+ static int
+-hns3_check_dcb_cfg(struct rte_eth_dev *dev)
+-{
+-	struct hns3_hw *hw = HNS3_DEV_PRIVATE_TO_HW(dev->data->dev_private);
+-
+-	if (!hns3_dev_dcb_supported(hw)) {
+-		hns3_err(hw, "this port does not support dcb configurations.");
+-		return -EOPNOTSUPP;
+-	}
+-
+-	if (hw->current_fc_status == HNS3_FC_STATUS_MAC_PAUSE) {
+-		hns3_err(hw, "MAC pause enabled, cannot config dcb info.");
+-		return -EOPNOTSUPP;
+-	}
+-
+-	return 0;
+-}
+-
+-static int
+ hns3_bind_ring_with_vector(struct hns3_hw *hw, uint16_t vector_id, bool en,
+ 			   enum hns3_ring_type queue_type, uint16_t queue_id)
+ {
+@@ -2427,6 +2409,30 @@ hns3_refresh_mtu(struct rte_eth_dev *dev, struct rte_eth_conf *conf)
+ }
+ 
+ static int
++hns3_setup_dcb(struct rte_eth_dev *dev)
++{
++	struct hns3_adapter *hns = dev->data->dev_private;
++	struct hns3_hw *hw = &hns->hw;
++	int ret;
++
++	if (!hns3_dev_dcb_supported(hw)) {
++		hns3_err(hw, "this port does not support dcb configurations.");
++		return -EOPNOTSUPP;
++	}
++
++	if (hw->current_fc_status == HNS3_FC_STATUS_MAC_PAUSE) {
++		hns3_err(hw, "MAC pause enabled, cannot config dcb info.");
++		return -EOPNOTSUPP;
++	}
++
++	ret = hns3_dcb_configure(hns);
++	if (ret)
++		hns3_err(hw, "failed to config dcb: %d", ret);
++
++	return ret;
++}
++
++static int
+ hns3_check_link_speed(struct hns3_hw *hw, uint32_t link_speeds)
+ {
+ 	int ret;
+@@ -2506,7 +2512,7 @@ hns3_dev_configure(struct rte_eth_dev *dev)
+ 		goto cfg_err;
+ 
+ 	if ((uint32_t)mq_mode & ETH_MQ_RX_DCB_FLAG) {
+-		ret = hns3_check_dcb_cfg(dev);
++		ret = hns3_setup_dcb(dev);
+ 		if (ret)
+ 			goto cfg_err;
+ 	}
+@@ -5571,14 +5577,14 @@ hns3_do_start(struct hns3_adapter *hns, bool reset_queue)
+ 	struct hns3_hw *hw = &hns->hw;
+ 	int ret;
+ 
+-	ret = hns3_dcb_cfg_update(hns);
+-	if (ret)
++	ret = hns3_update_queue_map_configure(hns);
++	if (ret) {
++		hns3_err(hw, "failed to update queue mapping configuration, ret = %d",
++			 ret);
+ 		return ret;
++	}
+ 
+-	/*
+-	 * The hns3_dcb_cfg_update may configure TM module, so
+-	 * hns3_tm_conf_update must called later.
+-	 */
++	/* Note: hns3_tm_conf_update must be called after configuring DCB. */
+ 	ret = hns3_tm_conf_update(hw);
+ 	if (ret) {
+ 		PMD_INIT_LOG(ERR, "failed to update tm conf, ret = %d.", ret);
+-- 
+2.7.4
+

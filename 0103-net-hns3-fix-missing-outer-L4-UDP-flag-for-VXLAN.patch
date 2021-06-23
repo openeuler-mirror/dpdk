@@ -1,0 +1,32 @@
+From e8eb8b70d1d9cf8c1fd6ece253d4195e49208a21 Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Tue, 13 Apr 2021 19:50:06 +0800
+Subject: [PATCH 103/189] net/hns3: fix missing outer L4 UDP flag for VXLAN
+
+This patch adds RTE_PTYPE_L4_UDP flag when parsed tunnel vxlan packet.
+
+Fixes: bba636698316 ("net/hns3: support Rx/Tx and related operations")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_rxtx.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/net/hns3/hns3_rxtx.c b/drivers/net/hns3/hns3_rxtx.c
+index f3ced19..7e9b762 100644
+--- a/drivers/net/hns3/hns3_rxtx.c
++++ b/drivers/net/hns3/hns3_rxtx.c
+@@ -2051,7 +2051,7 @@ hns3_init_tunnel_ptype_tbl(struct hns3_ptype_table *tbl)
+ 	tbl->ol3table[5] = RTE_PTYPE_L2_ETHER | RTE_PTYPE_L3_IPV6_EXT;
+ 
+ 	tbl->ol4table[0] = RTE_PTYPE_UNKNOWN;
+-	tbl->ol4table[1] = RTE_PTYPE_TUNNEL_VXLAN;
++	tbl->ol4table[1] = RTE_PTYPE_L4_UDP | RTE_PTYPE_TUNNEL_VXLAN;
+ 	tbl->ol4table[2] = RTE_PTYPE_TUNNEL_NVGRE;
+ }
+ 
+-- 
+2.7.4
+

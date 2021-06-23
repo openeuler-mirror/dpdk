@@ -1,0 +1,37 @@
+From aefb4f06db3a837b7e93f8088c1d4882aa9a5041 Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Wed, 3 Feb 2021 20:23:50 +0800
+Subject: [PATCH 036/189] net/hns3: constrain TM peak rate
+
+User could config Port or TC's peak rate by TM ops, but hardware does
+not support peak rate which lower than 1Mbps. So we constraint TM
+peak rate must be at least 1Mbps.
+
+Fixes: c09c7847d892 ("net/hns3: support traffic management")
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Lijun Ou <oulijun@huawei.com>
+---
+ drivers/net/hns3/hns3_tm.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/drivers/net/hns3/hns3_tm.c b/drivers/net/hns3/hns3_tm.c
+index d1639d4..bcae57a 100644
+--- a/drivers/net/hns3/hns3_tm.c
++++ b/drivers/net/hns3/hns3_tm.c
+@@ -200,6 +200,12 @@ hns3_tm_shaper_profile_param_check(struct rte_eth_dev *dev,
+ 		return -EINVAL;
+ 	}
+ 
++	if (profile->peak.rate < hns3_tm_rate_convert_firmware2tm(1)) {
++		error->type = RTE_TM_ERROR_TYPE_SHAPER_PROFILE_PEAK_RATE;
++		error->message = "peak rate must be at least 1Mbps";
++		return -EINVAL;
++	}
++
+ 	if (profile->peak.size) {
+ 		error->type = RTE_TM_ERROR_TYPE_SHAPER_PROFILE_PEAK_SIZE;
+ 		error->message = "peak bucket size not supported";
+-- 
+2.7.4
+

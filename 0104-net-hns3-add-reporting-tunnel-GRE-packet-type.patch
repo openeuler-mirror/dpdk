@@ -1,0 +1,45 @@
+From a501cc13ee7b3047e81233c9488a5782108ede68 Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Tue, 13 Apr 2021 19:50:07 +0800
+Subject: [PATCH 104/189] net/hns3: add reporting tunnel GRE packet type
+
+This patch supports reporting TUNNEL GRE packet type when rxd advanced
+layout enabled.
+
+Fixes: fb5e90694022 ("net/hns3: support Rx descriptor advanced layout")
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_rxtx.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_rxtx.c b/drivers/net/hns3/hns3_rxtx.c
+index 7e9b762..db64578 100644
+--- a/drivers/net/hns3/hns3_rxtx.c
++++ b/drivers/net/hns3/hns3_rxtx.c
+@@ -2074,8 +2074,8 @@ hns3_init_adv_layout_ptype(struct hns3_ptype_table *tbl)
+ 		    RTE_PTYPE_L4_UDP;
+ 	ptype[20] = RTE_PTYPE_L2_ETHER | RTE_PTYPE_L3_IPV4_EXT_UNKNOWN |
+ 		    RTE_PTYPE_L4_TCP;
+-	/* The next ptype is GRE over IPv4 */
+-	ptype[21] = RTE_PTYPE_L2_ETHER | RTE_PTYPE_L3_IPV4_EXT_UNKNOWN;
++	ptype[21] = RTE_PTYPE_L2_ETHER | RTE_PTYPE_L3_IPV4_EXT_UNKNOWN |
++		    RTE_PTYPE_TUNNEL_GRE;
+ 	ptype[22] = RTE_PTYPE_L2_ETHER | RTE_PTYPE_L3_IPV4_EXT_UNKNOWN |
+ 		    RTE_PTYPE_L4_SCTP;
+ 	ptype[23] = RTE_PTYPE_L2_ETHER | RTE_PTYPE_L3_IPV4_EXT_UNKNOWN |
+@@ -2162,8 +2162,8 @@ hns3_init_adv_layout_ptype(struct hns3_ptype_table *tbl)
+ 		     RTE_PTYPE_L4_UDP;
+ 	ptype[114] = RTE_PTYPE_L2_ETHER | RTE_PTYPE_L3_IPV6_EXT_UNKNOWN |
+ 		     RTE_PTYPE_L4_TCP;
+-	/* The next ptype is GRE over IPv6 */
+-	ptype[115] = RTE_PTYPE_L2_ETHER | RTE_PTYPE_L3_IPV6_EXT_UNKNOWN;
++	ptype[115] = RTE_PTYPE_L2_ETHER | RTE_PTYPE_L3_IPV6_EXT_UNKNOWN |
++		     RTE_PTYPE_TUNNEL_GRE;
+ 	ptype[116] = RTE_PTYPE_L2_ETHER | RTE_PTYPE_L3_IPV6_EXT_UNKNOWN |
+ 		     RTE_PTYPE_L4_SCTP;
+ 	ptype[117] = RTE_PTYPE_L2_ETHER | RTE_PTYPE_L3_IPV6_EXT_UNKNOWN |
+-- 
+2.7.4
+

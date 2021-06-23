@@ -1,0 +1,64 @@
+From 8ca8c0a70500b13e25d292994ba403729f8671fd Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Wed, 28 Apr 2021 15:20:51 +0800
+Subject: [PATCH 140/189] net/hns3: support preferred burst size and queues in
+ VF
+
+This patch supports get preferred burst size and queues when call
+rte_eth_dev_info_get() API with VF.
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev.c    | 3 ---
+ drivers/net/hns3/hns3_ethdev.h    | 3 +++
+ drivers/net/hns3/hns3_ethdev_vf.c | 5 +++++
+ 3 files changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 8dc9dbe..f532284 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -16,9 +16,6 @@
+ #include "hns3_dcb.h"
+ #include "hns3_mp.h"
+ 
+-#define HNS3_DEFAULT_PORT_CONF_BURST_SIZE	32
+-#define HNS3_DEFAULT_PORT_CONF_QUEUES_NUM	1
+-
+ #define HNS3_SERVICE_INTERVAL		1000000 /* us */
+ #define HNS3_SERVICE_QUICK_INTERVAL	10
+ #define HNS3_INVALID_PVID		0xFFFF
+diff --git a/drivers/net/hns3/hns3_ethdev.h b/drivers/net/hns3/hns3_ethdev.h
+index 8191c53..29737c6 100644
+--- a/drivers/net/hns3/hns3_ethdev.h
++++ b/drivers/net/hns3/hns3_ethdev.h
+@@ -42,6 +42,9 @@
+ #define HNS3_PF_FUNC_ID			0
+ #define HNS3_1ST_VF_FUNC_ID		1
+ 
++#define HNS3_DEFAULT_PORT_CONF_BURST_SIZE	32
++#define HNS3_DEFAULT_PORT_CONF_QUEUES_NUM	1
++
+ #define HNS3_SW_SHIFT_AND_DISCARD_MODE		0
+ #define HNS3_HW_SHIFT_AND_DISCARD_MODE		1
+ 
+diff --git a/drivers/net/hns3/hns3_ethdev_vf.c b/drivers/net/hns3/hns3_ethdev_vf.c
+index a278146..324c6b1 100644
+--- a/drivers/net/hns3/hns3_ethdev_vf.c
++++ b/drivers/net/hns3/hns3_ethdev_vf.c
+@@ -1027,6 +1027,11 @@ hns3vf_dev_infos_get(struct rte_eth_dev *eth_dev, struct rte_eth_dev_info *info)
+ 	info->reta_size = hw->rss_ind_tbl_size;
+ 	info->hash_key_size = HNS3_RSS_KEY_SIZE;
+ 	info->flow_type_rss_offloads = HNS3_ETH_RSS_SUPPORT;
++
++	info->default_rxportconf.burst_size = HNS3_DEFAULT_PORT_CONF_BURST_SIZE;
++	info->default_txportconf.burst_size = HNS3_DEFAULT_PORT_CONF_BURST_SIZE;
++	info->default_rxportconf.nb_queues = HNS3_DEFAULT_PORT_CONF_QUEUES_NUM;
++	info->default_txportconf.nb_queues = HNS3_DEFAULT_PORT_CONF_QUEUES_NUM;
+ 	info->default_rxportconf.ring_size = HNS3_DEFAULT_RING_DESC;
+ 	info->default_txportconf.ring_size = HNS3_DEFAULT_RING_DESC;
+ 
+-- 
+2.7.4
+
