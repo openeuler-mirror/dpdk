@@ -1,0 +1,41 @@
+From 44d86d6218b9da9d8218a629011ddd432a27a67c Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Fri, 30 Apr 2021 17:04:02 +0800
+Subject: [PATCH 152/189] net/hns3: remove read when enabling TM QCN error
+ event
+
+According to the HW manual, the read operation is unnecessary when
+enabling TM QCN error event, so remove it.
+
+Fixes: f53a793bb7c2 ("net/hns3: add more hardware error types")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_intr.c | 9 +--------
+ 1 file changed, 1 insertion(+), 8 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_intr.c b/drivers/net/hns3/hns3_intr.c
+index e216788..87afce2 100644
+--- a/drivers/net/hns3/hns3_intr.c
++++ b/drivers/net/hns3/hns3_intr.c
+@@ -1782,14 +1782,7 @@ enable_tm_err_intr(struct hns3_adapter *hns, bool en)
+ 	}
+ 
+ 	/* configure TM QCN hw errors */
+-	hns3_cmd_setup_basic_desc(&desc, HNS3_OPC_TM_QCN_MEM_INT_CFG, true);
+-	ret = hns3_cmd_send(hw, &desc, 1);
+-	if (ret) {
+-		hns3_err(hw, "fail to read TM QCN CFG status, ret = %d\n", ret);
+-		return ret;
+-	}
+-
+-	hns3_cmd_reuse_desc(&desc, false);
++	hns3_cmd_setup_basic_desc(&desc, HNS3_OPC_TM_QCN_MEM_INT_CFG, false);
+ 	if (en)
+ 		desc.data[1] = rte_cpu_to_le_32(HNS3_TM_QCN_MEM_ERR_INT_EN);
+ 
+-- 
+2.7.4
+

@@ -1,0 +1,274 @@
+From 682546e9b26cf26a4b82a0c022f5c8dd4a7aa7ed Mon Sep 17 00:00:00 2001
+From: "Min Hu (Connor)" <humin29@huawei.com>
+Date: Thu, 4 Mar 2021 15:44:45 +0800
+Subject: [PATCH 049/189] net/hns3: add imissed packet stats
+
+This patch implement Rx imissed stats by querying cmdq.
+
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+Signed-off-by: Lijun Ou <oulijun@huawei.com>
+---
+ drivers/net/hns3/hns3_cmd.h    |   7 +++
+ drivers/net/hns3/hns3_ethdev.c |   7 +++
+ drivers/net/hns3/hns3_ethdev.h |   1 +
+ drivers/net/hns3/hns3_stats.c  | 106 ++++++++++++++++++++++++++++++++++++++++-
+ drivers/net/hns3/hns3_stats.h  |   8 ++++
+ 5 files changed, 128 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/net/hns3/hns3_cmd.h b/drivers/net/hns3/hns3_cmd.h
+index 2e23f99..93bfa74 100644
+--- a/drivers/net/hns3/hns3_cmd.h
++++ b/drivers/net/hns3/hns3_cmd.h
+@@ -905,6 +905,13 @@ struct hns3_dev_specs_0_cmd {
+ 	uint32_t max_tm_rate;
+ };
+ 
++struct hns3_query_rpu_cmd {
++	uint32_t tc_queue_num;
++	uint32_t rsv1[2];
++	uint32_t rpu_rx_pkt_drop_cnt;
++	uint32_t rsv2[2];
++};
++
+ #define HNS3_MAX_TQP_NUM_HIP08_PF	64
+ #define HNS3_DEFAULT_TX_BUF		0x4000    /* 16k  bytes */
+ #define HNS3_TOTAL_PKT_BUF		0x108000  /* 1.03125M bytes */
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 6e0f3b1..96ad9b0 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -4742,6 +4742,13 @@ hns3_init_pf(struct rte_eth_dev *eth_dev)
+ 		goto err_cmd_init;
+ 	}
+ 
++	/* Hardware statistics of imissed registers cleared. */
++	ret = hns3_update_imissed_stats(hw, true);
++	if (ret) {
++		hns3_err(hw, "clear imissed stats failed, ret = %d", ret);
++		return ret;
++	}
++
+ 	hns3_config_all_msix_error(hw, true);
+ 
+ 	ret = rte_intr_callback_register(&pci_dev->intr_handle,
+diff --git a/drivers/net/hns3/hns3_ethdev.h b/drivers/net/hns3/hns3_ethdev.h
+index 6178f0b..2954422 100644
+--- a/drivers/net/hns3/hns3_ethdev.h
++++ b/drivers/net/hns3/hns3_ethdev.h
+@@ -434,6 +434,7 @@ struct hns3_hw {
+ 	struct hns3_tqp_stats tqp_stats;
+ 	/* Include Mac stats | Rx stats | Tx stats */
+ 	struct hns3_mac_stats mac_stats;
++	struct hns3_rx_missed_stats imissed_stats;
+ 	uint32_t fw_version;
+ 
+ 	uint16_t num_msi;
+diff --git a/drivers/net/hns3/hns3_stats.c b/drivers/net/hns3/hns3_stats.c
+index 777d36a..87035e3 100644
+--- a/drivers/net/hns3/hns3_stats.c
++++ b/drivers/net/hns3/hns3_stats.c
+@@ -324,6 +324,12 @@ static const struct hns3_xstats_name_offset hns3_tx_queue_strings[] = {
+ 	{"TX_QUEUE_FBD", HNS3_RING_TX_FBDNUM_REG}
+ };
+ 
++/* The statistic of imissed packet */
++static const struct hns3_xstats_name_offset hns3_imissed_stats_strings[] = {
++	{"RPU_DROP_CNT",
++		HNS3_IMISSED_STATS_FIELD_OFFSET(rpu_rx_drop_cnt)},
++};
++
+ #define HNS3_NUM_MAC_STATS (sizeof(hns3_mac_strings) / \
+ 	sizeof(hns3_mac_strings[0]))
+ 
+@@ -354,8 +360,11 @@ static const struct hns3_xstats_name_offset hns3_tx_queue_strings[] = {
+ #define HNS3_NUM_TXQ_BASIC_STATS (sizeof(hns3_txq_basic_stats_strings) / \
+ 	sizeof(hns3_txq_basic_stats_strings[0]))
+ 
++#define HNS3_NUM_IMISSED_XSTATS (sizeof(hns3_imissed_stats_strings) / \
++	sizeof(hns3_imissed_stats_strings[0]))
++
+ #define HNS3_FIX_NUM_STATS (HNS3_NUM_MAC_STATS + HNS3_NUM_ERROR_INT_XSTATS + \
+-			    HNS3_NUM_RESET_XSTATS)
++			    HNS3_NUM_RESET_XSTATS + HNS3_NUM_IMISSED_XSTATS)
+ 
+ static void hns3_tqp_stats_clear(struct hns3_hw *hw);
+ static void hns3_tqp_basic_stats_clear(struct rte_eth_dev *dev);
+@@ -515,6 +524,52 @@ hns3_update_tqp_stats(struct hns3_hw *hw)
+ 	return 0;
+ }
+ 
++static int
++hns3_update_rpu_drop_stats(struct hns3_hw *hw)
++{
++	struct hns3_rx_missed_stats *stats = &hw->imissed_stats;
++	struct hns3_query_rpu_cmd *req;
++	struct hns3_cmd_desc desc;
++	uint64_t cnt;
++	uint32_t tc_num;
++	int ret;
++
++	hns3_cmd_setup_basic_desc(&desc, HNS3_OPC_DFX_RPU_REG_0, true);
++	req = (struct hns3_query_rpu_cmd *)desc.data;
++
++	/*
++	 * tc_num is 0, means rpu stats of all TC channels will be
++	 * get from firmware
++	 */
++	tc_num = 0;
++	req->tc_queue_num = rte_cpu_to_le_32(tc_num);
++	ret = hns3_cmd_send(hw, &desc, 1);
++	if (ret) {
++		hns3_err(hw, "failed to query RPU stats: %d", ret);
++		return ret;
++	}
++
++	cnt = rte_le_to_cpu_32(req->rpu_rx_pkt_drop_cnt);
++	stats->rpu_rx_drop_cnt += cnt;
++
++	return 0;
++}
++
++int
++hns3_update_imissed_stats(struct hns3_hw *hw, bool is_clear)
++{
++	int ret;
++
++	ret = hns3_update_rpu_drop_stats(hw);
++	if (ret)
++		return ret;
++
++	if (is_clear)
++		memset(&hw->imissed_stats, 0, sizeof(hw->imissed_stats));
++
++	return 0;
++}
++
+ /*
+  * Query tqp tx queue statistics ,opcode id: 0x0B03.
+  * Query tqp rx queue statistics ,opcode id: 0x0B13.
+@@ -531,6 +586,7 @@ hns3_stats_get(struct rte_eth_dev *eth_dev, struct rte_eth_stats *rte_stats)
+ {
+ 	struct hns3_adapter *hns = eth_dev->data->dev_private;
+ 	struct hns3_hw *hw = &hns->hw;
++	struct hns3_rx_missed_stats *imissed_stats = &hw->imissed_stats;
+ 	struct hns3_tqp_stats *stats = &hw->tqp_stats;
+ 	struct hns3_rx_queue *rxq;
+ 	uint64_t cnt;
+@@ -544,6 +600,18 @@ hns3_stats_get(struct rte_eth_dev *eth_dev, struct rte_eth_stats *rte_stats)
+ 		return ret;
+ 	}
+ 
++	if (!hns->is_vf) {
++		/* Update imissed stats */
++		ret = hns3_update_imissed_stats(hw, false);
++		if (ret) {
++			hns3_err(hw, "update imissed stats failed, ret = %d",
++				 ret);
++			return ret;
++		}
++
++		rte_stats->imissed = imissed_stats->rpu_rx_drop_cnt;
++	}
++
+ 	/* Get the error stats and bytes of received packets */
+ 	for (i = 0; i < eth_dev->data->nb_rx_queues; i++) {
+ 		rxq = eth_dev->data->rx_queues[i];
+@@ -616,6 +684,19 @@ hns3_stats_reset(struct rte_eth_dev *eth_dev)
+ 		}
+ 	}
+ 
++	if (!hns->is_vf) {
++		/*
++		 * Note: Reading hardware statistics of imissed registers will
++		 * clear them.
++		 */
++		ret = hns3_update_imissed_stats(hw, true);
++		if (ret) {
++			hns3_err(hw, "clear imissed stats failed, ret = %d",
++				 ret);
++			return ret;
++		}
++	}
++
+ 	/*
+ 	 * Clear soft stats of rx error packet which will be dropped
+ 	 * in driver.
+@@ -928,6 +1009,7 @@ hns3_dev_xstats_get(struct rte_eth_dev *dev, struct rte_eth_xstat *xstats,
+ 	struct hns3_adapter *hns = dev->data->dev_private;
+ 	struct hns3_pf *pf = &hns->pf;
+ 	struct hns3_hw *hw = &hns->hw;
++	struct hns3_rx_missed_stats *imissed_stats = &hw->imissed_stats;
+ 	struct hns3_mac_stats *mac_stats = &hw->mac_stats;
+ 	struct hns3_reset_stats *reset_stats = &hw->reset.stats;
+ 	struct hns3_rx_bd_errors_stats *rx_err_stats;
+@@ -966,6 +1048,21 @@ hns3_dev_xstats_get(struct rte_eth_dev *dev, struct rte_eth_xstat *xstats,
+ 			count++;
+ 		}
+ 
++		ret = hns3_update_imissed_stats(hw, false);
++		if (ret) {
++			hns3_err(hw, "update imissed stats failed, ret = %d",
++				 ret);
++			return ret;
++		}
++
++		for (i = 0; i < HNS3_NUM_IMISSED_XSTATS; i++) {
++			addr = (char *)imissed_stats +
++				hns3_imissed_stats_strings[i].offset;
++			xstats[count].value = *(uint64_t *)addr;
++			xstats[count].id = count;
++			count++;
++		}
++
+ 		for (i = 0; i < HNS3_NUM_ERROR_INT_XSTATS; i++) {
+ 			addr = (char *)&pf->abn_int_stats +
+ 			       hns3_error_int_stats_strings[i].offset;
+@@ -1108,6 +1205,13 @@ hns3_dev_xstats_get_names(struct rte_eth_dev *dev,
+ 			count++;
+ 		}
+ 
++		for (i = 0; i < HNS3_NUM_IMISSED_XSTATS; i++) {
++			snprintf(xstats_names[count].name,
++				 sizeof(xstats_names[count].name),
++				 "%s", hns3_imissed_stats_strings[i].name);
++			count++;
++		}
++
+ 		for (i = 0; i < HNS3_NUM_ERROR_INT_XSTATS; i++) {
+ 			snprintf(xstats_names[count].name,
+ 				 sizeof(xstats_names[count].name),
+diff --git a/drivers/net/hns3/hns3_stats.h b/drivers/net/hns3/hns3_stats.h
+index d213be5..01b4f36 100644
+--- a/drivers/net/hns3/hns3_stats.h
++++ b/drivers/net/hns3/hns3_stats.h
+@@ -110,6 +110,10 @@ struct hns3_mac_stats {
+ 	uint64_t mac_rx_ctrl_pkt_num;
+ };
+ 
++struct hns3_rx_missed_stats {
++	uint64_t rpu_rx_drop_cnt;
++};
++
+ /* store statistics names and its offset in stats structure */
+ struct hns3_xstats_name_offset {
+ 	char name[RTE_ETH_XSTATS_NAME_SIZE];
+@@ -141,6 +145,9 @@ struct hns3_reset_stats;
+ #define HNS3_TXQ_BASIC_STATS_FIELD_OFFSET(f) \
+ 	(offsetof(struct hns3_tx_basic_stats, f))
+ 
++#define HNS3_IMISSED_STATS_FIELD_OFFSET(f) \
++	(offsetof(struct hns3_rx_missed_stats, f))
++
+ int hns3_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *rte_stats);
+ int hns3_dev_xstats_get(struct rte_eth_dev *dev, struct rte_eth_xstat *xstats,
+ 			unsigned int n);
+@@ -160,5 +167,6 @@ int hns3_stats_reset(struct rte_eth_dev *dev);
+ void hns3_error_int_stats_add(struct hns3_adapter *hns, const char *err);
+ int hns3_tqp_stats_init(struct hns3_hw *hw);
+ void hns3_tqp_stats_uninit(struct hns3_hw *hw);
++int hns3_update_imissed_stats(struct hns3_hw *hw, bool is_clear);
+ 
+ #endif /* _HNS3_STATS_H_ */
+-- 
+2.7.4
+

@@ -1,0 +1,34 @@
+From 4cdaa8769ca9aa1aa558637606de0434bdd343fb Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Thu, 22 Apr 2021 09:55:49 +0800
+Subject: [PATCH 132/189] net/hns3: fix mailbox error message
+
+The hns3_dev_handle_mbx_msg() could be called under both PF and VF,
+but the error messages show VF.
+
+Fixes: 109e4dd1bd7a ("net/hns3: get link state change through mailbox")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_mbx.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_mbx.c b/drivers/net/hns3/hns3_mbx.c
+index 9955f27..6203af5 100644
+--- a/drivers/net/hns3/hns3_mbx.c
++++ b/drivers/net/hns3/hns3_mbx.c
+@@ -528,8 +528,7 @@ hns3_dev_handle_mbx_msg(struct hns3_hw *hw)
+ 			hns3_handle_promisc_info(hw, req->msg[1]);
+ 			break;
+ 		default:
+-			hns3_err(hw,
+-				 "VF received unsupported(%u) mbx msg from PF",
++			hns3_err(hw, "received unsupported(%u) mbx msg",
+ 				 req->msg[0]);
+ 			break;
+ 		}
+-- 
+2.7.4
+

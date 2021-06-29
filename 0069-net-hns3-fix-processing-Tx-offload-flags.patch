@@ -1,0 +1,34 @@
+From 5233a6a3449ff374def3469b79d98a85e6cfd6f1 Mon Sep 17 00:00:00 2001
+From: Chengchang Tang <tangchengchang@huawei.com>
+Date: Tue, 23 Mar 2021 21:45:53 +0800
+Subject: [PATCH 069/189] net/hns3: fix processing Tx offload flags
+
+Currently, if the PKT_TX_TCP_SEG and PKT_TX_TCP_CKSUM offload flags set
+in the same time, hns3 PMD can not process the descriptors correctly.
+
+This patch fixes it by adding the processing of this situation.
+
+Fixes: fb6eb9009f41 ("net/hns3: fix Tx checksum with fixed header length")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengchang Tang <tangchengchang@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_rxtx.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/net/hns3/hns3_rxtx.c b/drivers/net/hns3/hns3_rxtx.c
+index 6a7c360..62c56f6 100644
+--- a/drivers/net/hns3/hns3_rxtx.c
++++ b/drivers/net/hns3/hns3_rxtx.c
+@@ -3291,6 +3291,7 @@ hns3_parse_l4_cksum_params(struct rte_mbuf *m, uint32_t *type_cs_vlan_tso_len)
+ 	uint32_t tmp;
+ 	/* Enable L4 checksum offloads */
+ 	switch (ol_flags & (PKT_TX_L4_MASK | PKT_TX_TCP_SEG)) {
++	case PKT_TX_TCP_CKSUM | PKT_TX_TCP_SEG:
+ 	case PKT_TX_TCP_CKSUM:
+ 	case PKT_TX_TCP_SEG:
+ 		tmp = *type_cs_vlan_tso_len;
+-- 
+2.7.4
+

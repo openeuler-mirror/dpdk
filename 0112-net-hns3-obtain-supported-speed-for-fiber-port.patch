@@ -1,0 +1,275 @@
+From 984fd9914cfd3f9d24eb9b6c0914595dba9f3575 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Tue, 13 Apr 2021 21:47:15 +0800
+Subject: [PATCH 112/189] net/hns3: obtain supported speed for fiber port
+
+Currently, the speed of fiber port is obtained by using the default
+query type of HNS3_OPC_GET_SFP_INFO opcode. In this way, only
+the speed of the optical module can be obtained. In fact, the opcode
+also supports an active query type, which is a channel for obtaining
+information such as the speed, the supported speed, auto-negotiation
+capability, and FEC mode. This patch changes the query type of the
+opcode from the default query type to the active query type to obtain
+the supported speed of fiber port.
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_cmd.h    | 41 ++++++++++++++--------
+ drivers/net/hns3/hns3_ethdev.c | 80 ++++++++++++++++++++++++++++++++----------
+ drivers/net/hns3/hns3_ethdev.h | 26 ++++++++++++--
+ 3 files changed, 113 insertions(+), 34 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_cmd.h b/drivers/net/hns3/hns3_cmd.h
+index a7dd2b5..4c25c43 100644
+--- a/drivers/net/hns3/hns3_cmd.h
++++ b/drivers/net/hns3/hns3_cmd.h
+@@ -230,7 +230,7 @@ enum hns3_opcode_type {
+ 	/* SFP command */
+ 	HNS3_OPC_GET_SFP_EEPROM         = 0x7100,
+ 	HNS3_OPC_GET_SFP_EXIST          = 0x7101,
+-	HNS3_OPC_SFP_GET_SPEED          = 0x7104,
++	HNS3_OPC_GET_SFP_INFO           = 0x7104,
+ 
+ 	/* Interrupts commands */
+ 	HNS3_OPC_ADD_RING_TO_VECTOR     = 0x1503,
+@@ -767,13 +767,6 @@ struct hns3_config_auto_neg_cmd {
+ 	uint8_t   rsv[20];
+ };
+ 
+-#define HNS3_MAC_CFG_FEC_AUTO_EN_B	0
+-#define HNS3_MAC_CFG_FEC_MODE_S		1
+-#define HNS3_MAC_CFG_FEC_MODE_M	GENMASK(3, 1)
+-#define HNS3_MAC_FEC_OFF		0
+-#define HNS3_MAC_FEC_BASER		1
+-#define HNS3_MAC_FEC_RS			2
+-
+ #define HNS3_SFP_INFO_BD0_LEN  20UL
+ #define HNS3_SFP_INFO_BDX_LEN  24UL
+ 
+@@ -788,14 +781,34 @@ struct hns3_sfp_type {
+ 	uint8_t ext_type;
+ };
+ 
+-struct hns3_sfp_speed_cmd {
+-	uint32_t  sfp_speed;
+-	uint8_t   query_type; /* 0: sfp speed, 1: active fec */
+-	uint8_t   active_fec; /* current FEC mode */
+-	uint16_t  rsv1;
+-	uint32_t  rsv2[4];
++/* Bitmap flags in supported_speed */
++#define HNS3_FIBER_LINK_SPEED_1G_BIT		BIT(0)
++#define HNS3_FIBER_LINK_SPEED_10G_BIT		BIT(1)
++#define HNS3_FIBER_LINK_SPEED_25G_BIT		BIT(2)
++#define HNS3_FIBER_LINK_SPEED_50G_BIT		BIT(3)
++#define HNS3_FIBER_LINK_SPEED_100G_BIT		BIT(4)
++#define HNS3_FIBER_LINK_SPEED_40G_BIT		BIT(5)
++#define HNS3_FIBER_LINK_SPEED_100M_BIT		BIT(6)
++#define HNS3_FIBER_LINK_SPEED_10M_BIT		BIT(7)
++#define HNS3_FIBER_LINK_SPEED_200G_BIT		BIT(8)
++
++struct hns3_sfp_info_cmd {
++	uint32_t sfp_speed;
++	uint8_t query_type; /* 0: sfp speed, 1: active */
++	uint8_t active_fec; /* current FEC mode */
++	uint16_t rsv;
++	uint32_t supported_speed; /* speed supported by current media */
++	uint32_t module_type;
++	uint8_t rsv1[8];
+ };
+ 
++#define HNS3_MAC_CFG_FEC_AUTO_EN_B	0
++#define HNS3_MAC_CFG_FEC_MODE_S		1
++#define HNS3_MAC_CFG_FEC_MODE_M	GENMASK(3, 1)
++#define HNS3_MAC_FEC_OFF		0
++#define HNS3_MAC_FEC_BASER		1
++#define HNS3_MAC_FEC_RS			2
++
+ /* Configure FEC mode, opcode:0x031A */
+ struct hns3_config_fec_cmd {
+ 	uint8_t fec_mode;
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 7bae923..5f629e7 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -4507,24 +4507,45 @@ hns3_dev_promisc_restore(struct hns3_adapter *hns)
+ }
+ 
+ static int
+-hns3_get_sfp_speed(struct hns3_hw *hw, uint32_t *speed)
++hns3_get_sfp_info(struct hns3_hw *hw, struct hns3_mac *mac_info)
+ {
+-	struct hns3_sfp_speed_cmd *resp;
++	struct hns3_sfp_info_cmd *resp;
+ 	struct hns3_cmd_desc desc;
+ 	int ret;
+ 
+-	hns3_cmd_setup_basic_desc(&desc, HNS3_OPC_SFP_GET_SPEED, true);
+-	resp = (struct hns3_sfp_speed_cmd *)desc.data;
++	hns3_cmd_setup_basic_desc(&desc, HNS3_OPC_GET_SFP_INFO, true);
++	resp = (struct hns3_sfp_info_cmd *)desc.data;
++	resp->query_type = HNS3_ACTIVE_QUERY;
++
+ 	ret = hns3_cmd_send(hw, &desc, 1);
+ 	if (ret == -EOPNOTSUPP) {
+-		hns3_err(hw, "IMP do not support get SFP speed %d", ret);
++		hns3_warn(hw, "firmware does not support get SFP info,"
++			  " ret = %d.", ret);
+ 		return ret;
+ 	} else if (ret) {
+-		hns3_err(hw, "get sfp speed failed %d", ret);
++		hns3_err(hw, "get sfp info failed, ret = %d.", ret);
+ 		return ret;
+ 	}
+ 
+-	*speed = resp->sfp_speed;
++	/*
++	 * In some case, the speed of MAC obtained from firmware may be 0, it
++	 * shouldn't be set to mac->speed.
++	 */
++	if (!rte_le_to_cpu_32(resp->sfp_speed))
++		return 0;
++
++	mac_info->link_speed = rte_le_to_cpu_32(resp->sfp_speed);
++	/*
++	 * if resp->supported_speed is 0, it means it's an old version
++	 * firmware, do not update these params.
++	 */
++	if (resp->supported_speed) {
++		mac_info->query_type = HNS3_ACTIVE_QUERY;
++		mac_info->supported_speed =
++					rte_le_to_cpu_32(resp->supported_speed);
++	} else {
++		mac_info->query_type = HNS3_DEFAULT_QUERY;
++	}
+ 
+ 	return 0;
+ }
+@@ -4566,25 +4587,49 @@ static int
+ hns3_update_fiber_link_info(struct hns3_hw *hw)
+ {
+ 	struct hns3_pf *pf = HNS3_DEV_HW_TO_PF(hw);
+-	uint32_t speed;
++	struct hns3_mac *mac = &hw->mac;
++	struct hns3_mac mac_info;
+ 	int ret;
+ 
+-	/* If IMP do not support get SFP/qSFP speed, return directly */
++	/* If firmware do not support get SFP/qSFP speed, return directly */
+ 	if (!pf->support_sfp_query)
+ 		return 0;
+ 
+-	ret = hns3_get_sfp_speed(hw, &speed);
++	memset(&mac_info, 0, sizeof(struct hns3_mac));
++	ret = hns3_get_sfp_info(hw, &mac_info);
+ 	if (ret == -EOPNOTSUPP) {
+ 		pf->support_sfp_query = false;
+ 		return ret;
+ 	} else if (ret)
+ 		return ret;
+ 
+-	if (speed == ETH_SPEED_NUM_NONE)
+-		return 0; /* do nothing if no SFP */
++	/* Do nothing if no SFP */
++	if (mac_info.link_speed == ETH_SPEED_NUM_NONE)
++		return 0;
++
++	/*
++	 * If query_type is HNS3_ACTIVE_QUERY, it is no need
++	 * to reconfigure the speed of MAC. Otherwise, it indicates
++	 * that the current firmware only supports to obtain the
++	 * speed of the SFP, and the speed of MAC needs to reconfigure.
++	 */
++	mac->query_type = mac_info.query_type;
++	if (mac->query_type == HNS3_ACTIVE_QUERY) {
++		if (mac_info.link_speed != mac->link_speed) {
++			ret = hns3_port_shaper_update(hw, mac_info.link_speed);
++			if (ret)
++				return ret;
++		}
++
++		mac->link_speed = mac_info.link_speed;
++		mac->supported_speed = mac_info.supported_speed;
++
++		return 0;
++	}
+ 
+ 	/* Config full duplex for SFP */
+-	return hns3_cfg_mac_speed_dup(hw, speed, ETH_LINK_FULL_DUPLEX);
++	return hns3_cfg_mac_speed_dup(hw, mac_info.link_speed,
++				      ETH_LINK_FULL_DUPLEX);
+ }
+ 
+ static void
+@@ -6200,8 +6245,7 @@ get_current_fec_auto_state(struct hns3_hw *hw, uint8_t *state)
+ static int
+ hns3_fec_get_internal(struct hns3_hw *hw, uint32_t *fec_capa)
+ {
+-#define QUERY_ACTIVE_SPEED	1
+-	struct hns3_sfp_speed_cmd *resp;
++	struct hns3_sfp_info_cmd *resp;
+ 	uint32_t tmp_fec_capa;
+ 	uint8_t auto_state;
+ 	struct hns3_cmd_desc desc;
+@@ -6223,9 +6267,9 @@ hns3_fec_get_internal(struct hns3_hw *hw, uint32_t *fec_capa)
+ 		}
+ 	}
+ 
+-	hns3_cmd_setup_basic_desc(&desc, HNS3_OPC_SFP_GET_SPEED, true);
+-	resp = (struct hns3_sfp_speed_cmd *)desc.data;
+-	resp->query_type = QUERY_ACTIVE_SPEED;
++	hns3_cmd_setup_basic_desc(&desc, HNS3_OPC_GET_SFP_INFO, true);
++	resp = (struct hns3_sfp_info_cmd *)desc.data;
++	resp->query_type = HNS3_ACTIVE_QUERY;
+ 
+ 	ret = hns3_cmd_send(hw, &desc, 1);
+ 	if (ret == -EOPNOTSUPP) {
+diff --git a/drivers/net/hns3/hns3_ethdev.h b/drivers/net/hns3/hns3_ethdev.h
+index 03bb783..a677ddc 100644
+--- a/drivers/net/hns3/hns3_ethdev.h
++++ b/drivers/net/hns3/hns3_ethdev.h
+@@ -174,6 +174,9 @@ enum hns3_media_type {
+ 	HNS3_MEDIA_TYPE_NONE,
+ };
+ 
++#define HNS3_DEFAULT_QUERY		0
++#define HNS3_ACTIVE_QUERY		1
++
+ struct hns3_mac {
+ 	uint8_t mac_addr[RTE_ETHER_ADDR_LEN];
+ 	bool default_addr_setted; /* whether default addr(mac_addr) is set */
+@@ -183,10 +186,29 @@ struct hns3_mac {
+ 	uint8_t link_autoneg : 1; /* ETH_LINK_[AUTONEG/FIXED] */
+ 	uint8_t link_status  : 1; /* ETH_LINK_[DOWN/UP] */
+ 	uint32_t link_speed;      /* ETH_SPEED_NUM_ */
++	/*
++	 * Some firmware versions support only the SFP speed query. In addition
++	 * to the SFP speed query, some firmware supports the query of the speed
++	 * capability, auto-negotiation capability, and FEC mode, which can be
++	 * selected by the 'query_type' filed in the HNS3_OPC_GET_SFP_INFO CMD.
++	 * This field is used to record the SFP information query mode.
++	 * Value range:
++	 *       HNS3_DEFAULT_QUERY/HNS3_ACTIVE_QUERY
++	 *
++	 * - HNS3_DEFAULT_QUERY
++	 * Speed obtained is from SFP. When the queried speed changes, the MAC
++	 * speed needs to be reconfigured.
++	 *
++	 * - HNS3_ACTIVE_QUERY
++	 * Speed obtained is from MAC. At this time, it is unnecessary for
++	 * driver to reconfigured the MAC speed. In addition, more information,
++	 * such as, the speed capability, auto-negotiation capability and FEC
++	 * mode, can be obtained by the HNS3_OPC_GET_SFP_INFO CMD.
++	 */
++	uint8_t query_type;
+ 	uint32_t supported_speed;  /* supported speed for current media type */
+ 	uint32_t advertising;     /* advertised capability in the local part */
+-	/* advertised capability in the link partner */
+-	uint32_t lp_advertising;
++	uint32_t lp_advertising; /* advertised capability in the link partner */
+ 	uint8_t support_autoneg;
+ };
+ 
+-- 
+2.7.4
+

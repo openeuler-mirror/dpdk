@@ -1,0 +1,31 @@
+From fc5b336c4006b92193b36b61363e39a776bad5cb Mon Sep 17 00:00:00 2001
+From: "Min Hu (Connor)" <humin29@huawei.com>
+Date: Tue, 20 Apr 2021 16:59:48 +0800
+Subject: [PATCH 129/189] net/hns3: remove unused macro
+
+'HNS3_RXD_LKBK_B' was defined in previous versions but no used.
+This patch deleted it.
+
+Fixes: bba636698316 ("net/hns3: support Rx/Tx and related operations")
+Cc: stable@dpdk.org
+
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_rxtx.h | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/drivers/net/hns3/hns3_rxtx.h b/drivers/net/hns3/hns3_rxtx.h
+index ac14802..92f01ed 100644
+--- a/drivers/net/hns3/hns3_rxtx.h
++++ b/drivers/net/hns3/hns3_rxtx.h
+@@ -106,7 +106,6 @@
+ #define HNS3_RXD_L3L4P_B			11
+ 
+ #define HNS3_RXD_TS_VLD_B			14
+-#define HNS3_RXD_LKBK_B				15
+ #define HNS3_RXD_GRO_SIZE_S			16
+ #define HNS3_RXD_GRO_SIZE_M			(0x3fff << HNS3_RXD_GRO_SIZE_S)
+ 
+-- 
+2.7.4
+

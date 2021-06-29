@@ -1,0 +1,45 @@
+From 92f474b6b5f954d20b81576549a25ce8b7bc2a2b Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Thu, 14 Jan 2021 21:33:32 +0800
+Subject: [PATCH 013/189] net/hns3: fix VF query link status in dev init
+
+Current hns3vf queried link status in dev init stage, but the link
+status should be maintained in dev start stage, this patch fix this.
+
+Also, in the dev start stage, we use quick query instead of delayed
+query to make sure update the link status soon.
+
+Fixes: a5475d61fa34 ("net/hns3: support VF")
+Fixes: 958edf6627d5 ("net/hns3: fix VF link status")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Lijun Ou <oulijun@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev_vf.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_ethdev_vf.c b/drivers/net/hns3/hns3_ethdev_vf.c
+index c126384..ee89505 100644
+--- a/drivers/net/hns3/hns3_ethdev_vf.c
++++ b/drivers/net/hns3/hns3_ethdev_vf.c
+@@ -1749,7 +1749,6 @@ hns3vf_init_hardware(struct hns3_adapter *hns)
+ 		goto err_init_hardware;
+ 	}
+ 
+-	hns3vf_request_link_info(hw);
+ 	return 0;
+ 
+ err_init_hardware:
+@@ -2238,7 +2237,7 @@ hns3vf_dev_start(struct rte_eth_dev *dev)
+ 	hns3_rx_scattered_calc(dev);
+ 	hns3_set_rxtx_function(dev);
+ 	hns3_mp_req_start_rxtx(dev);
+-	rte_eal_alarm_set(HNS3VF_SERVICE_INTERVAL, hns3vf_service_handler, dev);
++	hns3vf_service_handler(dev);
+ 
+ 	hns3vf_restore_filter(dev);
+ 
+-- 
+2.7.4
+

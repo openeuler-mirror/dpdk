@@ -1,0 +1,37 @@
+From 21b64900224a9d81aee3ee20349073f18c5c927f Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Wed, 31 Mar 2021 18:01:39 +0800
+Subject: [PATCH 081/189] net/hns3: fix flow control exception
+
+In multi-TC scenarios, MAC pause is not supported. Otherwise, only
+TC0 can trigger pause frames, and other TCs cannot trigger pause
+frames. In this case, flow control does not meet the expectation.
+
+Fixes: 62e3ccc2b94c ("net/hns3: support flow control")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 4984ff9..6f3502f 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -5554,6 +5554,11 @@ hns3_flow_ctrl_set(struct rte_eth_dev *dev, struct rte_eth_fc_conf *fc_conf)
+ 		return -EOPNOTSUPP;
+ 	}
+ 
++	if (hw->num_tc > 1) {
++		hns3_err(hw, "in multi-TC scenarios, MAC pause is not supported.");
++		return -EOPNOTSUPP;
++	}
++
+ 	hns3_get_fc_mode(hw, fc_conf->mode);
+ 	if (hw->requested_mode == hw->current_mode &&
+ 	    pf->pause_time == fc_conf->pause_time)
+-- 
+2.7.4
+

@@ -1,0 +1,128 @@
+From 71c308ebc61180d6f7a65c9f4dfdfc5e6d1fb782 Mon Sep 17 00:00:00 2001
+From: Hongbo Zheng <zhenghongbo3@huawei.com>
+Date: Tue, 23 Mar 2021 19:21:06 +0800
+Subject: [PATCH 065/189] net/hns3: support Tx descriptor status query
+
+Add support for query Tx descriptor status in hns3 driver. Check the
+descriptor specified and provide the status information of the
+corresponding descriptor.
+
+Signed-off-by: Hongbo Zheng <zhenghongbo3@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ doc/guides/nics/features/hns3.ini    |  1 +
+ doc/guides/nics/features/hns3_vf.ini |  1 +
+ drivers/net/hns3/hns3_ethdev.c       |  1 +
+ drivers/net/hns3/hns3_ethdev_vf.c    |  1 +
+ drivers/net/hns3/hns3_rxtx.c         | 28 ++++++++++++++++++++++++++++
+ drivers/net/hns3/hns3_rxtx.h         |  1 +
+ 6 files changed, 33 insertions(+)
+
+diff --git a/doc/guides/nics/features/hns3.ini b/doc/guides/nics/features/hns3.ini
+index 00a26cd..445d391 100644
+--- a/doc/guides/nics/features/hns3.ini
++++ b/doc/guides/nics/features/hns3.ini
+@@ -34,6 +34,7 @@ L4 checksum offload  = Y
+ Inner L3 checksum    = Y
+ Inner L4 checksum    = Y
+ Packet type parsing  = Y
++Tx descriptor status = Y
+ Basic stats          = Y
+ Extended stats       = Y
+ Stats per queue      = Y
+diff --git a/doc/guides/nics/features/hns3_vf.ini b/doc/guides/nics/features/hns3_vf.ini
+index f3dd239..eb55b4f 100644
+--- a/doc/guides/nics/features/hns3_vf.ini
++++ b/doc/guides/nics/features/hns3_vf.ini
+@@ -32,6 +32,7 @@ L4 checksum offload  = Y
+ Inner L3 checksum    = Y
+ Inner L4 checksum    = Y
+ Packet type parsing  = Y
++Tx descriptor status = Y
+ Basic stats          = Y
+ Extended stats       = Y
+ Stats per queue      = Y
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index b5057da..5b07183 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -6774,6 +6774,7 @@ hns3_dev_init(struct rte_eth_dev *eth_dev)
+ 	eth_dev->rx_pkt_burst = NULL;
+ 	eth_dev->tx_pkt_burst = NULL;
+ 	eth_dev->tx_pkt_prepare = NULL;
++	eth_dev->tx_descriptor_status = NULL;
+ 	rte_free(eth_dev->process_private);
+ 	eth_dev->process_private = NULL;
+ 	return ret;
+diff --git a/drivers/net/hns3/hns3_ethdev_vf.c b/drivers/net/hns3/hns3_ethdev_vf.c
+index c567dff..2688c19 100644
+--- a/drivers/net/hns3/hns3_ethdev_vf.c
++++ b/drivers/net/hns3/hns3_ethdev_vf.c
+@@ -2917,6 +2917,7 @@ hns3vf_dev_init(struct rte_eth_dev *eth_dev)
+ 	eth_dev->rx_pkt_burst = NULL;
+ 	eth_dev->tx_pkt_burst = NULL;
+ 	eth_dev->tx_pkt_prepare = NULL;
++	eth_dev->tx_descriptor_status = NULL;
+ 	rte_free(eth_dev->process_private);
+ 	eth_dev->process_private = NULL;
+ 
+diff --git a/drivers/net/hns3/hns3_rxtx.c b/drivers/net/hns3/hns3_rxtx.c
+index 404c403..efdb49a 100644
+--- a/drivers/net/hns3/hns3_rxtx.c
++++ b/drivers/net/hns3/hns3_rxtx.c
+@@ -4044,6 +4044,7 @@ void hns3_set_rxtx_function(struct rte_eth_dev *eth_dev)
+ 		eth_dev->rx_pkt_burst = hns3_get_rx_function(eth_dev);
+ 		eth_dev->tx_pkt_burst = hns3_get_tx_function(eth_dev, &prep);
+ 		eth_dev->tx_pkt_prepare = prep;
++		eth_dev->tx_descriptor_status = hns3_dev_tx_descriptor_status;
+ 	} else {
+ 		eth_dev->rx_pkt_burst = hns3_dummy_rxtx_burst;
+ 		eth_dev->tx_pkt_burst = hns3_dummy_rxtx_burst;
+@@ -4256,6 +4257,33 @@ hns3_tx_done_cleanup(void *txq, uint32_t free_cnt)
+ 		return -ENOTSUP;
+ }
+ 
++int
++hns3_dev_tx_descriptor_status(void *tx_queue, uint16_t offset)
++{
++	volatile struct hns3_desc *txdp;
++	struct hns3_tx_queue *txq;
++	struct rte_eth_dev *dev;
++	uint16_t desc_id;
++
++	txq = (struct hns3_tx_queue *)tx_queue;
++	if (offset >= txq->nb_tx_desc)
++		return -EINVAL;
++
++	dev = &rte_eth_devices[txq->port_id];
++	if (dev->tx_pkt_burst != hns3_xmit_pkts_simple &&
++	    dev->tx_pkt_burst != hns3_xmit_pkts &&
++	    dev->tx_pkt_burst != hns3_xmit_pkts_vec_sve &&
++	    dev->tx_pkt_burst != hns3_xmit_pkts_vec)
++		return RTE_ETH_TX_DESC_UNAVAIL;
++
++	desc_id = (txq->next_to_use + offset) % txq->nb_tx_desc;
++	txdp = &txq->tx_ring[desc_id];
++	if (txdp->tx.tp_fe_sc_vld_ra_ri & rte_cpu_to_le_16(BIT(HNS3_TXD_VLD_B)))
++		return RTE_ETH_TX_DESC_FULL;
++	else
++		return RTE_ETH_TX_DESC_DONE;
++}
++
+ uint32_t
+ hns3_rx_queue_count(struct rte_eth_dev *dev, uint16_t rx_queue_id)
+ {
+diff --git a/drivers/net/hns3/hns3_rxtx.h b/drivers/net/hns3/hns3_rxtx.h
+index cd04200..82d5aa0 100644
+--- a/drivers/net/hns3/hns3_rxtx.h
++++ b/drivers/net/hns3/hns3_rxtx.h
+@@ -720,5 +720,6 @@ void hns3_stop_all_txqs(struct rte_eth_dev *dev);
+ void hns3_restore_tqp_enable_state(struct hns3_hw *hw);
+ int hns3_tx_done_cleanup(void *txq, uint32_t free_cnt);
+ void hns3_enable_rxd_adv_layout(struct hns3_hw *hw);
++int hns3_dev_tx_descriptor_status(void *tx_queue, uint16_t offset);
+ 
+ #endif /* _HNS3_RXTX_H_ */
+-- 
+2.7.4
+

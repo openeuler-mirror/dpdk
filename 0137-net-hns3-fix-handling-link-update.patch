@@ -1,0 +1,49 @@
+From 2f19fbb0dd817a21194fc0764621fe0ad67b90a7 Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Tue, 27 Apr 2021 20:17:39 +0800
+Subject: [PATCH 137/189] net/hns3: fix handling link update
+
+The link fails code should be parsed using the structure
+hns3_mbx_vf_to_pf_cmd, else it will parse fail.
+
+Fixes: 109e4dd1bd7a ("net/hns3: get link state change through mailbox")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_mbx.c | 11 +++++++++--
+ 1 file changed, 9 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_mbx.c b/drivers/net/hns3/hns3_mbx.c
+index ea6c0c3..3d019b9 100644
+--- a/drivers/net/hns3/hns3_mbx.c
++++ b/drivers/net/hns3/hns3_mbx.c
+@@ -347,7 +347,7 @@ hns3_link_fail_parse(struct hns3_hw *hw, uint8_t link_fail_code)
+ 
+ static void
+ hns3pf_handle_link_change_event(struct hns3_hw *hw,
+-			      struct hns3_mbx_pf_to_vf_cmd *req)
++				struct hns3_mbx_vf_to_pf_cmd *req)
+ {
+ #define LINK_STATUS_OFFSET     1
+ #define LINK_FAIL_CODE_OFFSET  2
+@@ -513,7 +513,14 @@ hns3_dev_handle_mbx_msg(struct hns3_hw *hw)
+ 			hns3_handle_asserting_reset(hw, req);
+ 			break;
+ 		case HNS3_MBX_PUSH_LINK_STATUS:
+-			hns3pf_handle_link_change_event(hw, req);
++			/*
++			 * This message is reported by the firmware and is
++			 * reported in 'struct hns3_mbx_vf_to_pf_cmd' format.
++			 * Therefore, we should cast the req variable to
++			 * 'struct hns3_mbx_vf_to_pf_cmd' and then process it.
++			 */
++			hns3pf_handle_link_change_event(hw,
++				(struct hns3_mbx_vf_to_pf_cmd *)req);
+ 			break;
+ 		case HNS3_MBX_PUSH_VLAN_INFO:
+ 			/*
+-- 
+2.7.4
+

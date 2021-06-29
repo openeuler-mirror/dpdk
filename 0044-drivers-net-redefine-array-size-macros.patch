@@ -1,0 +1,156 @@
+From 6b66b8fd3b82d5f7c7d35b5e1c52d2611abc4317 Mon Sep 17 00:00:00 2001
+From: Andrew Boyer <aboyer@pensando.io>
+Date: Fri, 29 Jan 2021 14:44:32 -0800
+Subject: [PATCH 044/189] drivers/net: redefine array size macros
+
+Replace copies of size(arr)/size(arr[0]) with RTE_DIM().
+Eventually all of these macro definitions should be removed.
+
+Signed-off-by: Andrew Boyer <aboyer@pensando.io>
+Reviewed-by: Ferruh Yigit <ferruh.yigit@intel.com>
+---
+ drivers/net/atlantic/atl_hw_regs.h                | 2 +-
+ drivers/net/axgbe/axgbe_common.h                  | 2 +-
+ drivers/net/bnx2x/bnx2x.h                         | 2 +-
+ drivers/net/bnx2x/elink.h                         | 2 +-
+ drivers/net/ena/ena_ethdev.c                      | 2 +-
+ drivers/net/enic/base/vnic_devcmd.h               | 2 +-
+ drivers/net/hns3/hns3_ethdev.h                    | 2 +-
+ drivers/net/i40e/base/i40e_osdep.h                | 2 +-
+ drivers/net/nfp/nfpcore/nfp-common/nfp_platform.h | 2 +-
+ drivers/net/thunderx/base/nicvf_hw.h              | 2 +-
+ 10 files changed, 10 insertions(+), 10 deletions(-)
+
+diff --git a/drivers/net/atlantic/atl_hw_regs.h b/drivers/net/atlantic/atl_hw_regs.h
+index a2d6ca8..4f6cd35 100644
+--- a/drivers/net/atlantic/atl_hw_regs.h
++++ b/drivers/net/atlantic/atl_hw_regs.h
+@@ -26,7 +26,7 @@
+ 
+ #define mdelay rte_delay_ms
+ #define udelay rte_delay_us
+-#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
++#define ARRAY_SIZE(arr) RTE_DIM(arr)
+ #define BIT(x)	(1UL << (x))
+ 
+ #define AQ_HW_WAIT_FOR(_B_, _US_, _N_) \
+diff --git a/drivers/net/axgbe/axgbe_common.h b/drivers/net/axgbe/axgbe_common.h
+index fb97f0b..799382a 100644
+--- a/drivers/net/axgbe/axgbe_common.h
++++ b/drivers/net/axgbe/axgbe_common.h
+@@ -42,7 +42,7 @@
+ 
+ #define BIT(nr)	                       (1 << (nr))
+ #ifndef ARRAY_SIZE
+-#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
++#define ARRAY_SIZE(arr) RTE_DIM(arr)
+ #endif
+ 
+ #define AXGBE_HZ				250
+diff --git a/drivers/net/bnx2x/bnx2x.h b/drivers/net/bnx2x/bnx2x.h
+index 69cc143..e13ab15 100644
+--- a/drivers/net/bnx2x/bnx2x.h
++++ b/drivers/net/bnx2x/bnx2x.h
+@@ -81,7 +81,7 @@
+ #endif
+ 
+ #ifndef ARRAY_SIZE
+-#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
++#define ARRAY_SIZE(arr) RTE_DIM(arr)
+ #endif
+ #ifndef DIV_ROUND_UP
+ #define DIV_ROUND_UP(n, d) (((n) + (d) - 1) / (d))
+diff --git a/drivers/net/bnx2x/elink.h b/drivers/net/bnx2x/elink.h
+index dd70ac6..6b2e85f 100644
+--- a/drivers/net/bnx2x/elink.h
++++ b/drivers/net/bnx2x/elink.h
+@@ -86,7 +86,7 @@ extern void elink_cb_notify_link_changed(struct bnx2x_softc *sc);
+ #define ELINK_EVENT_ID_SFP_UNQUALIFIED_MODULE 	1
+ #define ELINK_EVENT_ID_SFP_POWER_FAULT 		2
+ 
+-#define ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))
++#define ARRAY_SIZE(x) RTE_DIM(x)
+ /* Debug prints */
+ #ifdef ELINK_DEBUG
+ 
+diff --git a/drivers/net/ena/ena_ethdev.c b/drivers/net/ena/ena_ethdev.c
+index 20ff365..b4b8794 100644
+--- a/drivers/net/ena/ena_ethdev.c
++++ b/drivers/net/ena/ena_ethdev.c
+@@ -47,7 +47,7 @@
+ #define ENA_HASH_KEY_SIZE	40
+ #define ETH_GSTRING_LEN	32
+ 
+-#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
++#define ARRAY_SIZE(x) RTE_DIM(x)
+ 
+ #define ENA_MIN_RING_DESC	128
+ 
+diff --git a/drivers/net/enic/base/vnic_devcmd.h b/drivers/net/enic/base/vnic_devcmd.h
+index a2f577f..4675e5a 100644
+--- a/drivers/net/enic/base/vnic_devcmd.h
++++ b/drivers/net/enic/base/vnic_devcmd.h
+@@ -63,7 +63,7 @@
+ #define _CMD_VTYPE(cmd)          (((cmd) >> _CMD_VTYPESHIFT) & _CMD_VTYPEMASK)
+ #define _CMD_N(cmd)              (((cmd) >> _CMD_NSHIFT) & _CMD_NMASK)
+ 
+-#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
++#define ARRAY_SIZE(x) RTE_DIM(x)
+ 
+ enum vnic_devcmd_cmd {
+ 	CMD_NONE                = _CMDC(_CMD_DIR_NONE, _CMD_VTYPE_NONE, 0),
+diff --git a/drivers/net/hns3/hns3_ethdev.h b/drivers/net/hns3/hns3_ethdev.h
+index cf42ef1..6178f0b 100644
+--- a/drivers/net/hns3/hns3_ethdev.h
++++ b/drivers/net/hns3/hns3_ethdev.h
+@@ -887,7 +887,7 @@ static inline uint32_t hns3_read_reg(void *base, uint32_t reg)
+ #define hns3_read_dev(a, reg) \
+ 	hns3_read_reg((a)->io_base, (reg))
+ 
+-#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
++#define ARRAY_SIZE(x) RTE_DIM(x)
+ 
+ #define NEXT_ITEM_OF_ACTION(act, actions, index)                        \
+ 	do {								\
+diff --git a/drivers/net/i40e/base/i40e_osdep.h b/drivers/net/i40e/base/i40e_osdep.h
+index 9b50330..9b79ece 100644
+--- a/drivers/net/i40e/base/i40e_osdep.h
++++ b/drivers/net/i40e/base/i40e_osdep.h
+@@ -155,7 +155,7 @@ static inline uint32_t i40e_read_addr(volatile void *addr)
+ 	I40E_PCI_REG_WRITE(I40E_PCI_REG_ADDR((a), (reg)), (value))
+ #define flush(a) i40e_read_addr(I40E_PCI_REG_ADDR((a), (I40E_GLGEN_STAT)))
+ 
+-#define ARRAY_SIZE(arr) (sizeof(arr)/sizeof(arr[0]))
++#define ARRAY_SIZE(arr) RTE_DIM(arr)
+ 
+ /* memory allocation tracking */
+ struct i40e_dma_mem {
+diff --git a/drivers/net/nfp/nfpcore/nfp-common/nfp_platform.h b/drivers/net/nfp/nfpcore/nfp-common/nfp_platform.h
+index d46574b..7b64e2d 100644
+--- a/drivers/net/nfp/nfpcore/nfp-common/nfp_platform.h
++++ b/drivers/net/nfp/nfpcore/nfp-common/nfp_platform.h
+@@ -23,7 +23,7 @@
+ #endif
+ 
+ #ifndef ARRAY_SIZE
+-#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
++#define ARRAY_SIZE(x) RTE_DIM(x)
+ #endif
+ 
+ #define NFP_ERRNO(err) (errno = (err), -1)
+diff --git a/drivers/net/thunderx/base/nicvf_hw.h b/drivers/net/thunderx/base/nicvf_hw.h
+index fd13ea8..d6f3a57 100644
+--- a/drivers/net/thunderx/base/nicvf_hw.h
++++ b/drivers/net/thunderx/base/nicvf_hw.h
+@@ -17,7 +17,7 @@
+ #define	PCI_SUB_DEVICE_ID_CN81XX_NICVF			0xA234
+ #define	PCI_SUB_DEVICE_ID_CN83XX_NICVF			0xA334
+ 
+-#define NICVF_ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
++#define NICVF_ARRAY_SIZE(arr) RTE_DIM(arr)
+ 
+ #define NICVF_GET_RX_STATS(reg) \
+ 	nicvf_reg_read(nic, NIC_VNIC_RX_STAT_0_13 | (reg << 3))
+-- 
+2.7.4
+

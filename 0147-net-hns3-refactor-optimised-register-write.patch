@@ -1,0 +1,39 @@
+From b1c34695f2af22dfea670f424d35eb4d65376678 Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Fri, 30 Apr 2021 14:28:46 +0800
+Subject: [PATCH 147/189] net/hns3: refactor optimised register write
+
+This patch modifies hns3_write_reg_opt() API implementation because
+the rte_write32() already uses rte_io_wmb().
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev.h | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_ethdev.h b/drivers/net/hns3/hns3_ethdev.h
+index a57b20f..091512e 100644
+--- a/drivers/net/hns3/hns3_ethdev.h
++++ b/drivers/net/hns3/hns3_ethdev.h
+@@ -980,13 +980,13 @@ static inline void hns3_write_reg(void *base, uint32_t reg, uint32_t value)
+ }
+ 
+ /*
+- * The optimized function for writing registers used in the '.rx_pkt_burst' and
+- * '.tx_pkt_burst' ops implementation function.
++ * The optimized function for writing registers reduces one address addition
++ * calculation, it was used in the '.rx_pkt_burst' and '.tx_pkt_burst' ops
++ * implementation function.
+  */
+ static inline void hns3_write_reg_opt(volatile void *addr, uint32_t value)
+ {
+-	rte_io_wmb();
+-	rte_write32_relaxed(rte_cpu_to_le_32(value), addr);
++	rte_write32(rte_cpu_to_le_32(value), addr);
+ }
+ 
+ static inline uint32_t hns3_read_reg(void *base, uint32_t reg)
+-- 
+2.7.4
+

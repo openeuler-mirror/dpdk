@@ -1,0 +1,135 @@
+From 454906f37a15048b7ed19934382234c762842ef0 Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Tue, 13 Apr 2021 19:50:02 +0800
+Subject: [PATCH 099/189] net/hns3: fix VF handling LSC event in secondary
+ process
+
+VF will build two queues (csq: command send queue, crq: command receive
+queue) with firmware, the crq may contain the following messages:
+1) mailbox response message which was the ack of mailbox sync request.
+2) PF's link status change message which may send by PF at anytime;
+
+Currently, any threads in the primary and secondary processes could
+send mailbox sync request, so it will need to process the crq messages
+in there own thread context.
+
+If the crq hold two messages: a) PF's link status change message, b)
+mailbox response message when secondary process deals with the crq
+messages, it will lead to report lsc event in secondary process
+because it uses the policy of processing all pending messages at once.
+
+We use the following scheme to solve it:
+1) threads in secondary process could only process specifics messages
+   (eg. mailbox response message) in crq, if the message processed, its
+   opcode will rewrite with zero, then the intr thread in primary
+   process will not process again.
+2) threads other than intr thread in the primary process use the same
+   processing logic as the threads in secondary process.
+3) intr thread in the primary process could process all messages.
+
+Fixes: 76a3836b98c4 ("net/hns3: fix setting default MAC address in bonding of VF")
+Fixes: 463e748964f5 ("net/hns3: support mailbox")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_mbx.c | 68 +++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 68 insertions(+)
+
+diff --git a/drivers/net/hns3/hns3_mbx.c b/drivers/net/hns3/hns3_mbx.c
+index 7a69b63..5a88fe2 100644
+--- a/drivers/net/hns3/hns3_mbx.c
++++ b/drivers/net/hns3/hns3_mbx.c
+@@ -400,6 +400,44 @@ hns3_handle_promisc_info(struct hns3_hw *hw, uint16_t promisc_en)
+ 	}
+ }
+ 
++static void
++hns3_handle_mbx_msg_out_intr(struct hns3_hw *hw)
++{
++	struct hns3_cmq_ring *crq = &hw->cmq.crq;
++	struct hns3_mbx_pf_to_vf_cmd *req;
++	struct hns3_cmd_desc *desc;
++	uint32_t tail, next_to_use;
++	uint8_t opcode;
++	uint16_t flag;
++
++	tail = hns3_read_dev(hw, HNS3_CMDQ_RX_TAIL_REG);
++	next_to_use = crq->next_to_use;
++	while (next_to_use != tail) {
++		desc = &crq->desc[next_to_use];
++		req = (struct hns3_mbx_pf_to_vf_cmd *)desc->data;
++		opcode = req->msg[0] & 0xff;
++
++		flag = rte_le_to_cpu_16(crq->desc[next_to_use].flag);
++		if (!hns3_get_bit(flag, HNS3_CMDQ_RX_OUTVLD_B))
++			goto scan_next;
++
++		if (crq->desc[next_to_use].opcode == 0)
++			goto scan_next;
++
++		if (opcode == HNS3_MBX_PF_VF_RESP) {
++			hns3_handle_mbx_response(hw, req);
++			/*
++			 * Clear opcode to inform intr thread don't process
++			 * again.
++			 */
++			crq->desc[crq->next_to_use].opcode = 0;
++		}
++
++scan_next:
++		next_to_use = (next_to_use + 1) % hw->cmq.crq.desc_num;
++	}
++}
++
+ void
+ hns3_dev_handle_mbx_msg(struct hns3_hw *hw)
+ {
+@@ -411,6 +449,29 @@ hns3_dev_handle_mbx_msg(struct hns3_hw *hw)
+ 
+ 	rte_spinlock_lock(&hw->cmq.crq.lock);
+ 
++	if (rte_eal_process_type() != RTE_PROC_PRIMARY ||
++	    !rte_thread_is_intr()) {
++		/*
++		 * Currently, any threads in the primary and secondary processes
++		 * could send mailbox sync request, so it will need to process
++		 * the crq message (which is the HNS3_MBX_PF_VF_RESP) in there
++		 * own thread context. It may also process other messages
++		 * because it uses the policy of processing all pending messages
++		 * at once.
++		 * But some messages such as HNS3_MBX_PUSH_LINK_STATUS could
++		 * only process within the intr thread in primary process,
++		 * otherwise it may lead to report lsc event in secondary
++		 * process.
++		 * So the threads other than intr thread in primary process
++		 * could only process HNS3_MBX_PF_VF_RESP message, if the
++		 * message processed, its opcode will rewrite with zero, then
++		 * the intr thread in primary process will not process again.
++		 */
++		hns3_handle_mbx_msg_out_intr(hw);
++		rte_spinlock_unlock(&hw->cmq.crq.lock);
++		return;
++	}
++
+ 	while (!hns3_cmd_crq_empty(hw)) {
+ 		if (__atomic_load_n(&hw->reset.disable_cmd, __ATOMIC_RELAXED)) {
+ 			rte_spinlock_unlock(&hw->cmq.crq.lock);
+@@ -433,6 +494,13 @@ hns3_dev_handle_mbx_msg(struct hns3_hw *hw)
+ 			continue;
+ 		}
+ 
++		if (desc->opcode == 0) {
++			/* Message already processed by other thread */
++			crq->desc[crq->next_to_use].flag = 0;
++			hns3_mbx_ring_ptr_move_crq(crq);
++			continue;
++		}
++
+ 		switch (opcode) {
+ 		case HNS3_MBX_PF_VF_RESP:
+ 			hns3_handle_mbx_response(hw, req);
+-- 
+2.7.4
+

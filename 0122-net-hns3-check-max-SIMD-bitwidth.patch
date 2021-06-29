@@ -1,0 +1,47 @@
+From 65e9bf664b7758d9e0e722ce0b4b15869a177f19 Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Thu, 15 Apr 2021 11:52:02 +0800
+Subject: [PATCH 122/189] net/hns3: check max SIMD bitwidth
+
+This patch supports check max SIMD bitwidth when choosing NEON and SVE
+vector path.
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_rxtx.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/drivers/net/hns3/hns3_rxtx.c b/drivers/net/hns3/hns3_rxtx.c
+index 87416a1..92d377b 100644
+--- a/drivers/net/hns3/hns3_rxtx.c
++++ b/drivers/net/hns3/hns3_rxtx.c
+@@ -13,6 +13,7 @@
+ #include <rte_malloc.h>
+ #if defined(RTE_ARCH_ARM64)
+ #include <rte_cpuflags.h>
++#include <rte_vect.h>
+ #endif
+ 
+ #include "hns3_ethdev.h"
+@@ -2790,6 +2791,8 @@ static bool
+ hns3_get_default_vec_support(void)
+ {
+ #if defined(RTE_ARCH_ARM64)
++	if (rte_vect_get_max_simd_bitwidth() < RTE_VECT_SIMD_128)
++		return false;
+ 	if (rte_cpu_get_flag_enabled(RTE_CPUFLAG_NEON))
+ 		return true;
+ #endif
+@@ -2800,6 +2803,8 @@ static bool
+ hns3_get_sve_support(void)
+ {
+ #if defined(RTE_ARCH_ARM64) && defined(__ARM_FEATURE_SVE)
++	if (rte_vect_get_max_simd_bitwidth() < RTE_VECT_SIMD_256)
++		return false;
+ 	if (rte_cpu_get_flag_enabled(RTE_CPUFLAG_SVE))
+ 		return true;
+ #endif
+-- 
+2.7.4
+

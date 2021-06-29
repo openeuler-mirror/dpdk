@@ -1,0 +1,39 @@
+From 4c2dcb5bd22a65d3b30ca64e5c96f67c3b9f5e7e Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Wed, 31 Mar 2021 18:01:41 +0800
+Subject: [PATCH 083/189] net/hns3: fix VF mailbox head field
+
+Currently, the VF mailbox synchronization communication is based on
+three fields: head/tail/lost, when head equals tail plus lost, it
+means the response is received successfully.
+
+The head field indicates the number of requests that are successfully
+sent. If the request sending fails, it should not be updated.
+
+This patch fix the above bug by roll back updates when the sending
+fails.
+
+Fixes: 463e748964f5 ("net/hns3: support mailbox")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_mbx.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/net/hns3/hns3_mbx.c b/drivers/net/hns3/hns3_mbx.c
+index b9190a1..7357d7f 100644
+--- a/drivers/net/hns3/hns3_mbx.c
++++ b/drivers/net/hns3/hns3_mbx.c
+@@ -142,6 +142,7 @@ hns3_send_mbx_msg(struct hns3_hw *hw, uint16_t code, uint16_t subcode,
+ 		hw->mbx_resp.head++;
+ 		ret = hns3_cmd_send(hw, &desc, 1);
+ 		if (ret) {
++			hw->mbx_resp.head--;
+ 			rte_spinlock_unlock(&hw->mbx_resp.lock);
+ 			hns3_err(hw, "VF failed(=%d) to send mbx message to PF",
+ 				 ret);
+-- 
+2.7.4
+

@@ -1,0 +1,75 @@
+From aab52c0cbdfbd5c05a8589d08bcdbaa6f34739be Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Tue, 13 Apr 2021 21:47:11 +0800
+Subject: [PATCH 108/189] net/hns3: fix supported speed of copper ports
+
+The "supported capability" obtained from firmware on copper ports
+includes the speed capability, auto-negotiation capability, and flow
+control capability. Therefore, this patch changes "supported_capa" to
+"supported_speed" and parses the speed capability supported by the
+driver from the "supported capability".
+
+Fixes: 2e4859f3b362 ("net/hns3: support PF device with copper PHYs")
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev.c | 11 +++++++----
+ drivers/net/hns3/hns3_ethdev.h |  2 +-
+ 2 files changed, 8 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index a06fdc9..e57163b 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -4612,7 +4612,10 @@ hns3_update_fiber_link_info(struct hns3_hw *hw)
+ static void
+ hns3_parse_copper_phy_params(struct hns3_cmd_desc *desc, struct hns3_mac *mac)
+ {
++#define HNS3_PHY_SUPPORTED_SPEED_MASK   0x2f
++
+ 	struct hns3_phy_params_bd0_cmd *req;
++	uint32_t supported;
+ 
+ 	req = (struct hns3_phy_params_bd0_cmd *)desc[0].data;
+ 	mac->link_speed = rte_le_to_cpu_32(req->speed);
+@@ -4620,11 +4623,11 @@ hns3_parse_copper_phy_params(struct hns3_cmd_desc *desc, struct hns3_mac *mac)
+ 					   HNS3_PHY_DUPLEX_CFG_B);
+ 	mac->link_autoneg = hns3_get_bit(req->autoneg,
+ 					   HNS3_PHY_AUTONEG_CFG_B);
+-	mac->supported_capa = rte_le_to_cpu_32(req->supported);
+ 	mac->advertising = rte_le_to_cpu_32(req->advertising);
+ 	mac->lp_advertising = rte_le_to_cpu_32(req->lp_advertising);
+-	mac->support_autoneg = !!(mac->supported_capa &
+-				HNS3_PHY_LINK_MODE_AUTONEG_BIT);
++	supported = rte_le_to_cpu_32(req->supported);
++	mac->supported_speed = supported & HNS3_PHY_SUPPORTED_SPEED_MASK;
++	mac->support_autoneg = !!(supported & HNS3_PHY_LINK_MODE_AUTONEG_BIT);
+ }
+ 
+ static int
+@@ -4673,7 +4676,7 @@ hns3_update_copper_link_info(struct hns3_hw *hw)
+ 	mac->link_speed = mac_info.link_speed;
+ 	mac->link_duplex = mac_info.link_duplex;
+ 	mac->link_autoneg = mac_info.link_autoneg;
+-	mac->supported_capa = mac_info.supported_capa;
++	mac->supported_speed = mac_info.supported_speed;
+ 	mac->advertising = mac_info.advertising;
+ 	mac->lp_advertising = mac_info.lp_advertising;
+ 	mac->support_autoneg = mac_info.support_autoneg;
+diff --git a/drivers/net/hns3/hns3_ethdev.h b/drivers/net/hns3/hns3_ethdev.h
+index 1763cc9..986bf26 100644
+--- a/drivers/net/hns3/hns3_ethdev.h
++++ b/drivers/net/hns3/hns3_ethdev.h
+@@ -183,7 +183,7 @@ struct hns3_mac {
+ 	uint8_t link_autoneg : 1; /* ETH_LINK_[AUTONEG/FIXED] */
+ 	uint8_t link_status  : 1; /* ETH_LINK_[DOWN/UP] */
+ 	uint32_t link_speed;      /* ETH_SPEED_NUM_ */
+-	uint32_t supported_capa;  /* supported capability for current media */
++	uint32_t supported_speed;  /* supported speed for current media type */
+ 	uint32_t advertising;     /* advertised capability in the local part */
+ 	/* advertised capability in the link partner */
+ 	uint32_t lp_advertising;
+-- 
+2.7.4
+

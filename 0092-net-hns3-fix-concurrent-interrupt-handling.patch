@@ -1,0 +1,42 @@
+From c7b459449995a35bdb5eac512ce8fb65a28cfe7f Mon Sep 17 00:00:00 2001
+From: Hongbo Zheng <zhenghongbo3@huawei.com>
+Date: Sat, 10 Apr 2021 09:11:16 +0800
+Subject: [PATCH 092/189] net/hns3: fix concurrent interrupt handling
+
+Currently, if RAS interrupt and FLR occurred at the same time, FLR will
+be detected and corresponding schedule state will be set during RAS
+interrupt processing. However, the schedule state value will be
+overridden in subsequent RAS processing, resulting in FLR processing
+failure. This patch solves this problem.
+
+Fixes: 2790c6464725 ("net/hns3: support device reset")
+Cc: stable@dpdk.org
+
+Signed-off-by: Hongbo Zheng <zhenghongbo3@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_intr.c | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_intr.c b/drivers/net/hns3/hns3_intr.c
+index 6250c36..ccc90c5 100644
+--- a/drivers/net/hns3/hns3_intr.c
++++ b/drivers/net/hns3/hns3_intr.c
+@@ -2133,10 +2133,11 @@ hns3_schedule_reset(struct hns3_adapter *hns)
+ 			SCHEDULE_REQUESTED)
+ 		return;
+ 	if (__atomic_load_n(&hw->reset.schedule, __ATOMIC_RELAXED) ==
+-			SCHEDULE_DEFERRED)
++			    SCHEDULE_DEFERRED)
+ 		rte_eal_alarm_cancel(hw->reset.ops->reset_service, hns);
+-	__atomic_store_n(&hw->reset.schedule, SCHEDULE_REQUESTED,
+-			 __ATOMIC_RELAXED);
++	else
++		__atomic_store_n(&hw->reset.schedule, SCHEDULE_REQUESTED,
++				 __ATOMIC_RELAXED);
+ 
+ 	rte_eal_alarm_set(SWITCH_CONTEXT_US, hw->reset.ops->reset_service, hns);
+ }
+-- 
+2.7.4
+

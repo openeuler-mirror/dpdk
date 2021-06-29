@@ -1,0 +1,36 @@
+From 0bfe64c5063855fb27785c2f73e98cc8f2893e0b Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Mon, 10 May 2021 21:38:12 +0800
+Subject: [PATCH 164/189] net/hns3: fix ordering in secondary process
+ initialization
+
+The memory barrier is used to ensure that the response is returned
+only after the Tx/Rx function is set, it should place after the Rx/Tx
+function is set.
+
+Fixes: 23d4b61fee5d ("net/hns3: support multiple process")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_mp.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/net/hns3/hns3_mp.c b/drivers/net/hns3/hns3_mp.c
+index 7d85de3..b5cd5b0 100644
+--- a/drivers/net/hns3/hns3_mp.c
++++ b/drivers/net/hns3/hns3_mp.c
+@@ -86,8 +86,8 @@ mp_secondary_handle(const struct rte_mp_msg *mp_msg, const void *peer)
+ 	case HNS3_MP_REQ_START_RXTX:
+ 		PMD_INIT_LOG(INFO, "port %u starting datapath",
+ 			     dev->data->port_id);
+-		rte_mb();
+ 		hns3_set_rxtx_function(dev);
++		rte_mb();
+ 		mp_init_msg(dev, &mp_res, param->type);
+ 		res->result = 0;
+ 		ret = rte_mp_reply(&mp_res, peer);
+-- 
+2.7.4
+

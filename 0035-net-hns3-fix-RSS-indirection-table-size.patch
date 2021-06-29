@@ -1,0 +1,334 @@
+From 00cee658ee4db31787baecbaff321d14734f6494 Mon Sep 17 00:00:00 2001
+From: Lijun Ou <oulijun@huawei.com>
+Date: Wed, 3 Feb 2021 20:23:49 +0800
+Subject: [PATCH 035/189] net/hns3: fix RSS indirection table size
+
+The driver should not use the fixed value as the validity check of
+RSS indirection table size with HW supported. As a result, it will
+cause misjudgment when the RSS RETA size with HW supported have
+changed.
+
+Fixes: c37ca66f2b27 ("net/hns3: support RSS")
+Cc: stable@dpdk.org
+
+Signed-off-by: Lijun Ou <oulijun@huawei.com>
+---
+ drivers/net/hns3/hns3_cmd.c       | 11 +++++++++++
+ drivers/net/hns3/hns3_cmd.h       |  7 ++++++-
+ drivers/net/hns3/hns3_dcb.c       |  2 +-
+ drivers/net/hns3/hns3_ethdev.c    | 18 ++++++++++++++++--
+ drivers/net/hns3/hns3_ethdev_vf.c | 18 ++++++++++++++++--
+ drivers/net/hns3/hns3_flow.c      |  6 +++---
+ drivers/net/hns3/hns3_rss.c       | 28 ++++++++++++++--------------
+ drivers/net/hns3/hns3_rss.h       |  5 ++---
+ 8 files changed, 69 insertions(+), 26 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_cmd.c b/drivers/net/hns3/hns3_cmd.c
+index 4c301cb..a6ea072 100644
+--- a/drivers/net/hns3/hns3_cmd.c
++++ b/drivers/net/hns3/hns3_cmd.c
+@@ -430,6 +430,16 @@ static void hns3_parse_capability(struct hns3_hw *hw,
+ 		hns3_set_bit(hw->capability, HNS3_DEV_SUPPORT_STASH_B, 1);
+ }
+ 
++static uint32_t
++hns3_build_api_caps(void)
++{
++	uint32_t api_caps = 0;
++
++	hns3_set_bit(api_caps, HNS3_API_CAP_FLEX_RSS_TBL_B, 1);
++
++	return rte_cpu_to_le_32(api_caps);
++}
++
+ static enum hns3_cmd_status
+ hns3_cmd_query_firmware_version_and_capability(struct hns3_hw *hw)
+ {
+@@ -439,6 +449,7 @@ hns3_cmd_query_firmware_version_and_capability(struct hns3_hw *hw)
+ 
+ 	hns3_cmd_setup_basic_desc(&desc, HNS3_OPC_QUERY_FW_VER, 1);
+ 	resp = (struct hns3_query_version_cmd *)desc.data;
++	resp->api_caps = hns3_build_api_caps();
+ 
+ 	/* Initialize the cmd function */
+ 	ret = hns3_cmd_send(hw, &desc, 1);
+diff --git a/drivers/net/hns3/hns3_cmd.h b/drivers/net/hns3/hns3_cmd.h
+index ad5e188..5640fe4 100644
+--- a/drivers/net/hns3/hns3_cmd.h
++++ b/drivers/net/hns3/hns3_cmd.h
+@@ -295,11 +295,16 @@ enum HNS3_CAPS_BITS {
+ 	HNS3_CAPS_HW_PAD_B,
+ 	HNS3_CAPS_STASH_B,
+ };
++
++enum HNS3_API_CAP_BITS {
++	HNS3_API_CAP_FLEX_RSS_TBL_B,
++};
++
+ #define HNS3_QUERY_CAP_LENGTH		3
+ struct hns3_query_version_cmd {
+ 	uint32_t firmware;
+ 	uint32_t hardware;
+-	uint32_t rsv;
++	uint32_t api_caps;
+ 	uint32_t caps[HNS3_QUERY_CAP_LENGTH]; /* capabilities of device */
+ };
+ 
+diff --git a/drivers/net/hns3/hns3_dcb.c b/drivers/net/hns3/hns3_dcb.c
+index 5aa374c..7fc6ac9 100644
+--- a/drivers/net/hns3/hns3_dcb.c
++++ b/drivers/net/hns3/hns3_dcb.c
+@@ -644,7 +644,7 @@ hns3_set_rss_size(struct hns3_hw *hw, uint16_t nb_rx_q)
+ 	 * stage of the reset process.
+ 	 */
+ 	if (__atomic_load_n(&hw->reset.resetting, __ATOMIC_RELAXED) == 0) {
+-		for (i = 0; i < HNS3_RSS_IND_TBL_SIZE; i++)
++		for (i = 0; i < hw->rss_ind_tbl_size; i++)
+ 			rss_cfg->rss_indirection_tbl[i] =
+ 							i % hw->alloc_rss_size;
+ 	}
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 30f09a7..df7220b 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -2593,7 +2593,7 @@ hns3_dev_infos_get(struct rte_eth_dev *eth_dev, struct rte_eth_dev_info *info)
+ 
+ 	info->vmdq_queue_num = 0;
+ 
+-	info->reta_size = HNS3_RSS_IND_TBL_SIZE;
++	info->reta_size = hw->rss_ind_tbl_size;
+ 	info->hash_key_size = HNS3_RSS_KEY_SIZE;
+ 	info->flow_type_rss_offloads = HNS3_ETH_RSS_SUPPORT;
+ 
+@@ -2984,6 +2984,20 @@ hns3_parse_dev_specifications(struct hns3_hw *hw, struct hns3_cmd_desc *desc)
+ }
+ 
+ static int
++hns3_check_dev_specifications(struct hns3_hw *hw)
++{
++	if (hw->rss_ind_tbl_size == 0 ||
++	    hw->rss_ind_tbl_size > HNS3_RSS_IND_TBL_SIZE_MAX) {
++		hns3_err(hw, "the size of hash lookup table configured (%u)"
++			      " exceeds the maximum(%u)", hw->rss_ind_tbl_size,
++			      HNS3_RSS_IND_TBL_SIZE_MAX);
++		return -EINVAL;
++	}
++
++	return 0;
++}
++
++static int
+ hns3_query_dev_specifications(struct hns3_hw *hw)
+ {
+ 	struct hns3_cmd_desc desc[HNS3_QUERY_DEV_SPECS_BD_NUM];
+@@ -3003,7 +3017,7 @@ hns3_query_dev_specifications(struct hns3_hw *hw)
+ 
+ 	hns3_parse_dev_specifications(hw, desc);
+ 
+-	return 0;
++	return hns3_check_dev_specifications(hw);
+ }
+ 
+ static int
+diff --git a/drivers/net/hns3/hns3_ethdev_vf.c b/drivers/net/hns3/hns3_ethdev_vf.c
+index 3a682e5..1b1989e 100644
+--- a/drivers/net/hns3/hns3_ethdev_vf.c
++++ b/drivers/net/hns3/hns3_ethdev_vf.c
+@@ -1016,7 +1016,7 @@ hns3vf_dev_infos_get(struct rte_eth_dev *eth_dev, struct rte_eth_dev_info *info)
+ 
+ 	info->vmdq_queue_num = 0;
+ 
+-	info->reta_size = HNS3_RSS_IND_TBL_SIZE;
++	info->reta_size = hw->rss_ind_tbl_size;
+ 	info->hash_key_size = HNS3_RSS_KEY_SIZE;
+ 	info->flow_type_rss_offloads = HNS3_ETH_RSS_SUPPORT;
+ 	info->default_rxportconf.ring_size = HNS3_DEFAULT_RING_DESC;
+@@ -1149,6 +1149,20 @@ hns3vf_parse_dev_specifications(struct hns3_hw *hw, struct hns3_cmd_desc *desc)
+ }
+ 
+ static int
++hns3vf_check_dev_specifications(struct hns3_hw *hw)
++{
++	if (hw->rss_ind_tbl_size == 0 ||
++	    hw->rss_ind_tbl_size > HNS3_RSS_IND_TBL_SIZE_MAX) {
++		hns3_warn(hw, "the size of hash lookup table configured (%u)"
++			      " exceeds the maximum(%u)", hw->rss_ind_tbl_size,
++			      HNS3_RSS_IND_TBL_SIZE_MAX);
++		return -EINVAL;
++	}
++
++	return 0;
++}
++
++static int
+ hns3vf_query_dev_specifications(struct hns3_hw *hw)
+ {
+ 	struct hns3_cmd_desc desc[HNS3_QUERY_DEV_SPECS_BD_NUM];
+@@ -1168,7 +1182,7 @@ hns3vf_query_dev_specifications(struct hns3_hw *hw)
+ 
+ 	hns3vf_parse_dev_specifications(hw, desc);
+ 
+-	return 0;
++	return hns3vf_check_dev_specifications(hw);
+ }
+ 
+ static int
+diff --git a/drivers/net/hns3/hns3_flow.c b/drivers/net/hns3/hns3_flow.c
+index 3e387ac..a601124 100644
+--- a/drivers/net/hns3/hns3_flow.c
++++ b/drivers/net/hns3/hns3_flow.c
+@@ -1489,14 +1489,14 @@ hns3_update_indir_table(struct rte_eth_dev *dev,
+ {
+ 	struct hns3_adapter *hns = dev->data->dev_private;
+ 	struct hns3_hw *hw = &hns->hw;
+-	uint16_t indir_tbl[HNS3_RSS_IND_TBL_SIZE];
++	uint16_t indir_tbl[HNS3_RSS_IND_TBL_SIZE_MAX];
+ 	uint16_t j;
+ 	uint32_t i;
+ 
+ 	/* Fill in redirection table */
+ 	memcpy(indir_tbl, hw->rss_info.rss_indirection_tbl,
+ 	       sizeof(hw->rss_info.rss_indirection_tbl));
+-	for (i = 0, j = 0; i < HNS3_RSS_IND_TBL_SIZE; i++, j++) {
++	for (i = 0, j = 0; i < hw->rss_ind_tbl_size; i++, j++) {
+ 		j %= num;
+ 		if (conf->queue[j] >= hw->alloc_rss_size) {
+ 			hns3_err(hw, "queue id(%u) set to redirection table "
+@@ -1507,7 +1507,7 @@ hns3_update_indir_table(struct rte_eth_dev *dev,
+ 		indir_tbl[i] = conf->queue[j];
+ 	}
+ 
+-	return hns3_set_rss_indir_table(hw, indir_tbl, HNS3_RSS_IND_TBL_SIZE);
++	return hns3_set_rss_indir_table(hw, indir_tbl, hw->rss_ind_tbl_size);
+ }
+ 
+ static int
+diff --git a/drivers/net/hns3/hns3_rss.c b/drivers/net/hns3/hns3_rss.c
+index 7d1a297..858e31a 100644
+--- a/drivers/net/hns3/hns3_rss.c
++++ b/drivers/net/hns3/hns3_rss.c
+@@ -312,7 +312,7 @@ hns3_set_rss_indir_table(struct hns3_hw *hw, uint16_t *indir, uint16_t size)
+ 
+ 	/* Update redirection table of hw */
+ 	memcpy(hw->rss_info.rss_indirection_tbl, indir,
+-	       sizeof(hw->rss_info.rss_indirection_tbl));
++	       sizeof(uint16_t) * size);
+ 
+ 	return 0;
+ }
+@@ -324,13 +324,13 @@ hns3_rss_reset_indir_table(struct hns3_hw *hw)
+ 	int ret;
+ 
+ 	lut = rte_zmalloc("hns3_rss_lut",
+-			  HNS3_RSS_IND_TBL_SIZE * sizeof(uint16_t), 0);
++			  hw->rss_ind_tbl_size * sizeof(uint16_t), 0);
+ 	if (lut == NULL) {
+ 		hns3_err(hw, "No hns3_rss_lut memory can be allocated");
+ 		return -ENOMEM;
+ 	}
+ 
+-	ret = hns3_set_rss_indir_table(hw, lut, HNS3_RSS_IND_TBL_SIZE);
++	ret = hns3_set_rss_indir_table(hw, lut, hw->rss_ind_tbl_size);
+ 	if (ret)
+ 		hns3_err(hw, "RSS uninit indir table failed: %d", ret);
+ 	rte_free(lut);
+@@ -428,7 +428,7 @@ hns3_dev_rss_hash_update(struct rte_eth_dev *dev,
+ 	} else if (rss_hf && rss_cfg->conf.types == 0) {
+ 		/* Enable RSS, restore indirection table by hw's config */
+ 		ret = hns3_set_rss_indir_table(hw, rss_cfg->rss_indirection_tbl,
+-					       HNS3_RSS_IND_TBL_SIZE);
++					       hw->rss_ind_tbl_size);
+ 		if (ret)
+ 			goto conf_err;
+ 	}
+@@ -505,15 +505,15 @@ hns3_dev_rss_reta_update(struct rte_eth_dev *dev,
+ 	struct hns3_adapter *hns = dev->data->dev_private;
+ 	struct hns3_hw *hw = &hns->hw;
+ 	struct hns3_rss_conf *rss_cfg = &hw->rss_info;
+-	uint16_t i, indir_size = HNS3_RSS_IND_TBL_SIZE; /* Table size is 512 */
+-	uint16_t indirection_tbl[HNS3_RSS_IND_TBL_SIZE];
++	uint16_t indirection_tbl[HNS3_RSS_IND_TBL_SIZE_MAX];
+ 	uint16_t idx, shift;
++	uint16_t i;
+ 	int ret;
+ 
+-	if (reta_size != indir_size || reta_size > ETH_RSS_RETA_SIZE_512) {
++	if (reta_size != hw->rss_ind_tbl_size) {
+ 		hns3_err(hw, "The size of hash lookup table configured (%u)"
+ 			 "doesn't match the number hardware can supported"
+-			 "(%u)", reta_size, indir_size);
++			 "(%u)", reta_size, hw->rss_ind_tbl_size);
+ 		return -EINVAL;
+ 	}
+ 	rte_spinlock_lock(&hw->lock);
+@@ -536,7 +536,7 @@ hns3_dev_rss_reta_update(struct rte_eth_dev *dev,
+ 	}
+ 
+ 	ret = hns3_set_rss_indir_table(hw, indirection_tbl,
+-				       HNS3_RSS_IND_TBL_SIZE);
++				       hw->rss_ind_tbl_size);
+ 
+ 	rte_spinlock_unlock(&hw->lock);
+ 	return ret;
+@@ -561,13 +561,13 @@ hns3_dev_rss_reta_query(struct rte_eth_dev *dev,
+ 	struct hns3_adapter *hns = dev->data->dev_private;
+ 	struct hns3_hw *hw = &hns->hw;
+ 	struct hns3_rss_conf *rss_cfg = &hw->rss_info;
+-	uint16_t i, indir_size = HNS3_RSS_IND_TBL_SIZE; /* Table size is 512 */
+ 	uint16_t idx, shift;
++	uint16_t i;
+ 
+-	if (reta_size != indir_size || reta_size > ETH_RSS_RETA_SIZE_512) {
++	if (reta_size != hw->rss_ind_tbl_size) {
+ 		hns3_err(hw, "The size of hash lookup table configured (%u)"
+ 			 " doesn't match the number hardware can supported"
+-			 "(%u)", reta_size, indir_size);
++			 "(%u)", reta_size, hw->rss_ind_tbl_size);
+ 		return -EINVAL;
+ 	}
+ 	rte_spinlock_lock(&hw->lock);
+@@ -662,7 +662,7 @@ hns3_rss_set_default_args(struct hns3_hw *hw)
+ 	memcpy(rss_cfg->key, hns3_hash_key, HNS3_RSS_KEY_SIZE);
+ 
+ 	/* Initialize RSS indirection table */
+-	for (i = 0; i < HNS3_RSS_IND_TBL_SIZE; i++)
++	for (i = 0; i < hw->rss_ind_tbl_size; i++)
+ 		rss_cfg->rss_indirection_tbl[i] = i % queue_num;
+ }
+ 
+@@ -711,7 +711,7 @@ hns3_config_rss(struct hns3_adapter *hns)
+ 	 */
+ 	if (((uint32_t)mq_mode & ETH_MQ_RX_RSS_FLAG)) {
+ 		ret = hns3_set_rss_indir_table(hw, rss_cfg->rss_indirection_tbl,
+-					       HNS3_RSS_IND_TBL_SIZE);
++					       hw->rss_ind_tbl_size);
+ 		if (ret)
+ 			goto rss_tuple_uninit;
+ 	}
+diff --git a/drivers/net/hns3/hns3_rss.h b/drivers/net/hns3/hns3_rss.h
+index 05d5c26..94668ed 100644
+--- a/drivers/net/hns3/hns3_rss.h
++++ b/drivers/net/hns3/hns3_rss.h
+@@ -24,9 +24,8 @@
+ 	ETH_RSS_L4_DST_ONLY)
+ 
+ #define HNS3_RSS_IND_TBL_SIZE	512 /* The size of hash lookup table */
++#define HNS3_RSS_IND_TBL_SIZE_MAX 2048
+ #define HNS3_RSS_KEY_SIZE	40
+-#define HNS3_RSS_CFG_TBL_NUM \
+-	(HNS3_RSS_IND_TBL_SIZE / HNS3_RSS_CFG_TBL_SIZE)
+ #define HNS3_RSS_SET_BITMAP_MSK	0xffff
+ 
+ #define HNS3_RSS_HASH_ALGO_TOEPLITZ	0
+@@ -45,7 +44,7 @@ struct hns3_rss_conf {
+ 	uint8_t hash_algo; /* hash function type definited by hardware */
+ 	uint8_t key[HNS3_RSS_KEY_SIZE];  /* Hash key */
+ 	struct hns3_rss_tuple_cfg rss_tuple_sets;
+-	uint16_t rss_indirection_tbl[HNS3_RSS_IND_TBL_SIZE]; /* Shadow table */
++	uint16_t rss_indirection_tbl[HNS3_RSS_IND_TBL_SIZE_MAX];
+ 	uint16_t queue[HNS3_RSS_QUEUES_BUFFER_NUM]; /* Queues indices to use */
+ 	bool valid; /* check if RSS rule is valid */
+ 	/*
+-- 
+2.7.4
+

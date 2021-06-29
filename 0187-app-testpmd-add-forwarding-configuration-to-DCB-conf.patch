@@ -1,0 +1,40 @@
+From b7e79c9c712372946ccd9ce66bd3d1b91cd0a9d1 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Wed, 28 Apr 2021 14:40:45 +0800
+Subject: [PATCH 187/189] app/testpmd: add forwarding configuration to DCB
+ config
+
+This patch adds fwd_config_setup() at the end of cmd_config_dcb_parsed()
+to update "cur_fwd_config", so that the actual forwarding streams can be
+queried by the "show config fwd" cmd.
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Lijun Ou <oulijun@huawei.com>
+Acked-by: Xiaoyun Li <xiaoyun.li@intel.com>
+---
+ app/test-pmd/cmdline.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/app/test-pmd/cmdline.c b/app/test-pmd/cmdline.c
+index 40a6871..78db462 100644
+--- a/app/test-pmd/cmdline.c
++++ b/app/test-pmd/cmdline.c
+@@ -3292,13 +3292,13 @@ cmd_config_dcb_parsed(void *parsed_result,
+ 		ret = init_port_dcb_config(port_id, DCB_ENABLED,
+ 				(enum rte_eth_nb_tcs)res->num_tcs,
+ 				pfc_en);
+-
+-
+ 	if (ret != 0) {
+ 		printf("Cannot initialize network ports.\n");
+ 		return;
+ 	}
+ 
++	fwd_config_setup();
++
+ 	cmd_reconfig_device_queue(port_id, 1, 1);
+ }
+ 
+-- 
+2.7.4
+

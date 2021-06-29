@@ -1,0 +1,34 @@
+From 91cdc3204aec2d95d138d8fd88a16ea9af123a5f Mon Sep 17 00:00:00 2001
+From: Chengchang Tang <tangchengchang@huawei.com>
+Date: Thu, 22 Apr 2021 15:03:31 +0800
+Subject: [PATCH 181/189] app/testpmd: fix max queue number for Tx offloads
+
+When txq offload is configured, max rxq is used as the max queue. This
+patch fixes it.
+
+Fixes: 74453ac9ef67 ("app/testpmd: fix queue offload configuration")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengchang Tang <tangchengchang@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+Acked-by: Xiaoyun Li <xiaoyun.li@intel.com>
+---
+ app/test-pmd/cmdline.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/app/test-pmd/cmdline.c b/app/test-pmd/cmdline.c
+index a64b493..59c4f7e 100644
+--- a/app/test-pmd/cmdline.c
++++ b/app/test-pmd/cmdline.c
+@@ -4645,7 +4645,7 @@ cmd_config_queue_tx_offloads(struct rte_port *port)
+ 	int k;
+ 
+ 	/* Apply queue tx offloads configuration */
+-	for (k = 0; k < port->dev_info.max_rx_queues; k++)
++	for (k = 0; k < port->dev_info.max_tx_queues; k++)
+ 		port->tx_conf[k].offloads =
+ 			port->dev_conf.txmode.offloads;
+ }
+-- 
+2.7.4
+

@@ -1,0 +1,28 @@
+From 2fa098fa0c4986f77f00521bc7ef50948397a6ef Mon Sep 17 00:00:00 2001
+From: "Min Hu (Connor)" <humin29@huawei.com>
+Date: Thu, 10 Jun 2021 15:21:07 +0800
+Subject: [PATCH 189/189] net: fix compiling bug for 20.11 merge
+
+This patch add byte order support for definition.
+
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ lib/librte_net/rte_geneve.h | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/lib/librte_net/rte_geneve.h b/lib/librte_net/rte_geneve.h
+index bb67724..3bbc561 100644
+--- a/lib/librte_net/rte_geneve.h
++++ b/lib/librte_net/rte_geneve.h
+@@ -12,6 +12,8 @@
+  */
+ #include <stdint.h>
+ 
++#include <rte_byteorder.h>
++
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+-- 
+2.7.4
+

@@ -1,0 +1,57 @@
+From c36dad2a8570ffadd1fd802c85d0566260ff1daf Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Wed, 21 Apr 2021 11:24:59 +0800
+Subject: [PATCH 180/189] app/testpmd: support display queue state
+
+This patch supports display queue state in "show rxq/txq" commands.
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+Reviewed-by: Ferruh Yigit <ferruh.yigit@intel.com>
+---
+ app/test-pmd/config.c | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/app/test-pmd/config.c b/app/test-pmd/config.c
+index d4ec3ff..baae44e 100644
+--- a/app/test-pmd/config.c
++++ b/app/test-pmd/config.c
+@@ -362,6 +362,19 @@ nic_xstats_clear(portid_t port_id)
+ 	}
+ }
+ 
++static const char *
++get_queue_state_name(uint8_t queue_state)
++{
++	if (queue_state == RTE_ETH_QUEUE_STATE_STOPPED)
++		return "stopped";
++	else if (queue_state == RTE_ETH_QUEUE_STATE_STARTED)
++		return "started";
++	else if (queue_state == RTE_ETH_QUEUE_STATE_HAIRPIN)
++		return "hairpin";
++	else
++		return "unknown";
++}
++
+ void
+ rx_queue_infos_display(portid_t port_id, uint16_t queue_id)
+ {
+@@ -392,6 +405,7 @@ rx_queue_infos_display(portid_t port_id, uint16_t queue_id)
+ 		(qinfo.conf.rx_deferred_start != 0) ? "on" : "off");
+ 	printf("\nRX scattered packets: %s",
+ 		(qinfo.scattered_rx != 0) ? "on" : "off");
++	printf("\nRx queue state: %s", get_queue_state_name(qinfo.queue_state));
+ 	if (qinfo.rx_buf_size != 0)
+ 		printf("\nRX buffer size: %hu", qinfo.rx_buf_size);
+ 	printf("\nNumber of RXDs: %hu", qinfo.nb_desc);
+@@ -432,6 +446,7 @@ tx_queue_infos_display(portid_t port_id, uint16_t queue_id)
+ 	printf("\nTX deferred start: %s",
+ 		(qinfo.conf.tx_deferred_start != 0) ? "on" : "off");
+ 	printf("\nNumber of TXDs: %hu", qinfo.nb_desc);
++	printf("\nTx queue state: %s", get_queue_state_name(qinfo.queue_state));
+ 
+ 	if (rte_eth_tx_burst_mode_get(port_id, queue_id, &mode) == 0)
+ 		printf("\nBurst mode: %s%s",
+-- 
+2.7.4
+

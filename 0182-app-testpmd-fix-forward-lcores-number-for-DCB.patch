@@ -1,0 +1,70 @@
+From fd91f2f494b8dd91eda34ffa3d28b6e44d5988aa Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Wed, 28 Apr 2021 14:40:40 +0800
+Subject: [PATCH 182/189] app/testpmd: fix forward lcores number for DCB
+
+For the DCB forwarding test, each core is assigned to each traffic class.
+Number of forwarding cores for DCB test must be equal or less than number
+of total TC. Otherwise, the following problems may occur:
+1/ Redundant polling threads will be created when forwarding cores number
+   is greater than total TC number.
+2/ Two cores would try to use a same queue on a port when Rx/Tx queue
+   number is greater than the used TC number, which is not allowed.
+
+Fixes: 900550de04a7 ("app/testpmd: add dcb support")
+Fixes: ce8d561418d4 ("app/testpmd: add port configuration settings")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Lijun Ou <oulijun@huawei.com>
+Acked-by: Xiaoyun Li <xiaoyun.li@intel.com>
+---
+ app/test-pmd/config.c | 19 +++++++++++++++++++
+ 1 file changed, 19 insertions(+)
+
+diff --git a/app/test-pmd/config.c b/app/test-pmd/config.c
+index baae44e..075929c 100644
+--- a/app/test-pmd/config.c
++++ b/app/test-pmd/config.c
+@@ -3154,6 +3154,21 @@ rss_fwd_config_setup(void)
+ 	}
+ }
+ 
++static uint16_t
++get_fwd_port_total_tc_num(void)
++{
++	struct rte_eth_dcb_info dcb_info;
++	uint16_t total_tc_num = 0;
++	unsigned int i;
++
++	for (i = 0; i < nb_fwd_ports; i++) {
++		(void)rte_eth_dev_get_dcb_info(fwd_ports_ids[i], &dcb_info);
++		total_tc_num += dcb_info.nb_tcs;
++	}
++
++	return total_tc_num;
++}
++
+ /**
+  * For the DCB forwarding test, each core is assigned on each traffic class.
+  *
+@@ -3173,12 +3188,16 @@ dcb_fwd_config_setup(void)
+ 	lcoreid_t  lc_id;
+ 	uint16_t nb_rx_queue, nb_tx_queue;
+ 	uint16_t i, j, k, sm_id = 0;
++	uint16_t total_tc_num;
+ 	uint8_t tc = 0;
+ 
+ 	cur_fwd_config.nb_fwd_lcores = (lcoreid_t) nb_fwd_lcores;
+ 	cur_fwd_config.nb_fwd_ports = nb_fwd_ports;
+ 	cur_fwd_config.nb_fwd_streams =
+ 		(streamid_t) (nb_rxq * cur_fwd_config.nb_fwd_ports);
++	total_tc_num = get_fwd_port_total_tc_num();
++	if (cur_fwd_config.nb_fwd_lcores > total_tc_num)
++		cur_fwd_config.nb_fwd_lcores = total_tc_num;
+ 
+ 	/* reinitialize forwarding streams */
+ 	init_fwd_streams();
+-- 
+2.7.4
+

@@ -1,0 +1,55 @@
+From 0a74fe6f54d39e5e09e875266efc365d51a4de68 Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Thu, 22 Apr 2021 09:55:52 +0800
+Subject: [PATCH 134/189] net/hns3: remove unused mailbox macro and struct
+
+In hns3_mbx.h, some macro and structure were defined in previous
+versions but never used.
+
+Fixes: 463e748964f5 ("net/hns3: support mailbox")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_mbx.h | 10 ----------
+ 1 file changed, 10 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_mbx.h b/drivers/net/hns3/hns3_mbx.h
+index 338c2c2..e84ef6d 100644
+--- a/drivers/net/hns3/hns3_mbx.h
++++ b/drivers/net/hns3/hns3_mbx.h
+@@ -5,8 +5,6 @@
+ #ifndef _HNS3_MBX_H_
+ #define _HNS3_MBX_H_
+ 
+-#define HNS3_MBX_VF_MSG_DATA_NUM	16
+-
+ enum HNS3_MBX_OPCODE {
+ 	HNS3_MBX_RESET = 0x01,          /* (VF -> PF) assert reset */
+ 	HNS3_MBX_ASSERTING_RESET,       /* (PF -> VF) PF is asserting reset */
+@@ -80,8 +78,6 @@ enum hns3_mbx_link_fail_subcode {
+ 
+ #define HNS3_MBX_MAX_MSG_SIZE	16
+ #define HNS3_MBX_MAX_RESP_DATA_SIZE	8
+-#define HNS3_MBX_RING_MAP_BASIC_MSG_NUM	3
+-#define HNS3_MBX_RING_NODE_VARIABLE_NUM	3
+ 
+ enum {
+ 	HNS3_MBX_RESP_MATCHING_SCHEME_OF_ORIGINAL = 0,
+@@ -147,12 +143,6 @@ struct hns3_vf_bind_vector_msg {
+ 	struct hns3_ring_chain_param param[HNS3_MBX_MAX_RING_CHAIN_PARAM_NUM];
+ };
+ 
+-struct hns3_vf_rst_cmd {
+-	uint8_t dest_vfid;
+-	uint8_t vf_rst;
+-	uint8_t rsv[22];
+-};
+-
+ struct hns3_pf_rst_done_cmd {
+ 	uint8_t pf_rst_done;
+ 	uint8_t rsv[23];
+-- 
+2.7.4
+
