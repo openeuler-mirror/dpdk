@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 20.11
-Release: 1
+Release: 2
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  20.11
@@ -205,10 +205,9 @@ ExclusiveArch: i686 x86_64 aarch64
 %global target build
 
 
-BuildRequires: meson
-BuildRequires: ninja-build
-BuildRequires: gcc
+BuildRequires: meson ninja-build gcc
 BuildRequires: kernel-devel
+BuildRequires: uname-build-checks
 
 %define kern_devel_ver %(uname -r)
 
@@ -457,6 +456,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Fri Jul 02 2021 huangliming <huangliming5@huawei.com> - 20.11-2
+- add uname-build-checks BuildRequires
+
 * Mon Jun 21 2021 Min Hu <humin29@huawei.com> - 20.11-1
 - support hns3 PMD for Kunpeng 920 and Kunpeng 930
 
