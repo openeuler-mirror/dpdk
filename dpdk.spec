@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 19.11
-Release: 11
+Release: 12
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  19.11
@@ -94,41 +94,7 @@ Requires:       dpdk = %{version}
 This package contains the pdump tool for capture the dpdk network packets.
 
 %prep
-%setup -q -n %{name}-%{version}
-%patch11 -p1
-%patch12 -p1
-%patch13 -p1
-%patch14 -p1
-%patch15 -p1
-%patch16 -p1
-%patch17 -p1
-%patch18 -p1
-%patch0 -p1
-%patch1 -p1
-%patch2 -p1
-%patch3 -p1
-%patch4 -p1
-%patch19 -p1
-%patch20 -p1
-%patch21 -p1
-%patch22 -p1
-%patch23 -p1
-%patch24 -p1
-%patch25 -p1
-%patch26 -p1
-%patch27 -p1
-%patch28 -p1
-%patch29 -p1
-%patch30 -p1
-%patch31 -p1
-%patch32 -p1
-%patch5 -p1
-%patch6 -p1
-%patch7 -p1
-%patch8 -p1
-%patch9 -p1
-%patch10 -p1
-%patch33 -p1
+%autosetup -n %{name}-%{version} -p1
 
 %build
 namer=%{kern_devel_ver}
@@ -223,6 +189,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Mon Jul 12 2021 huangliming <huangliming5@huawei.com> - 19.11-12
+- change the patch installation to autosetup
+
 * Tue Jun 08 2021 huangliming<huangliming5@huawei.com> - 19.11-11
 - add gcc BuildRequires
 
