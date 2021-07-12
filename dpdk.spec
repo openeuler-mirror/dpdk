@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 20.11
-Release: 2
+Release: 3
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  20.11
@@ -232,196 +232,7 @@ DPDK doc is divided in two parts: API details in doxygen HTML format
 and guides in sphinx HTML/PDF formats.
 
 %prep
-%setup -q -n %{name}-%{version}
-%patch0 -p1
-%patch1 -p1
-%patch2 -p1
-%patch3 -p1
-%patch4 -p1
-%patch5 -p1
-%patch6 -p1
-%patch7 -p1
-%patch8 -p1
-%patch9 -p1
-%patch10 -p1
-%patch11 -p1
-%patch12 -p1
-%patch13 -p1
-%patch14 -p1
-%patch15 -p1
-%patch16 -p1
-%patch17 -p1
-%patch18 -p1
-%patch19 -p1
-%patch20 -p1
-%patch21 -p1
-%patch22 -p1
-%patch23 -p1
-%patch24 -p1
-%patch25 -p1
-%patch26 -p1
-%patch27 -p1
-%patch28 -p1
-%patch29 -p1
-%patch30 -p1
-%patch31 -p1
-%patch32 -p1
-%patch33 -p1
-%patch34 -p1
-%patch35 -p1
-%patch36 -p1
-%patch37 -p1
-%patch38 -p1
-%patch39 -p1
-%patch40 -p1
-%patch41 -p1
-%patch42 -p1
-%patch43 -p1
-%patch44 -p1
-%patch45 -p1
-%patch46 -p1
-%patch47 -p1
-%patch48 -p1
-%patch49 -p1
-%patch50 -p1
-%patch51 -p1
-%patch52 -p1
-%patch53 -p1
-%patch54 -p1
-%patch55 -p1
-%patch56 -p1
-%patch57 -p1
-%patch58 -p1
-%patch59 -p1
-%patch60 -p1
-%patch61 -p1
-%patch62 -p1
-%patch63 -p1
-%patch64 -p1
-%patch65 -p1
-%patch66 -p1
-%patch67 -p1
-%patch68 -p1
-%patch69 -p1
-%patch70 -p1
-%patch71 -p1
-%patch72 -p1
-%patch73 -p1
-%patch74 -p1
-%patch75 -p1
-%patch76 -p1
-%patch77 -p1
-%patch78 -p1
-%patch79 -p1
-%patch80 -p1
-%patch81 -p1
-%patch82 -p1
-%patch83 -p1
-%patch84 -p1
-%patch85 -p1
-%patch86 -p1
-%patch87 -p1
-%patch88 -p1
-%patch89 -p1
-%patch90 -p1
-%patch91 -p1
-%patch92 -p1
-%patch93 -p1
-%patch94 -p1
-%patch95 -p1
-%patch96 -p1
-%patch97 -p1
-%patch98 -p1
-%patch99 -p1
-%patch100 -p1
-%patch101 -p1
-%patch102 -p1
-%patch103 -p1
-%patch104 -p1
-%patch105 -p1
-%patch106 -p1
-%patch107 -p1
-%patch108 -p1
-%patch109 -p1
-%patch110 -p1
-%patch111 -p1
-%patch112 -p1
-%patch113 -p1
-%patch114 -p1
-%patch115 -p1
-%patch116 -p1
-%patch117 -p1
-%patch118 -p1
-%patch119 -p1
-%patch120 -p1
-%patch121 -p1
-%patch122 -p1
-%patch123 -p1
-%patch124 -p1
-%patch125 -p1
-%patch126 -p1
-%patch127 -p1
-%patch128 -p1
-%patch129 -p1
-%patch130 -p1
-%patch131 -p1
-%patch132 -p1
-%patch133 -p1
-%patch134 -p1
-%patch135 -p1
-%patch136 -p1
-%patch137 -p1
-%patch138 -p1
-%patch139 -p1
-%patch140 -p1
-%patch141 -p1
-%patch142 -p1
-%patch143 -p1
-%patch144 -p1
-%patch145 -p1
-%patch146 -p1
-%patch147 -p1
-%patch148 -p1
-%patch149 -p1
-%patch150 -p1
-%patch151 -p1
-%patch152 -p1
-%patch153 -p1
-%patch154 -p1
-%patch155 -p1
-%patch156 -p1
-%patch157 -p1
-%patch158 -p1
-%patch159 -p1
-%patch160 -p1
-%patch161 -p1
-%patch162 -p1
-%patch163 -p1
-%patch164 -p1
-%patch165 -p1
-%patch166 -p1
-%patch167 -p1
-%patch168 -p1
-%patch169 -p1
-%patch170 -p1
-%patch171 -p1
-%patch172 -p1
-%patch173 -p1
-%patch174 -p1
-%patch175 -p1
-%patch176 -p1
-%patch177 -p1
-%patch178 -p1
-%patch179 -p1
-%patch180 -p1
-%patch181 -p1
-%patch182 -p1
-%patch183 -p1
-%patch184 -p1
-%patch185 -p1
-%patch186 -p1
-%patch187 -p1
-%patch188 -p1
+%autosetup -n %{name}-%{version} -p1
 
 %build
 %define debug_package %{nil}
@@ -456,6 +267,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Mon Jul 12 2021 huangliming <huangliming5@huawei.com> - 20.11-3
+- change the patch installation to autosetup
+
 * Fri Jul 02 2021 huangliming <huangliming5@huawei.com> - 20.11-2
 - add uname-build-checks BuildRequires
 
