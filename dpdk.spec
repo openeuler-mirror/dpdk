@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 19.11
-Release: 13
+Release: 14
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  19.11
@@ -75,22 +75,7 @@ Requires:       dpdk = %{version}
 This package contains the pdump tool for capture the dpdk network packets.
 
 %prep
-%setup -q -n %{name}-%{version}
-%patch0 -p1
-%patch1 -p1
-%patch2 -p1
-%patch3 -p1
-%patch4 -p1
-%patch5 -p1
-%patch6 -p1
-%patch7 -p1
-%patch8 -p1
-%patch9 -p1
-%patch10 -p1
-%patch11 -p1
-%patch12 -p1
-%patch13 -p1
-%patch14 -p1
+%autosetup -n %{name}-%{version} -p1
 
 %build
 namer=%{kern_devel_ver}
@@ -185,6 +170,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Mon Jul 12 2021 huangliming <huangliming5@huawei.com> - 19.11-14
+- change the patch installation to autosetup
+
 * Tue Jun 08 2021 huangliming<huangliming5@huawei.com> - 19.11-13
 - add gcc BuildRequires
 
