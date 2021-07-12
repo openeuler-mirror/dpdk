@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 20.11
-Release: 3
+Release: 4
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  20.11
@@ -208,6 +208,7 @@ ExclusiveArch: i686 x86_64 aarch64
 BuildRequires: meson ninja-build gcc
 BuildRequires: kernel-devel
 BuildRequires: uname-build-checks
+BuildRequires: doxygen python3-sphinx
 
 %define kern_devel_ver %(uname -r)
 
@@ -236,7 +237,7 @@ and guides in sphinx HTML/PDF formats.
 
 %build
 %define debug_package %{nil}
-meson %{target} -Ddisable_drivers=*/octeontx2 -Ddisable_drivers=*/fpga* -Ddisable_drivers=*/ifpga* -Denable_kmods=true
+meson %{target} -Ddisable_drivers=*/octeontx2 -Ddisable_drivers=*/fpga* -Ddisable_drivers=*/ifpga* -Denable_kmods=true -Denable_docs=true
 ninja -C %{target}
 
 %install
@@ -254,9 +255,10 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 
 %files devel
 /usr/local/include/*
+/usr/local/share/dpdk/*
 
 %files doc
-/usr/local/share/*
+/usr/local/share/doc/*
 
 %post
 /sbin/ldconfig
@@ -267,6 +269,10 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Mon Jul 12 2021 chenjian <chenjian@kylinos.cn> - 20.11-4
+- move /usr/local/share/dpdk/* to devel
+- add doc files
+
 * Mon Jul 12 2021 huangliming <huangliming5@huawei.com> - 20.11-3
 - change the patch installation to autosetup
 
