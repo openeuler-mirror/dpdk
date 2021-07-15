@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 20.11
-Release: 5
+Release: 6
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  20.11
@@ -201,12 +201,17 @@ Group: System Environment/Libraries
 License: BSD and LGPLv2 and GPLv2
 
 ExclusiveArch: i686 x86_64 aarch64
+%ifarch aarch64
 %global machine armv8a
-%global target build
-
+%global target arm64-%{machine}-linux-gcc
+%else
+%global machine native
+%global target x86_64-%{machine}-linux-gcc
+%endif
 
 BuildRequires: meson ninja-build gcc
-BuildRequires: kernel-devel
+BuildRequires: kernel-devel numactl-devel
+BuildRequires: libpcap libpcap-devel
 BuildRequires: uname-build-checks
 BuildRequires: doxygen python3-sphinx
 
@@ -232,6 +237,13 @@ BuildArch: noarch
 DPDK doc is divided in two parts: API details in doxygen HTML format
 and guides in sphinx HTML/PDF formats.
 
+%package tools
+Summary:      dpdk pdump tool
+Group  :      Applications/System
+Requires:       dpdk = %{version}
+%description tools
+This package contains the pdump tool for capture the dpdk network packets.
+
 %prep
 %autosetup -n %{name}-%{version} -p1
 
@@ -243,22 +255,61 @@ ninja -C %{target}
 %install
 namer=%{kern_devel_ver}
 DESTDIR=$RPM_BUILD_ROOT/ meson install -C %{target}
+DESTDIR=$RPM_BUILD_ROOT/ ninja install -C %{target}
+
+mkdir -p $RPM_BUILD_ROOT/usr/share/dpdk/%{target}
+ln -fs  %{buildroot}/usr/local/include %{buildroot}/usr/share/dpdk/%{target}/include
+ln -fs  %{buildroot}/usr/local/lib64 %{buildroot}/usr/share/dpdk/%{target}/lib
+
+mkdir -p $RPM_BUILD_ROOT/usr/sbin
+ln -fs  /usr/local/bin/dpdk-devbind.py %{buildroot}/usr/sbin/dpdk-devbind
+
+mkdir -p $RPM_BUILD_ROOT/lib64/
+cp -ar ./%{target}/lib/librte_eal.so* $RPM_BUILD_ROOT/lib64/
+cp -ar ./%{target}/lib/librte_mempool.so* $RPM_BUILD_ROOT/lib64/
+cp -ar ./%{target}/lib/librte_ring.so* $RPM_BUILD_ROOT/lib64/
+cp -ar ./%{target}/drivers/librte_mempool_ring.so* $RPM_BUILD_ROOT/lib64/
+cp -ar ./%{target}/lib/librte_pci.so* $RPM_BUILD_ROOT/lib64/
+cp -ar ./%{target}/drivers/librte_bus_pci.so* $RPM_BUILD_ROOT/lib64/
+cp -ar ./%{target}/lib/librte_kvargs.so* $RPM_BUILD_ROOT/lib64/
+cp -ar ./%{target}/lib/librte_acl.so* $RPM_BUILD_ROOT/lib64/
+cp -ar ./%{target}/lib/librte_ethdev.so* $RPM_BUILD_ROOT/lib64/
+cp -ar ./%{target}/lib/librte_mbuf.so* $RPM_BUILD_ROOT/lib64/
+cp -ar ./%{target}/lib/librte_cmdline.so* $RPM_BUILD_ROOT/lib64/
+cp -ar ./%{target}/lib/librte_net.so* $RPM_BUILD_ROOT/lib64/
+cp -ar ./%{target}/lib/librte_meter.so* $RPM_BUILD_ROOT/lib64/
+cp -ar ./%{target}/lib/librte_telemetry.so* $RPM_BUILD_ROOT/lib64/
+
+mkdir -p $RPM_BUILD_ROOT/usr/bin
+cp ./%{target}/app/dpdk-pdump  $RPM_BUILD_ROOT/usr/bin
 
 strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 
 %define _unpackaged_files_terminate_build 0
 
 %files
+/usr/local/bin/*.py
 /lib/modules/%{kern_devel_ver}/extra/dpdk/*
-/usr/local/bin/*
-/usr/local/lib64/*
+/lib64/librte*.so*
+%{_sbindir}/dpdk-devbind
 
 %files devel
-/usr/local/include/*
-/usr/local/share/dpdk/*
+%dir /usr/local/include/
+/usr/local/include/*.h
+/usr/local/include/generic/*.h
+/usr/local/share/dpdk/examples/*
+/usr/local/lib64/*
+%exclude /usr/local/lib64/*.py
+/usr/local/bin/*
+%dir /usr/share/dpdk/%{target}/
+/usr/share/dpdk/%{target}/include/*
+/usr/share/dpdk/%{target}/lib/*
 
 %files doc
 /usr/local/share/doc/*
+
+%files tools
+/usr/bin/dpdk-pdump
 
 %post
 /sbin/ldconfig
@@ -269,6 +320,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Mon Jul 19 2021 Min Hu <humin29@huawei.com> - 20.11-6
+- keep in accordance with dpdk 19.11 version package arrangement
+
 * Tue Jul 13 2021 huangliming <huangliming5@huawei.com> - 20.11-5
 - remove redundant README files
 
