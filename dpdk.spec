@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 20.11
-Release: 4
+Release: 5
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  20.11
@@ -269,6 +269,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Tue Jul 13 2021 huangliming <huangliming5@huawei.com> - 20.11-5
+- remove redundant README files
+
 * Mon Jul 12 2021 chenjian <chenjian@kylinos.cn> - 20.11-4
 - move /usr/local/share/dpdk/* to devel
 - add doc files
