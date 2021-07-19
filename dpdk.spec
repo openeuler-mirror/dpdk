@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 19.11
-Release: 14
+Release: 15
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  19.11
@@ -170,6 +170,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
++* Tue Jul 13 2021 huangliming <huangliming5@huawei.com> - 19.11-15
++- remove redundant README files
+
 * Mon Jul 12 2021 huangliming <huangliming5@huawei.com> - 19.11-14
 - change the patch installation to autosetup
 
