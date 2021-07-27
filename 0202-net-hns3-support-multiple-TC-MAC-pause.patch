@@ -1,0 +1,69 @@
+From ec5421783ce5243f8bbad0f28db3d05e31e000d8 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Sat, 10 Jul 2021 09:58:34 +0800
+Subject: [PATCH 16/26] net/hns3: support multiple TC MAC pause
+
+MAC PAUSE can take effect on a single TC or multiple TCs, depending on the
+hardware. For example, the Kunpeng 920 supports MAC pause in a single TC,
+and the Kunpeng 930 supports MAC pause in multiple TCs. This patch
+supports MAC PAUSE in multiple TC for some hardware.
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev.c | 5 ++++-
+ drivers/net/hns3/hns3_ethdev.h | 1 +
+ 2 files changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 7283364..b2ee831 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -3314,6 +3314,7 @@ hns3_get_capability(struct hns3_hw *hw)
+ 		pf->tqp_config_mode = HNS3_FIXED_MAX_TQP_NUM_MODE;
+ 		hw->rss_info.ipv6_sctp_offload_supported = false;
+ 		hw->udp_cksum_mode = HNS3_SPECIAL_PORT_SW_CKSUM_MODE;
++		pf->support_multi_tc_pause = false;
+ 		return 0;
+ 	}
+ 
+@@ -3334,6 +3335,7 @@ hns3_get_capability(struct hns3_hw *hw)
+ 	pf->tqp_config_mode = HNS3_FLEX_MAX_TQP_NUM_MODE;
+ 	hw->rss_info.ipv6_sctp_offload_supported = true;
+ 	hw->udp_cksum_mode = HNS3_SPECIAL_PORT_HW_CKSUM_MODE;
++	pf->support_multi_tc_pause = true;
+ 
+ 	return 0;
+ }
+@@ -6100,6 +6102,7 @@ static int
+ hns3_flow_ctrl_set(struct rte_eth_dev *dev, struct rte_eth_fc_conf *fc_conf)
+ {
+ 	struct hns3_hw *hw = HNS3_DEV_PRIVATE_TO_HW(dev->data->dev_private);
++	struct hns3_pf *pf = HNS3_DEV_PRIVATE_TO_PF(dev->data->dev_private);
+ 	int ret;
+ 
+ 	if (fc_conf->high_water || fc_conf->low_water ||
+@@ -6129,7 +6132,7 @@ hns3_flow_ctrl_set(struct rte_eth_dev *dev, struct rte_eth_fc_conf *fc_conf)
+ 		return -EOPNOTSUPP;
+ 	}
+ 
+-	if (hw->num_tc > 1) {
++	if (hw->num_tc > 1 && !pf->support_multi_tc_pause) {
+ 		hns3_err(hw, "in multi-TC scenarios, MAC pause is not supported.");
+ 		return -EOPNOTSUPP;
+ 	}
+diff --git a/drivers/net/hns3/hns3_ethdev.h b/drivers/net/hns3/hns3_ethdev.h
+index 9a59483..bdad384 100644
+--- a/drivers/net/hns3/hns3_ethdev.h
++++ b/drivers/net/hns3/hns3_ethdev.h
+@@ -783,6 +783,7 @@ struct hns3_pf {
+ 	uint8_t prio_tc[HNS3_MAX_USER_PRIO]; /* TC indexed by prio */
+ 	uint16_t pause_time;
+ 	bool support_fc_autoneg;       /* support FC autonegotiate */
++	bool support_multi_tc_pause;
+ 
+ 	uint16_t wanted_umv_size;
+ 	uint16_t max_umv_size;
+-- 
+2.7.4
+

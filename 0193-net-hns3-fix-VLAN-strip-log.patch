@@ -1,0 +1,49 @@
+From dabf2fc6e1ae8d1a4b87f9b8603d5666a8b05efb Mon Sep 17 00:00:00 2001
+From: Chengchang Tang <tangchengchang@huawei.com>
+Date: Sun, 13 Jun 2021 10:31:54 +0800
+Subject: [PATCH 05/26] net/hns3: fix VLAN strip log
+
+When the current VLAN stripping is set, the log print always prompts
+that the enabling fails, bug if may actually be the disabling failure.
+
+Fixes: 411d23b9eafb ("net/hns3: support VLAN")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengchang Tang <tangchengchang@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev.c    | 3 ++-
+ drivers/net/hns3/hns3_ethdev_vf.c | 3 ++-
+ 2 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 54a2bc7..3ecdd68 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -640,7 +640,8 @@ hns3_en_hw_strip_rxvtag(struct hns3_adapter *hns, bool enable)
+ 
+ 	ret = hns3_set_vlan_rx_offload_cfg(hns, &rxvlan_cfg);
+ 	if (ret) {
+-		hns3_err(hw, "enable strip rx vtag failed, ret =%d", ret);
++		hns3_err(hw, "%s strip rx vtag failed, ret = %d.",
++				enable ? "enable" : "disable", ret);
+ 		return ret;
+ 	}
+ 
+diff --git a/drivers/net/hns3/hns3_ethdev_vf.c b/drivers/net/hns3/hns3_ethdev_vf.c
+index 3631022..cd59ae2 100644
+--- a/drivers/net/hns3/hns3_ethdev_vf.c
++++ b/drivers/net/hns3/hns3_ethdev_vf.c
+@@ -1606,7 +1606,8 @@ hns3vf_en_hw_strip_rxvtag(struct hns3_hw *hw, bool enable)
+ 	ret = hns3_send_mbx_msg(hw, HNS3_MBX_SET_VLAN, HNS3_MBX_VLAN_RX_OFF_CFG,
+ 				&msg_data, sizeof(msg_data), false, NULL, 0);
+ 	if (ret)
+-		hns3_err(hw, "vf enable strip failed, ret =%d", ret);
++		hns3_err(hw, "vf %s strip failed, ret = %d.",
++				enable ? "enable" : "disable", ret);
+ 
+ 	return ret;
+ }
+-- 
+2.7.4
+

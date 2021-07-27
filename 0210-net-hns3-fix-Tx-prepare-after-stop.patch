@@ -1,0 +1,39 @@
+From c0e77e78921b2b7de78738c8d023bf5a4dac5383 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Sat, 17 Jul 2021 10:02:56 +0800
+Subject: [PATCH 24/26] net/hns3: fix Tx prepare after stop
+
+In some special scenarios, such as TSO scenarios, the user layer may need
+to call the tx_pkt_prepare(), and then call tx_pkt_burst() to send packets.
+If the return value of tx_pkt_parepare() isn't equal to the numbers of
+packets requested to send, warning message may be printed at the user
+layer. Currently, tx_pkt_prepare() is assigned to dummy function when
+dev_stop() is called in hns3 PMD. At this moment, if user layer continues
+to send packets, the warning message will always be printed. So this patch
+modifies the address to NULL.
+
+Fixes: 2790c6464725 ("net/hns3: support device reset")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_rxtx.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/net/hns3/hns3_rxtx.c b/drivers/net/hns3/hns3_rxtx.c
+index d8b79c3..d50cfc6 100644
+--- a/drivers/net/hns3/hns3_rxtx.c
++++ b/drivers/net/hns3/hns3_rxtx.c
+@@ -4386,7 +4386,7 @@ void hns3_set_rxtx_function(struct rte_eth_dev *eth_dev)
+ 	} else {
+ 		eth_dev->rx_pkt_burst = hns3_dummy_rxtx_burst;
+ 		eth_dev->tx_pkt_burst = hns3_dummy_rxtx_burst;
+-		eth_dev->tx_pkt_prepare = hns3_dummy_rxtx_burst;
++		eth_dev->tx_pkt_prepare = NULL;
+ 	}
+ }
+ 
+-- 
+2.7.4
+

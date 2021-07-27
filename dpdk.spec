@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 20.11
-Release: 6
+Release: 7
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  20.11
@@ -195,6 +195,30 @@ Patch185: 0186-app-testpmd-verify-DCB-config-during-forward-config.patch
 Patch186: 0187-app-testpmd-add-forwarding-configuration-to-DCB-conf.patch
 Patch187: 0188-app-testpmd-remove-redundant-forwarding-initializati.patch
 Patch188: 0189-net-fix-compiling-bug-for-20.11-merge.patch
+Patch189: 0189-config-arm-check-SVE-CPU-flag.patch
+Patch190: 0190-net-hns3-increase-VF-reset-retry-maximum.patch
+Patch191: 0191-net-hns3-fix-delay-for-waiting-to-stop-Rx-Tx.patch
+Patch192: 0192-net-hns3-fix-fake-queue-rollback.patch
+Patch193: 0193-net-hns3-fix-VLAN-strip-log.patch
+Patch194: 0194-net-hns3-fix-maximum-queues-on-configuration-failure.patch
+Patch195: 0195-net-hns3-remove-unnecessary-blank-lines.patch
+Patch196: 0196-net-hns3-support-Tx-push-quick-doorbell-for-performa.patch
+Patch197: 0197-net-hns3-fix-traffic-management.patch
+Patch198: 0198-config-arm-fix-SVE-build-with-GCC-8.3.patch
+Patch199: 0199-net-hns3-fix-Arm-SVE-build-with-GCC-8.3.patch
+Patch200: 0200-net-hns3-query-basic-info-for-VF.patch
+Patch201: 0201-net-hns3-support-VLAN-filter-state-modify-for-VF.patch
+Patch202: 0202-net-hns3-support-multiple-TC-MAC-pause.patch
+Patch203: 0203-net-hns3-fix-residual-MAC-address-entry.patch
+Patch204: 0204-net-hns3-remove-unnecessary-zero-assignments.patch
+Patch205: 0205-net-hns3-fix-filter-parsing-comment.patch
+Patch206: 0206-net-hns3-fix-timing-of-clearing-interrupt-source.patch
+Patch207: 0207-net-hns3-remove-duplicate-compile-time-check.patch
+Patch208: 0208-net-hns3-move-speed-auto-negotiation-warning.patch
+Patch209: 0209-net-hns3-fix-flow-rule-list-in-multi-process.patch
+Patch210: 0210-net-hns3-fix-Tx-prepare-after-stop.patch
+Patch211: 0211-net-hns3-disable-PFC-if-not-configured.patch
+Patch212: 0212-net-hns3-use-the-correct-HiSilicon-copyright.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -320,6 +344,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Tue Jul 27 2021 Min Hu <humin29@huawei.com> - 20.11-7
+- add bugfixes for hns3 PMD and sync upstream
+
 * Mon Jul 19 2021 Min Hu <humin29@huawei.com> - 20.11-6
 - keep in accordance with dpdk 19.11 version package arrangement
 
