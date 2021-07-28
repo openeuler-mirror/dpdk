@@ -1,0 +1,77 @@
+From 54cda7e32e96a2217e39de257c2dec42bb13a272 Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Mon, 28 Jun 2021 10:57:51 +0800
+Subject: [PATCH 13/26] net/hns3: fix Arm SVE build with GCC 8.3
+
+If the target machine has SVE feature (e.g. '-march=armv8.2-a+sve'),
+and compiler is gcc-8.3, it will fail, the error is arm_sve.h:
+no such file or directory.
+
+The solution:
+a. If RTE_HAS_SVE_ACLE defined (it means the minimum instruction set
+support SVE ACLE) then compiles it.
+b. Else if the compiler support SVE ACLE then compiles it.
+c. Otherwise don't compile it.
+
+Fixes: 8c25b02b082a ("net/hns3: fix enabling SVE Rx/Tx")
+Fixes: 952ebacce4f2 ("net/hns3: support SVE Rx")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Acked-by: Ruifeng Wang <ruifeng.wang@arm.com>
+---
+ drivers/net/hns3/hns3_rxtx.c |  2 +-
+ drivers/net/hns3/meson.build | 26 ++++++++++++++++++++++----
+ 2 files changed, 23 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_rxtx.c b/drivers/net/hns3/hns3_rxtx.c
+index 51b727f..d8b79c3 100644
+--- a/drivers/net/hns3/hns3_rxtx.c
++++ b/drivers/net/hns3/hns3_rxtx.c
+@@ -2811,7 +2811,7 @@ hns3_get_default_vec_support(void)
+ static bool
+ hns3_get_sve_support(void)
+ {
+-#if defined(RTE_ARCH_ARM64) && defined(__ARM_FEATURE_SVE)
++#if defined(RTE_HAS_SVE_ACLE)
+ 	if (rte_vect_get_max_simd_bitwidth() < RTE_VECT_SIMD_256)
+ 		return false;
+ 	if (rte_cpu_get_flag_enabled(RTE_CPUFLAG_SVE))
+diff --git a/drivers/net/hns3/meson.build b/drivers/net/hns3/meson.build
+index 6d78c33..bf602af 100644
+--- a/drivers/net/hns3/meson.build
++++ b/drivers/net/hns3/meson.build
+@@ -32,8 +32,26 @@ sources = files('hns3_cmd.c',
+ deps += ['hash']
+ 
+ if arch_subdir == 'arm' and dpdk_conf.get('RTE_ARCH_64')
+-	sources += files('hns3_rxtx_vec.c')
+-	if cc.get_define('__ARM_FEATURE_SVE', args: machine_args) != ''
+-		sources += files('hns3_rxtx_vec_sve.c')
+-	endif
++    sources += files('hns3_rxtx_vec.c')
++
++    # compile SVE when:
++    # a. support SVE in minimum instruction set baseline
++    # b. it's not minimum instruction set, but compiler support
++    if dpdk_conf.has('RTE_HAS_SVE_ACLE')
++        sources += files('hns3_rxtx_vec_sve.c')
++    elif cc.has_argument('-march=armv8.2-a+sve') and cc.check_header('arm_sve.h')
++        cflags += ['-DRTE_HAS_SVE_ACLE=1']
++        sve_cflags = []
++        foreach flag: cflags
++            if not (flag.startswith('-march=') or flag.startswith('-mcpu=') or flag.startswith('-mtune='))
++                sve_cflags += flag
++            endif
++        endforeach
++        hns3_sve_lib = static_library('hns3_sve_lib',
++                        'hns3_rxtx_vec_sve.c',
++                        dependencies: [static_rte_ethdev],
++                        include_directories: includes,
++                        c_args: [sve_cflags, '-march=armv8.2-a+sve'])
++        objs += hns3_sve_lib.extract_objects('hns3_rxtx_vec_sve.c')
++    endif
+ endif
+-- 
+2.7.4
+

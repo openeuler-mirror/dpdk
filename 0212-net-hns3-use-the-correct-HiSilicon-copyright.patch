@@ -1,0 +1,412 @@
+From 7fcab57399496811e5167d475645f6cb4b67692a Mon Sep 17 00:00:00 2001
+From: "Min Hu (Connor)" <humin29@huawei.com>
+Date: Thu, 1 Apr 2021 16:24:52 +0800
+Subject: [PATCH 26/26] net/hns3: use the correct HiSilicon copyright
+
+According to the suggestion of our legal department,
+to standardize the copyright license of our code to
+avoid potential copyright risks, we make a unified
+modification to the "Hisilicon", which was nonstandard,
+in the main modules we maintain.
+
+We change it to "HiSilicon", which is consistent with
+the terms used on the following official website:
+https://www.hisilicon.com/en/terms-of-use.
+
+Fixes: 565829db8b8f ("net/hns3: add build and doc infrastructure")
+Fixes: 952ebacce4f2 ("net/hns3: support SVE Rx")
+Fixes: e31f123db06b ("net/hns3: support NEON Tx")
+Fixes: c09c7847d892 ("net/hns3: support traffic management")
+Cc: stable@dpdk.org
+
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_cmd.c           | 2 +-
+ drivers/net/hns3/hns3_cmd.h           | 2 +-
+ drivers/net/hns3/hns3_dcb.c           | 2 +-
+ drivers/net/hns3/hns3_dcb.h           | 2 +-
+ drivers/net/hns3/hns3_ethdev.c        | 2 +-
+ drivers/net/hns3/hns3_ethdev.h        | 2 +-
+ drivers/net/hns3/hns3_ethdev_vf.c     | 2 +-
+ drivers/net/hns3/hns3_fdir.c          | 2 +-
+ drivers/net/hns3/hns3_fdir.h          | 2 +-
+ drivers/net/hns3/hns3_flow.c          | 2 +-
+ drivers/net/hns3/hns3_intr.c          | 2 +-
+ drivers/net/hns3/hns3_intr.h          | 2 +-
+ drivers/net/hns3/hns3_logs.h          | 2 +-
+ drivers/net/hns3/hns3_mbx.c           | 2 +-
+ drivers/net/hns3/hns3_mbx.h           | 2 +-
+ drivers/net/hns3/hns3_mp.c            | 2 +-
+ drivers/net/hns3/hns3_mp.h            | 2 +-
+ drivers/net/hns3/hns3_regs.c          | 2 +-
+ drivers/net/hns3/hns3_regs.h          | 2 +-
+ drivers/net/hns3/hns3_rss.c           | 2 +-
+ drivers/net/hns3/hns3_rss.h           | 2 +-
+ drivers/net/hns3/hns3_rxtx.c          | 2 +-
+ drivers/net/hns3/hns3_rxtx.h          | 2 +-
+ drivers/net/hns3/hns3_rxtx_vec.c      | 2 +-
+ drivers/net/hns3/hns3_rxtx_vec.h      | 2 +-
+ drivers/net/hns3/hns3_rxtx_vec_neon.h | 2 +-
+ drivers/net/hns3/hns3_rxtx_vec_sve.c  | 2 +-
+ drivers/net/hns3/hns3_stats.c         | 2 +-
+ drivers/net/hns3/hns3_stats.h         | 2 +-
+ drivers/net/hns3/hns3_tm.c            | 2 +-
+ drivers/net/hns3/hns3_tm.h            | 2 +-
+ drivers/net/hns3/meson.build          | 2 +-
+ 32 files changed, 32 insertions(+), 32 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_cmd.c b/drivers/net/hns3/hns3_cmd.c
+index ab92240..0de1a53 100644
+--- a/drivers/net/hns3/hns3_cmd.c
++++ b/drivers/net/hns3/hns3_cmd.c
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2018-2019 Hisilicon Limited.
++ * Copyright(c) 2018-2021 HiSilicon Limited.
+  */
+ 
+ #include <rte_ethdev_pci.h>
+diff --git a/drivers/net/hns3/hns3_cmd.h b/drivers/net/hns3/hns3_cmd.h
+index 780ab0f..88683df 100644
+--- a/drivers/net/hns3/hns3_cmd.h
++++ b/drivers/net/hns3/hns3_cmd.h
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2018-2019 Hisilicon Limited.
++ * Copyright(c) 2018-2021 HiSilicon Limited.
+  */
+ 
+ #ifndef _HNS3_CMD_H_
+diff --git a/drivers/net/hns3/hns3_dcb.c b/drivers/net/hns3/hns3_dcb.c
+index 4d5b00b..b71e2e9 100644
+--- a/drivers/net/hns3/hns3_dcb.c
++++ b/drivers/net/hns3/hns3_dcb.c
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2018-2019 Hisilicon Limited.
++ * Copyright(c) 2018-2021 HiSilicon Limited.
+  */
+ 
+ #include <rte_io.h>
+diff --git a/drivers/net/hns3/hns3_dcb.h b/drivers/net/hns3/hns3_dcb.h
+index 1abe649..e06ec17 100644
+--- a/drivers/net/hns3/hns3_dcb.h
++++ b/drivers/net/hns3/hns3_dcb.h
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2018-2019 Hisilicon Limited.
++ * Copyright(c) 2018-2021 HiSilicon Limited.
+  */
+ 
+ #ifndef _HNS3_DCB_H_
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 4c2dcee..59260c6 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2018-2019 Hisilicon Limited.
++ * Copyright(c) 2018-2021 HiSilicon Limited.
+  */
+ 
+ #include <rte_alarm.h>
+diff --git a/drivers/net/hns3/hns3_ethdev.h b/drivers/net/hns3/hns3_ethdev.h
+index 0b5d102..1b592c8 100644
+--- a/drivers/net/hns3/hns3_ethdev.h
++++ b/drivers/net/hns3/hns3_ethdev.h
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2018-2019 Hisilicon Limited.
++ * Copyright(c) 2018-2021 HiSilicon Limited.
+  */
+ 
+ #ifndef _HNS3_ETHDEV_H_
+diff --git a/drivers/net/hns3/hns3_ethdev_vf.c b/drivers/net/hns3/hns3_ethdev_vf.c
+index fc088f8..e07eb20 100644
+--- a/drivers/net/hns3/hns3_ethdev_vf.c
++++ b/drivers/net/hns3/hns3_ethdev_vf.c
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2018-2019 Hisilicon Limited.
++ * Copyright(c) 2018-2021 HiSilicon Limited.
+  */
+ 
+ #include <linux/pci_regs.h>
+diff --git a/drivers/net/hns3/hns3_fdir.c b/drivers/net/hns3/hns3_fdir.c
+index 8ab5fd6..40edd6c 100644
+--- a/drivers/net/hns3/hns3_fdir.c
++++ b/drivers/net/hns3/hns3_fdir.c
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2018-2019 Hisilicon Limited.
++ * Copyright(c) 2018-2021 HiSilicon Limited.
+  */
+ 
+ #include <rte_ethdev_driver.h>
+diff --git a/drivers/net/hns3/hns3_fdir.h b/drivers/net/hns3/hns3_fdir.h
+index d7b31d8..3f610f7 100644
+--- a/drivers/net/hns3/hns3_fdir.h
++++ b/drivers/net/hns3/hns3_fdir.h
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2018-2019 Hisilicon Limited.
++ * Copyright(c) 2018-2021 HiSilicon Limited.
+  */
+ 
+ #ifndef _HNS3_FDIR_H_
+diff --git a/drivers/net/hns3/hns3_flow.c b/drivers/net/hns3/hns3_flow.c
+index 6c1e727..42b1c70 100644
+--- a/drivers/net/hns3/hns3_flow.c
++++ b/drivers/net/hns3/hns3_flow.c
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2018-2019 Hisilicon Limited.
++ * Copyright(c) 2018-2021 HiSilicon Limited.
+  */
+ 
+ #include <rte_flow_driver.h>
+diff --git a/drivers/net/hns3/hns3_intr.c b/drivers/net/hns3/hns3_intr.c
+index e8ca6d5..0b307fd 100644
+--- a/drivers/net/hns3/hns3_intr.c
++++ b/drivers/net/hns3/hns3_intr.c
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2018-2019 Hisilicon Limited.
++ * Copyright(c) 2018-2021 HiSilicon Limited.
+  */
+ 
+ #include <rte_alarm.h>
+diff --git a/drivers/net/hns3/hns3_intr.h b/drivers/net/hns3/hns3_intr.h
+index 4dfc807..1a0f196 100644
+--- a/drivers/net/hns3/hns3_intr.h
++++ b/drivers/net/hns3/hns3_intr.h
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2018-2019 Hisilicon Limited.
++ * Copyright(c) 2018-2021 HiSilicon Limited.
+  */
+ 
+ #ifndef _HNS3_INTR_H_
+diff --git a/drivers/net/hns3/hns3_logs.h b/drivers/net/hns3/hns3_logs.h
+index f3fc7b5..072a53b 100644
+--- a/drivers/net/hns3/hns3_logs.h
++++ b/drivers/net/hns3/hns3_logs.h
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2018-2019 Hisilicon Limited.
++ * Copyright(c) 2018-2021 HiSilicon Limited.
+  */
+ 
+ #ifndef _HNS3_LOGS_H_
+diff --git a/drivers/net/hns3/hns3_mbx.c b/drivers/net/hns3/hns3_mbx.c
+index 0c2e03b..411c5eb 100644
+--- a/drivers/net/hns3/hns3_mbx.c
++++ b/drivers/net/hns3/hns3_mbx.c
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2018-2019 Hisilicon Limited.
++ * Copyright(c) 2018-2021 HiSilicon Limited.
+  */
+ 
+ #include <rte_ethdev_driver.h>
+diff --git a/drivers/net/hns3/hns3_mbx.h b/drivers/net/hns3/hns3_mbx.h
+index 2154c04..f868e33 100644
+--- a/drivers/net/hns3/hns3_mbx.h
++++ b/drivers/net/hns3/hns3_mbx.h
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2018-2019 Hisilicon Limited.
++ * Copyright(c) 2018-2021 HiSilicon Limited.
+  */
+ 
+ #ifndef _HNS3_MBX_H_
+diff --git a/drivers/net/hns3/hns3_mp.c b/drivers/net/hns3/hns3_mp.c
+index b5cd5b0..2a7654d 100644
+--- a/drivers/net/hns3/hns3_mp.c
++++ b/drivers/net/hns3/hns3_mp.c
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2018-2019 Hisilicon Limited.
++ * Copyright(c) 2018-2021 HiSilicon Limited.
+  */
+ 
+ #include <rte_eal.h>
+diff --git a/drivers/net/hns3/hns3_mp.h b/drivers/net/hns3/hns3_mp.h
+index 036546a..1a73598 100644
+--- a/drivers/net/hns3/hns3_mp.h
++++ b/drivers/net/hns3/hns3_mp.h
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2018-2019 Hisilicon Limited.
++ * Copyright(c) 2018-2021 HiSilicon Limited.
+  */
+ 
+ #ifndef _HNS3_MP_H_
+diff --git a/drivers/net/hns3/hns3_regs.c b/drivers/net/hns3/hns3_regs.c
+index 374b9ea..ee5bcdf 100644
+--- a/drivers/net/hns3/hns3_regs.c
++++ b/drivers/net/hns3/hns3_regs.c
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2018-2019 Hisilicon Limited.
++ * Copyright(c) 2018-2021 HiSilicon Limited.
+  */
+ 
+ #include <rte_ethdev_pci.h>
+diff --git a/drivers/net/hns3/hns3_regs.h b/drivers/net/hns3/hns3_regs.h
+index c9e10be..5812eb3 100644
+--- a/drivers/net/hns3/hns3_regs.h
++++ b/drivers/net/hns3/hns3_regs.h
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2018-2019 Hisilicon Limited.
++ * Copyright(c) 2018-2021 HiSilicon Limited.
+  */
+ 
+ #ifndef _HNS3_REGS_H_
+diff --git a/drivers/net/hns3/hns3_rss.c b/drivers/net/hns3/hns3_rss.c
+index 858e31a..3a81e90 100644
+--- a/drivers/net/hns3/hns3_rss.c
++++ b/drivers/net/hns3/hns3_rss.c
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2018-2019 Hisilicon Limited.
++ * Copyright(c) 2018-2021 HiSilicon Limited.
+  */
+ 
+ #include <rte_ethdev.h>
+diff --git a/drivers/net/hns3/hns3_rss.h b/drivers/net/hns3/hns3_rss.h
+index 94668ed..996083b 100644
+--- a/drivers/net/hns3/hns3_rss.h
++++ b/drivers/net/hns3/hns3_rss.h
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2018-2019 Hisilicon Limited.
++ * Copyright(c) 2018-2021 HiSilicon Limited.
+  */
+ 
+ #ifndef _HNS3_RSS_H_
+diff --git a/drivers/net/hns3/hns3_rxtx.c b/drivers/net/hns3/hns3_rxtx.c
+index d50cfc6..13d9a31 100644
+--- a/drivers/net/hns3/hns3_rxtx.c
++++ b/drivers/net/hns3/hns3_rxtx.c
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2018-2019 Hisilicon Limited.
++ * Copyright(c) 2018-2021 HiSilicon Limited.
+  */
+ 
+ #include <rte_bus_pci.h>
+diff --git a/drivers/net/hns3/hns3_rxtx.h b/drivers/net/hns3/hns3_rxtx.h
+index e01e582..56c1b80 100644
+--- a/drivers/net/hns3/hns3_rxtx.h
++++ b/drivers/net/hns3/hns3_rxtx.h
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2018-2019 Hisilicon Limited.
++ * Copyright(c) 2018-2021 HiSilicon Limited.
+  */
+ 
+ #ifndef _HNS3_RXTX_H_
+diff --git a/drivers/net/hns3/hns3_rxtx_vec.c b/drivers/net/hns3/hns3_rxtx_vec.c
+index e37e858..15a0bd0 100644
+--- a/drivers/net/hns3/hns3_rxtx_vec.c
++++ b/drivers/net/hns3/hns3_rxtx_vec.c
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2020 Hisilicon Limited.
++ * Copyright(c) 2020-2021 HiSilicon Limited.
+  */
+ 
+ #include <rte_io.h>
+diff --git a/drivers/net/hns3/hns3_rxtx_vec.h b/drivers/net/hns3/hns3_rxtx_vec.h
+index 872ba22..67c75e4 100644
+--- a/drivers/net/hns3/hns3_rxtx_vec.h
++++ b/drivers/net/hns3/hns3_rxtx_vec.h
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2020 Hisilicon Limited.
++ * Copyright(c) 2020-2021 HiSilicon Limited.
+  */
+ 
+ #ifndef _HNS3_RXTX_VEC_H_
+diff --git a/drivers/net/hns3/hns3_rxtx_vec_neon.h b/drivers/net/hns3/hns3_rxtx_vec_neon.h
+index 30a7d70..74c848d 100644
+--- a/drivers/net/hns3/hns3_rxtx_vec_neon.h
++++ b/drivers/net/hns3/hns3_rxtx_vec_neon.h
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2020 Hisilicon Limited.
++ * Copyright(c) 2020-2021 HiSilicon Limited.
+  */
+ 
+ #ifndef _HNS3_RXTX_VEC_NEON_H_
+diff --git a/drivers/net/hns3/hns3_rxtx_vec_sve.c b/drivers/net/hns3/hns3_rxtx_vec_sve.c
+index c861887..84a31d8 100644
+--- a/drivers/net/hns3/hns3_rxtx_vec_sve.c
++++ b/drivers/net/hns3/hns3_rxtx_vec_sve.c
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2020 Hisilicon Limited.
++ * Copyright(c) 2020-2021 HiSilicon Limited.
+  */
+ 
+ #include <arm_sve.h>
+diff --git a/drivers/net/hns3/hns3_stats.c b/drivers/net/hns3/hns3_stats.c
+index 464a33d..e09dc0d 100644
+--- a/drivers/net/hns3/hns3_stats.c
++++ b/drivers/net/hns3/hns3_stats.c
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2018-2019 Hisilicon Limited.
++ * Copyright(c) 2018-2021 HiSilicon Limited.
+  */
+ 
+ #include <rte_ethdev.h>
+diff --git a/drivers/net/hns3/hns3_stats.h b/drivers/net/hns3/hns3_stats.h
+index 273be42..de5c40d 100644
+--- a/drivers/net/hns3/hns3_stats.h
++++ b/drivers/net/hns3/hns3_stats.h
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2018-2019 Hisilicon Limited.
++ * Copyright(c) 2018-2021 HiSilicon Limited.
+  */
+ 
+ #ifndef _HNS3_STATS_H_
+diff --git a/drivers/net/hns3/hns3_tm.c b/drivers/net/hns3/hns3_tm.c
+index cd32664..db5ac78 100644
+--- a/drivers/net/hns3/hns3_tm.c
++++ b/drivers/net/hns3/hns3_tm.c
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2020-2020 Hisilicon Limited.
++ * Copyright(c) 2020-2021 HiSilicon Limited.
+  */
+ 
+ #include <rte_malloc.h>
+diff --git a/drivers/net/hns3/hns3_tm.h b/drivers/net/hns3/hns3_tm.h
+index 2286d0e..83e9cc8 100644
+--- a/drivers/net/hns3/hns3_tm.h
++++ b/drivers/net/hns3/hns3_tm.h
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+- * Copyright(c) 2020-2020 Hisilicon Limited.
++ * Copyright(c) 2020-2021 HiSilicon Limited.
+  */
+ 
+ #ifndef _HNS3_TM_H_
+diff --git a/drivers/net/hns3/meson.build b/drivers/net/hns3/meson.build
+index bf602af..881aff6 100644
+--- a/drivers/net/hns3/meson.build
++++ b/drivers/net/hns3/meson.build
+@@ -1,5 +1,5 @@
+ # SPDX-License-Identifier: BSD-3-Clause
+-# Copyright(c) 2018-2019 Hisilicon Limited
++# Copyright(c) 2018-2021 Hisilicon Limited
+ 
+ if not is_linux
+ 	build = false
+-- 
+2.7.4
+

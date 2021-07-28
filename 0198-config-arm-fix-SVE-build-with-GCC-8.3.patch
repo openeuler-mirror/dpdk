@@ -1,0 +1,83 @@
+From 8ae253ae5053753fd8225cc78d34ab5d2c449b5f Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Mon, 28 Jun 2021 10:57:50 +0800
+Subject: [PATCH 12/26] config/arm: fix SVE build with GCC 8.3
+
+If the target machine has SVE feature (e.g. "-march=armv8.2-a+sve'),
+and the compiler is gcc-8.3, it will produce this error:
+	In file included from lib/eal/common/eal_common_options.c:38:
+	lib/eal/arm/include/rte_vect.h:13:10: fatal	error:
+	arm_sve.h: No such file or directory
+	#include <arm_sve.h>
+	       ^~~~~~~~~~~
+
+The root cause is that gcc-8.3 supports SVE (the macro
+__ARM_FEATURE_SVE was 1), but it doesn't support SVE ACLE [1].
+
+The solution:
+a) Detect compiler whether support SVE ACLE, if support then define
+RTE_HAS_SVE_ACLE macro.
+b) Use the RTE_HAS_SVE_ACLE macro to include SVE header file.
+
+[1] ACLE:  Arm C Language Extensions, the SVE ACLE header file is
+<arm_sve.h>, user should include it when writing ACLE SVE code.
+
+Fixes: 67b68824a82d ("lpm/arm: support SVE")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Acked-by: Ruifeng Wang <ruifeng.wang@arm.com>
+Signed-off-by: Thomas Monjalon <thomas@monjalon.net>
+---
+ config/arm/meson.build                | 3 +++
+ lib/librte_eal/arm/include/rte_vect.h | 3 +++
+ lib/librte_lpm/rte_lpm.h              | 4 ++++
+ 3 files changed, 10 insertions(+)
+
+diff --git a/config/arm/meson.build b/config/arm/meson.build
+index b18acea..06ecaf3 100644
+--- a/config/arm/meson.build
++++ b/config/arm/meson.build
+@@ -216,6 +216,9 @@ endif
+ 
+ if cc.get_define('__ARM_FEATURE_SVE', args: machine_args) != ''
+     compile_time_cpuflags += ['RTE_CPUFLAG_SVE']
++    if (cc.check_header('arm_sve.h'))
++        dpdk_conf.set('RTE_HAS_SVE_ACLE', 1)
++    endif
+ endif
+ 
+ if cc.get_define('__ARM_FEATURE_CRC32', args: machine_args) != ''
+diff --git a/lib/librte_eal/arm/include/rte_vect.h b/lib/librte_eal/arm/include/rte_vect.h
+index a739e6e..4b705ba 100644
+--- a/lib/librte_eal/arm/include/rte_vect.h
++++ b/lib/librte_eal/arm/include/rte_vect.h
+@@ -9,6 +9,9 @@
+ #include "generic/rte_vect.h"
+ #include "rte_debug.h"
+ #include "arm_neon.h"
++#ifdef RTE_HAS_SVE_ACLE
++#include <arm_sve.h>
++#endif
+ 
+ #ifdef __cplusplus
+ extern "C" {
+diff --git a/lib/librte_lpm/rte_lpm.h b/lib/librte_lpm/rte_lpm.h
+index 1afe55c..5eb14c1 100644
+--- a/lib/librte_lpm/rte_lpm.h
++++ b/lib/librte_lpm/rte_lpm.h
+@@ -402,7 +402,11 @@ rte_lpm_lookupx4(const struct rte_lpm *lpm, xmm_t ip, uint32_t hop[4],
+ 	uint32_t defv);
+ 
+ #if defined(RTE_ARCH_ARM)
++#ifdef RTE_HAS_SVE_ACLE
++#include "rte_lpm_sve.h"
++#else
+ #include "rte_lpm_neon.h"
++#endif
+ #elif defined(RTE_ARCH_PPC_64)
+ #include "rte_lpm_altivec.h"
+ #else
+-- 
+2.7.4
+
