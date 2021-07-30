@@ -1,0 +1,46 @@
+From 3e1dae547da0a58b31d551edee18511232ba5716 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Wed, 28 Apr 2021 16:36:59 +0800
+Subject: [PATCH 10/26] app/testpmd: change port link speed without stopping
+ all
+
+When we use the following cmd to modify the link speed of specified
+port: "port config <port_id> speed xxx duplex xxx", we have to stop
+all ports. It's not necessary.
+
+Fixes: 82113036e4e5 ("ethdev: redesign link speed config")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+Acked-by: Ferruh Yigit <ferruh.yigit@intel.com>
+Acked-by: Xiaoyun Li <xiaoyun.li@intel.com>
+---
+ app/test-pmd/cmdline.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/app/test-pmd/cmdline.c b/app/test-pmd/cmdline.c
+index 78db462..b69c648 100644
+--- a/app/test-pmd/cmdline.c
++++ b/app/test-pmd/cmdline.c
+@@ -1613,13 +1613,13 @@ cmd_config_speed_specific_parsed(void *parsed_result,
+ 	struct cmd_config_speed_specific *res = parsed_result;
+ 	uint32_t link_speed;
+ 
+-	if (!all_ports_stopped()) {
+-		printf("Please stop all ports first\n");
++	if (port_id_is_invalid(res->id, ENABLED_WARN))
+ 		return;
+-	}
+ 
+-	if (port_id_is_invalid(res->id, ENABLED_WARN))
++	if (!port_is_stopped(res->id)) {
++		printf("Please stop port %d first\n", res->id);
+ 		return;
++	}
+ 
+ 	if (parse_and_check_speed_duplex(res->value1, res->value2,
+ 			&link_speed) < 0)
+-- 
+2.7.4
+
