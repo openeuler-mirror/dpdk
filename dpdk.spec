@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 20.11
-Release: 8
+Release: 9
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  20.11
@@ -221,6 +221,8 @@ Patch211: 0211-net-hns3-disable-PFC-if-not-configured.patch
 Patch212: 0212-net-hns3-use-the-correct-HiSilicon-copyright.patch
 Patch213: 0213-app-testpmd-change-port-link-speed-without-stopping-.patch
 Patch214: 0214-ethdev-add-dev-configured-flag.patch
+Patch215: 0215-net-hns3-add-start-stop-Tx-datapath-request-for-MP.patch
+Patch216: 0216-net-hns3-support-set-link-up-down-for-PF.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -346,6 +348,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Tur Aug 30 2021 Min Hu <humin29@huawei.com> - 20.11-9
+- support link up/down for PF in hns3 PMD
+
 * Tur Jul 29 2021 Min Hu <humin29@huawei.com> - 20.11-8
 - add lib and testpmd functions to sync upstream
 

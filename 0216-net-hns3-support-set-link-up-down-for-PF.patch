@@ -1,0 +1,287 @@
+From 0a3e6a5d6e2ab6eec0a16db1d5d5f5d0b75bcf8b Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Mon, 26 Jul 2021 18:59:40 +0800
+Subject: [PATCH] net/hns3: support set link up/down for PF
+
+This patch adds set link up/down feature. RxTx datapath and link status
+will be disabled when dev_set_link_down() is called, and can be enabled by
+dev_start() or dev_set_link_up().
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev.c | 107 ++++++++++++++++++++++++++++++++++++++---
+ drivers/net/hns3/hns3_ethdev.h |  11 +++--
+ drivers/net/hns3/hns3_rxtx.c   |  28 ++++++++++-
+ drivers/net/hns3/hns3_rxtx.h   |   2 +
+ 4 files changed, 138 insertions(+), 10 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index a374fa7..7d37004 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -103,6 +103,7 @@ static int hns3_restore_fec(struct hns3_hw *hw);
+ static int hns3_query_dev_fec_info(struct hns3_hw *hw);
+ static int hns3_do_stop(struct hns3_adapter *hns);
+ static int hns3_check_port_speed(struct hns3_hw *hw, uint32_t link_speeds);
++static int hns3_cfg_mac_mode(struct hns3_hw *hw, bool enable);
+ 
+ void hns3_ether_format_addr(char *buf, uint16_t size,
+ 			    const struct rte_ether_addr *ether_addr)
+@@ -2924,6 +2925,88 @@ hns3_dev_link_update(struct rte_eth_dev *eth_dev, int wait_to_complete)
+ }
+ 
+ static int
++hns3_dev_set_link_up(struct rte_eth_dev *dev)
++{
++	struct hns3_hw *hw = HNS3_DEV_PRIVATE_TO_HW(dev->data->dev_private);
++	int ret;
++
++	/*
++	 * The "tx_pkt_burst" will be restored. But the secondary process does
++	 * not support the mechanism for notifying the primary process.
++	 */
++	if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
++		hns3_err(hw, "secondary process does not support to set link up.");
++		return -ENOTSUP;
++	}
++
++	/*
++	 * If device isn't started Rx/Tx function is still disabled, setting
++	 * link up is not allowed. But it is probably better to return success
++	 * to reduce the impact on the upper layer.
++	 */
++	if (hw->adapter_state != HNS3_NIC_STARTED) {
++		hns3_info(hw, "device isn't started, can't set link up.");
++		return 0;
++	}
++
++	if (!hw->set_link_down)
++		return 0;
++
++	rte_spinlock_lock(&hw->lock);
++	ret = hns3_cfg_mac_mode(hw, true);
++	if (ret) {
++		rte_spinlock_unlock(&hw->lock);
++		hns3_err(hw, "failed to set link up, ret = %d", ret);
++		return ret;
++	}
++
++	hw->set_link_down = false;
++	hns3_start_tx_datapath(dev);
++	rte_spinlock_unlock(&hw->lock);
++
++	return 0;
++}
++
++static int
++hns3_dev_set_link_down(struct rte_eth_dev *dev)
++{
++	struct hns3_hw *hw = HNS3_DEV_PRIVATE_TO_HW(dev->data->dev_private);
++	int ret;
++
++	/*
++	 * The "tx_pkt_burst" will be set to dummy function. But the secondary
++	 * process does not support the mechanism for notifying the primary
++	 * process.
++	 */
++	if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
++		hns3_err(hw, "secondary process does not support to set link down.");
++		return -ENOTSUP;
++	}
++
++	/*
++	 * If device isn't started or the API has been called, link status is
++	 * down, return success.
++	 */
++	if (hw->adapter_state != HNS3_NIC_STARTED || hw->set_link_down)
++		return 0;
++
++	rte_spinlock_lock(&hw->lock);
++	hns3_stop_tx_datapath(dev);
++	ret = hns3_cfg_mac_mode(hw, false);
++	if (ret) {
++		hns3_start_tx_datapath(dev);
++		rte_spinlock_unlock(&hw->lock);
++		hns3_err(hw, "failed to set link down, ret = %d", ret);
++		return ret;
++	}
++
++	hw->set_link_down = true;
++	rte_spinlock_unlock(&hw->lock);
++
++	return 0;
++}
++
++static int
+ hns3_parse_func_status(struct hns3_hw *hw, struct hns3_func_status_cmd *status)
+ {
+ 	struct hns3_adapter *hns = HNS3_DEV_HW_TO_ADAPTER(hw);
+@@ -5576,6 +5659,7 @@ static int
+ hns3_do_start(struct hns3_adapter *hns, bool reset_queue)
+ {
+ 	struct hns3_hw *hw = &hns->hw;
++	bool link_en;
+ 	int ret;
+ 
+ 	ret = hns3_update_queue_map_configure(hns);
+@@ -5600,7 +5684,8 @@ hns3_do_start(struct hns3_adapter *hns, bool reset_queue)
+ 		return ret;
+ 	}
+ 
+-	ret = hns3_cfg_mac_mode(hw, true);
++	link_en = hw->set_link_down ? false : true;
++	ret = hns3_cfg_mac_mode(hw, link_en);
+ 	if (ret) {
+ 		PMD_INIT_LOG(ERR, "failed to enable MAC, ret = %d", ret);
+ 		goto err_config_mac_mode;
+@@ -5731,6 +5816,7 @@ hns3_dev_start(struct rte_eth_dev *dev)
+ {
+ 	struct hns3_adapter *hns = dev->data->dev_private;
+ 	struct hns3_hw *hw = &hns->hw;
++	bool old_state = hw->set_link_down;
+ 	int ret;
+ 
+ 	PMD_INIT_FUNC_TRACE();
+@@ -5740,12 +5826,17 @@ hns3_dev_start(struct rte_eth_dev *dev)
+ 	rte_spinlock_lock(&hw->lock);
+ 	hw->adapter_state = HNS3_NIC_STARTING;
+ 
++	/*
++	 * If the dev_set_link_down() API has been called, the "set_link_down"
++	 * flag can be cleared by dev_start() API. In addition, the flag should
++	 * also be cleared before calling hns3_do_start() so that MAC can be
++	 * enabled in dev_start stage.
++	 */
++	hw->set_link_down = false;
+ 	ret = hns3_do_start(hns, true);
+-	if (ret) {
+-		hw->adapter_state = HNS3_NIC_CONFIGURED;
+-		rte_spinlock_unlock(&hw->lock);
+-		return ret;
+-	}
++	if (ret)
++		goto do_start_fail;
++
+ 	ret = hns3_map_rx_interrupt(dev);
+ 	if (ret)
+ 		goto map_rx_inter_err;
+@@ -5801,6 +5892,8 @@ hns3_dev_start(struct rte_eth_dev *dev)
+ 	hns3_stop_all_txqs(dev);
+ map_rx_inter_err:
+ 	(void)hns3_do_stop(hns);
++do_start_fail:
++	hw->set_link_down = old_state;
+ 	hw->adapter_state = HNS3_NIC_CONFIGURED;
+ 	rte_spinlock_unlock(&hw->lock);
+ 
+@@ -7345,6 +7438,8 @@ static const struct eth_dev_ops hns3_eth_dev_ops = {
+ 	.mac_addr_set           = hns3_set_default_mac_addr,
+ 	.set_mc_addr_list       = hns3_set_mc_mac_addr_list,
+ 	.link_update            = hns3_dev_link_update,
++	.dev_set_link_up        = hns3_dev_set_link_up,
++	.dev_set_link_down      = hns3_dev_set_link_down,
+ 	.rss_hash_update        = hns3_dev_rss_hash_update,
+ 	.rss_hash_conf_get      = hns3_dev_rss_hash_conf_get,
+ 	.reta_update            = hns3_dev_rss_reta_update,
+diff --git a/drivers/net/hns3/hns3_ethdev.h b/drivers/net/hns3/hns3_ethdev.h
+index 2e48ff6..0e4e426 100644
+--- a/drivers/net/hns3/hns3_ethdev.h
++++ b/drivers/net/hns3/hns3_ethdev.h
+@@ -481,6 +481,11 @@ struct hns3_hw {
+ 	struct hns3_cmq cmq;
+ 	struct hns3_mbx_resp_status mbx_resp; /* mailbox response */
+ 	struct hns3_mac mac;
++	/*
++	 * This flag indicates dev_set_link_down() API is called, and is cleared
++	 * by dev_set_link_up() or dev_start().
++	 */
++	bool set_link_down;
+ 	unsigned int secondary_cnt; /* Number of secondary processes init'd. */
+ 	struct hns3_tqp_stats tqp_stats;
+ 	/* Include Mac stats | Rx stats | Tx stats */
+@@ -699,9 +704,9 @@ struct hns3_vtag_cfg {
+ /* Request types for IPC. */
+ enum hns3_mp_req_type {
+ 	HNS3_MP_REQ_START_RXTX = 1,
+-	HNS3_MP_REQ_STOP_RXTX  = 2,
+-	HNS3_MP_REQ_START_TX   = 3,
+-	HNS3_MP_REQ_STOP_TX    = 4,
++	HNS3_MP_REQ_STOP_RXTX,
++	HNS3_MP_REQ_START_TX,
++	HNS3_MP_REQ_STOP_TX,
+ 	HNS3_MP_REQ_MAX
+ };
+ 
+diff --git a/drivers/net/hns3/hns3_rxtx.c b/drivers/net/hns3/hns3_rxtx.c
+index 7d8176f..0f222b3 100644
+--- a/drivers/net/hns3/hns3_rxtx.c
++++ b/drivers/net/hns3/hns3_rxtx.c
+@@ -20,6 +20,7 @@
+ #include "hns3_rxtx.h"
+ #include "hns3_regs.h"
+ #include "hns3_logs.h"
++#include "hns3_mp.h"
+ 
+ #define HNS3_CFG_DESC_NUM(num)	((num) / 8 - 1)
+ #define HNS3_RX_RING_PREFETCTH_MASK	3
+@@ -4372,6 +4373,7 @@ hns3_trace_rxtx_function(struct rte_eth_dev *dev)
+ 
+ void hns3_set_rxtx_function(struct rte_eth_dev *eth_dev)
+ {
++	struct hns3_hw *hw = HNS3_DEV_PRIVATE_TO_HW(eth_dev->data->dev_private);
+ 	struct hns3_adapter *hns = eth_dev->data->dev_private;
+ 	eth_tx_prep_t prep = NULL;
+ 
+@@ -4379,7 +4381,9 @@ void hns3_set_rxtx_function(struct rte_eth_dev *eth_dev)
+ 	    __atomic_load_n(&hns->hw.reset.resetting, __ATOMIC_RELAXED) == 0) {
+ 		eth_dev->rx_pkt_burst = hns3_get_rx_function(eth_dev);
+ 		eth_dev->rx_descriptor_status = hns3_dev_rx_descriptor_status;
+-		eth_dev->tx_pkt_burst = hns3_get_tx_function(eth_dev, &prep);
++		eth_dev->tx_pkt_burst = hw->set_link_down ?
++					hns3_dummy_rxtx_burst :
++					hns3_get_tx_function(eth_dev, &prep);
+ 		eth_dev->tx_pkt_prepare = prep;
+ 		eth_dev->tx_descriptor_status = hns3_dev_tx_descriptor_status;
+ 		hns3_trace_rxtx_function(eth_dev);
+@@ -4703,3 +4707,25 @@ hns3_enable_rxd_adv_layout(struct hns3_hw *hw)
+ 	if (hns3_dev_rxd_adv_layout_supported(hw))
+ 		hns3_write_dev(hw, HNS3_RXD_ADV_LAYOUT_EN_REG, 1);
+ }
++
++void
++hns3_stop_tx_datapath(struct rte_eth_dev *dev)
++{
++	dev->tx_pkt_burst = hns3_dummy_rxtx_burst;
++	dev->tx_pkt_prepare = NULL;
++	rte_wmb();
++	/* Disable tx datapath on secondary process. */
++	hns3_mp_req_stop_tx(dev);
++	/* Prevent crashes when queues are still in use. */
++	rte_delay_ms(dev->data->nb_tx_queues);
++}
++
++void
++hns3_start_tx_datapath(struct rte_eth_dev *dev)
++{
++	eth_tx_prep_t prep = NULL;
++
++	dev->tx_pkt_burst = hns3_get_tx_function(dev, &prep);
++	dev->tx_pkt_prepare = prep;
++	hns3_mp_req_start_tx(dev);
++}
+diff --git a/drivers/net/hns3/hns3_rxtx.h b/drivers/net/hns3/hns3_rxtx.h
+index 141de7a..cd7c21c 100644
+--- a/drivers/net/hns3/hns3_rxtx.h
++++ b/drivers/net/hns3/hns3_rxtx.h
+@@ -766,5 +766,7 @@ void hns3_enable_rxd_adv_layout(struct hns3_hw *hw);
+ int hns3_dev_rx_descriptor_status(void *rx_queue, uint16_t offset);
+ int hns3_dev_tx_descriptor_status(void *tx_queue, uint16_t offset);
+ void hns3_tx_push_init(struct rte_eth_dev *dev);
++void hns3_stop_tx_datapath(struct rte_eth_dev *dev);
++void hns3_start_tx_datapath(struct rte_eth_dev *dev);
+ 
+ #endif /* _HNS3_RXTX_H_ */
+-- 
+2.7.4
+
