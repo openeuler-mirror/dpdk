@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 20.11
-Release: 8
+Release: 9
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  20.11
@@ -239,7 +239,7 @@ BuildRequires: meson ninja-build gcc
 BuildRequires: kernel-devel numactl-devel
 BuildRequires: libpcap libpcap-devel
 BuildRequires: uname-build-checks
-BuildRequires: doxygen python3-sphinx
+BuildRequires: doxygen python3-sphinx chrpath
 
 %define kern_devel_ver %(uname -r)
 
@@ -274,7 +274,7 @@ This package contains the pdump tool for capture the dpdk network packets.
 %autosetup -n %{name}-%{version} -p1
 
 %build
-%define debug_package %{nil}
+export CFLAGS="%{optflags}"
 meson %{target} -Ddisable_drivers=*/octeontx2 -Ddisable_drivers=*/fpga* -Ddisable_drivers=*/ifpga* -Denable_kmods=true -Denable_docs=true
 ninja -C %{target}
 
@@ -283,6 +283,17 @@ namer=%{kern_devel_ver}
 DESTDIR=$RPM_BUILD_ROOT/ meson install -C %{target}
 DESTDIR=$RPM_BUILD_ROOT/ ninja install -C %{target}
 
+cd  $RPM_BUILD_ROOT
+file `find -type f`| grep -w ELF | awk -F":" '{print $1}' | grep -v ko | for i in `xargs`
+do
+  chrpath -d $i
+done
+cd -
+
+mkdir -p  $RPM_BUILD_ROOT/etc/ld.so.conf.d
+echo "%{_bindir}/%{name}" > $RPM_BUILD_ROOT/etc/ld.so.conf.d/%{name}-%{_arch}.conf
+echo "/usr/local/bin/%{name}" >> $RPM_BUILD_ROOT/etc/ld.so.conf.d/%{name}-%{_arch}.conf
+echo "lib64/%{name}" >> $RPM_BUILD_ROOT/etc/ld.so.conf.d/%{name}-%{_arch}.conf
 mkdir -p $RPM_BUILD_ROOT/usr/share/dpdk/%{target}
 ln -fs  %{buildroot}/usr/local/include %{buildroot}/usr/share/dpdk/%{target}/include
 ln -fs  %{buildroot}/usr/local/lib64 %{buildroot}/usr/share/dpdk/%{target}/lib
@@ -313,11 +324,14 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 
 %define _unpackaged_files_terminate_build 0
 
+
+
 %files
 /usr/local/bin/*.py
 /lib/modules/%{kern_devel_ver}/extra/dpdk/*
 /lib64/librte*.so*
 %{_sbindir}/dpdk-devbind
+%config(noreplace) /etc/ld.so.conf.d/*
 
 %files devel
 %dir /usr/local/include/
@@ -325,7 +339,6 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/local/include/generic/*.h
 /usr/local/share/dpdk/examples/*
 /usr/local/lib64/*
-%exclude /usr/local/lib64/*.py
 /usr/local/bin/*
 %dir /usr/share/dpdk/%{target}/
 /usr/share/dpdk/%{target}/include/*
@@ -346,7 +359,12 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
-* Tur Jul 29 2021 Min Hu <humin29@huawei.com> - 20.11-8
+* Mon Sep 13 2021 chenchen <chen_aka_jan@163.com> - 20.11-9
+- del rpath from some binaries and bin
+- add debug package to strip
+- add "-fstack-protector-strong" for binaries and bin
+
+* Thu Jul 29 2021 Min Hu <humin29@huawei.com> - 20.11-8
 - add lib and testpmd functions to sync upstream
 
 * Tue Jul 27 2021 Min Hu <humin29@huawei.com> - 20.11-7
