@@ -1,0 +1,35 @@
+From 9c5fac6cc28c70fe549e60b3765ddef5a58d76f3 Mon Sep 17 00:00:00 2001
+From: Chengchang Tang <tangchengchang@huawei.com>
+Date: Mon, 30 Aug 2021 16:26:50 +0800
+Subject: [PATCH] net/hns3: fix taskqueue pair reset command
+
+This new taskqueue pair reset command is used incorrectly, resulting in
+the new command not taking effect.
+
+This patch fixes the incorrect use.
+
+Fixes: 6911e7c22c61 ("net/hns3: fix long task queue pairs reset time")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengchang Tang <tangchengchang@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_rxtx.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/net/hns3/hns3_rxtx.c b/drivers/net/hns3/hns3_rxtx.c
+index 0f222b37f9..481872e395 100644
+--- a/drivers/net/hns3/hns3_rxtx.c
++++ b/drivers/net/hns3/hns3_rxtx.c
+@@ -697,7 +697,7 @@ hns3_reset_rcb_cmd(struct hns3_hw *hw, uint8_t *reset_status)
+ 
+ 	hns3_cmd_setup_basic_desc(&desc, HNS3_OPC_CFG_RST_TRIGGER, false);
+ 	req = (struct hns3_reset_cmd *)desc.data;
+-	hns3_set_bit(req->mac_func_reset, HNS3_CFG_RESET_RCB_B, 1);
++	hns3_set_bit(req->fun_reset_rcb, HNS3_CFG_RESET_RCB_B, 1);
+ 
+ 	/*
+ 	 * The start qid should be the global qid of the first tqp of the
+-- 
+2.33.0
+
