@@ -1,0 +1,30 @@
+From 96fdb80048e279289e012fafe762f5b53e2ecd23 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Tue, 14 Sep 2021 14:02:19 +0800
+Subject: [PATCH 01/17] examples/kni: close port before exit
+
+This patch adds dev_close() step to release network adapter resources
+when kni free.
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+Acked-by: Ferruh Yigit <ferruh.yigit@intel.com>
+---
+ examples/kni/main.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/examples/kni/main.c b/examples/kni/main.c
+index fe93b8618..40e1790c4 100644
+--- a/examples/kni/main.c
++++ b/examples/kni/main.c
+@@ -1031,6 +1031,7 @@ kni_free_kni(uint16_t port_id)
+ 	if (ret != 0)
+ 		RTE_LOG(ERR, APP, "Failed to stop port %d: %s\n",
+ 			port_id, rte_strerror(-ret));
++	rte_eth_dev_close(port_id);
+ 
+ 	return 0;
+ }
+-- 
+2.23.0
+
