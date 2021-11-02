@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 20.11
-Release: 11
+Release: 12
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  20.11
@@ -226,7 +226,18 @@ Patch216: 0216-net-hns3-support-set-link-up-down-for-PF.patch
 Patch217: 0217-net-hns3-fix-queue-flow-action-validation.patch
 Patch218: 0218-net-hns3-fix-taskqueue-pair-reset-command.patch
 Patch219: 0219-net-hns3-fix-Tx-push-capability.patch
-
+Patch220: 0220-examples-kni-close-port-before-exit.patch
+Patch221: 0221-net-hns3-fix-residual-MAC-after-setting-default-MAC.patch
+Patch222: 0222-net-hns3-fix-input-parameters-of-MAC-functions.patch				
+Patch223: 0223-net-bonding-fix-dedicated-queue-mode-in-vector-burst.patch
+Patch224: 0224-net-bonding-fix-RSS-key-length.patch					
+Patch225: 0225-app-testpmd-add-command-to-show-LACP-bonding-info.patch
+Patch226: 0226-app-testpmd-retain-all-original-dev-conf-when-config.patch
+Patch227: 0227-net-hns3-remove-similar-macro-function-definitions.patch		
+Patch228: 0228-net-hns3-fix-interrupt-vector-freeing.patch					
+Patch229: 0229-net-hns3-add-runtime-config-for-mailbox-limit-time.patch
+Patch230: 0230-net-hns3-fix-mailbox-communication-with-HW.patch				
+Patch231: 0231-app-testpmd-support-multi-process.patch					
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -365,6 +376,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Mon Nov 01 2021 Min Hu <humin29@huawei.com> - 20.11-12
+- synchronize dmadev and hns3 bugfixes from upstream
+
 * Mon Sep 13 2021 chenchen <chen_aka_jan@163.com> - 20.11-11
 - del rpath from some binaries and bin
 - add debug package to strip
