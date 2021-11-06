@@ -1,0 +1,1871 @@
+From 0813978b00875a8465b845672ecbc54082af9573 Mon Sep 17 00:00:00 2001
+From: wuchangsheng <wuchangsheng2@huawei.com>
+Date: Sat, 6 Nov 2021 20:10:49 +0800
+Subject: [PATCH] 0009-dpdk-add-support-gazelle
+
+---
+ config/common_base                           |   3 +-
+ config/rte_config.h                          |   3 +-
+ lib/librte_eal/common/eal_common_fbarray.c   | 106 ++++++-
+ lib/librte_eal/common/eal_common_memory.c    |  88 ++++--
+ lib/librte_eal/common/eal_common_options.c   |  46 ++-
+ lib/librte_eal/common/eal_filesystem.h       |  56 +++-
+ lib/librte_eal/common/eal_internal_cfg.h     |   2 +
+ lib/librte_eal/common/eal_memalloc.h         |   7 +
+ lib/librte_eal/common/eal_options.h          |   7 +-
+ lib/librte_eal/common/eal_private.h          |  25 +-
+ lib/librte_eal/common/include/rte_eal.h      |  10 +-
+ lib/librte_eal/common/include/rte_fbarray.h  |   7 +
+ lib/librte_eal/common/include/rte_memory.h   |  20 +-
+ lib/librte_eal/linux/eal/eal.c               | 277 ++++++++++++++++---
+ lib/librte_eal/linux/eal/eal_hugepage_info.c |   2 +-
+ lib/librte_eal/linux/eal/eal_memalloc.c      | 127 +++++++--
+ lib/librte_eal/linux/eal/eal_memory.c        | 171 ++++++++++--
+ lib/librte_ring/rte_ring.h                   |  75 +++++
+ 18 files changed, 903 insertions(+), 129 deletions(-)
+
+diff --git a/config/common_base b/config/common_base
+index 7dec7ed..57b1349 100644
+--- a/config/common_base
++++ b/config/common_base
+@@ -95,7 +95,8 @@ CONFIG_RTE_MAX_MEMSEG_PER_TYPE=32768
+ CONFIG_RTE_MAX_MEM_MB_PER_TYPE=131072
+ # global maximum usable amount of VA, in megabytes
+ CONFIG_RTE_MAX_MEM_MB=524288
+-CONFIG_RTE_MAX_MEMZONE=2560
++CONFIG_RTE_MAX_MEMZONE=65535
++CONFIG_RTE_MAX_SECONDARY=256
+ CONFIG_RTE_MAX_TAILQ=32
+ CONFIG_RTE_ENABLE_ASSERT=n
+ CONFIG_RTE_LOG_DP_LEVEL=RTE_LOG_INFO
+diff --git a/config/rte_config.h b/config/rte_config.h
+index d30786b..b848b1c 100644
+--- a/config/rte_config.h
++++ b/config/rte_config.h
+@@ -39,7 +39,8 @@
+ #define RTE_MAX_MEMSEG_PER_TYPE 32768
+ #define RTE_MAX_MEM_MB_PER_TYPE 65536
+ #define RTE_MAX_MEM_MB 524288
+-#define RTE_MAX_MEMZONE 2560
++#define RTE_MAX_MEMZONE 65535
++#define RTE_MAX_SECONDARY 256
+ #define RTE_MAX_TAILQ 32
+ #define RTE_LOG_DP_LEVEL RTE_LOG_INFO
+ #define RTE_BACKTRACE 1
+diff --git a/lib/librte_eal/common/eal_common_fbarray.c b/lib/librte_eal/common/eal_common_fbarray.c
+index 1312f93..b611ffa 100644
+--- a/lib/librte_eal/common/eal_common_fbarray.c
++++ b/lib/librte_eal/common/eal_common_fbarray.c
+@@ -833,8 +833,9 @@ rte_fbarray_init(struct rte_fbarray *arr, const char *name, unsigned int len,
+ 	return -1;
+ }
+ 
+-int
+-rte_fbarray_attach(struct rte_fbarray *arr)
++static int
++__rte_fbarray_attach(struct rte_fbarray *arr, const char *runtime_dir,
++		const struct internal_config *internal_cfg)
+ {
+ 	struct mem_area *ma = NULL, *tmp = NULL;
+ 	size_t page_sz, mmap_len;
+@@ -870,13 +871,15 @@ rte_fbarray_attach(struct rte_fbarray *arr)
+ 
+ 	mmap_len = calc_data_size(page_sz, arr->elt_sz, arr->len);
+ 
+-	/* check the tailq - maybe user has already mapped this address space */
+-	rte_spinlock_lock(&mem_area_lock);
++	if (!internal_cfg->pri_and_sec) {
++		/* check the tailq - maybe user has already mapped this address space */
++		rte_spinlock_lock(&mem_area_lock);
+ 
+-	TAILQ_FOREACH(tmp, &mem_area_tailq, next) {
+-		if (overlap(tmp, arr->data, mmap_len)) {
+-			rte_errno = EEXIST;
+-			goto fail;
++		TAILQ_FOREACH(tmp, &mem_area_tailq, next) {
++			if (overlap(tmp, arr->data, mmap_len)) {
++				rte_errno = EEXIST;
++				goto fail;
++			}
+ 		}
+ 	}
+ 
+@@ -886,7 +889,7 @@ rte_fbarray_attach(struct rte_fbarray *arr)
+ 	if (data == NULL)
+ 		goto fail;
+ 
+-	eal_get_fbarray_path(path, sizeof(path), arr->name);
++	eal_sec_get_fbarray_path(path, sizeof(path), arr->name, runtime_dir);
+ 
+ 	fd = open(path, O_RDWR);
+ 	if (fd < 0) {
+@@ -903,16 +906,27 @@ rte_fbarray_attach(struct rte_fbarray *arr)
+ 	if (resize_and_map(fd, data, mmap_len))
+ 		goto fail;
+ 
++	if (internal_cfg->pri_and_sec) {
++		if (flock(fd, LOCK_UN)) {
++			rte_errno = errno;
++			goto fail;
++		}
++		close(fd);
++		fd = -1;
++	}
++
+ 	/* store our new memory area */
+ 	ma->addr = data;
+ 	ma->fd = fd; /* keep fd until detach/destroy */
+ 	ma->len = mmap_len;
+ 
+-	TAILQ_INSERT_TAIL(&mem_area_tailq, ma, next);
++	if (!internal_cfg->pri_and_sec) {
++		TAILQ_INSERT_TAIL(&mem_area_tailq, ma, next);
+ 
+-	/* we're done */
++		/* we're done */
+ 
+-	rte_spinlock_unlock(&mem_area_lock);
++		rte_spinlock_unlock(&mem_area_lock);
++	}
+ 	return 0;
+ fail:
+ 	if (data)
+@@ -924,6 +938,30 @@ rte_fbarray_attach(struct rte_fbarray *arr)
+ 	return -1;
+ }
+ 
++int
++rte_fbarray_attach(struct rte_fbarray *arr)
++{
++	return __rte_fbarray_attach(arr, rte_eal_get_runtime_dir(), &internal_config);
++}
++
++int
++rte_sec_fbarray_attach(struct rte_fbarray *arr,
++		const int switch_pri_and_sec, const int sec_idx)
++{
++	struct internal_config *internal_cfg = NULL;
++	char *runtime_dir = NULL;
++
++	if (!switch_pri_and_sec) {
++		runtime_dir = rte_eal_get_runtime_dir();
++		internal_cfg = &internal_config;
++	} else {
++		runtime_dir = rte_eal_sec_get_runtime_dir(sec_idx);
++		internal_cfg = rte_eal_sec_get_internal_config(sec_idx);
++	}
++
++	return __rte_fbarray_attach(arr, runtime_dir, internal_cfg);
++}
++
+ int
+ rte_fbarray_detach(struct rte_fbarray *arr)
+ {
+@@ -1063,6 +1101,50 @@ rte_fbarray_destroy(struct rte_fbarray *arr)
+ 	return ret;
+ }
+ 
++int
++rte_sec_fbarray_destroy(struct rte_fbarray *arr,
++		const int sec_idx)
++{
++	int fd, ret;
++	size_t mmap_len;
++	char path[PATH_MAX];
++
++	if (arr == NULL) {
++		rte_errno = EINVAL;
++		return -1;
++	}
++
++	size_t page_sz = sysconf(_SC_PAGESIZE);
++
++	if (page_sz == (size_t)-1)
++		return -1;
++
++	mmap_len = calc_data_size(page_sz, arr->elt_sz, arr->len);
++	munmap(arr->data, mmap_len);
++
++	/* try deleting the file */
++	eal_sec_get_fbarray_path(path, sizeof(path), arr->name, rte_eal_sec_get_runtime_dir(sec_idx));
++	
++	fd = open(path, O_RDONLY);
++	if (fd < 0) {
++		RTE_LOG(ERR, EAL, "Could not open fbarray file: %s\n",
++			strerror(errno));
++		return -1;
++	}
++	if (flock(fd, LOCK_EX | LOCK_NB)) {
++		RTE_LOG(DEBUG, EAL, "Cannot destroy fbarray - another process is using it\n");
++		rte_errno = EBUSY;
++		ret = -1;
++	} else {
++		ret = 0;
++		unlink(path);
++		memset(arr, 0, sizeof(*arr));
++	}
++	close(fd);
++	
++	return ret;
++}
++
+ void *
+ rte_fbarray_get(const struct rte_fbarray *arr, unsigned int idx)
+ {
+diff --git a/lib/librte_eal/common/eal_common_memory.c b/lib/librte_eal/common/eal_common_memory.c
+index 4a9cc1f..842fc9b 100644
+--- a/lib/librte_eal/common/eal_common_memory.c
++++ b/lib/librte_eal/common/eal_common_memory.c
+@@ -206,9 +206,9 @@ virt2memseg(const void *addr, const struct rte_memseg_list *msl)
+ }
+ 
+ static struct rte_memseg_list *
+-virt2memseg_list(const void *addr)
++virt2memseg_list(const void *addr, const struct rte_config *rte_cfg)
+ {
+-	struct rte_mem_config *mcfg = rte_eal_get_configuration()->mem_config;
++	struct rte_mem_config *mcfg = rte_cfg->mem_config;
+ 	struct rte_memseg_list *msl;
+ 	int msl_idx;
+ 
+@@ -230,7 +230,13 @@ virt2memseg_list(const void *addr)
+ struct rte_memseg_list *
+ rte_mem_virt2memseg_list(const void *addr)
+ {
+-	return virt2memseg_list(addr);
++	return virt2memseg_list(addr, rte_eal_get_configuration());
++}
++
++struct rte_memseg_list *
++rte_sec_mem_virt2memseg_list(const void *addr, const struct rte_config *rte_cfg)
++{
++	return virt2memseg_list(addr, rte_cfg);
+ }
+ 
+ struct virtiova {
+@@ -283,11 +289,25 @@ rte_mem_iova2virt(rte_iova_t iova)
+ 	return vi.virt;
+ }
+ 
++static struct rte_memseg *
++__rte_mem_virt2memseg(const void *addr, const struct rte_memseg_list *msl, 
++		const struct rte_config *rte_cfg)
++{
++	return virt2memseg(addr, msl != NULL ? msl :
++			rte_sec_mem_virt2memseg_list(addr, rte_cfg));
++}
++
+ struct rte_memseg *
+ rte_mem_virt2memseg(const void *addr, const struct rte_memseg_list *msl)
+ {
+-	return virt2memseg(addr, msl != NULL ? msl :
+-			rte_mem_virt2memseg_list(addr));
++	return __rte_mem_virt2memseg(addr, msl, rte_eal_get_configuration());
++}
++
++struct rte_memseg *
++rte_sec_mem_virt2memseg(const void *addr, const struct rte_memseg_list *msl, 
++		const struct rte_config *rte_cfg)
++{
++	return __rte_mem_virt2memseg(addr, msl, rte_cfg);
+ }
+ 
+ static int
+@@ -889,10 +909,14 @@ rte_extmem_detach(void *va_addr, size_t len)
+ }
+ 
+ /* init memory subsystem */
+-int
+-rte_eal_memory_init(void)
++static int
++__rte_eal_memory_init(__attribute__((__unused__)) const char *runtime_dir,
++		const struct internal_config *internal_cfg,
++		struct rte_config *rte_cfg,
++		const int switch_pri_and_sec,
++		const int sec_idx)
+ {
+-	struct rte_mem_config *mcfg = rte_eal_get_configuration()->mem_config;
++	struct rte_mem_config *mcfg = rte_cfg->mem_config;
+ 	int retval;
+ 	RTE_LOG(DEBUG, EAL, "Setting up physically contiguous memory...\n");
+ 
+@@ -900,25 +924,57 @@ rte_eal_memory_init(void)
+ 		return -1;
+ 
+ 	/* lock mem hotplug here, to prevent races while we init */
+-	rte_mcfg_mem_read_lock();
++	rte_rwlock_read_lock(&mcfg->memory_hotplug_lock);
+ 
+-	if (rte_eal_memseg_init() < 0)
++	if (rte_eal_memseg_init(switch_pri_and_sec, sec_idx) < 0)
+ 		goto fail;
+ 
+-	if (eal_memalloc_init() < 0)
+-		goto fail;
++	if (!internal_cfg->pri_and_sec)
++		if (eal_memalloc_init() < 0)
++			goto fail;
+ 
+-	retval = rte_eal_process_type() == RTE_PROC_PRIMARY ?
++	retval = rte_cfg->process_type == RTE_PROC_PRIMARY ?
+ 			rte_eal_hugepage_init() :
+-			rte_eal_hugepage_attach();
++			rte_eal_hugepage_attach(switch_pri_and_sec, sec_idx);
+ 	if (retval < 0)
+ 		goto fail;
+ 
+-	if (internal_config.no_shconf == 0 && rte_eal_memdevice_init() < 0)
++	if (internal_cfg->no_shconf == 0 && rte_eal_memdevice_init() < 0)
+ 		goto fail;
+ 
+ 	return 0;
+ fail:
+-	rte_mcfg_mem_read_unlock();
++	rte_rwlock_read_unlock(&mcfg->memory_hotplug_lock);
+ 	return -1;
+ }
++
++int
++rte_eal_memory_init(void)
++{
++	const int unused_idx = -1;
++
++	return __rte_eal_memory_init(rte_eal_get_runtime_dir(),
++			&internal_config, rte_eal_get_configuration(),
++			false, unused_idx);
++}
++
++int
++rte_eal_sec_memory_init(const int sec_idx)
++{
++	int ret;
++	struct rte_config *rte_cfg = rte_eal_sec_get_configuration(sec_idx);
++
++	ret = __rte_eal_memory_init(rte_eal_sec_get_runtime_dir(sec_idx),
++			rte_eal_sec_get_internal_config(sec_idx), rte_cfg,
++			true, sec_idx);
++
++	rte_rwlock_read_unlock(&rte_cfg->mem_config->memory_hotplug_lock);
++
++	return ret;
++}
++
++int
++rte_eal_sec_memory_cleanup(const int sec_idx)
++{
++	return eal_memalloc_destroy(sec_idx);
++}
+diff --git a/lib/librte_eal/common/eal_common_options.c b/lib/librte_eal/common/eal_common_options.c
+index a7f9c5f..34f4199 100644
+--- a/lib/librte_eal/common/eal_common_options.c
++++ b/lib/librte_eal/common/eal_common_options.c
+@@ -82,6 +82,7 @@ eal_long_options[] = {
+ 	{OPT_LEGACY_MEM,        0, NULL, OPT_LEGACY_MEM_NUM       },
+ 	{OPT_SINGLE_FILE_SEGMENTS, 0, NULL, OPT_SINGLE_FILE_SEGMENTS_NUM},
+ 	{OPT_MATCH_ALLOCATIONS, 0, NULL, OPT_MATCH_ALLOCATIONS_NUM},
++	{OPT_MAP_PERFECT,       0, NULL, OPT_MAP_PERFECT_NUM      },
+ 	{0,                     0, NULL, 0                        }
+ };
+ 
+@@ -221,6 +222,7 @@ eal_reset_internal_config(struct internal_config *internal_cfg)
+ 	internal_cfg->user_mbuf_pool_ops_name = NULL;
+ 	CPU_ZERO(&internal_cfg->ctrl_cpuset);
+ 	internal_cfg->init_complete = 0;
++	internal_cfg->map_perfect = 0;
+ }
+ 
+ static int
+@@ -1097,7 +1099,7 @@ eal_parse_iova_mode(const char *name)
+ }
+ 
+ static int
+-eal_parse_base_virtaddr(const char *arg)
++eal_parse_base_virtaddr(const char *arg, struct internal_config *conf)
+ {
+ 	char *end;
+ 	uint64_t addr;
+@@ -1120,7 +1122,7 @@ eal_parse_base_virtaddr(const char *arg)
+ 	 * it can align to 2MB for x86. So this alignment can also be used
+ 	 * on x86 and other architectures.
+ 	 */
+-	internal_config.base_virtaddr =
++	conf->base_virtaddr =
+ 		RTE_PTR_ALIGN_CEIL((uintptr_t)addr, (size_t)RTE_PGSIZE_16M);
+ 
+ 	return 0;
+@@ -1440,7 +1442,7 @@ eal_parse_common_option(int opt, const char *optarg,
+ 		}
+ 		break;
+ 	case OPT_BASE_VIRTADDR_NUM:
+-		if (eal_parse_base_virtaddr(optarg) < 0) {
++		if (eal_parse_base_virtaddr(optarg, conf) < 0) {
+ 			RTE_LOG(ERR, EAL, "invalid parameter for --"
+ 					OPT_BASE_VIRTADDR "\n");
+ 			return -1;
+@@ -1553,11 +1555,33 @@ eal_adjust_config(struct internal_config *internal_cfg)
+ }
+ 
+ int
+-eal_check_common_options(struct internal_config *internal_cfg)
++eal_sec_adjust_config(struct internal_config *internal_cfg)
+ {
+-	struct rte_config *cfg = rte_eal_get_configuration();
++	struct internal_config *internal_cfg_head;
++	internal_cfg->process_type = RTE_PROC_SECONDARY;
++
++	internal_cfg_head = rte_eal_sec_get_internal_config(0);
++	for (int i = 0; i < RTE_MAX_SECONDARY; ++i) {
++		if (!internal_cfg_head[i].pri_and_sec)
++			continue;
++		if (internal_cfg == &internal_cfg_head[i])
++			continue;
++		if (!strcmp(internal_cfg_head[i].hugefile_prefix, internal_cfg->hugefile_prefix))
++			return -EALREADY;
++	}
++
++	for (int i = 0; i < RTE_MAX_NUMA_NODES; i++)
++		internal_cfg->memory += internal_cfg->socket_mem[i];
++
++	return 0;
++}
+ 
+-	if (cfg->lcore_role[cfg->master_lcore] != ROLE_RTE) {
++int
++eal_check_common_options(struct internal_config *internal_cfg,
++		struct rte_config *cfg)
++{
++	if (!internal_cfg->pri_and_sec &&
++			cfg->lcore_role[cfg->master_lcore] != ROLE_RTE) {
+ 		RTE_LOG(ERR, EAL, "Master lcore is not enabled for DPDK\n");
+ 		return -1;
+ 	}
+@@ -1602,7 +1626,7 @@ eal_check_common_options(struct internal_config *internal_cfg)
+ 			"be specified together with --"OPT_NO_HUGE"\n");
+ 		return -1;
+ 	}
+-	if (internal_config.force_socket_limits && internal_config.legacy_mem) {
++	if (internal_cfg->force_socket_limits && internal_config.legacy_mem) {
+ 		RTE_LOG(ERR, EAL, "Option --"OPT_SOCKET_LIMIT
+ 			" is only supported in non-legacy memory mode\n");
+ 	}
+@@ -1635,6 +1659,14 @@ eal_check_common_options(struct internal_config *internal_cfg)
+ 			"-m or --"OPT_SOCKET_MEM"\n");
+ 	}
+ 
++	if (internal_cfg->map_perfect || internal_cfg->pri_and_sec) {
++		if (!internal_cfg->legacy_mem || internal_cfg->in_memory || internal_cfg->no_hugetlbfs) {
++			RTE_LOG(ERR, EAL, "Option --"OPT_LEGACY_MEM" or "OPT_IN_MEMORY" or "OPT_NO_HUGE" "
++					"is not compatible with --"OPT_MAP_PERFECT" and "OPT_PRI_AND_SEC"\n");
++			return -1;
++		}
++	}
++
+ 	return 0;
+ }
+ 
+diff --git a/lib/librte_eal/common/eal_filesystem.h b/lib/librte_eal/common/eal_filesystem.h
+index 5d21f07..e65a183 100644
+--- a/lib/librte_eal/common/eal_filesystem.h
++++ b/lib/librte_eal/common/eal_filesystem.h
+@@ -23,7 +23,8 @@
+ 
+ /* sets up platform-specific runtime data dir */
+ int
+-eal_create_runtime_dir(void);
++eal_create_runtime_dir(char *runtime_dir, const int buflen,
++		const struct internal_config *conf);
+ 
+ int
+ eal_clean_runtime_dir(void);
+@@ -34,15 +35,27 @@ eal_get_hugefile_prefix(void);
+ 
+ #define RUNTIME_CONFIG_FNAME "config"
+ static inline const char *
+-eal_runtime_config_path(void)
++__eal_runtime_config_path(const char *runtime_dir)
+ {
+ 	static char buffer[PATH_MAX]; /* static so auto-zeroed */
+ 
+-	snprintf(buffer, sizeof(buffer), "%s/%s", rte_eal_get_runtime_dir(),
++	snprintf(buffer, sizeof(buffer), "%s/%s", runtime_dir,
+ 			RUNTIME_CONFIG_FNAME);
+ 	return buffer;
+ }
+ 
++static inline const char *
++eal_runtime_config_path(void)
++{
++	return __eal_runtime_config_path(rte_eal_get_runtime_dir());
++}
++
++static inline const char *
++eal_sec_runtime_config_path(const char *runtime_dir)
++{
++	return __eal_runtime_config_path(runtime_dir);
++}
++
+ /** Path of primary/secondary communication unix socket file. */
+ #define MP_SOCKET_FNAME "mp_socket"
+ static inline const char *
+@@ -57,12 +70,29 @@ eal_mp_socket_path(void)
+ 
+ #define FBARRAY_NAME_FMT "%s/fbarray_%s"
+ static inline const char *
+-eal_get_fbarray_path(char *buffer, size_t buflen, const char *name) {
+-	snprintf(buffer, buflen, FBARRAY_NAME_FMT, rte_eal_get_runtime_dir(),
++__eal_get_fbarray_path(char *buffer, size_t buflen, const char *name,
++		const char *runtime_dir)
++{
++	snprintf(buffer, buflen, FBARRAY_NAME_FMT, runtime_dir,
+ 			name);
+ 	return buffer;
+ }
+ 
++static inline const char *
++eal_get_fbarray_path(char *buffer, size_t buflen, const char *name)
++{
++	return __eal_get_fbarray_path(buffer, buflen, name, 
++			rte_eal_get_runtime_dir());
++}
++
++static inline const char *
++eal_sec_get_fbarray_path(char *buffer, size_t buflen,
++		const char *name, const char *runtime_dir)
++{
++	return __eal_get_fbarray_path(buffer, buflen, name, 
++			runtime_dir);
++}
++
+ /** Path of hugepage info file. */
+ #define HUGEPAGE_INFO_FNAME "hugepage_info"
+ static inline const char *
+@@ -78,15 +108,27 @@ eal_hugepage_info_path(void)
+ /** Path of hugepage data file. */
+ #define HUGEPAGE_DATA_FNAME "hugepage_data"
+ static inline const char *
+-eal_hugepage_data_path(void)
++__eal_hugepage_data_path(const char *runtime_dir)
+ {
+ 	static char buffer[PATH_MAX]; /* static so auto-zeroed */
+ 
+-	snprintf(buffer, sizeof(buffer), "%s/%s", rte_eal_get_runtime_dir(),
++	snprintf(buffer, sizeof(buffer), "%s/%s", runtime_dir,
+ 			HUGEPAGE_DATA_FNAME);
+ 	return buffer;
+ }
+ 
++static inline const char *
++eal_hugepage_data_path(void)
++{
++	return __eal_hugepage_data_path(rte_eal_get_runtime_dir());
++}
++
++static inline const char *
++eal_sec_hugepage_data_path(const char *runtime_dir)
++{
++	return __eal_hugepage_data_path(runtime_dir);
++}
++
+ /** String format for hugepage map files. */
+ #define HUGEFILE_FMT "%s/%smap_%d"
+ static inline const char *
+diff --git a/lib/librte_eal/common/eal_internal_cfg.h b/lib/librte_eal/common/eal_internal_cfg.h
+index a42f349..50d5da1 100644
+--- a/lib/librte_eal/common/eal_internal_cfg.h
++++ b/lib/librte_eal/common/eal_internal_cfg.h
+@@ -82,6 +82,8 @@ struct internal_config {
+ 	rte_cpuset_t ctrl_cpuset;         /**< cpuset for ctrl threads */
+ 	volatile unsigned int init_complete;
+ 	/**< indicates whether EAL has completed initialization */
++	volatile unsigned pri_and_sec;
++	volatile unsigned map_perfect;
+ };
+ extern struct internal_config internal_config; /**< Global EAL configuration. */
+ 
+diff --git a/lib/librte_eal/common/eal_memalloc.h b/lib/librte_eal/common/eal_memalloc.h
+index e953cd8..d5ea6e1 100644
+--- a/lib/librte_eal/common/eal_memalloc.h
++++ b/lib/librte_eal/common/eal_memalloc.h
+@@ -83,6 +83,10 @@ eal_memalloc_get_seg_fd(int list_idx, int seg_idx);
+ int
+ eal_memalloc_set_seg_fd(int list_idx, int seg_idx, int fd);
+ 
++int
++eal_sec_memalloc_set_seg_fd(int list_idx, int seg_idx, int fd, 
++		const int switch_pri_and_sec, const int sec_idx);
++
+ /* returns 0 or -errno */
+ int
+ eal_memalloc_set_seg_list_fd(int list_idx, int fd);
+@@ -93,4 +97,7 @@ eal_memalloc_get_seg_fd_offset(int list_idx, int seg_idx, size_t *offset);
+ int
+ eal_memalloc_init(void);
+ 
++int
++eal_memalloc_destroy(const int sec_idx);
++
+ #endif /* EAL_MEMALLOC_H */
+diff --git a/lib/librte_eal/common/eal_options.h b/lib/librte_eal/common/eal_options.h
+index 9855429..b42d41d 100644
+--- a/lib/librte_eal/common/eal_options.h
++++ b/lib/librte_eal/common/eal_options.h
+@@ -69,6 +69,10 @@ enum {
+ 	OPT_IOVA_MODE_NUM,
+ #define OPT_MATCH_ALLOCATIONS  "match-allocations"
+ 	OPT_MATCH_ALLOCATIONS_NUM,
++#define OPT_PRI_AND_SEC        "pri-and-sec"
++	OPT_PRI_AND_SEC_NUM,
++#define OPT_MAP_PERFECT        "map-perfect"
++	OPT_MAP_PERFECT_NUM,
+ 	OPT_LONG_MAX_NUM
+ };
+ 
+@@ -79,8 +83,9 @@ int eal_parse_common_option(int opt, const char *argv,
+ 			    struct internal_config *conf);
+ int eal_option_device_parse(void);
+ int eal_adjust_config(struct internal_config *internal_cfg);
++int eal_sec_adjust_config(struct internal_config *internal_cfg);
+ int eal_cleanup_config(struct internal_config *internal_cfg);
+-int eal_check_common_options(struct internal_config *internal_cfg);
++int eal_check_common_options(struct internal_config *internal_cfg, struct rte_config *cfg);
+ void eal_common_usage(void);
+ enum rte_proc_type_t eal_proc_type_detect(void);
+ int eal_plugins_init(void);
+diff --git a/lib/librte_eal/common/eal_private.h b/lib/librte_eal/common/eal_private.h
+index 597fd02..1fd32a9 100644
+--- a/lib/librte_eal/common/eal_private.h
++++ b/lib/librte_eal/common/eal_private.h
+@@ -113,7 +113,8 @@ int rte_eal_cpu_init(void);
+  * @return
+  *   0 on success, negative on error
+  */
+-int rte_eal_memseg_init(void);
++//int rte_eal_memseg_init(void);
++int rte_eal_memseg_init(const int switch_pri_and_sec, const int sec_idx);
+ 
+ /**
+  * Map memory
+@@ -127,6 +128,9 @@ int rte_eal_memseg_init(void);
+  */
+ int rte_eal_memory_init(void);
+ 
++int rte_eal_sec_memory_init(const int sec_idx);
++int rte_eal_sec_memory_cleanup(const int sec_idx);
++
+ /**
+  * Configure timers
+  *
+@@ -291,7 +295,8 @@ int rte_eal_hugepage_init(void);
+  *
+  * This function is private to the EAL.
+  */
+-int rte_eal_hugepage_attach(void);
++//int rte_eal_hugepage_attach(void);
++int rte_eal_hugepage_attach(const int switch_pri_and_sec, const int sec_idx);
+ 
+ /**
+  * Find a bus capable of identifying a device.
+@@ -450,4 +455,20 @@ eal_get_baseaddr(void);
+   **/
+ bool
+ eal_is_master_set_affinity(void);
++
++
++/****** APIs for libnet ******/
++#include <rte_memory.h>
++
++struct rte_memseg *
++rte_sec_mem_virt2memseg(const void *addr, const struct rte_memseg_list *msl, 
++		const struct rte_config *rte_cfg);
++
++struct rte_memseg_list *
++rte_sec_mem_virt2memseg_list(const void *addr, const struct rte_config *rte_cfg);
++
++int
++rte_sec_memseg_list_walk_thread_unsafe(rte_memseg_list_walk_t func, void *arg,
++		struct rte_config *rte_cfg);
++
+ #endif /* _EAL_PRIVATE_H_ */
+diff --git a/lib/librte_eal/common/include/rte_eal.h b/lib/librte_eal/common/include/rte_eal.h
+index 2f9ed29..ac1dc1d 100644
+--- a/lib/librte_eal/common/include/rte_eal.h
++++ b/lib/librte_eal/common/include/rte_eal.h
+@@ -485,9 +485,17 @@ rte_eal_mbuf_user_pool_ops(void);
+  * @return
+  *  The runtime directory path of DPDK
+  */
+-const char *
++char *
+ rte_eal_get_runtime_dir(void);
+ 
++/****** APIs for libnet ******/
++char *rte_eal_sec_get_runtime_dir(const int sec_idx);
++struct rte_config *rte_eal_sec_get_configuration(const int sec_idx);
++struct internal_config *rte_eal_sec_get_internal_config(const int sec_idx);
++
++int rte_eal_sec_attach(int argc, char **argv);
++int rte_eal_sec_detach(const char *file_prefix, int length);
++
+ #ifdef __cplusplus
+ }
+ #endif
+diff --git a/lib/librte_eal/common/include/rte_fbarray.h b/lib/librte_eal/common/include/rte_fbarray.h
+index 6dccdbe..dffee1e 100644
+--- a/lib/librte_eal/common/include/rte_fbarray.h
++++ b/lib/librte_eal/common/include/rte_fbarray.h
+@@ -101,6 +101,10 @@ __rte_experimental
+ int
+ rte_fbarray_attach(struct rte_fbarray *arr);
+ 
++int
++rte_sec_fbarray_attach(struct rte_fbarray *arr,
++		const int switch_pri_and_sec, const int sec_idx);
++
+ 
+ /**
+  * Deallocate resources for an already allocated and correctly set up
+@@ -123,6 +127,9 @@ __rte_experimental
+ int
+ rte_fbarray_destroy(struct rte_fbarray *arr);
+ 
++int
++rte_sec_fbarray_destroy(struct rte_fbarray *arr,
++		const int sec_idx);
+ 
+ /**
+  * Deallocate resources for an already allocated and correctly set up
+diff --git a/lib/librte_eal/common/include/rte_memory.h b/lib/librte_eal/common/include/rte_memory.h
+index 3d8d0bd..4dd6daa 100644
+--- a/lib/librte_eal/common/include/rte_memory.h
++++ b/lib/librte_eal/common/include/rte_memory.h
+@@ -152,7 +152,12 @@ rte_mem_iova2virt(rte_iova_t iova);
+ __rte_experimental
+ struct rte_memseg *
+ rte_mem_virt2memseg(const void *virt, const struct rte_memseg_list *msl);
+-
++/*
++__rte_experimental
++struct rte_memseg *
++rte_sec_mem_virt2memseg(const void *addr, const struct rte_memseg_list *msl, 
++		const struct rte_config *rte_cfg);
++*/
+ /**
+  * Get memseg list corresponding to virtual memory address.
+  *
+@@ -164,7 +169,11 @@ rte_mem_virt2memseg(const void *virt, const struct rte_memseg_list *msl);
+ __rte_experimental
+ struct rte_memseg_list *
+ rte_mem_virt2memseg_list(const void *virt);
+-
++/*
++__rte_experimental
++struct rte_memseg_list *
++rte_sec_mem_virt2memseg_list(const void *addr, const struct rte_config *rte_cfg);
++*/
+ /**
+  * Memseg walk function prototype.
+  *
+@@ -282,7 +291,12 @@ rte_memseg_list_walk(rte_memseg_list_walk_t func, void *arg);
+ __rte_experimental
+ int
+ rte_memseg_walk_thread_unsafe(rte_memseg_walk_t func, void *arg);
+-
++/*
++__rte_experimental
++int
++rte_sec_memseg_list_walk_thread_unsafe(rte_memseg_list_walk_t func, void *arg,
++		struct rte_config *rte_cfg);
++*/
+ /**
+  * Walk each VA-contiguous area without performing any locking.
+  *
+diff --git a/lib/librte_eal/linux/eal/eal.c b/lib/librte_eal/linux/eal/eal.c
+index 8bb1842..a1f2b42 100644
+--- a/lib/librte_eal/linux/eal/eal.c
++++ b/lib/librte_eal/linux/eal/eal.c
+@@ -103,6 +103,12 @@ static char runtime_dir[PATH_MAX];
+ 
+ static const char *default_runtime_dir = "/var/run";
+ 
++/****** APIs for libnet ******/
++static unsigned int sec_count = 0;
++static struct rte_config sec_rte_config[RTE_MAX_SECONDARY];
++static struct internal_config sec_internal_config[RTE_MAX_SECONDARY];
++static char sec_runtime_dir[RTE_MAX_SECONDARY][PATH_MAX];
++
+ static bool master_set_affinity = true;
+ bool
+ eal_is_master_set_affinity(void)
+@@ -111,7 +117,8 @@ eal_is_master_set_affinity(void)
+ }
+ 
+ int
+-eal_create_runtime_dir(void)
++eal_create_runtime_dir(char *runtime_dir, const int buflen,
++		const struct internal_config *conf)
+ {
+ 	const char *directory = default_runtime_dir;
+ 	const char *xdg_runtime_dir = getenv("XDG_RUNTIME_DIR");
+@@ -134,8 +141,8 @@ eal_create_runtime_dir(void)
+ 	}
+ 
+ 	/* create prefix-specific subdirectory under DPDK runtime dir */
+-	ret = snprintf(runtime_dir, sizeof(runtime_dir), "%s/%s",
+-			tmp, eal_get_hugefile_prefix());
++	ret = snprintf(runtime_dir, buflen, "%s/%s",
++			tmp, conf->hugefile_prefix);
+ 	if (ret < 0 || ret == sizeof(runtime_dir)) {
+ 		RTE_LOG(ERR, EAL, "Error creating prefix-specific runtime path name\n");
+ 		return -1;
+@@ -246,12 +253,18 @@ eal_clean_runtime_dir(void)
+ 	return -1;
+ }
+ 
+-const char *
++char *
+ rte_eal_get_runtime_dir(void)
+ {
+ 	return runtime_dir;
+ }
+ 
++char *
++rte_eal_sec_get_runtime_dir(const int sec_idx)
++{
++	return sec_runtime_dir[sec_idx];
++}
++
+ /* Return user provided mbuf pool ops name */
+ const char *
+ rte_eal_mbuf_user_pool_ops(void)
+@@ -266,6 +279,18 @@ rte_eal_get_configuration(void)
+ 	return &rte_config;
+ }
+ 
++struct rte_config *
++rte_eal_sec_get_configuration(const int sec_idx)
++{
++	return &sec_rte_config[sec_idx];
++}
++
++struct internal_config *
++rte_eal_sec_get_internal_config(const int sec_idx)
++{
++	return &sec_internal_config[sec_idx];
++}
++
+ enum rte_iova_mode
+ rte_eal_iova_mode(void)
+ {
+@@ -395,18 +420,22 @@ rte_eal_config_create(void)
+ 
+ /* attach to an existing shared memory config */
+ static int
+-rte_eal_config_attach(void)
++__rte_eal_config_attach(const int mmap_flags, int *mem_cfg_fd,
++		const char *runtime_dir,
++		const struct internal_config *internal_cfg,
++		struct rte_config *rte_cfg)
+ {
+ 	struct rte_mem_config *mem_config;
++	int mcfg_fd = *mem_cfg_fd;
+ 
+-	const char *pathname = eal_runtime_config_path();
++	const char *pathname = eal_sec_runtime_config_path(runtime_dir);
+ 
+-	if (internal_config.no_shconf)
++	if (internal_cfg->no_shconf)
+ 		return 0;
+ 
+-	if (mem_cfg_fd < 0){
+-		mem_cfg_fd = open(pathname, O_RDWR);
+-		if (mem_cfg_fd < 0) {
++	if (mcfg_fd < 0){
++		mcfg_fd = open(pathname, O_RDWR);
++		if (mcfg_fd < 0) {
+ 			RTE_LOG(ERR, EAL, "Cannot open '%s' for rte_mem_config\n",
+ 				pathname);
+ 			return -1;
+@@ -415,20 +444,29 @@ rte_eal_config_attach(void)
+ 
+ 	/* map it as read-only first */
+ 	mem_config = (struct rte_mem_config *) mmap(NULL, sizeof(*mem_config),
+-			PROT_READ, MAP_SHARED, mem_cfg_fd, 0);
++			mmap_flags, MAP_SHARED, mcfg_fd, 0);
+ 	if (mem_config == MAP_FAILED) {
+-		close(mem_cfg_fd);
+-		mem_cfg_fd = -1;
++		close(mcfg_fd);
++		mcfg_fd = -1;
+ 		RTE_LOG(ERR, EAL, "Cannot mmap memory for rte_config! error %i (%s)\n",
+ 			errno, strerror(errno));
+ 		return -1;
+ 	}
+ 
+-	rte_config.mem_config = mem_config;
++	rte_cfg->mem_config = mem_config;
++	*mem_cfg_fd = mcfg_fd;
+ 
+ 	return 0;
+ }
+ 
++static int
++rte_eal_config_attach(void)
++{
++	return __rte_eal_config_attach(PROT_READ, &mem_cfg_fd,
++				rte_eal_get_runtime_dir(), &internal_config,
++				rte_eal_get_configuration());
++}
++
+ /* reattach the shared config at exact memory location primary process has it */
+ static int
+ rte_eal_config_reattach(void)
+@@ -531,6 +569,45 @@ rte_config_init(void)
+ 	return 0;
+ }
+ 
++static void
++rte_sec_config_init(const int sec_idx)
++{
++	int mem_cfg_fd = -1;
++	int mmap_flags = PROT_READ | PROT_WRITE;
++
++	struct rte_config *rte_cfg = rte_eal_sec_get_configuration(sec_idx);
++	struct internal_config *internal_cfg = rte_eal_sec_get_internal_config(sec_idx);
++
++	rte_cfg->process_type = internal_cfg->process_type;
++
++	__rte_eal_config_attach(mmap_flags, &mem_cfg_fd,
++				rte_eal_sec_get_runtime_dir(sec_idx),
++				internal_cfg, rte_cfg);
++
++	close(mem_cfg_fd);
++}
++
++static int
++eal_sec_config_cleanup(const int sec_idx)
++{
++	int ret;
++	struct rte_config *lc_rte_cfg = rte_eal_sec_get_configuration(sec_idx);
++	struct internal_config *lc_internal_cfg = rte_eal_sec_get_internal_config(sec_idx);
++	char *lc_runtime_dir = rte_eal_sec_get_runtime_dir(sec_idx);
++
++	ret = munmap(lc_rte_cfg->mem_config, sizeof(*lc_rte_cfg->mem_config));
++	if (ret < 0) {
++		RTE_LOG(ERR, EAL, "Failed to unmap config memory!\n");
++		return -1;
++	}
++
++	memset(lc_rte_cfg, 0, sizeof(*lc_rte_cfg));
++	memset(lc_internal_cfg, 0, sizeof(*lc_internal_cfg));
++	memset(lc_runtime_dir, 0, PATH_MAX);
++
++	return 0;
++}
++
+ /* Unlocks hugepage directories that were locked by eal_hugepage_info_init */
+ static void
+ eal_hugedirs_unlock(void)
+@@ -566,6 +643,7 @@ eal_usage(const char *prgname)
+ 	       "  --"OPT_LEGACY_MEM"        Legacy memory mode (no dynamic allocation, contiguous segments)\n"
+ 	       "  --"OPT_SINGLE_FILE_SEGMENTS" Put all hugepage memory in single files\n"
+ 	       "  --"OPT_MATCH_ALLOCATIONS" Free hugepages exactly as allocated\n"
++	       "  --"OPT_MAP_PERFECT"       Map virtual addresses according to configured hugepage size\n"
+ 	       "\n");
+ 	/* Allow the application to print its usage message too if hook is set */
+ 	if ( rte_application_usage_hook ) {
+@@ -693,7 +771,9 @@ eal_log_level_parse(int argc, char **argv)
+ 
+ /* Parse the argument given in the command line of the application */
+ static int
+-eal_parse_args(int argc, char **argv)
++__eal_parse_args(int argc, char **argv, char *runtime_dir, const int buflen,
++		struct internal_config *internal_cfg,
++		struct rte_config *rte_cfg)
+ {
+ 	int opt, ret;
+ 	char **argvopt;
+@@ -724,7 +804,7 @@ eal_parse_args(int argc, char **argv)
+ 			goto out;
+ 		}
+ 
+-		ret = eal_parse_common_option(opt, optarg, &internal_config);
++		ret = eal_parse_common_option(opt, optarg, internal_cfg);
+ 		/* common parser is not happy */
+ 		if (ret < 0) {
+ 			eal_usage(prgname);
+@@ -747,9 +827,9 @@ eal_parse_args(int argc, char **argv)
+ 				RTE_LOG(ERR, EAL, "Could not store hugepage directory\n");
+ 			else {
+ 				/* free old hugepage dir */
+-				if (internal_config.hugepage_dir != NULL)
+-					free(internal_config.hugepage_dir);
+-				internal_config.hugepage_dir = hdir;
++				if (internal_cfg->hugepage_dir != NULL)
++					free(internal_cfg->hugepage_dir);
++				internal_cfg->hugepage_dir = hdir;
+ 			}
+ 			break;
+ 		}
+@@ -760,34 +840,34 @@ eal_parse_args(int argc, char **argv)
+ 				RTE_LOG(ERR, EAL, "Could not store file prefix\n");
+ 			else {
+ 				/* free old prefix */
+-				if (internal_config.hugefile_prefix != NULL)
+-					free(internal_config.hugefile_prefix);
+-				internal_config.hugefile_prefix = prefix;
++				if (internal_cfg->hugefile_prefix != NULL)
++					free(internal_cfg->hugefile_prefix);
++				internal_cfg->hugefile_prefix = prefix;
+ 			}
+ 			break;
+ 		}
+ 		case OPT_SOCKET_MEM_NUM:
+ 			if (eal_parse_socket_arg(optarg,
+-					internal_config.socket_mem) < 0) {
++					internal_cfg->socket_mem) < 0) {
+ 				RTE_LOG(ERR, EAL, "invalid parameters for --"
+ 						OPT_SOCKET_MEM "\n");
+ 				eal_usage(prgname);
+ 				ret = -1;
+ 				goto out;
+ 			}
+-			internal_config.force_sockets = 1;
++			internal_cfg->force_sockets = 1;
+ 			break;
+ 
+ 		case OPT_SOCKET_LIMIT_NUM:
+ 			if (eal_parse_socket_arg(optarg,
+-					internal_config.socket_limit) < 0) {
++					internal_cfg->socket_limit) < 0) {
+ 				RTE_LOG(ERR, EAL, "invalid parameters for --"
+ 						OPT_SOCKET_LIMIT "\n");
+ 				eal_usage(prgname);
+ 				ret = -1;
+ 				goto out;
+ 			}
+-			internal_config.force_socket_limits = 1;
++			internal_cfg->force_socket_limits = 1;
+ 			break;
+ 
+ 		case OPT_VFIO_INTR_NUM:
+@@ -801,7 +881,7 @@ eal_parse_args(int argc, char **argv)
+ 			break;
+ 
+ 		case OPT_CREATE_UIO_DEV_NUM:
+-			internal_config.create_uio_dev = 1;
++			internal_cfg->create_uio_dev = 1;
+ 			break;
+ 
+ 		case OPT_MBUF_POOL_OPS_NAME_NUM:
+@@ -811,17 +891,21 @@ eal_parse_args(int argc, char **argv)
+ 				RTE_LOG(ERR, EAL, "Could not store mbuf pool ops name\n");
+ 			else {
+ 				/* free old ops name */
+-				if (internal_config.user_mbuf_pool_ops_name !=
++				if (internal_cfg->user_mbuf_pool_ops_name !=
+ 						NULL)
+-					free(internal_config.user_mbuf_pool_ops_name);
++					free(internal_cfg->user_mbuf_pool_ops_name);
+ 
+-				internal_config.user_mbuf_pool_ops_name =
++				internal_cfg->user_mbuf_pool_ops_name =
+ 						ops_name;
+ 			}
+ 			break;
+ 		}
+ 		case OPT_MATCH_ALLOCATIONS_NUM:
+-			internal_config.match_allocations = 1;
++			internal_cfg->match_allocations = 1;
++			break;
++
++		case OPT_MAP_PERFECT_NUM:
++			internal_cfg->map_perfect = 1;
+ 			break;
+ 
+ 		default:
+@@ -844,20 +928,25 @@ eal_parse_args(int argc, char **argv)
+ 	}
+ 
+ 	/* create runtime data directory */
+-	if (internal_config.no_shconf == 0 &&
+-			eal_create_runtime_dir() < 0) {
++	if (internal_cfg->no_shconf == 0 &&
++			eal_create_runtime_dir(runtime_dir, buflen, internal_cfg) < 0) {
+ 		RTE_LOG(ERR, EAL, "Cannot create runtime directory\n");
+ 		ret = -1;
+ 		goto out;
+ 	}
+ 
+-	if (eal_adjust_config(&internal_config) != 0) {
+-		ret = -1;
+-		goto out;
++	if (!internal_cfg->pri_and_sec) {
++		ret = eal_adjust_config(internal_cfg);
++		if (ret != 0)
++			goto out;
++	} else {
++		ret = eal_sec_adjust_config(internal_cfg);
++		if (ret != 0)
++			goto out;
+ 	}
+ 
+ 	/* sanity checks */
+-	if (eal_check_common_options(&internal_config) != 0) {
++	if (eal_check_common_options(internal_cfg, rte_cfg) != 0) {
+ 		eal_usage(prgname);
+ 		ret = -1;
+ 		goto out;
+@@ -876,6 +965,24 @@ eal_parse_args(int argc, char **argv)
+ 	return ret;
+ }
+ 
++static int
++eal_parse_args(int argc, char **argv)
++{
++	return __eal_parse_args(argc, argv,
++				rte_eal_get_runtime_dir(), PATH_MAX,
++				&internal_config,
++				rte_eal_get_configuration());
++}
++
++static int
++eal_sec_parse_args(int argc, char **argv, const int sec_idx)
++{
++	return __eal_parse_args(argc, argv,
++				rte_eal_sec_get_runtime_dir(sec_idx), PATH_MAX,
++				rte_eal_sec_get_internal_config(sec_idx),
++				rte_eal_sec_get_configuration(sec_idx));
++}
++
+ static int
+ check_socket(const struct rte_memseg_list *msl, void *arg)
+ {
+@@ -1406,3 +1513,99 @@ rte_eal_check_module(const char *module_name)
+ 	/* Module has been found */
+ 	return 1;
+ }
++
++
++/****** APIs for libnet ******/
++int
++rte_eal_sec_attach(int argc, char **argv)
++{
++	int ret;
++	int sec_idx = -1;
++	struct internal_config *lc_internal_cfg = NULL;
++
++	if (sec_count >= RTE_MAX_SECONDARY) {
++		RTE_LOG(ERR, EAL, "Too many secondary processes: %d.\n", sec_count);
++		rte_errno = EINVAL;
++		return -1;
++	}
++	
++	for (int i = 0; i < RTE_MAX_SECONDARY; ++i) {
++		if (sec_internal_config[i].pri_and_sec == 0) {
++			sec_internal_config[i].pri_and_sec = 1;
++			sec_idx = i;
++			break;
++		}
++	}
++	lc_internal_cfg = rte_eal_sec_get_internal_config(sec_idx);
++	
++	eal_reset_internal_config(lc_internal_cfg);
++	
++	ret = eal_sec_parse_args(argc, argv, sec_idx);
++	if (ret < 0) {
++		if (ret == -EALREADY) {
++			RTE_LOG(ERR, EAL, "file_refix %s already called initialization.\n",
++					lc_internal_cfg->hugefile_prefix);
++			rte_errno = EALREADY;
++		} else {
++			RTE_LOG(ERR, EAL, "Invalid 'command line' arguments.\n");
++			rte_errno = EINVAL;
++		}
++		return -1;
++	}
++
++	rte_sec_config_init(sec_idx);
++
++	ret = rte_eal_sec_memory_init(sec_idx);
++	if (ret < 0) {
++		RTE_LOG(ERR, EAL, "Cannot init memory\n");
++		rte_errno = ENOMEM;
++		return -1;
++	}
++	
++	sec_count++;
++	return 0;
++}
++
++int
++rte_eal_sec_detach(const char *file_prefix, int length)
++{
++	int ret;
++	int sec_idx = -1;
++
++	if (!file_prefix || length <= 0) {
++		RTE_LOG(ERR, EAL, "Invalid 'file_prefix or length' arguments.\n");
++		rte_errno = EINVAL;
++		return -1;
++	}
++	
++	for (int i = 0; i < RTE_MAX_SECONDARY; ++i) {
++		if (sec_internal_config[i].pri_and_sec == 0)
++			continue;
++		if (!strncmp(sec_internal_config[i].hugefile_prefix, file_prefix, length)) {
++			sec_idx = i;
++			break;
++		}
++	}
++	if (sec_idx == -1) {
++		RTE_LOG(ERR, EAL, "Cannot find file_prefix %s.\n", file_prefix);
++		rte_errno = EINVAL;
++		return -1;
++	}
++
++	ret = rte_eal_sec_memory_cleanup(sec_idx);
++	if (ret < 0) {
++		RTE_LOG(ERR, EAL, "Cannot cleanup memory\n");
++		rte_errno = ENOMEM;
++		return -1;
++	}
++
++	ret = eal_sec_config_cleanup(sec_idx);
++	if (ret < 0) {
++		RTE_LOG(ERR, EAL, "Cannot cleanup hugepage sharefile.\n");
++		rte_errno = EACCES;
++		return -1;
++	}
++
++	sec_count--;
++	return 0;
++}
+diff --git a/lib/librte_eal/linux/eal/eal_hugepage_info.c b/lib/librte_eal/linux/eal/eal_hugepage_info.c
+index 91a4fed..911acec 100644
+--- a/lib/librte_eal/linux/eal/eal_hugepage_info.c
++++ b/lib/librte_eal/linux/eal/eal_hugepage_info.c
+@@ -350,7 +350,7 @@ calc_num_pages(struct hugepage_info *hpi, struct dirent *dirent)
+ 	 */
+ 	total_pages = 0;
+ 	/* we also don't want to do this for legacy init */
+-	if (!internal_config.legacy_mem)
++	if (!internal_config.legacy_mem || internal_config.map_perfect)
+ 		for (i = 0; i < rte_socket_count(); i++) {
+ 			int socket = rte_socket_id_by_idx(i);
+ 			unsigned int num_pages =
+diff --git a/lib/librte_eal/linux/eal/eal_memalloc.c b/lib/librte_eal/linux/eal/eal_memalloc.c
+index cad4934..8e7f120 100644
+--- a/lib/librte_eal/linux/eal/eal_memalloc.c
++++ b/lib/librte_eal/linux/eal/eal_memalloc.c
+@@ -95,12 +95,14 @@ static int fallocate_supported = -1; /* unknown */
+  * they will be initialized at startup, and filled as we allocate/deallocate
+  * segments.
+  */
+-static struct {
++struct fd_list{
+ 	int *fds; /**< dynamically allocated array of segment lock fd's */
+ 	int memseg_list_fd; /**< memseg list fd */
+ 	int len; /**< total length of the array */
+ 	int count; /**< entries used in an array */
+-} fd_list[RTE_MAX_MEMSEG_LISTS];
++};
++static struct fd_list fd_list[RTE_MAX_MEMSEG_LISTS];
++static struct fd_list sec_fd_list[RTE_MAX_SECONDARY][RTE_MAX_MEMSEG_LISTS];
+ 
+ /** local copy of a memory map, used to synchronize memory hotplug in MP */
+ static struct rte_memseg_list local_memsegs[RTE_MAX_MEMSEG_LISTS];
+@@ -1391,13 +1393,13 @@ secondary_msl_create_walk(const struct rte_memseg_list *msl,
+ }
+ 
+ static int
+-alloc_list(int list_idx, int len)
++__alloc_list(int list_idx, int len, struct fd_list *fd_ls)
+ {
+ 	int *data;
+ 	int i;
+ 
+ 	/* single-file segments mode does not need fd list */
+-	if (!internal_config.single_file_segments) {
++	if (!internal_config.single_file_segments) {	// sec todo
+ 		/* ensure we have space to store fd per each possible segment */
+ 		data = malloc(sizeof(int) * len);
+ 		if (data == NULL) {
+@@ -1407,19 +1409,31 @@ alloc_list(int list_idx, int len)
+ 		/* set all fd's as invalid */
+ 		for (i = 0; i < len; i++)
+ 			data[i] = -1;
+-		fd_list[list_idx].fds = data;
+-		fd_list[list_idx].len = len;
++		fd_ls[list_idx].fds = data;
++		fd_ls[list_idx].len = len;
+ 	} else {
+-		fd_list[list_idx].fds = NULL;
+-		fd_list[list_idx].len = 0;
++		fd_ls[list_idx].fds = NULL;
++		fd_ls[list_idx].len = 0;
+ 	}
+ 
+-	fd_list[list_idx].count = 0;
+-	fd_list[list_idx].memseg_list_fd = -1;
++	fd_ls[list_idx].count = 0;
++	fd_ls[list_idx].memseg_list_fd = -1;
+ 
+ 	return 0;
+ }
+ 
++static int
++alloc_list(int list_idx, int len)
++{
++	return __alloc_list(list_idx, len, fd_list);
++}
++
++static int
++sec_alloc_list(int list_idx, int len, struct fd_list *fd_ls)
++{
++	return __alloc_list(list_idx, len, fd_ls);
++}
++
+ static int
+ fd_list_create_walk(const struct rte_memseg_list *msl,
+ 		void *arg __rte_unused)
+@@ -1437,27 +1451,71 @@ fd_list_create_walk(const struct rte_memseg_list *msl,
+ 	return alloc_list(msl_idx, len);
+ }
+ 
+-int
+-eal_memalloc_set_seg_fd(int list_idx, int seg_idx, int fd)
++static int
++fd_list_destroy_walk(const struct rte_memseg_list *msl, const int sec_idx)
+ {
+-	struct rte_mem_config *mcfg = rte_eal_get_configuration()->mem_config;
++	struct rte_mem_config *mcfg = rte_eal_sec_get_configuration(sec_idx)->mem_config;
++	struct fd_list *fd_ls = sec_fd_list[sec_idx];
++	int list_idx;
++
++	list_idx = msl - mcfg->memsegs;
++	if (fd_ls[list_idx].len != 0) {
++		free(fd_ls[list_idx].fds);
++		/* We have closed fd, seeing in function of eal_legacy_hugepage_attach. */
++		//close(fd_ls[list_idx].fds[seg_idx]);
++	}
++	memset(&fd_ls[list_idx], 0, sizeof(fd_ls[list_idx]));
++
++	return 0;
++}
++
++static int
++__eal_memalloc_set_seg_fd(int list_idx, int seg_idx, int fd, 
++		const struct rte_config *rte_cfg, struct fd_list *fd_ls)
++{
++	struct rte_mem_config *mcfg = rte_cfg->mem_config;
+ 
+ 	/* single file segments mode doesn't support individual segment fd's */
+-	if (internal_config.single_file_segments)
++	if (internal_config.single_file_segments)	// sec todo
+ 		return -ENOTSUP;
+ 
+ 	/* if list is not allocated, allocate it */
+-	if (fd_list[list_idx].len == 0) {
++	if (fd_ls[list_idx].len == 0) {
+ 		int len = mcfg->memsegs[list_idx].memseg_arr.len;
+ 
+-		if (alloc_list(list_idx, len) < 0)
++		if (sec_alloc_list(list_idx, len, fd_ls) < 0)
+ 			return -ENOMEM;
+ 	}
+-	fd_list[list_idx].fds[seg_idx] = fd;
++	fd_ls[list_idx].fds[seg_idx] = fd;
+ 
+ 	return 0;
+ }
+ 
++int
++eal_memalloc_set_seg_fd(int list_idx, int seg_idx, int fd)
++{
++	return __eal_memalloc_set_seg_fd(list_idx, seg_idx, fd, 
++		rte_eal_get_configuration(), fd_list);
++}
++
++int
++eal_sec_memalloc_set_seg_fd(int list_idx, int seg_idx, int fd, 
++	const int switch_pri_and_sec, const int sec_idx)
++{
++	struct rte_config *rte_cfg = NULL;
++	struct fd_list *fd_ls = NULL;
++
++	if (!switch_pri_and_sec) {
++		rte_cfg = rte_eal_get_configuration();
++		fd_ls = &fd_list[0];
++	} else {
++		rte_cfg = rte_eal_sec_get_configuration(sec_idx);
++		fd_ls = &sec_fd_list[sec_idx][0];
++	}
++	
++	return __eal_memalloc_set_seg_fd(list_idx, seg_idx, fd, rte_cfg, fd_ls);
++}
++
+ int
+ eal_memalloc_set_seg_list_fd(int list_idx, int fd)
+ {
+@@ -1602,3 +1660,38 @@ eal_memalloc_init(void)
+ 		return -1;
+ 	return 0;
+ }
++
++int
++eal_memalloc_destroy(const int sec_idx)
++{
++	int msl_idx = 0;
++	struct rte_memseg_list *msl;
++	struct rte_mem_config *mcfg = rte_eal_sec_get_configuration(sec_idx)->mem_config;
++	
++	for (msl_idx = 0; msl_idx < RTE_MAX_MEMSEG_LISTS; msl_idx++) {
++	
++		msl = &mcfg->memsegs[msl_idx];
++	
++		/* skip empty memseg lists */
++		if (msl->memseg_arr.len == 0)
++			continue;
++	
++		if (rte_sec_fbarray_destroy(&msl->memseg_arr, sec_idx)) {
++			RTE_LOG(ERR, EAL, "Cannot clear secondary process local memseg lists\n");
++			return -1;
++		}
++		
++		if (munmap(msl->base_va, msl->len) < 0) {
++			RTE_LOG(ERR, EAL, "Failed to unmap memseg lists\n");
++			return -1;
++		}
++		memset(msl, 0, sizeof(*msl));
++
++		if (fd_list_destroy_walk(msl, sec_idx)) {
++			RTE_LOG(ERR, EAL, "Failed to clear secondary fd_list.\n");
++			return -1;
++		}
++	}
++
++	return 0;
++}
+diff --git a/lib/librte_eal/linux/eal/eal_memory.c b/lib/librte_eal/linux/eal/eal_memory.c
+index 43e4ffc..ac81f43 100644
+--- a/lib/librte_eal/linux/eal/eal_memory.c
++++ b/lib/librte_eal/linux/eal/eal_memory.c
+@@ -1055,10 +1055,10 @@ remap_needed_hugepages(struct hugepage_file *hugepages, int n_pages)
+ 		 * address to lower address. Here, physical addresses are in
+ 		 * descending order.
+ 		 */
+-		else if ((prev->physaddr - cur->physaddr) != cur->size)
++		else if (!internal_config.map_perfect && (prev->physaddr - cur->physaddr) != cur->size)
+ 			new_memseg = 1;
+ #else
+-		else if ((cur->physaddr - prev->physaddr) != cur->size)
++		else if (!internal_config.map_perfect && (cur->physaddr - prev->physaddr) != cur->size)
+ 			new_memseg = 1;
+ #endif
+ 
+@@ -1457,6 +1457,24 @@ eal_legacy_hugepage_init(void)
+ 		/* meanwhile, also initialize used_hp hugepage sizes in used_hp */
+ 		used_hp[i].hugepage_sz = internal_config.hugepage_info[i].hugepage_sz;
+ 
++		if (internal_config.map_perfect) {
++			int sys_num_pages = 0;
++			int need_num_pages = 0;
++			struct rte_memseg_list *msl;
++		
++			for (j = 0; j < RTE_MAX_NUMA_NODES; j++) {
++				sys_num_pages += internal_config.hugepage_info[i].num_pages[j];
++			}
++		
++			for (j = 0; j < RTE_MAX_MEMSEG_LISTS; j++) {
++				msl = &mcfg->memsegs[j];
++				if (internal_config.hugepage_info[i].hugepage_sz == msl->page_sz)
++					need_num_pages += msl->memseg_arr.len;
++			}
++		
++			internal_config.hugepage_info[i].num_pages[0] = RTE_MIN(sys_num_pages, need_num_pages);
++		}
++
+ 		nr_hugepages += internal_config.hugepage_info[i].num_pages[0];
+ 	}
+ 
+@@ -1537,8 +1555,13 @@ eal_legacy_hugepage_init(void)
+ 			goto fail;
+ 		}
+ 
+-		qsort(&tmp_hp[hp_offset], hpi->num_pages[0],
+-		      sizeof(struct hugepage_file), cmp_physaddr);
++		/* continuous physical memory does not bring performance improvements,
++		 * so no sorting is performed for quick startup.
++		 */
++		if (!internal_config.map_perfect) {
++			qsort(&tmp_hp[hp_offset], hpi->num_pages[0],
++					  sizeof(struct hugepage_file), cmp_physaddr);
++		}
+ 
+ 		/* we have processed a num of hugepages of this size, so inc offset */
+ 		hp_offset += hpi->num_pages[0];
+@@ -1857,9 +1880,9 @@ getFileSize(int fd)
+  * in order to form a contiguous block in the virtual memory space
+  */
+ static int
+-eal_legacy_hugepage_attach(void)
++eal_legacy_hugepage_attach(const int switch_pri_and_sec, const int sec_idx)
+ {
+-	struct rte_mem_config *mcfg = rte_eal_get_configuration()->mem_config;
++	struct rte_mem_config *mcfg = NULL;
+ 	struct hugepage_file *hp = NULL;
+ 	unsigned int num_hp = 0;
+ 	unsigned int i = 0;
+@@ -1867,6 +1890,22 @@ eal_legacy_hugepage_attach(void)
+ 	off_t size = 0;
+ 	int fd, fd_hugepage = -1;
+ 
++	struct rte_config *rte_cfg = NULL;
++	struct internal_config *internal_cfg = NULL;
++	char *runtime_dir = NULL;
++
++	if (!switch_pri_and_sec) {
++		runtime_dir = rte_eal_get_runtime_dir();
++		rte_cfg = rte_eal_get_configuration();
++		internal_cfg = &internal_config;
++	} else {
++		runtime_dir = rte_eal_sec_get_runtime_dir(sec_idx);
++		rte_cfg = rte_eal_sec_get_configuration(sec_idx);
++		internal_cfg = rte_eal_sec_get_internal_config(sec_idx);
++	}
++	
++	mcfg = rte_cfg->mem_config;
++
+ 	if (aslr_enabled() > 0) {
+ 		RTE_LOG(WARNING, EAL, "WARNING: Address Space Layout Randomization "
+ 				"(ASLR) is enabled in the kernel.\n");
+@@ -1874,10 +1913,10 @@ eal_legacy_hugepage_attach(void)
+ 				"into secondary processes\n");
+ 	}
+ 
+-	fd_hugepage = open(eal_hugepage_data_path(), O_RDONLY);
++	fd_hugepage = open(eal_sec_hugepage_data_path(runtime_dir), O_RDONLY);
+ 	if (fd_hugepage < 0) {
+ 		RTE_LOG(ERR, EAL, "Could not open %s\n",
+-				eal_hugepage_data_path());
++				eal_sec_hugepage_data_path(runtime_dir));
+ 		goto error;
+ 	}
+ 
+@@ -1885,7 +1924,7 @@ eal_legacy_hugepage_attach(void)
+ 	hp = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd_hugepage, 0);
+ 	if (hp == MAP_FAILED) {
+ 		RTE_LOG(ERR, EAL, "Could not mmap %s\n",
+-				eal_hugepage_data_path());
++				eal_sec_hugepage_data_path(runtime_dir));
+ 		goto error;
+ 	}
+ 
+@@ -1932,13 +1971,13 @@ eal_legacy_hugepage_attach(void)
+ 		}
+ 
+ 		/* find segment data */
+-		msl = rte_mem_virt2memseg_list(map_addr);
++		msl = rte_sec_mem_virt2memseg_list(map_addr, rte_cfg);
+ 		if (msl == NULL) {
+ 			RTE_LOG(DEBUG, EAL, "%s(): Cannot find memseg list\n",
+ 				__func__);
+ 			goto fd_error;
+ 		}
+-		ms = rte_mem_virt2memseg(map_addr, msl);
++		ms = rte_sec_mem_virt2memseg(map_addr, msl, rte_cfg);
+ 		if (ms == NULL) {
+ 			RTE_LOG(DEBUG, EAL, "%s(): Cannot find memseg\n",
+ 				__func__);
+@@ -1953,8 +1992,16 @@ eal_legacy_hugepage_attach(void)
+ 			goto fd_error;
+ 		}
+ 
++		/* No hugefile lock is required in PRI_AND_SEC mode, close it 
++		 * to avoid opening too much fd.
++		 */
++		if (internal_cfg->pri_and_sec) {
++			close(fd);
++			fd = -1;
++		}
++
+ 		/* store segment fd internally */
+-		if (eal_memalloc_set_seg_fd(msl_idx, ms_idx, fd) < 0)
++		if (eal_sec_memalloc_set_seg_fd(msl_idx, ms_idx, fd, switch_pri_and_sec, sec_idx) < 0)
+ 			RTE_LOG(ERR, EAL, "Could not store segment fd: %s\n",
+ 				rte_strerror(rte_errno));
+ 	}
+@@ -2003,10 +2050,17 @@ rte_eal_hugepage_init(void)
+ }
+ 
+ int
+-rte_eal_hugepage_attach(void)
++rte_eal_hugepage_attach(const int switch_pri_and_sec, const int sec_idx)
+ {
+-	return internal_config.legacy_mem ?
+-			eal_legacy_hugepage_attach() :
++	struct internal_config *internal_cfg;
++	
++	if (!switch_pri_and_sec)
++		internal_cfg = &internal_config;
++	else
++		internal_cfg = rte_eal_sec_get_internal_config(sec_idx);
++	
++	return internal_cfg->legacy_mem ?
++			eal_legacy_hugepage_attach(switch_pri_and_sec, sec_idx) :
+ 			eal_hugepage_attach();
+ }
+ 
+@@ -2215,6 +2269,50 @@ memseg_primary_init_32(void)
+ 	return 0;
+ }
+ 
++static int
++eal_sec_set_num_pages(struct internal_config *internal_cfg,
++	struct hugepage_info *used_hp)
++{
++	int ret;
++	int hp_sz_idx;
++	uint64_t memory[RTE_MAX_NUMA_NODES];
++
++	if (!internal_cfg || !used_hp) {
++		return -1;
++	}
++
++	for (hp_sz_idx = 0;
++			hp_sz_idx < (int) internal_cfg->num_hugepage_sizes;
++			hp_sz_idx++) {
++		struct hugepage_info *hpi;
++		hpi = &internal_cfg->hugepage_info[hp_sz_idx];
++		used_hp[hp_sz_idx].hugepage_sz = hpi->hugepage_sz;
++	}
++
++	for (hp_sz_idx = 0; hp_sz_idx < RTE_MAX_NUMA_NODES; hp_sz_idx++)
++		memory[hp_sz_idx] = internal_cfg->socket_mem[hp_sz_idx];
++
++	ret = calc_num_pages_per_socket(memory,
++			internal_cfg->hugepage_info, used_hp,
++			internal_cfg->num_hugepage_sizes);
++
++	return ret;
++}
++
++static int
++eal_sec_get_num_pages(const struct hugepage_info *used_hp,
++		uint64_t hugepage_sz, int socket)
++{
++	int hp_sz_idx;
++	
++	for (hp_sz_idx = 0; hp_sz_idx < MAX_HUGEPAGE_SIZES; hp_sz_idx++) {
++		if (used_hp[hp_sz_idx].hugepage_sz == hugepage_sz)
++			return used_hp[hp_sz_idx].num_pages[socket];
++	}
++	
++	return 0;
++}
++
+ static int __rte_unused
+ memseg_primary_init(void)
+ {
+@@ -2228,11 +2326,20 @@ memseg_primary_init(void)
+ 	uint64_t max_mem, max_mem_per_type;
+ 	unsigned int max_seglists_per_type;
+ 	unsigned int n_memtypes, cur_type;
++	struct hugepage_info used_hp[MAX_HUGEPAGE_SIZES];
+ 
+ 	/* no-huge does not need this at all */
+ 	if (internal_config.no_hugetlbfs)
+ 		return 0;
+ 
++	if (internal_config.map_perfect) {
++		memset(used_hp, 0, sizeof(used_hp));
++		ret = eal_sec_set_num_pages(&internal_config, used_hp);
++		if (ret == -1) {
++			RTE_LOG(ERR, EAL, "Cannot get num pages\n");
++		}
++	}
++
+ 	/*
+ 	 * figuring out amount of memory we're going to have is a long and very
+ 	 * involved process. the basic element we're operating with is a memory
+@@ -2329,6 +2436,7 @@ memseg_primary_init(void)
+ 		struct memtype *type = &memtypes[cur_type];
+ 		uint64_t max_mem_per_list, pagesz;
+ 		int socket_id;
++		unsigned int need_n_segs, cur_n_segs;
+ 
+ 		pagesz = type->page_sz;
+ 		socket_id = type->socket_id;
+@@ -2372,8 +2480,17 @@ memseg_primary_init(void)
+ 				"n_segs:%i socket_id:%i hugepage_sz:%" PRIu64 "\n",
+ 			n_seglists, n_segs, socket_id, pagesz);
+ 
++		if (internal_config.map_perfect)
++			need_n_segs = eal_sec_get_num_pages(used_hp, pagesz, socket_id);
++		else
++			need_n_segs = n_segs;
++
+ 		/* create all segment lists */
+-		for (cur_seglist = 0; cur_seglist < n_seglists; cur_seglist++) {
++		for (cur_seglist = 0; cur_seglist < n_seglists && need_n_segs > 0; cur_seglist++) {
++			cur_n_segs = RTE_MIN(need_n_segs, n_segs);
++			if (internal_config.map_perfect)
++				need_n_segs -= cur_n_segs;
++
+ 			if (msl_idx >= RTE_MAX_MEMSEG_LISTS) {
+ 				RTE_LOG(ERR, EAL,
+ 					"No more space in memseg lists, please increase %s\n",
+@@ -2382,7 +2499,7 @@ memseg_primary_init(void)
+ 			}
+ 			msl = &mcfg->memsegs[msl_idx++];
+ 
+-			if (alloc_memseg_list(msl, pagesz, n_segs,
++			if (alloc_memseg_list(msl, pagesz, cur_n_segs,
+ 					socket_id, cur_seglist))
+ 				goto out;
+ 
+@@ -2400,9 +2517,10 @@ memseg_primary_init(void)
+ }
+ 
+ static int
+-memseg_secondary_init(void)
++memseg_secondary_init(struct rte_config *rte_cfg,
++		const int switch_pri_and_sec, const int sec_idx)
+ {
+-	struct rte_mem_config *mcfg = rte_eal_get_configuration()->mem_config;
++	struct rte_mem_config *mcfg = rte_cfg->mem_config;
+ 	int msl_idx = 0;
+ 	struct rte_memseg_list *msl;
+ 
+@@ -2414,7 +2532,7 @@ memseg_secondary_init(void)
+ 		if (msl->memseg_arr.len == 0)
+ 			continue;
+ 
+-		if (rte_fbarray_attach(&msl->memseg_arr)) {
++		if (rte_sec_fbarray_attach(&msl->memseg_arr, switch_pri_and_sec, sec_idx)) {
+ 			RTE_LOG(ERR, EAL, "Cannot attach to primary process memseg lists\n");
+ 			return -1;
+ 		}
+@@ -2430,11 +2548,18 @@ memseg_secondary_init(void)
+ }
+ 
+ int
+-rte_eal_memseg_init(void)
++rte_eal_memseg_init(const int switch_pri_and_sec, const int sec_idx)
+ {
+ 	/* increase rlimit to maximum */
+ 	struct rlimit lim;
+ 
++	struct rte_config *rte_cfg = NULL;
++	if (!switch_pri_and_sec) {
++		rte_cfg = rte_eal_get_configuration();
++	} else {
++		rte_cfg = rte_eal_sec_get_configuration(sec_idx);
++	}
++
+ 	if (getrlimit(RLIMIT_NOFILE, &lim) == 0) {
+ 		/* set limit to maximum */
+ 		lim.rlim_cur = lim.rlim_max;
+@@ -2458,11 +2583,11 @@ rte_eal_memseg_init(void)
+ 	}
+ #endif
+ 
+-	return rte_eal_process_type() == RTE_PROC_PRIMARY ?
++	return rte_cfg->process_type == RTE_PROC_PRIMARY ?
+ #ifndef RTE_ARCH_64
+ 			memseg_primary_init_32() :
+ #else
+ 			memseg_primary_init() :
+ #endif
+-			memseg_secondary_init();
++			memseg_secondary_init(rte_cfg, switch_pri_and_sec, sec_idx);
+ }
+diff --git a/lib/librte_ring/rte_ring.h b/lib/librte_ring/rte_ring.h
+index 2a9f768..0eb3a48 100644
+--- a/lib/librte_ring/rte_ring.h
++++ b/lib/librte_ring/rte_ring.h
+@@ -953,6 +953,81 @@ rte_ring_dequeue_burst(struct rte_ring *r, void **obj_table,
+ 				r->cons.single, available);
+ }
+ 
++/****** APIs for libnet ******/
++static __rte_always_inline unsigned
++rte_ring_cn_dequeue_burst(struct rte_ring *r, void **obj_table, unsigned int n)
++{
++	const uint32_t old_head = r->prod.tail;
++	rte_smp_rmb();
++
++	const uint32_t entries = r->cons.head - old_head;
++	if (n > entries) {
++		n = entries;
++	}
++	if (unlikely(n == 0)) {
++		return 0;
++	}
++
++	r->prod.head = old_head + n;
++	rte_smp_rmb();
++
++	DEQUEUE_PTRS(r, &r[1], old_head, obj_table, n, void *);
++	return n;
++}
++
++static __rte_always_inline void
++rte_ring_cn_enqueue(struct rte_ring *r)
++{
++	rte_smp_wmb();
++	r->prod.tail = r->prod.head;
++}
++
++static __rte_always_inline unsigned
++rte_ring_en_dequeue_burst(struct rte_ring *r, void **obj_table, unsigned int n)
++{
++	const uint32_t old_tail = r->cons.tail;
++	rte_smp_rmb();
++
++	const uint32_t entries = r->prod.tail - old_tail;
++	if (n > entries) {
++		n = entries;
++	}
++	if (unlikely(n == 0)) {
++		return 0;
++	}
++
++	const uint32_t new_tail = old_tail + n;
++	rte_smp_rmb();
++
++	DEQUEUE_PTRS(r, &r[1], old_tail, obj_table, n, void *);
++	rte_smp_rmb();
++
++	r->cons.tail = new_tail;
++	return n;
++}
++
++static __rte_always_inline unsigned
++rte_ring_en_enqueue_bulk(struct rte_ring *r, void **obj_table, unsigned int n)
++{
++	const uint32_t capacity = r->capacity;
++	const uint32_t old_head = r->cons.head;
++	rte_smp_rmb();
++
++	const uint32_t entries = capacity + r->cons.tail - old_head;
++	if (n > entries) {
++		return 0;
++	}
++
++	const uint32_t new_head = old_head + n;
++	rte_smp_rmb();
++
++	ENQUEUE_PTRS(r, &r[1], old_head, obj_table, n, void *);
++	rte_smp_wmb();
++
++	r->cons.head = new_head;
++	return n;
++}
++
+ #ifdef __cplusplus
+ }
+ #endif
+-- 
+2.30.0
+
