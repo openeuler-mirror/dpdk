@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 19.11
-Release: 13
+Release: 14
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  19.11
@@ -25,21 +25,11 @@ Patch15: 0005-dpdk-change-the-log-level-in-prepare_numa.patch
 Patch16: 0006-dpdk-fix-dpdk-coredump-problem.patch
 Patch17: 0007-dpdk-add-secure-compile-option-in-pmdinfogen-Makefil.patch
 Patch18: 0008-dpdk-fix-cpu-flag-error-in-Intel-R-Xeon-R-CPU-E5-262.patch
-Patch19: 0009-dpdk-support-gazelle-01-include.patch
-Patch20: 0009-dpdk-support-gazelle-02-include-base.patch
-Patch21: 0009-dpdk-support-gazelle-03-memory.patch
-Patch22: 0009-dpdk-support-gazelle-04-cfg-options.patch
-Patch23: 0009-dpdk-support-gazelle-05-fbarray-hugepageinfo.patch
-Patch24: 0009-dpdk-support-gazelle-06-memalloc.patch
-Patch25: 0009-dpdk-support-gazelle-07-eal-add-sec-attach.patch
-Patch26: 0009-dpdk-support-gazelle-08-eal-add-config.patch
-Patch27: 0009-dpdk-support-gazelle-09-eal-add-libnetapi.patch
-Patch28: 0009-dpdk-support-gazelle-10-eal-memory-inter-config.patch
-Patch29: 0009-dpdk-support-gazelle-11-eal-memory-add-sec.patch
-Patch30: 0010-dpdk-fix-error-in-clearing-secondary-process-memseg-lists.patch
-Patch31: 0011-dpdk-fix-coredump-when-primary-process-attach-without-shared-file.patch
-Patch32: 0012-dpdk-fix-fbarray-memseg-destory-error-during-detach.patch
-Patch33: 0013-dpdk-optimize-the-efficiency-of-compiling-dpdk.patch
+Patch19: 0009-dpdk-add-support-gazelle.patch
+Patch20: 0010-dpdk-fix-error-in-clearing-secondary-process-memseg-lists.patch
+Patch21: 0011-dpdk-fix-coredump-when-primary-process-attach-without-shared-file.patch
+Patch22: 0012-dpdk-fix-fbarray-memseg-destory-error-during-detach.patch
+Patch23: 0013-dpdk-optimize-the-efficiency-of-compiling-dpdk.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -189,6 +179,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Sat Nov 6 2021 wuchangsheng <wuchangsheng2@huawei.com> - 19.11-14
+- merge patches that add support gazelle into one
+
 * Tue Jul 13 2021 huangliming <huangliming5@huawei.com> - 19.11-13
 - remove redundant README files
 
