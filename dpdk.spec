@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 20.11
-Release: 13
+Release: 14
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  20.11
@@ -239,6 +239,7 @@ Patch229: 0229-net-hns3-add-runtime-config-for-mailbox-limit-time.patch
 Patch230: 0230-net-hns3-fix-mailbox-communication-with-HW.patch				
 Patch231: 0231-app-testpmd-support-multi-process.patch					
 Patch232: 0232-app-testpmd-fix-key-for-RSS-flow-rule.patch
+Patch233: 0233-app-testpmd-release-flows-left-before-port-stop.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -377,6 +378,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Wed Nov 10 2021 Min Hu <humin29@huawei.com> - 20.11-14
+- release flows left before port stop
+
 * Mon Nov 08 2021 Min Hu <humin29@huawei.com> - 20.11-13
 - fix PMD cannot get the RSS key.
 
