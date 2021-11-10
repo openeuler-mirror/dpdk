@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 20.11
-Release: 12
+Release: 13
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  20.11
@@ -238,6 +238,7 @@ Patch228: 0228-net-hns3-fix-interrupt-vector-freeing.patch
 Patch229: 0229-net-hns3-add-runtime-config-for-mailbox-limit-time.patch
 Patch230: 0230-net-hns3-fix-mailbox-communication-with-HW.patch				
 Patch231: 0231-app-testpmd-support-multi-process.patch					
+Patch232: 0232-app-testpmd-fix-key-for-RSS-flow-rule.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -376,6 +377,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Mon Nov 08 2021 Min Hu <humin29@huawei.com> - 20.11-13
+- fix PMD cannot get the RSS key.
+
 * Mon Nov 01 2021 Min Hu <humin29@huawei.com> - 20.11-12
 - synchronize dmadev and hns3 bugfixes from upstream
 
