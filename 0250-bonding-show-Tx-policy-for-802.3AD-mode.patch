@@ -1,0 +1,38 @@
+From 6ae8a77985dd6a896c304fa1c344980747e88e66 Mon Sep 17 00:00:00 2001
+From: "Min Hu (Connor)" <humin29@huawei.com>
+Date: Mon, 25 Oct 2021 11:15:11 +0800
+Subject: [PATCH 17/33] bonding: show Tx policy for 802.3AD mode
+
+As balance xmit policy is supported in bonding mode 4(802.3AD). This
+patch adds balance xmit policy show in testpmd commands for mode 4. Like:
+testpmd> show bonding config 2
+        Bonding mode: 4
+        Balance Xmit Policy: BALANCE_XMIT_POLICY_LAYER34
+        IEEE802.3AD Aggregator Mode: stable
+        Slaves (2): [0 1]
+        Active Slaves (2): [1 0]
+        Primary: [1]
+
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+Acked-by: Ferruh Yigit <ferruh.yigit@intel.com>
+---
+ app/test-pmd/cmdline.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/app/test-pmd/cmdline.c b/app/test-pmd/cmdline.c
+index b701129d8..66e3815de 100644
+--- a/app/test-pmd/cmdline.c
++++ b/app/test-pmd/cmdline.c
+@@ -6257,7 +6257,8 @@ static void cmd_show_bonding_config_parsed(void *parsed_result,
+ 	} else
+ 		printf("\tBonding mode: %d\n", bonding_mode);
+ 
+-	if (bonding_mode == BONDING_MODE_BALANCE) {
++	if (bonding_mode == BONDING_MODE_BALANCE ||
++		bonding_mode == BONDING_MODE_8023AD) {
+ 		int balance_xmit_policy;
+ 
+ 		balance_xmit_policy = rte_eth_bond_xmit_policy_get(port_id);
+-- 
+2.33.0
+

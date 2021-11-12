@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 20.11
-Release: 14
+Release: 15
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  20.11
@@ -240,6 +240,39 @@ Patch230: 0230-net-hns3-fix-mailbox-communication-with-HW.patch
 Patch231: 0231-app-testpmd-support-multi-process.patch					
 Patch232: 0232-app-testpmd-fix-key-for-RSS-flow-rule.patch
 Patch233: 0233-app-testpmd-release-flows-left-before-port-stop.patch
+Patch234: 0234-app-testpmd-delete-unused-function.patch
+Patch235: 0235-dmadev-introduce-DMA-device-support.patch
+Patch236: 0236-net-hns3-rename-multicast-address-function.patch
+Patch237: 0237-net-hns3-rename-unicast-address-function.patch
+Patch238: 0238-net-hns3-rename-multicast-address-removal-function.patch
+Patch239: 0239-net-hns3-extract-common-interface-to-check-duplicate.patch
+Patch240: 0240-net-hns3-remove-redundant-multicast-MAC-interface.patch
+Patch241: 0241-net-hns3-rename-unicast-address-removal-function.patch
+Patch242: 0242-net-hns3-remove-redundant-multicast-removal-interfac.patch
+Patch243: 0243-net-hns3-add-HW-ops-structure-to-operate-hardware.patch
+Patch244: 0244-net-hns3-use-HW-ops-to-config-MAC-features.patch
+Patch245: 0245-net-hns3-unify-MAC-and-multicast-address-configurati.patch
+Patch246: 0246-net-hns3-unify-MAC-address-add-and-remove.patch
+Patch247: 0247-net-hns3-unify-multicast-address-check.patch
+Patch248: 0248-net-hns3-refactor-multicast-MAC-address-set-for-PF.patch
+Patch249: 0249-net-hns3-unify-multicast-MAC-address-set-list.patch
+Patch250: 0250-bonding-show-Tx-policy-for-802.3AD-mode.patch
+Patch251: 0251-net-hns3-fix-secondary-process-reference-count.patch
+Patch252: 0252-net-hns3-fix-multi-process-action-register-and-unreg.patch
+Patch253: 0253-net-hns3-unregister-MP-action-on-close-for-secondary.patch
+Patch254: 0254-net-hns3-refactor-multi-process-initialization.patch
+Patch255: 0255-usertools-devbind-add-Kunpeng-DMA.patch
+Patch256: 0256-kni-check-error-code-of-allmulticast-mode-switch.patch
+Patch257: 0257-net-hns3-simplify-queue-DMA-address-arithmetic.patch
+Patch258: 0258-net-hns3-remove-redundant-function-declaration.patch
+Patch259: 0259-net-hns3-modify-an-indent-alignment.patch
+Patch260: 0260-net-hns3-use-unsigned-integer-for-bitwise-operations.patch
+Patch261: 0261-net-hns3-extract-common-code-to-its-own-file.patch
+Patch262: 0262-net-hns3-move-declarations-in-flow-header-file.patch
+Patch263: 0263-net-hns3-remove-magic-numbers.patch
+Patch264: 0264-net-hns3-mark-unchecked-return-of-snprintf.patch
+Patch265: 0265-net-hns3-remove-PF-VF-duplicate-code.patch
+Patch266: 0266-app-testpmd-remove-unused-header-file.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -378,6 +411,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Fri Nov 12 2021 Min Hu <humin29@huawei.com> - 20.11-15
+- synchronize dmadev and refactor for hns3 PMD
+
 * Wed Nov 10 2021 Min Hu <humin29@huawei.com> - 20.11-14
 - release flows left before port stop
 
