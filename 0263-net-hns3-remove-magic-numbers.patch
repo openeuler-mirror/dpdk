@@ -1,0 +1,53 @@
+From b96b2ca6d5b510d372137ef4b3ef66b762434c92 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Sat, 6 Nov 2021 09:43:04 +0800
+Subject: [PATCH 30/33] net/hns3: remove magic numbers
+
+Removing magic numbers with macros.
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_common.c | 4 ++--
+ drivers/net/hns3/hns3_common.h | 3 +++
+ 2 files changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_common.c b/drivers/net/hns3/hns3_common.c
+index 85316d342..c306e0b0e 100644
+--- a/drivers/net/hns3/hns3_common.c
++++ b/drivers/net/hns3/hns3_common.c
+@@ -54,7 +54,7 @@ hns3_parse_dev_caps_mask(const char *key, const char *value, void *extra_args)
+ 
+ 	RTE_SET_USED(key);
+ 
+-	val = strtoull(value, NULL, 16);
++	val = strtoull(value, NULL, HNS3_CONVERT_TO_HEXADECIMAL);
+ 	*(uint64_t *)extra_args = val;
+ 
+ 	return 0;
+@@ -67,7 +67,7 @@ hns3_parse_mbx_time_limit(const char *key, const char *value, void *extra_args)
+ 
+ 	RTE_SET_USED(key);
+ 
+-	val = strtoul(value, NULL, 10);
++	val = strtoul(value, NULL, HNS3_CONVERT_TO_DECIMAL);
+ 	if (val > HNS3_MBX_DEF_TIME_LIMIT_MS && val <= UINT16_MAX)
+ 		*(uint16_t *)extra_args = val;
+ 
+diff --git a/drivers/net/hns3/hns3_common.h b/drivers/net/hns3/hns3_common.h
+index 094a0bc5f..68f9b1b96 100644
+--- a/drivers/net/hns3/hns3_common.h
++++ b/drivers/net/hns3/hns3_common.h
+@@ -9,6 +9,9 @@
+ 
+ #include "hns3_ethdev.h"
+ 
++#define HNS3_CONVERT_TO_DECIMAL 10
++#define HNS3_CONVERT_TO_HEXADECIMAL 16
++
+ enum {
+ 	HNS3_IO_FUNC_HINT_NONE = 0,
+ 	HNS3_IO_FUNC_HINT_VEC,
+-- 
+2.33.0
+
