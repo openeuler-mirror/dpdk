@@ -1,0 +1,38 @@
+From de8606bf73323dfa8395f2dc0a93dc6194ff21b7 Mon Sep 17 00:00:00 2001
+From: David Hunt <david.hunt@intel.com>
+Date: Fri, 16 Jul 2021 14:32:37 +0100
+Subject: [PATCH] distributor: fix 128-bit write alignment
+
+When the distributor sample app is built as a 32-bit app,
+the data buffer passed to find_match_vec can be unaligned,
+causing a segmentation fault due to writing a 128-bit value
+using _mm_store_si128().  128-bit align the data being
+passed in so this does not happen.
+
+Fixes: 775003ad2f96 ("distributor: add new burst-capable library")
+Cc: stable@dpdk.org
+
+Signed-off-by: David Hunt <david.hunt@intel.com>
+Conflict: mv distributor dir to librte_distributor
+Reference: https://github.com/DPDK/dpdk/commit/de8606bf73323dfa8395f2dc0a93dc6194ff21b7
+
+---
+ lib/librte_distributor/rte_distributor.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/librte_distributor/rte_distributor.c b/lib/librte_distributor/rte_distributor.c
+index 6c5b0c8..f6a0107 100644
+--- a/lib/librte_distributor/rte_distributor.c
++++ b/lib/librte_distributor/rte_distributor.c
+@@ -373,7 +373,7 @@ rte_distributor_process(struct rte_distributor *d,
+ 	}
+ 
+ 	while (next_idx < num_mbufs) {
+-		uint16_t matches[RTE_DIST_BURST_SIZE];
++		uint16_t matches[RTE_DIST_BURST_SIZE] __rte_aligned(128);
+ 		unsigned int pkts;
+ 
+ 		/* Sync with worker on GET_BUF flag. */
+-- 
+2.23.0
+
