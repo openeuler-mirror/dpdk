@@ -1,0 +1,37 @@
+From 11d7bc9ff074dc5e37dd9ab51bb365669d08c3d6 Mon Sep 17 00:00:00 2001
+From: Ivan Ilchenko <ivan.ilchenko@oktetlabs.ru>
+Date: Wed, 21 Jul 2021 12:22:25 +0300
+Subject: [PATCH] net/virtio: report maximum MTU in device info
+
+Fix the driver to report maximum MTU obtained from config if
+VIRTIO_NET_F_MTU is supported or calculated based on maximum
+Rx packet length.
+
+Fixes: ad97ceece12c ("ethdev: add min/max MTU to device info")
+Cc: stable@dpdk.org
+
+Signed-off-by: Ivan Ilchenko <ivan.ilchenko@oktetlabs.ru>
+Signed-off-by: Andrew Rybchenko <andrew.rybchenko@oktetlabs.ru>
+Reviewed-by: Maxime Coquelin <maxime.coquelin@redhat.com>
+Conflict: NA
+Reference: https://github.com/DPDK/dpdk/commit/11d7bc9ff074dc5e37dd9ab51bb365669d08c3d6
+
+---
+ drivers/net/virtio/virtio_ethdev.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/net/virtio/virtio_ethdev.c b/drivers/net/virtio/virtio_ethdev.c
+index 044eb10..89e4c23 100644
+--- a/drivers/net/virtio/virtio_ethdev.c
++++ b/drivers/net/virtio/virtio_ethdev.c
+@@ -2436,6 +2436,7 @@ virtio_dev_info_get(struct rte_eth_dev *dev, struct rte_eth_dev_info *dev_info)
+ 	dev_info->min_rx_bufsize = VIRTIO_MIN_RX_BUFSIZE;
+ 	dev_info->max_rx_pktlen = VIRTIO_MAX_RX_PKTLEN;
+ 	dev_info->max_mac_addrs = VIRTIO_MAX_MAC_ADDRS;
++	dev_info->max_mtu = hw->max_mtu;
+ 
+ 	host_features = VTPCI_OPS(hw)->get_features(hw);
+ 	dev_info->rx_offload_capa = DEV_RX_OFFLOAD_VLAN_STRIP;
+-- 
+2.23.0
+
