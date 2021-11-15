@@ -1,0 +1,43 @@
+From 7b9195154926b808e3ae23750eaff3e81cd5f529 Mon Sep 17 00:00:00 2001
+From: Gaoxiang Liu <liugaoxiang@huawei.com>
+Date: Mon, 26 Jul 2021 22:42:05 +0800
+Subject: [PATCH] net/virtio: fix interrupt handle leak
+
+Free memory of interrupt handle in virtio_user_dev_uninit() to
+avoid memory leak.
+when virtio user dev closes, memory of interrupt handle is not freed
+that is allocated in virtio_user_fill_intr_handle().
+
+Fixes: 3d4fb6fd2505 ("net/virtio-user: support Rx interrupt")
+Cc: stable@dpdk.org
+
+Signed-off-by: Gaoxiang Liu <liugaoxiang@huawei.com>
+Reviewed-by: Chenbo Xia <chenbo.xia@intel.com>
+Reviewed-by: Maxime Coquelin <maxime.coquelin@redhat.com>
+Conflict: dev->hw.port_id to dev->port_id
+Reference: https://github.com/DPDK/dpdk/commit/7b9195154926b808e3ae23750eaff3e81cd5f529
+---
+ drivers/net/virtio/virtio_user/virtio_user_dev.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/drivers/net/virtio/virtio_user/virtio_user_dev.c b/drivers/net/virtio/virtio_user/virtio_user_dev.c
+index ea016e8..6b91806 100644
+--- a/drivers/net/virtio/virtio_user/virtio_user_dev.c
++++ b/drivers/net/virtio/virtio_user/virtio_user_dev.c
+@@ -528,6 +528,13 @@ virtio_user_dev_uninit(struct virtio_user_dev *dev)
+ {
+ 	uint32_t i;
+ 
++	struct rte_eth_dev *eth_dev = &rte_eth_devices[dev->port_id];
++
++	if (eth_dev->intr_handle) {
++		free(eth_dev->intr_handle);
++		eth_dev->intr_handle = NULL;
++	}
++
+ 	virtio_user_stop_device(dev);
+ 
+ 	rte_mem_event_callback_unregister(VIRTIO_USER_MEM_EVENT_CLB_NAME, dev);
+-- 
+2.23.0
+
