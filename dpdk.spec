@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 19.11
-Release: 14
+Release: 15
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  19.11
@@ -30,6 +30,12 @@ Patch20: 0010-dpdk-fix-error-in-clearing-secondary-process-memseg-lists.patch
 Patch21: 0011-dpdk-fix-coredump-when-primary-process-attach-without-shared-file.patch
 Patch22: 0012-dpdk-fix-fbarray-memseg-destory-error-during-detach.patch
 Patch23: 0013-dpdk-optimize-the-efficiency-of-compiling-dpdk.patch
+Patch24: backport-0001-net-softnic-fix-memory-leak-as-profile-is-freed.patch
+Patch25: backport-0002-net-virtio-fix-interrupt-handle-leak.patch
+Patch26: backport-0003-vhost-fix-crash-on-reconnect.patch
+Patch27: backport-0004-net-virtio-report-maximum-MTU-in-device-info.patch
+Patch28: backport-0005-bus-dpaa-fix-freeing-in-FMAN-interface-destructor.patch
+Patch29: backport-0006-distributor-fix-128-bit-write-alignment.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -179,6 +185,16 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Mon Nov 15 2021 wuchangsheng <wuchangsheng2@huawei.com> - 19.11-15
+- backport pathes from community
+- net/softnic fix memory leak as profile is freed
+- net/virtio fix interrupt handle leak
+- vhost fix crash on reconnect
+- net/virtio report maximum MTU in device info
+- bus/dpaa fix freeing in FMAN interface destructor
+- distributor fix 128 bit write alignment
+
+
 * Sat Nov 6 2021 wuchangsheng <wuchangsheng2@huawei.com> - 19.11-14
 - merge patches that add support gazelle into one
 
