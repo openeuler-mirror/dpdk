@@ -1,0 +1,33 @@
+From 5ddcf3de6bc08fa7c14fd1ead86012aa575cf665 Mon Sep 17 00:00:00 2001
+From: Hemant Agrawal <hemant.agrawal@nxp.com>
+Date: Mon, 19 Jul 2021 19:29:11 +0530
+Subject: [PATCH] bus/dpaa: fix freeing in FMAN interface destructor
+
+if was allocated with rte_malloc, free shall be equivalent.
+
+Fixes: 4762b3d419c3 ("bus/dpaa: delay fman device list to bus probe")
+Cc: stable@dpdk.org
+
+Signed-off-by: Hemant Agrawal <hemant.agrawal@nxp.com>
+Conflict: NA
+Reference: https://github.com/DPDK/dpdk/commit/5ddcf3de6bc08fa7c14fd1ead86012aa575cf665
+---
+ drivers/bus/dpaa/base/fman/fman.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/bus/dpaa/base/fman/fman.c b/drivers/bus/dpaa/base/fman/fman.c
+index 692071b4b0..a14004d7fc 100644
+--- a/drivers/bus/dpaa/base/fman/fman.c
++++ b/drivers/bus/dpaa/base/fman/fman.c
+@@ -50,7 +50,7 @@ if_destructor(struct __fman_if *__if)
+ 		free(bp);
+ 	}
+ cleanup:
+-	free(__if);
++	rte_free(__if);
+ }
+ 
+ static int
+-- 
+2.23.0
+

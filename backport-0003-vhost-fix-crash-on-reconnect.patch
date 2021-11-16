@@ -1,0 +1,44 @@
+From 3c929a0bb3e7addc5103227bff126b8b9dd952ef Mon Sep 17 00:00:00 2001
+From: Maxime Coquelin <maxime.coquelin@redhat.com>
+Date: Mon, 26 Jul 2021 09:58:14 +0200
+Subject: [PATCH] vhost: fix crash on reconnect
+
+When the vhost-user frontend like Virtio-user tries to
+reconnect to the restarted Vhost backend, the Vhost backend
+segfaults when multiqueue is enabled.
+
+This is caused by VHOST_USER_GET_VRING_BASE being called for
+a virtqueue that has not been created before, causing a NULL
+pointer dereferencing.
+
+This patch adds the VHOST_USER_GET_VRING_BASE requests to
+the list of requests that trigger queue pair allocations.
+
+Fixes: 160cbc815b41 ("vhost: remove a hack on queue allocation")
+Cc: stable@dpdk.org
+
+Reported-by: Yinan Wang <yinan.wang@intel.com>
+Signed-off-by: Maxime Coquelin <maxime.coquelin@redhat.com>
+Tested-by: Yinan Wang <yinan.wang@intel.com>
+Reviewed-by: Chenbo Xia <chenbo.xia@intel.com>
+Conflict: change vhost dir to librte_vhost
+Reference: https://github.com/DPDK/dpdk/commit/3c929a0bb3e7addc5103227bff126b8b9dd952ef
+---
+ lib/librte_vhost/vhost_user.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/lib/librte_vhost/vhost_user.c b/lib/librte_vhost/vhost_user.c
+index 433f412fa8..29a4c9af60 100644
+--- a/lib/librte_vhost/vhost_user.c
++++ b/lib/librte_vhost/vhost_user.c
+@@ -2796,6 +2796,7 @@ vhost_user_check_and_alloc_queue_pair(struct virtio_net *dev,
+ 		break;
+ 	case VHOST_USER_SET_VRING_NUM:
+ 	case VHOST_USER_SET_VRING_BASE:
++	case VHOST_USER_GET_VRING_BASE:
+ 	case VHOST_USER_SET_VRING_ENABLE:
+ 		vring_idx = msg->payload.state.index;
+ 		break;
+-- 
+2.23.0
+
