@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 20.11
-Release: 15
+Release: 16
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  20.11
@@ -291,7 +291,7 @@ BuildRequires: meson ninja-build gcc
 BuildRequires: kernel-devel numactl-devel
 BuildRequires: libpcap libpcap-devel
 BuildRequires: uname-build-checks
-BuildRequires: doxygen python3-sphinx chrpath
+BuildRequires: chrpath
 
 %define kern_devel_ver %(uname -r)
 
@@ -327,7 +327,7 @@ This package contains the pdump tool for capture the dpdk network packets.
 
 %build
 export CFLAGS="%{optflags}"
-meson %{target} -Ddisable_drivers=*/octeontx2 -Ddisable_drivers=*/fpga* -Ddisable_drivers=*/ifpga* -Denable_kmods=true -Denable_docs=true
+meson %{target} -Ddisable_drivers=*/octeontx2 -Ddisable_drivers=*/fpga* -Ddisable_drivers=*/ifpga* -Denable_kmods=true
 ninja -C %{target}
 
 %install
@@ -397,7 +397,6 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/share/dpdk/%{target}/lib/*
 
 %files doc
-/usr/local/share/doc/*
 
 %files tools
 /usr/bin/dpdk-pdump
@@ -411,6 +410,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Fri Dec 10 2021 Min Hu <humin29@huawei.com> - 20.11-16
+- del doc package
+
 * Fri Nov 12 2021 Min Hu <humin29@huawei.com> - 20.11-15
 - synchronize dmadev and refactor for hns3 PMD
 
