@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 20.11
-Release: 16
+Release: 17
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  20.11
@@ -273,6 +273,7 @@ Patch263: 0263-net-hns3-remove-magic-numbers.patch
 Patch264: 0264-net-hns3-mark-unchecked-return-of-snprintf.patch
 Patch265: 0265-net-hns3-remove-PF-VF-duplicate-code.patch
 Patch266: 0266-app-testpmd-remove-unused-header-file.patch
+Patch267: 0267-usertools-add-Intel-DLB-device-binding.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -292,6 +293,7 @@ BuildRequires: kernel-devel numactl-devel
 BuildRequires: libpcap libpcap-devel
 BuildRequires: uname-build-checks
 BuildRequires: chrpath
+BuildRequires: groff-base
 
 %define kern_devel_ver %(uname -r)
 
@@ -410,6 +412,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Sat Dec 11 2021 Min Hu <humin29@huawei.com> - 20.11-17
+- Fix execution failure to add DLB to usertools/dpdk-devbind.py
+
 * Fri Dec 10 2021 Min Hu <humin29@huawei.com> - 20.11-16
 - del doc package
 

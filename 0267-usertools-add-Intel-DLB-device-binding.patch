@@ -1,0 +1,31 @@
+From dfbf3715354e41c8751972d2bcb04a8f5a6961dd Mon Sep 17 00:00:00 2001
+From: speech_white <humin29@huawei.com>
+Date: Fri, 10 Dec 2021 09:20:28 +0800
+Subject: [PATCH] usertools: add Intel DLB device binding
+
+Fix execution failure to add DLB to usertools/dpdk-devbind.py
+
+Signed-off-by: speech_white <humin29@huawei.com>
+---
+ usertools/dpdk-devbind.py | 2 ++
+ 1 file changed, 2 insertions(+)
+ mode change 100644 => 100755 usertools/dpdk-devbind.py
+
+diff --git a/usertools/dpdk-devbind.py b/usertools/dpdk-devbind.py
+old mode 100644
+new mode 100755
+index 8af3089ae..9b063dae9
+--- a/usertools/dpdk-devbind.py
++++ b/usertools/dpdk-devbind.py
+@@ -47,6 +47,8 @@
+ 
+ hisilicon_dma = {'Class': '08', 'Vendor': '19e5', 'Device': 'a122',
+                  'SVendor': None, 'SDevice': None}
++intel_dlb = {'Class': '0b', 'Vendor': '8086', 'Device': '270b,2710,2714',
++             'SVendor': None, 'SDevice': None}
+ intel_ioat_bdw = {'Class': '08', 'Vendor': '8086',
+                   'Device': '6f20,6f21,6f22,6f23,6f24,6f25,6f26,6f27,6f2e,6f2f',
+                   'SVendor': None, 'SDevice': None}
+-- 
+2.23.0
+
