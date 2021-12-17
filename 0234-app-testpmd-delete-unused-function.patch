@@ -1,0 +1,33 @@
+From 888d05e90f1dd78cd5075048206e573b0e30e40c Mon Sep 17 00:00:00 2001
+From: "Min Hu (Connor)" <humin29@huawei.com>
+Date: Wed, 10 Nov 2021 16:50:56 +0800
+Subject: [PATCH 01/33] app/testpmd: delete unused function
+
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ app/test-pmd/testpmd.c | 9 ---------
+ 1 file changed, 9 deletions(-)
+
+diff --git a/app/test-pmd/testpmd.c b/app/test-pmd/testpmd.c
+index 50a2a5a94..e3b5a165d 100644
+--- a/app/test-pmd/testpmd.c
++++ b/app/test-pmd/testpmd.c
+@@ -552,15 +552,6 @@ mempool_free_mp(struct rte_mempool *mp)
+ 		rte_mempool_free(mp);
+ }
+ 
+-static int
+-eth_dev_set_mtu_mp(uint16_t port_id, uint16_t mtu)
+-{
+-	if (is_proc_primary())
+-		return rte_eth_dev_set_mtu(port_id, mtu);
+-
+-	return 0;
+-}
+-
+ /* Forward function declarations */
+ static void setup_attached_port(portid_t pi);
+ static void check_all_ports_link_status(uint32_t port_mask);
+-- 
+2.33.0
+

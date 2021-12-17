@@ -1,0 +1,116 @@
+From 1058a9cd1fa03e94b7e8634f1f26902ed9a376b1 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Tue, 2 Nov 2021 09:38:26 +0800
+Subject: [PATCH 18/33] net/hns3: fix secondary process reference count
+
+The "secondary_cnt" will be increased when a secondary process
+initialized. But the value of this variable is not decreased when the
+secondary process exits, which causes the primary process senses that
+the secondary process still exists. As a result, the primary process
+fails to send messages to the secondary process after the secondary
+process exits.
+
+Fixes: 23d4b61fee5d ("net/hns3: support multiple process")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev.c    | 10 +++++++---
+ drivers/net/hns3/hns3_ethdev_vf.c | 10 +++++++---
+ drivers/net/hns3/hns3_mp.c        |  4 +++-
+ 3 files changed, 17 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 85c50ce67..31d027836 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -5894,8 +5894,10 @@ hns3_dev_close(struct rte_eth_dev *eth_dev)
+ 	struct hns3_hw *hw = &hns->hw;
+ 	int ret = 0;
+ 
+-	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
++	if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
++		__atomic_fetch_sub(&hw->secondary_cnt, 1, __ATOMIC_RELAXED);
+ 		return 0;
++	}
+ 
+ 	if (hw->adapter_state == HNS3_NIC_STARTED)
+ 		ret = hns3_dev_stop(eth_dev);
+@@ -7421,7 +7423,7 @@ hns3_dev_init(struct rte_eth_dev *eth_dev)
+ 				     "process, ret = %d", ret);
+ 			goto err_mp_init_secondary;
+ 		}
+-		hw->secondary_cnt++;
++		__atomic_fetch_add(&hw->secondary_cnt, 1, __ATOMIC_RELAXED);
+ 		hns3_tx_push_init(eth_dev);
+ 		return 0;
+ 	}
+@@ -7524,8 +7526,10 @@ hns3_dev_uninit(struct rte_eth_dev *eth_dev)
+ 
+ 	PMD_INIT_FUNC_TRACE();
+ 
+-	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
++	if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
++		__atomic_fetch_sub(&hw->secondary_cnt, 1, __ATOMIC_RELAXED);
+ 		return 0;
++	}
+ 
+ 	if (hw->adapter_state < HNS3_NIC_CLOSING)
+ 		hns3_dev_close(eth_dev);
+diff --git a/drivers/net/hns3/hns3_ethdev_vf.c b/drivers/net/hns3/hns3_ethdev_vf.c
+index 095f635cc..76721b0d7 100644
+--- a/drivers/net/hns3/hns3_ethdev_vf.c
++++ b/drivers/net/hns3/hns3_ethdev_vf.c
+@@ -1921,8 +1921,10 @@ hns3vf_dev_close(struct rte_eth_dev *eth_dev)
+ 	struct hns3_hw *hw = &hns->hw;
+ 	int ret = 0;
+ 
+-	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
++	if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
++		__atomic_fetch_sub(&hw->secondary_cnt, 1, __ATOMIC_RELAXED);
+ 		return 0;
++	}
+ 
+ 	if (hw->adapter_state == HNS3_NIC_STARTED)
+ 		ret = hns3vf_dev_stop(eth_dev);
+@@ -2710,7 +2712,7 @@ hns3vf_dev_init(struct rte_eth_dev *eth_dev)
+ 					  "process, ret = %d", ret);
+ 			goto err_mp_init_secondary;
+ 		}
+-		hw->secondary_cnt++;
++		__atomic_fetch_add(&hw->secondary_cnt, 1, __ATOMIC_RELAXED);
+ 		hns3_tx_push_init(eth_dev);
+ 		return 0;
+ 	}
+@@ -2812,8 +2814,10 @@ hns3vf_dev_uninit(struct rte_eth_dev *eth_dev)
+ 
+ 	PMD_INIT_FUNC_TRACE();
+ 
+-	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
++	if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
++		__atomic_fetch_sub(&hw->secondary_cnt, 1, __ATOMIC_RELAXED);
+ 		return 0;
++	}
+ 
+ 	if (hw->adapter_state < HNS3_NIC_CLOSING)
+ 		hns3vf_dev_close(eth_dev);
+diff --git a/drivers/net/hns3/hns3_mp.c b/drivers/net/hns3/hns3_mp.c
+index 4891c6e4f..184acfe02 100644
+--- a/drivers/net/hns3/hns3_mp.c
++++ b/drivers/net/hns3/hns3_mp.c
+@@ -150,8 +150,10 @@ mp_req_on_rxtx(struct rte_eth_dev *dev, enum hns3_mp_req_type type)
+ 	int ret;
+ 	int i;
+ 
+-	if (rte_eal_process_type() == RTE_PROC_SECONDARY || !hw->secondary_cnt)
++	if (rte_eal_process_type() == RTE_PROC_SECONDARY ||
++		__atomic_load_n(&hw->secondary_cnt, __ATOMIC_RELAXED) == 0)
+ 		return;
++
+ 	if (!mp_req_type_is_valid(type)) {
+ 		hns3_err(hw, "port %u unknown request (req_type %d)",
+ 			 dev->data->port_id, type);
+-- 
+2.33.0
+

@@ -1,0 +1,179 @@
+From 61c8349bbed069317c59da812598b74d2e076ced Mon Sep 17 00:00:00 2001
+From: Chengchang Tang <tangchengchang@huawei.com>
+Date: Fri, 22 Oct 2021 09:38:40 +0800
+Subject: [PATCH 16/17] net/hns3: add runtime config for mailbox limit time
+
+Current, the max waiting time for MBX response is 500ms, but in
+some scenarios, it is not enough. Since it depends on the response
+of the kernel mode driver, and its response time is related to the
+scheduling of the system. In this special scenario, most of the
+cores are isolated, and only a few cores are used for system
+scheduling. When a large number of services are started, the
+scheduling of the system will be very busy, and the reply of the
+mbx message will time out, which will cause our PMD initialization
+to fail.
+
+This patch add a runtime config to set the max wait time. For the
+above scenes, users can adjust the waiting time to a suitable value
+by themselves.
+
+Fixes: 463e748964f5 ("net/hns3: support mailbox")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengchang Tang <tangchengchang@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev.c    | 32 ++++++++++++++++++++++++++++++-
+ drivers/net/hns3/hns3_ethdev.h    |  3 +++
+ drivers/net/hns3/hns3_ethdev_vf.c |  3 ++-
+ drivers/net/hns3/hns3_mbx.c       |  8 +++++---
+ drivers/net/hns3/hns3_mbx.h       |  1 +
+ 5 files changed, 42 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index c5c355d95..2ae4cb9b7 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -7348,9 +7348,30 @@ hns3_parse_dev_caps_mask(const char *key, const char *value, void *extra_args)
+ 	return 0;
+ }
+ 
++static int
++hns3_parse_mbx_time_limit(const char *key, const char *value, void *extra_args)
++{
++	uint32_t val;
++
++	RTE_SET_USED(key);
++
++	val = strtoul(value, NULL, 10);
++
++	/*
++	 * 500ms is empirical value in process of mailbox communication. If
++	 * the delay value is set to one lower thanthe empirical value, mailbox
++	 * communication may fail.
++	 */
++	if (val > HNS3_MBX_DEF_TIME_LIMIT_MS && val <= UINT16_MAX)
++		*(uint16_t *)extra_args = val;
++
++	return 0;
++}
++
+ void
+ hns3_parse_devargs(struct rte_eth_dev *dev)
+ {
++	uint16_t mbx_time_limit_ms = HNS3_MBX_DEF_TIME_LIMIT_MS;
+ 	struct hns3_adapter *hns = dev->data->dev_private;
+ 	uint32_t rx_func_hint = HNS3_IO_FUNC_HINT_NONE;
+ 	uint32_t tx_func_hint = HNS3_IO_FUNC_HINT_NONE;
+@@ -7371,6 +7392,9 @@ hns3_parse_devargs(struct rte_eth_dev *dev)
+ 			   &hns3_parse_io_hint_func, &tx_func_hint);
+ 	(void)rte_kvargs_process(kvlist, HNS3_DEVARG_DEV_CAPS_MASK,
+ 			   &hns3_parse_dev_caps_mask, &dev_caps_mask);
++	(void)rte_kvargs_process(kvlist, HNS3_DEVARG_MBX_TIME_LIMIT_MS,
++			   &hns3_parse_mbx_time_limit, &mbx_time_limit_ms);
++
+ 	rte_kvargs_free(kvlist);
+ 
+ 	if (rx_func_hint != HNS3_IO_FUNC_HINT_NONE)
+@@ -7386,6 +7410,11 @@ hns3_parse_devargs(struct rte_eth_dev *dev)
+ 		hns3_warn(hw, "parsed %s = 0x%" PRIx64 ".",
+ 			  HNS3_DEVARG_DEV_CAPS_MASK, dev_caps_mask);
+ 	hns->dev_caps_mask = dev_caps_mask;
++
++	if (mbx_time_limit_ms != HNS3_MBX_DEF_TIME_LIMIT_MS)
++		hns3_warn(hw, "parsed %s = %u.", HNS3_DEVARG_MBX_TIME_LIMIT_MS,
++				mbx_time_limit_ms);
++	hns->mbx_time_limit_ms = mbx_time_limit_ms;
+ }
+ 
+ static const struct eth_dev_ops hns3_eth_dev_ops = {
+@@ -7642,6 +7671,7 @@ RTE_PMD_REGISTER_KMOD_DEP(net_hns3, "* igb_uio | vfio-pci");
+ RTE_PMD_REGISTER_PARAM_STRING(net_hns3,
+ 		HNS3_DEVARG_RX_FUNC_HINT "=vec|sve|simple|common "
+ 		HNS3_DEVARG_TX_FUNC_HINT "=vec|sve|simple|common "
+-		HNS3_DEVARG_DEV_CAPS_MASK "=<1-65535> ");
++		HNS3_DEVARG_DEV_CAPS_MASK "=<1-65535> "
++		HNS3_DEVARG_MBX_TIME_LIMIT_MS "=<uint16> ");
+ RTE_LOG_REGISTER(hns3_logtype_init, pmd.net.hns3.init, NOTICE);
+ RTE_LOG_REGISTER(hns3_logtype_driver, pmd.net.hns3.driver, NOTICE);
+diff --git a/drivers/net/hns3/hns3_ethdev.h b/drivers/net/hns3/hns3_ethdev.h
+index 94fd14bfc..84f5a9f29 100644
+--- a/drivers/net/hns3/hns3_ethdev.h
++++ b/drivers/net/hns3/hns3_ethdev.h
+@@ -851,6 +851,7 @@ struct hns3_adapter {
+ 	uint32_t tx_func_hint;
+ 
+ 	uint64_t dev_caps_mask;
++	uint16_t mbx_time_limit_ms; /* wait time for mbx message */
+ 
+ 	struct hns3_ptype_table ptype_tbl __rte_cache_aligned;
+ };
+@@ -868,6 +869,8 @@ enum {
+ 
+ #define HNS3_DEVARG_DEV_CAPS_MASK	"dev_caps_mask"
+ 
++#define HNS3_DEVARG_MBX_TIME_LIMIT_MS	"mbx_time_limit_ms"
++
+ enum {
+ 	HNS3_DEV_SUPPORT_DCB_B,
+ 	HNS3_DEV_SUPPORT_COPPER_B,
+diff --git a/drivers/net/hns3/hns3_ethdev_vf.c b/drivers/net/hns3/hns3_ethdev_vf.c
+index 9dfc22d2d..29313c2f7 100644
+--- a/drivers/net/hns3/hns3_ethdev_vf.c
++++ b/drivers/net/hns3/hns3_ethdev_vf.c
+@@ -3112,4 +3112,5 @@ RTE_PMD_REGISTER_KMOD_DEP(net_hns3_vf, "* igb_uio | vfio-pci");
+ RTE_PMD_REGISTER_PARAM_STRING(net_hns3_vf,
+ 		HNS3_DEVARG_RX_FUNC_HINT "=vec|sve|simple|common "
+ 		HNS3_DEVARG_TX_FUNC_HINT "=vec|sve|simple|common "
+-		HNS3_DEVARG_DEV_CAPS_MASK "=<1-65535> ");
++		HNS3_DEVARG_DEV_CAPS_MASK "=<1-65535> "
++		HNS3_DEVARG_MBX_TIME_LIMIT_MS "=<uint16_t> ");
+diff --git a/drivers/net/hns3/hns3_mbx.c b/drivers/net/hns3/hns3_mbx.c
+index 411c5ebe9..a4d9afc45 100644
+--- a/drivers/net/hns3/hns3_mbx.c
++++ b/drivers/net/hns3/hns3_mbx.c
+@@ -61,8 +61,9 @@ static int
+ hns3_get_mbx_resp(struct hns3_hw *hw, uint16_t code, uint16_t subcode,
+ 		  uint8_t *resp_data, uint16_t resp_len)
+ {
+-#define HNS3_MAX_RETRY_US	500000
+ #define HNS3_WAIT_RESP_US	100
++#define US_PER_MS		1000
++	uint32_t mbx_time_limit;
+ 	struct hns3_adapter *hns = HNS3_DEV_HW_TO_ADAPTER(hw);
+ 	struct hns3_mbx_resp_status *mbx_resp;
+ 	uint32_t wait_time = 0;
+@@ -74,7 +75,8 @@ hns3_get_mbx_resp(struct hns3_hw *hw, uint16_t code, uint16_t subcode,
+ 		return -EINVAL;
+ 	}
+ 
+-	while (wait_time < HNS3_MAX_RETRY_US) {
++	mbx_time_limit = (uint32_t)hns->mbx_time_limit_ms * US_PER_MS;
++	while (wait_time < mbx_time_limit) {
+ 		if (__atomic_load_n(&hw->reset.disable_cmd, __ATOMIC_RELAXED)) {
+ 			hns3_err(hw, "Don't wait for mbx respone because of "
+ 				 "disable_cmd");
+@@ -103,7 +105,7 @@ hns3_get_mbx_resp(struct hns3_hw *hw, uint16_t code, uint16_t subcode,
+ 		wait_time += HNS3_WAIT_RESP_US;
+ 	}
+ 	hw->mbx_resp.req_msg_data = 0;
+-	if (wait_time >= HNS3_MAX_RETRY_US) {
++	if (wait_time >= mbx_time_limit) {
+ 		hns3_mbx_proc_timeout(hw, code, subcode);
+ 		return -ETIME;
+ 	}
+diff --git a/drivers/net/hns3/hns3_mbx.h b/drivers/net/hns3/hns3_mbx.h
+index f868e33a9..d637bd2b2 100644
+--- a/drivers/net/hns3/hns3_mbx.h
++++ b/drivers/net/hns3/hns3_mbx.h
+@@ -87,6 +87,7 @@ enum hns3_mbx_link_fail_subcode {
+ 
+ #define HNS3_MBX_MAX_MSG_SIZE	16
+ #define HNS3_MBX_MAX_RESP_DATA_SIZE	8
++#define HNS3_MBX_DEF_TIME_LIMIT_MS	500
+ 
+ enum {
+ 	HNS3_MBX_RESP_MATCHING_SCHEME_OF_ORIGINAL = 0,
+-- 
+2.23.0
+

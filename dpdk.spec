@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 20.11
-Release: 9
+Release: 10
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  20.11
@@ -221,6 +221,59 @@ Patch211: 0211-net-hns3-disable-PFC-if-not-configured.patch
 Patch212: 0212-net-hns3-use-the-correct-HiSilicon-copyright.patch
 Patch213: 0213-app-testpmd-change-port-link-speed-without-stopping-.patch
 Patch214: 0214-ethdev-add-dev-configured-flag.patch
+Patch215: 0215-net-hns3-add-start-stop-Tx-datapath-request-for-MP.patch
+Patch216: 0216-net-hns3-support-set-link-up-down-for-PF.patch
+Patch217: 0217-net-hns3-fix-queue-flow-action-validation.patch
+Patch218: 0218-net-hns3-fix-taskqueue-pair-reset-command.patch
+Patch219: 0219-net-hns3-fix-Tx-push-capability.patch
+Patch220: 0220-examples-kni-close-port-before-exit.patch
+Patch221: 0221-net-hns3-fix-residual-MAC-after-setting-default-MAC.patch
+Patch222: 0222-net-hns3-fix-input-parameters-of-MAC-functions.patch
+Patch223: 0223-net-bonding-fix-dedicated-queue-mode-in-vector-burst.patch
+Patch224: 0224-net-bonding-fix-RSS-key-length.patch
+Patch225: 0225-app-testpmd-add-command-to-show-LACP-bonding-info.patch
+Patch226: 0226-app-testpmd-retain-all-original-dev-conf-when-config.patch
+Patch227: 0227-net-hns3-remove-similar-macro-function-definitions.patch
+Patch228: 0228-net-hns3-fix-interrupt-vector-freeing.patch
+Patch229: 0229-net-hns3-add-runtime-config-for-mailbox-limit-time.patch
+Patch230: 0230-net-hns3-fix-mailbox-communication-with-HW.patch
+Patch231: 0231-app-testpmd-support-multi-process.patch
+Patch232: 0232-app-testpmd-fix-key-for-RSS-flow-rule.patch
+Patch233: 0233-app-testpmd-release-flows-left-before-port-stop.patch
+Patch234: 0234-app-testpmd-delete-unused-function.patch
+Patch235: 0235-dmadev-introduce-DMA-device-support.patch
+Patch236: 0236-net-hns3-rename-multicast-address-function.patch
+Patch237: 0237-net-hns3-rename-unicast-address-function.patch
+Patch238: 0238-net-hns3-rename-multicast-address-removal-function.patch
+Patch239: 0239-net-hns3-extract-common-interface-to-check-duplicate.patch
+Patch240: 0240-net-hns3-remove-redundant-multicast-MAC-interface.patch
+Patch241: 0241-net-hns3-rename-unicast-address-removal-function.patch
+Patch242: 0242-net-hns3-remove-redundant-multicast-removal-interfac.patch
+Patch243: 0243-net-hns3-add-HW-ops-structure-to-operate-hardware.patch
+Patch244: 0244-net-hns3-use-HW-ops-to-config-MAC-features.patch
+Patch245: 0245-net-hns3-unify-MAC-and-multicast-address-configurati.patch
+Patch246: 0246-net-hns3-unify-MAC-address-add-and-remove.patch
+Patch247: 0247-net-hns3-unify-multicast-address-check.patch
+Patch248: 0248-net-hns3-refactor-multicast-MAC-address-set-for-PF.patch
+Patch249: 0249-net-hns3-unify-multicast-MAC-address-set-list.patch
+Patch250: 0250-bonding-show-Tx-policy-for-802.3AD-mode.patch
+Patch251: 0251-net-hns3-fix-secondary-process-reference-count.patch
+Patch252: 0252-net-hns3-fix-multi-process-action-register-and-unreg.patch
+Patch253: 0253-net-hns3-unregister-MP-action-on-close-for-secondary.patch
+Patch254: 0254-net-hns3-refactor-multi-process-initialization.patch
+Patch255: 0255-usertools-devbind-add-Kunpeng-DMA.patch
+Patch256: 0256-kni-check-error-code-of-allmulticast-mode-switch.patch
+Patch257: 0257-net-hns3-simplify-queue-DMA-address-arithmetic.patch
+Patch258: 0258-net-hns3-remove-redundant-function-declaration.patch
+Patch259: 0259-net-hns3-modify-an-indent-alignment.patch
+Patch260: 0260-net-hns3-use-unsigned-integer-for-bitwise-operations.patch
+Patch261: 0261-net-hns3-extract-common-code-to-its-own-file.patch
+Patch262: 0262-net-hns3-move-declarations-in-flow-header-file.patch
+Patch263: 0263-net-hns3-remove-magic-numbers.patch
+Patch264: 0264-net-hns3-mark-unchecked-return-of-snprintf.patch
+Patch265: 0265-net-hns3-remove-PF-VF-duplicate-code.patch
+Patch266: 0266-app-testpmd-remove-unused-header-file.patch
+Patch267: 0267-usertools-add-Intel-DLB-device-binding.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -239,7 +292,8 @@ BuildRequires: meson ninja-build gcc
 BuildRequires: kernel-devel numactl-devel
 BuildRequires: libpcap libpcap-devel
 BuildRequires: uname-build-checks
-BuildRequires: doxygen python3-sphinx chrpath
+BuildRequires: chrpath
+BuildRequires: groff-base
 
 %define kern_devel_ver %(uname -r)
 
@@ -275,7 +329,7 @@ This package contains the pdump tool for capture the dpdk network packets.
 
 %build
 export CFLAGS="%{optflags}"
-meson %{target} -Ddisable_drivers=*/octeontx2 -Ddisable_drivers=*/fpga* -Ddisable_drivers=*/ifpga* -Denable_kmods=true -Denable_docs=true
+meson %{target} -Ddisable_drivers=*/octeontx2 -Ddisable_drivers=*/fpga* -Ddisable_drivers=*/ifpga* -Denable_kmods=true
 ninja -C %{target}
 
 %install
@@ -345,7 +399,6 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/share/dpdk/%{target}/lib/*
 
 %files doc
-/usr/local/share/doc/*
 
 %files tools
 /usr/bin/dpdk-pdump
@@ -359,6 +412,8 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Sat Dec 17 2021 Min Hu <humin29@huawei.com> - 20.11-10
+- sync patches ranges from versoin 9 t0 17 from master branch
 * Mon Sep 13 2021 chenchen <chen_aka_jan@163.com> - 20.11-9
 - del rpath from some binaries and bin
 - add debug package to strip

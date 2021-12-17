@@ -1,0 +1,40 @@
+From b71d309637e90a67f7814604f3a17b696b6304ce Mon Sep 17 00:00:00 2001
+From: Gregory Etelson <getelson@nvidia.com>
+Date: Thu, 26 Nov 2020 18:43:02 +0200
+Subject: [PATCH] app/testpmd: release flows left before port stop
+
+According to RTE flow user guide, PMD will not keep flow rules after
+port stop. Application resources that refer to flow rules become
+obsolete after port stop and must not be used.
+Testpmd maintains linked list of active flows for each port. Entries in
+that list are allocated dynamically and must be explicitly released to
+prevent memory leak.
+The patch releases testpmd port flow_list that holds remaining flows
+before port is stopped.
+
+Cc: stable@dpdk.org
+
+Signed-off-by: Gregory Etelson <getelson@nvidia.com>
+Acked-by: Ori Kam <orika@nvidia.com>
+Acked-by: Ajit Khaparde <ajit.khaparde@broadcom.com>
+---
+ app/test-pmd/testpmd.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/app/test-pmd/testpmd.c b/app/test-pmd/testpmd.c
+index 60636830b..7bede14ce 100644
+--- a/app/test-pmd/testpmd.c
++++ b/app/test-pmd/testpmd.c
+@@ -2768,6 +2768,9 @@ stop_port(portid_t pid)
+ 			}
+ 		}
+ 
++		if (port->flow_list)
++			port_flow_flush(pi);
++
+ 		if (eth_dev_stop_mp(pi) != 0)
+ 			RTE_LOG(ERR, EAL, "rte_eth_dev_stop failed for port %u\n",
+ 				pi);
+-- 
+2.33.0
+
