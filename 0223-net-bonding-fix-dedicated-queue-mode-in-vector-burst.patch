@@ -1,0 +1,84 @@
+From 19dc6356916c60f282b6d3046f5d2f1d74d48d35 Mon Sep 17 00:00:00 2001
+From: Chengchang Tang <tangchengchang@huawei.com>
+Date: Wed, 22 Sep 2021 15:09:12 +0800
+Subject: [PATCH 10/17] net/bonding: fix dedicated queue mode in vector burst
+
+If the vector burst mode is selected, the dedicated queue mode will not
+take effect on some PMDs because these PMDs may have some limitations
+in vector burst mode. For example, the limit on burst size. Currently,
+both hns3 and intel I40E require four alignments when receiving packets
+in vector mode. As a result, they can't accept packets if burst size
+below four. However, in dedicated queue mode, the burst size of periodic
+packets processing is one.
+
+This patch fixes the above problem by modifying the burst size to 32.
+This approach also makes the packet processing of the dedicated queue
+mode more reasonable. Currently, if multiple LACP protocol packets are
+received in the hardware queue in a cycle, only one LACP packet will be
+processed in this cycle, and the left packets will be processed in the
+following cycle. After the modification, all the LACP packets will be
+processed at one time, which seems more reasonable and closer to the
+behavior of the bonding driver when the dedicated queue is not turned on.
+
+Fixes: 112891cd27e5 ("net/bonding: add dedicated HW queues for LACP control")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengchang Tang <tangchengchang@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/bonding/rte_eth_bond_8023ad.c | 32 ++++++++++++++++-------
+ 1 file changed, 23 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/net/bonding/rte_eth_bond_8023ad.c b/drivers/net/bonding/rte_eth_bond_8023ad.c
+index 67ca0730f..0bcce6652 100644
+--- a/drivers/net/bonding/rte_eth_bond_8023ad.c
++++ b/drivers/net/bonding/rte_eth_bond_8023ad.c
+@@ -823,6 +823,27 @@ rx_machine_update(struct bond_dev_private *internals, uint16_t slave_id,
+ 		rx_machine(internals, slave_id, NULL);
+ }
+ 
++static void
++bond_mode_8023ad_dedicated_rxq_process(struct bond_dev_private *internals,
++			uint16_t slave_id)
++{
++#define DEDICATED_QUEUE_BURST_SIZE 32
++	struct rte_mbuf *lacp_pkt[DEDICATED_QUEUE_BURST_SIZE];
++	uint16_t rx_count = rte_eth_rx_burst(slave_id,
++				internals->mode4.dedicated_queues.rx_qid,
++				lacp_pkt, DEDICATED_QUEUE_BURST_SIZE);
++
++	if (rx_count) {
++		uint16_t i;
++
++		for (i = 0; i < rx_count; i++)
++			bond_mode_8023ad_handle_slow_pkt(internals, slave_id,
++					lacp_pkt[i]);
++	} else {
++		rx_machine_update(internals, slave_id, NULL);
++	}
++}
++
+ static void
+ bond_mode_8023ad_periodic_cb(void *arg)
+ {
+@@ -911,15 +932,8 @@ bond_mode_8023ad_periodic_cb(void *arg)
+ 
+ 			rx_machine_update(internals, slave_id, lacp_pkt);
+ 		} else {
+-			uint16_t rx_count = rte_eth_rx_burst(slave_id,
+-					internals->mode4.dedicated_queues.rx_qid,
+-					&lacp_pkt, 1);
+-
+-			if (rx_count == 1)
+-				bond_mode_8023ad_handle_slow_pkt(internals,
+-						slave_id, lacp_pkt);
+-			else
+-				rx_machine_update(internals, slave_id, NULL);
++			bond_mode_8023ad_dedicated_rxq_process(internals,
++					slave_id);
+ 		}
+ 
+ 		periodic_machine(internals, slave_id);
+-- 
+2.23.0
+

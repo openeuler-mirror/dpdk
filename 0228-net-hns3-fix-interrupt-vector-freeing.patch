@@ -1,0 +1,33 @@
+From b00fefaae559f49fbbbc39ec6ec1aaa1f4f5ba39 Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Wed, 13 Oct 2021 16:09:08 +0800
+Subject: [PATCH 15/17] net/hns3: fix interrupt vector freeing
+
+The intr_handle->intr_vec is allocated by rte_zmalloc(), but freed by
+free(), this patch fixes it.
+
+Fixes: 02a7b55657b2 ("net/hns3: support Rx interrupt")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Reviewed-by: Ferruh Yigit <ferruh.yigit@intel.com>
+---
+ drivers/net/hns3/hns3_ethdev_vf.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/net/hns3/hns3_ethdev_vf.c b/drivers/net/hns3/hns3_ethdev_vf.c
+index d2895b140..9dfc22d2d 100644
+--- a/drivers/net/hns3/hns3_ethdev_vf.c
++++ b/drivers/net/hns3/hns3_ethdev_vf.c
+@@ -2355,7 +2355,7 @@ hns3vf_map_rx_interrupt(struct rte_eth_dev *dev)
+ 	return 0;
+ 
+ vf_bind_vector_error:
+-	free(intr_handle->intr_vec);
++	rte_free(intr_handle->intr_vec);
+ 	intr_handle->intr_vec = NULL;
+ vf_alloc_intr_vec_error:
+ 	rte_intr_efd_disable(intr_handle);
+-- 
+2.23.0
+

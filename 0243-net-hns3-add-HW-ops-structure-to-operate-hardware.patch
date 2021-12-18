@@ -1,0 +1,106 @@
+From ce3a4cda823aabc34c9166022b0cdb102723ef2a Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Fri, 22 Oct 2021 17:19:59 +0800
+Subject: [PATCH 10/33] net/hns3: add HW ops structure to operate hardware
+
+This patch adds hns3_hw_ops structure to operate hardware in PF and VF
+driver.
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev.c    | 10 ++++++++++
+ drivers/net/hns3/hns3_ethdev.h    | 13 +++++++++++++
+ drivers/net/hns3/hns3_ethdev_vf.c | 10 ++++++++++
+ 3 files changed, 33 insertions(+)
+
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index a2d365a28..48c6483e1 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -7478,6 +7478,15 @@ static const struct hns3_reset_ops hns3_reset_ops = {
+ 	.start_service       = hns3_start_service,
+ };
+ 
++static void
++hns3_init_hw_ops(struct hns3_hw *hw)
++{
++	hw->ops.add_mc_mac_addr = hns3_add_mc_mac_addr;
++	hw->ops.del_mc_mac_addr = hns3_remove_mc_mac_addr;
++	hw->ops.add_uc_mac_addr = hns3_add_uc_mac_addr;
++	hw->ops.del_uc_mac_addr = hns3_remove_uc_mac_addr;
++}
++
+ static int
+ hns3_dev_init(struct rte_eth_dev *eth_dev)
+ {
+@@ -7530,6 +7539,7 @@ hns3_dev_init(struct rte_eth_dev *eth_dev)
+ 		goto err_init_reset;
+ 	hw->reset.ops = &hns3_reset_ops;
+ 
++	hns3_init_hw_ops(hw);
+ 	ret = hns3_init_pf(eth_dev);
+ 	if (ret) {
+ 		PMD_INIT_LOG(ERR, "Failed to init pf: %d", ret);
+diff --git a/drivers/net/hns3/hns3_ethdev.h b/drivers/net/hns3/hns3_ethdev.h
+index a97406198..73947e194 100644
+--- a/drivers/net/hns3/hns3_ethdev.h
++++ b/drivers/net/hns3/hns3_ethdev.h
+@@ -428,6 +428,17 @@ struct hns3_reset_data {
+ 	struct hns3_wait_data *wait_data;
+ };
+ 
++struct hns3_hw_ops {
++	int (*add_mc_mac_addr)(struct hns3_hw *hw,
++				struct rte_ether_addr *mac_addr);
++	int (*del_mc_mac_addr)(struct hns3_hw *hw,
++				struct rte_ether_addr *mac_addr);
++	int (*add_uc_mac_addr)(struct hns3_hw *hw,
++				struct rte_ether_addr *mac_addr);
++	int (*del_uc_mac_addr)(struct hns3_hw *hw,
++				struct rte_ether_addr *mac_addr);
++};
++
+ #define HNS3_INTR_MAPPING_VEC_RSV_ONE		0
+ #define HNS3_INTR_MAPPING_VEC_ALL		1
+ 
+@@ -638,6 +649,8 @@ struct hns3_hw {
+ 	struct hns3_rss_filter_list flow_rss_list; /* flow RSS rule list */
+ 	struct hns3_flow_mem_list flow_list;
+ 
++	struct hns3_hw_ops ops;
++
+ 	/*
+ 	 * PMD setup and configuration is not thread safe. Since it is not
+ 	 * performance sensitive, it is better to guarantee thread-safety
+diff --git a/drivers/net/hns3/hns3_ethdev_vf.c b/drivers/net/hns3/hns3_ethdev_vf.c
+index 92673d29b..1020b42e1 100644
+--- a/drivers/net/hns3/hns3_ethdev_vf.c
++++ b/drivers/net/hns3/hns3_ethdev_vf.c
+@@ -2920,6 +2920,15 @@ static const struct hns3_reset_ops hns3vf_reset_ops = {
+ 	.start_service       = hns3vf_start_service,
+ };
+ 
++static void
++hns3vf_init_hw_ops(struct hns3_hw *hw)
++{
++	hw->ops.add_mc_mac_addr = hns3vf_add_mc_mac_addr;
++	hw->ops.del_mc_mac_addr = hns3vf_remove_mc_mac_addr;
++	hw->ops.add_uc_mac_addr = hns3vf_add_uc_mac_addr;
++	hw->ops.del_uc_mac_addr = hns3vf_remove_uc_mac_addr;
++}
++
+ static int
+ hns3vf_dev_init(struct rte_eth_dev *eth_dev)
+ {
+@@ -2964,6 +2973,7 @@ hns3vf_dev_init(struct rte_eth_dev *eth_dev)
+ 		goto err_init_reset;
+ 	hw->reset.ops = &hns3vf_reset_ops;
+ 
++	hns3vf_init_hw_ops(hw);
+ 	ret = hns3vf_init_vf(eth_dev);
+ 	if (ret) {
+ 		PMD_INIT_LOG(ERR, "Failed to init vf: %d", ret);
+-- 
+2.33.0
+

@@ -1,0 +1,39 @@
+From 36c73d69efda51972d64318ef8cb1c7fefde482f Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Sat, 6 Nov 2021 09:43:01 +0800
+Subject: [PATCH 27/33] net/hns3: use unsigned integer for bitwise operations
+
+Bitwise operations should be used only with unsigned integer. This patch
+modifies some code that does not meet this rule.
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index ecf912a9f..03f6da5bc 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -2104,7 +2104,7 @@ hns3_check_mq_mode(struct rte_eth_dev *dev)
+ 	int max_tc = 0;
+ 	int i;
+ 
+-	if ((rx_mq_mode & ETH_MQ_RX_VMDQ_FLAG) ||
++	if (((uint32_t)rx_mq_mode & ETH_MQ_RX_VMDQ_FLAG) ||
+ 	    (tx_mq_mode == ETH_MQ_TX_VMDQ_DCB ||
+ 	     tx_mq_mode == ETH_MQ_TX_VMDQ_ONLY)) {
+ 		hns3_err(hw, "VMDQ is not supported, rx_mq_mode = %d, tx_mq_mode = %d.",
+@@ -2114,7 +2114,7 @@ hns3_check_mq_mode(struct rte_eth_dev *dev)
+ 
+ 	dcb_rx_conf = &dev->data->dev_conf.rx_adv_conf.dcb_rx_conf;
+ 	dcb_tx_conf = &dev->data->dev_conf.tx_adv_conf.dcb_tx_conf;
+-	if (rx_mq_mode & ETH_MQ_RX_DCB_FLAG) {
++	if ((uint32_t)rx_mq_mode & ETH_MQ_RX_DCB_FLAG) {
+ 		if (dcb_rx_conf->nb_tcs > pf->tc_max) {
+ 			hns3_err(hw, "nb_tcs(%u) > max_tc(%u) driver supported.",
+ 				 dcb_rx_conf->nb_tcs, pf->tc_max);
+-- 
+2.33.0
+
