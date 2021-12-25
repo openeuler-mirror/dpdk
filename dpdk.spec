@@ -1,25 +1,33 @@
 Name: dpdk
 Version: 21.11
-Release: 1
+Release: 2
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
 Source: https://git.dpdk.org/dpdk/snapshot/%{name}-%{version}.tar.xz
 
-Patch0:    add-igb-uio.patch
+Patch9001:    0001-add-igb-uio.patch
+Patch9002:    0002-dpdk-add-secure-compile-option-and-fPIC-option.patch
+Patch9003:    0003-dpdk-bugfix-the-deadlock-in-rte_eal_init.patch
+Patch9004:    0004-dpdk-master-core-donot-set-affinity-in-libstorage.patch
+Patch9005:    0005-dpdk-change-the-log-level-in-prepare_numa.patch
+Patch9006:    0006-dpdk-fix-dpdk-coredump-problem.patch
+Patch9007:    0007-dpdk-fix-cpu-flag-error-in-Intel-R-Xeon-R-CPU-E5-262.patch
+Patch9008:    0008-dpdk-add-support-for-gazelle.patch
+Patch9009:    0009-dpdk-fix-error-in-clearing-secondary-process-memseg-lists.patch
+Patch9010:    0010-dpdk-fix-coredump-when-primary-process-attach-without-shared-file.patch
+Patch9011:    0011-dpdk-fix-fbarray-memseg-destory-error-during-detach.patch
+Patch9012:    0012-fix-rte-eal-sec-detach-coredump-count-rollover.patch
+Patch9013:    0013-fix-rte-eal-memory-init-double-unlock.patch
+Patch9014:    0014-fix-last-argv-pointer-change-to-first.patch
+Patch9015:    0015-fix-internal-cfg-and-fbarray-attach-mememory-leak.patch
+Patch9016:    0016-fix-error-that-the-secondary-attach-fails-due-to-detach.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
 License: BSD and LGPLv2 and GPLv2
 
 ExclusiveArch: i686 x86_64 aarch64
-%ifarch aarch64
-%global machine armv8a
-%global target arm64-%{machine}-linux-gcc
-%else
-%global machine native
-%global target x86_64-%{machine}-linux-gcc
-%endif
 
 BuildRequires: meson ninja-build gcc diffutils python3-pyelftools python-pyelftools
 BuildRequires: kernel-devel numactl-devel
@@ -62,83 +70,42 @@ This package contains the pdump tool for capture the dpdk network packets.
 
 %build
 export CFLAGS="%{optflags}"
-meson %{target} -Ddisable_drivers=*/octeontx2 -Ddisable_drivers=*/fpga* -Ddisable_drivers=*/ifpga* -Denable_kmods=true
-ninja -C %{target}
+meson build
+ninja -C build
 
 %install
-namer=%{kern_devel_ver}
-DESTDIR=$RPM_BUILD_ROOT/ meson install -C %{target}
-DESTDIR=$RPM_BUILD_ROOT/ ninja install -C %{target}
+DESTDIR=$RPM_BUILD_ROOT/ ninja install -C build
 
-cd  $RPM_BUILD_ROOT
-file `find -type f`| grep -w ELF | awk -F":" '{print $1}' | grep -v ko | for i in `xargs`
-do
-  chrpath -d $i
-done
-cd -
+mkdir -p $RPM_BUILD_ROOT/usr/lib64
+mv $RPM_BUILD_ROOT/usr/local/lib64/* $RPM_BUILD_ROOT/usr/lib64/
 
-mkdir -p  $RPM_BUILD_ROOT/etc/ld.so.conf.d
-echo "%{_bindir}/%{name}" > $RPM_BUILD_ROOT/etc/ld.so.conf.d/%{name}-%{_arch}.conf
-echo "/usr/local/bin/%{name}" >> $RPM_BUILD_ROOT/etc/ld.so.conf.d/%{name}-%{_arch}.conf
-echo "/lib64/%{name}" >> $RPM_BUILD_ROOT/etc/ld.so.conf.d/%{name}-%{_arch}.conf
-echo "/usr/local/lib64" >> $RPM_BUILD_ROOT/etc/ld.so.conf.d/%{name}-%{_arch}.conf
-echo "/usr/local/include" >> $RPM_BUILD_ROOT/etc/ld.so.conf.d/%{name}-%{_arch}.conf
-mkdir -p $RPM_BUILD_ROOT/usr/share/dpdk/%{target}
-ln -fs  %{buildroot}/usr/local/include %{buildroot}/usr/share/dpdk/%{target}/include
-ln -fs  %{buildroot}/usr/local/lib64 %{buildroot}/usr/share/dpdk/%{target}/lib
+mkdir -p $RPM_BUILD_ROOT/usr/local/bin
+ln -fs /usr/local/bin/dpdk-devbind.py $RPM_BUILD_ROOT/usr/local/bin/dpdk-devbind
 
-mkdir -p $RPM_BUILD_ROOT/usr/sbin
-ln -fs  /usr/local/bin/dpdk-devbind.py %{buildroot}/usr/sbin/dpdk-devbind
-
-mkdir -p $RPM_BUILD_ROOT/lib64/
-cp -ar ./%{target}/lib/librte_eal.so* $RPM_BUILD_ROOT/lib64/
-cp -ar ./%{target}/lib/librte_mempool.so* $RPM_BUILD_ROOT/lib64/
-cp -ar ./%{target}/lib/librte_ring.so* $RPM_BUILD_ROOT/lib64/
-cp -ar ./%{target}/drivers/librte_mempool_ring.so* $RPM_BUILD_ROOT/lib64/
-cp -ar ./%{target}/lib/librte_pci.so* $RPM_BUILD_ROOT/lib64/
-cp -ar ./%{target}/drivers/librte_bus_pci.so* $RPM_BUILD_ROOT/lib64/
-cp -ar ./%{target}/lib/librte_kvargs.so* $RPM_BUILD_ROOT/lib64/
-cp -ar ./%{target}/lib/librte_acl.so* $RPM_BUILD_ROOT/lib64/
-cp -ar ./%{target}/lib/librte_ethdev.so* $RPM_BUILD_ROOT/lib64/
-cp -ar ./%{target}/lib/librte_mbuf.so* $RPM_BUILD_ROOT/lib64/
-cp -ar ./%{target}/lib/librte_cmdline.so* $RPM_BUILD_ROOT/lib64/
-cp -ar ./%{target}/lib/librte_net.so* $RPM_BUILD_ROOT/lib64/
-cp -ar ./%{target}/lib/librte_meter.so* $RPM_BUILD_ROOT/lib64/
-cp -ar ./%{target}/lib/librte_telemetry.so* $RPM_BUILD_ROOT/lib64/
-
-mkdir -p $RPM_BUILD_ROOT/usr/bin
-cp ./%{target}/app/dpdk-pdump  $RPM_BUILD_ROOT/usr/bin
-
-strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
-strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/igb_uio.ko
+strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/rte_kni.ko
+strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 
 %define _unpackaged_files_terminate_build 0
 %define _build_id_links none
 
 %files
 /usr/local/bin/*.py
-/lib/modules/%{kern_devel_ver}/extra/dpdk/*
-/lib64/librte*.so*
-%{_sbindir}/dpdk-devbind
-%config(noreplace) /etc/ld.so.conf.d/*
-/usr/local/lib64/*
-%exclude /usr/local/lib64/*.a
-/usr/local/bin/*
-%exclude /usr/local/bin/dpdk-test*
-%exclude /usr/local/bin/dpdk-pdump
+/usr/local/bin/dpdk-devbind
+/lib/modules/%{kern_devel_ver}/extra/dpdk/*.ko
+/usr/lib64/*.so*
 
 %files devel
-%dir /usr/local/include/
-/usr/local/include/*.h
-/usr/local/include/generic/*.h
-/usr/local/share/dpdk/examples/*
-/usr/share/dpdk/%{target}/include/*
-/usr/local/lib64/*.a
+/usr/local/include
+/usr/lib64/*.a
 
 %files doc
 
 %files tools
-/usr/bin/dpdk-pdump
+/usr/local/bin/dpdk-pdump
+/usr/local/bin/dpdk-dumpcap
+/usr/local/bin/dpdk-proc-info
+/usr/local/bin/dpdk-test
+/usr/local/bin/dpdk-testpmd
 
 %post
 /sbin/ldconfig
@@ -149,10 +116,14 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Sat Dec 25 2021 wuchangsheng <wuchangsheng2@huawei.com> - 21.11-2
+- remove redundant file in rpm
+- add gazelle support
+
 * Fri Dec 17 2021 jiangheng <jiangheng12@huawei.com> - 21.11-1
 - update to 21.11
 
-* Sat Dec 17 2021 Min Hu <humin29@huawei.com> - 20.11-10
+* Fri Dec 17 2021 Min Hu <humin29@huawei.com> - 20.11-10
 - sync patches ranges from versoin 9 t0 17 from master branch
 
 * Mon Sep 13 2021 chenchen <chen_aka_jan@163.com> - 20.11-9
