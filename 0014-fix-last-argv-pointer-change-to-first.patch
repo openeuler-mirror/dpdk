@@ -1,0 +1,25 @@
+From 23113e9f48414f534358274a732921cd3f5345cf Mon Sep 17 00:00:00 2001
+From: Changsheng Wu <wuchangsheng2@huawei.com>
+Date: Thu, 16 Dec 2021 20:12:42 +0800
+Subject: [PATCH] huawei-0016-fix-last-argv-pointer-change-to-first
+
+---
+ lib/eal/linux/eal.c | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/lib/eal/linux/eal.c b/lib/eal/linux/eal.c
+index 16bb2b60cc..78c61a1979 100644
+--- a/lib/eal/linux/eal.c
++++ b/lib/eal/linux/eal.c
+@@ -935,8 +935,6 @@ __eal_parse_args(int argc, char **argv, char *runtime_dir, const int buflen,
+ 		goto out;
+ 	}
+ 
+-	if (optind >= 0)
+-		argv[optind-1] = prgname;
+ 	ret = optind-1;
+ 
+ out:
+-- 
+2.27.0
+

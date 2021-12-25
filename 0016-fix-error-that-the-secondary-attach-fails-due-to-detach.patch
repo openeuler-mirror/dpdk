@@ -1,0 +1,24 @@
+From e8466bb5c02192727a140688df0c8882ed35ca59 Mon Sep 17 00:00:00 2001
+From: Changsheng Wu <wuchangsheng2@huawei.com>
+Date: Sat, 18 Dec 2021 17:09:27 +0800
+Subject: [PATCH] 15
+
+---
+ lib/eal/linux/eal_memalloc.c | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/lib/eal/linux/eal_memalloc.c b/lib/eal/linux/eal_memalloc.c
+index d5fe856dd8..38543bf8c4 100644
+--- a/lib/eal/linux/eal_memalloc.c
++++ b/lib/eal/linux/eal_memalloc.c
+@@ -1830,7 +1830,6 @@ eal_sec_memalloc_destroy(const int sec_idx)
+ 			return ret;
+ 
+ 		rte_mem_unmap(msl->base_va, msl->len);
+-		memset(msl, 0, sizeof(*msl));
+ 	}
+ 
+ 	return 0;
+-- 
+2.27.0
+
