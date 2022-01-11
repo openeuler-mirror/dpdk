@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 2
+Release: 3
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -81,6 +81,9 @@ mv $RPM_BUILD_ROOT/usr/local/lib64/* $RPM_BUILD_ROOT/usr/lib64/
 
 mkdir -p $RPM_BUILD_ROOT/usr/local/bin
 ln -fs /usr/local/bin/dpdk-devbind.py $RPM_BUILD_ROOT/usr/local/bin/dpdk-devbind
+cd $RPM_BUILD_ROOT/usr/lib64/dpdk/pmds-22.0
+ln -fs ../../../local/include/* .
+cd -
 
 strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/rte_kni.ko
 strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
@@ -93,10 +96,13 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/local/bin/dpdk-devbind
 /lib/modules/%{kern_devel_ver}/extra/dpdk/*.ko
 /usr/lib64/*.so*
+/usr/lib64/dpdk/*
+%exclude /usr/lib64/dpdk/pmds-22.0/*.h
 
 %files devel
 /usr/local/include
 /usr/lib64/*.a
+/usr/lib64/dpdk/pmds-22.0/*.h
 
 %files doc
 
@@ -116,6 +122,10 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Mon Jan 10 2022 jiangheng <jiangheng12@huawei.com> - 21.11-3
+- add /usr/lib64/dpdk/*, here are some so files
+- put lib file and header file in the same directory for third-party lib compile
+
 * Sat Dec 25 2021 wuchangsheng <wuchangsheng2@huawei.com> - 21.11-2
 - remove redundant file in rpm
 - add gazelle support
