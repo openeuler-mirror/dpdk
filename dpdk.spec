@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 4
+Release: 5
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -22,6 +22,7 @@ Patch9013:    0013-fix-rte-eal-memory-init-double-unlock.patch
 Patch9014:    0014-fix-last-argv-pointer-change-to-first.patch
 Patch9015:    0015-fix-internal-cfg-and-fbarray-attach-mememory-leak.patch
 Patch9016:    0016-fix-error-that-the-secondary-attach-fails-due-to-detach.patch
+Patch9017:    0017-fix-master-thread-not-set-affinity.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -127,6 +128,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Fri Jan 14 2022 wuchangsheng <wuchangsheng2@huawei.com> - 21.11-5
+- fix master thread not set affinity
+
 * Wed Jan 12 2022 jiangheng <jiangheng12@huawei.com> - 21.11-4
 - modify location of header and library Files
 
