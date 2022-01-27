@@ -1,0 +1,47 @@
+From b274c48fc01ed8fe854c285b02f1ac108bbf2721 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Mon, 17 Jan 2022 10:43:01 +0800
+Subject: [PATCH] net/hns3: fix mailbox wait time uninitialization
+
+The mailbox wait time can be specified at runtime. But the variable that
+controls this time are not initialized when the variable isn't designated
+or is specified as an invalid value, which will fail to initialize device
+in the case where no device is bound to initialize the device.
+
+Fixes: 2fc3e696a7f1 ("net/hns3: add runtime config for mailbox limit time")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+---
+ drivers/net/hns3/hns3_common.c | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/net/hns3/hns3_common.c b/drivers/net/hns3/hns3_common.c
+index 0bb552ea3e..78158401f2 100644
+--- a/drivers/net/hns3/hns3_common.c
++++ b/drivers/net/hns3/hns3_common.c
+@@ -216,7 +216,7 @@ hns3_parse_mbx_time_limit(const char *key, const char *value, void *extra_args)
+ 
+ 	/*
+ 	 * 500ms is empirical value in process of mailbox communication. If
+-	 * the delay value is set to one lower thanthe empirical value, mailbox
++	 * the delay value is set to one lower than the empirical value, mailbox
+ 	 * communication may fail.
+ 	 */
+ 	if (val > HNS3_MBX_DEF_TIME_LIMIT_MS && val <= UINT16_MAX)
+@@ -236,6 +236,12 @@ hns3_parse_devargs(struct rte_eth_dev *dev)
+ 	uint64_t dev_caps_mask = 0;
+ 	struct rte_kvargs *kvlist;
+ 
++	/* Set default value of runtime config parameters. */
++	hns->rx_func_hint = HNS3_IO_FUNC_HINT_NONE;
++	hns->tx_func_hint = HNS3_IO_FUNC_HINT_NONE;
++	hns->dev_caps_mask = 0;
++	hns->mbx_time_limit_ms = HNS3_MBX_DEF_TIME_LIMIT_MS;
++
+ 	if (dev->device->devargs == NULL)
+ 		return;
+ 
+-- 
+2.33.0
+
