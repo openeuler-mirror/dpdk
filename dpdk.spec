@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 5
+Release: 6
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -23,6 +23,10 @@ Patch9014:    0014-fix-last-argv-pointer-change-to-first.patch
 Patch9015:    0015-fix-internal-cfg-and-fbarray-attach-mememory-leak.patch
 Patch9016:    0016-fix-error-that-the-secondary-attach-fails-due-to-detach.patch
 Patch9017:    0017-fix-master-thread-not-set-affinity.patch
+Patch9018:    0018-net-bonding-fix-offloading-configuration.patch
+Patch9019:    0019-net-hns3-fix-Rx-Tx-when-fast-path-operation-introduc.patch
+Patch9020:    0020-net-hns3-fix-mailbox-wait-time-uninitialization.patch
+Patch9021:    0021-net-hns3-fix-vector-burst-when-PTP-enable.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -128,6 +132,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Thu Jan 27 2022 Min Hu(Connor) <humin29@huawei.com> - 21.11-6
+- fix key bugfixes for hns3 PMD.
+
 * Fri Jan 14 2022 wuchangsheng <wuchangsheng2@huawei.com> - 21.11-5
 - fix master thread not set affinity
 
