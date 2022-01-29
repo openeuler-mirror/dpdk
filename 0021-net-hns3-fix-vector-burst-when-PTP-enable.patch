@@ -1,0 +1,237 @@
+From 17efba586961886bd96033965f3ce4d5dcb3367a Mon Sep 17 00:00:00 2001
+From: "Min Hu (Connor)" <humin29@huawei.com>
+Date: Mon, 17 Jan 2022 10:43:02 +0800
+Subject: [PATCH] net/hns3: fix vector burst when PTP enable
+
+If hardware supports IEEE 1588 PTP, PTP capability will be set.
+Currently, vec and sve burst is unsupported when PTP capability is set.
+
+For sake of Rx/Tx performance, IEEE 1588 PTP is not supported in sve or
+vec burst mode. When enabling IEEE 1588 PTP, Rx/Tx burst mode should be
+simple or common. Rx/Tx burst mode could be set like this, for example:
+-a 0000:35:00.0,rx_func_hint=common,tx_func_hint=common
+
+This patch supports vec and sve burst when PTP is disabled. And only
+support simple or common burst When PTP is enabled.
+
+Fixes: 38b539d96eb6 ("net/hns3: support IEEE 1588 PTP")
+Cc: stable@dpdk.org
+
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ doc/guides/nics/hns3.rst         |  5 +++++
+ drivers/net/hns3/hns3_ethdev.c   |  8 +-------
+ drivers/net/hns3/hns3_ptp.c      |  1 +
+ drivers/net/hns3/hns3_rxtx.c     | 29 +++++++++++++++++------------
+ drivers/net/hns3/hns3_rxtx_vec.c | 20 ++++++++++++--------
+ 5 files changed, 36 insertions(+), 27 deletions(-)
+
+diff --git a/doc/guides/nics/hns3.rst b/doc/guides/nics/hns3.rst
+index 5f68a10ecf..791c9cc2ed 100644
+--- a/doc/guides/nics/hns3.rst
++++ b/doc/guides/nics/hns3.rst
+@@ -290,5 +290,10 @@ Currently, we only support VF device driven by DPDK driver when PF is driven
+ by kernel mode hns3 ethdev driver. VF is not supported when PF is driven by
+ DPDK driver.
+ 
++For sake of Rx/Tx performance, IEEE 1588 is not supported when using vec or
++sve burst function. When enabling IEEE 1588, Rx/Tx burst mode should be
++simple or common. It is recommended that enable IEEE 1588 before ethdev
++start. In this way, the correct Rx/Tx burst function can be selected.
++
+ Build with ICC is not supported yet.
+ X86-32, Power8, ARMv7 and BSD are not supported yet.
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 3b897492d3..ef13d31d19 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -227,17 +227,11 @@ hns3_check_event_cause(struct hns3_adapter *hns, uint32_t *clearval)
+ 	return ret;
+ }
+ 
+-static bool
+-hns3_is_1588_event_type(uint32_t event_type)
+-{
+-	return (event_type == HNS3_VECTOR0_EVENT_PTP);
+-}
+-
+ static void
+ hns3_clear_event_cause(struct hns3_hw *hw, uint32_t event_type, uint32_t regclr)
+ {
+ 	if (event_type == HNS3_VECTOR0_EVENT_RST ||
+-	    hns3_is_1588_event_type(event_type))
++	    event_type == HNS3_VECTOR0_EVENT_PTP)
+ 		hns3_write_dev(hw, HNS3_MISC_RESET_STS_REG, regclr);
+ 	else if (event_type == HNS3_VECTOR0_EVENT_MBX)
+ 		hns3_write_dev(hw, HNS3_VECTOR0_CMDQ_SRC_REG, regclr);
+diff --git a/drivers/net/hns3/hns3_ptp.c b/drivers/net/hns3/hns3_ptp.c
+index 9a829d7011..1442241a4e 100644
+--- a/drivers/net/hns3/hns3_ptp.c
++++ b/drivers/net/hns3/hns3_ptp.c
+@@ -125,6 +125,7 @@ hns3_timesync_enable(struct rte_eth_dev *dev)
+ 
+ 	if (pf->ptp_enable)
+ 		return 0;
++	hns3_warn(hw, "note: please ensure Rx/Tx burst mode is simple or common when enabling PTP!");
+ 
+ 	rte_spinlock_lock(&hw->lock);
+ 	ret = hns3_timesync_configure(hns, true);
+diff --git a/drivers/net/hns3/hns3_rxtx.c b/drivers/net/hns3/hns3_rxtx.c
+index c86aeb2366..c43131cac6 100644
+--- a/drivers/net/hns3/hns3_rxtx.c
++++ b/drivers/net/hns3/hns3_rxtx.c
+@@ -2388,14 +2388,14 @@ hns3_rx_alloc_buffer(struct hns3_rx_queue *rxq)
+ 		return rte_mbuf_raw_alloc(rxq->mb_pool);
+ }
+ 
+-static inline void
++static void
+ hns3_rx_ptp_timestamp_handle(struct hns3_rx_queue *rxq, struct rte_mbuf *mbuf,
+-		  volatile struct hns3_desc *rxd)
++			     uint64_t timestamp)
+ {
+ 	struct hns3_pf *pf = HNS3_DEV_PRIVATE_TO_PF(rxq->hns);
+-	uint64_t timestamp = rte_le_to_cpu_64(rxd->timestamp);
+ 
+-	mbuf->ol_flags |= RTE_MBUF_F_RX_IEEE1588_PTP | RTE_MBUF_F_RX_IEEE1588_TMST;
++	mbuf->ol_flags |= RTE_MBUF_F_RX_IEEE1588_PTP |
++			  RTE_MBUF_F_RX_IEEE1588_TMST;
+ 	if (hns3_timestamp_rx_dynflag > 0) {
+ 		*RTE_MBUF_DYNFIELD(mbuf, hns3_timestamp_dynfield_offset,
+ 			rte_mbuf_timestamp_t *) = timestamp;
+@@ -2469,7 +2469,8 @@ hns3_recv_pkts_simple(void *rx_queue,
+ 		rxe->mbuf = nmb;
+ 
+ 		if (unlikely(bd_base_info & BIT(HNS3_RXD_TS_VLD_B)))
+-			hns3_rx_ptp_timestamp_handle(rxq, rxm, rxdp);
++			hns3_rx_ptp_timestamp_handle(rxq, rxm,
++				rte_le_to_cpu_64(rxdp->timestamp));
+ 
+ 		dma_addr = rte_mbuf_data_iova_default(nmb);
+ 		rxdp->addr = rte_cpu_to_le_64(dma_addr);
+@@ -2540,6 +2541,7 @@ hns3_recv_scattered_pkts(void *rx_queue,
+ 	struct rte_mbuf *rxm;
+ 	struct rte_eth_dev *dev;
+ 	uint32_t bd_base_info;
++	uint64_t timestamp;
+ 	uint32_t l234_info;
+ 	uint32_t gro_size;
+ 	uint32_t ol_info;
+@@ -2649,6 +2651,9 @@ hns3_recv_scattered_pkts(void *rx_queue,
+ 		rxm = rxe->mbuf;
+ 		rxe->mbuf = nmb;
+ 
++		if (unlikely(bd_base_info & BIT(HNS3_RXD_TS_VLD_B)))
++			timestamp = rte_le_to_cpu_64(rxdp->timestamp);
++
+ 		dma_addr = rte_cpu_to_le_64(rte_mbuf_data_iova_default(nmb));
+ 		rxdp->rx.bd_base_info = 0;
+ 		rxdp->addr = dma_addr;
+@@ -2671,7 +2676,7 @@ hns3_recv_scattered_pkts(void *rx_queue,
+ 		}
+ 
+ 		if (unlikely(bd_base_info & BIT(HNS3_RXD_TS_VLD_B)))
+-			hns3_rx_ptp_timestamp_handle(rxq, first_seg, rxdp);
++			hns3_rx_ptp_timestamp_handle(rxq, first_seg, timestamp);
+ 
+ 		/*
+ 		 * The last buffer of the received packet. packet len from
+@@ -4044,7 +4049,7 @@ static inline void
+ hns3_tx_setup_4bd(struct hns3_desc *txdp, struct rte_mbuf **pkts)
+ {
+ #define PER_LOOP_NUM	4
+-	const uint16_t bd_flag = BIT(HNS3_TXD_VLD_B) | BIT(HNS3_TXD_FE_B);
++	uint16_t bd_flag = BIT(HNS3_TXD_VLD_B) | BIT(HNS3_TXD_FE_B);
+ 	uint64_t dma_addr;
+ 	uint32_t i;
+ 
+@@ -4055,6 +4060,8 @@ hns3_tx_setup_4bd(struct hns3_desc *txdp, struct rte_mbuf **pkts)
+ 		txdp->tx.paylen_fd_dop_ol4cs = 0;
+ 		txdp->tx.type_cs_vlan_tso_len = 0;
+ 		txdp->tx.ol_type_vlan_len_msec = 0;
++		if (unlikely((*pkts)->ol_flags & RTE_MBUF_F_TX_IEEE1588_TMST))
++			bd_flag |= BIT(HNS3_TXD_TSYN_B);
+ 		txdp->tx.tp_fe_sc_vld_ra_ri = rte_cpu_to_le_16(bd_flag);
+ 	}
+ }
+@@ -4062,7 +4069,7 @@ hns3_tx_setup_4bd(struct hns3_desc *txdp, struct rte_mbuf **pkts)
+ static inline void
+ hns3_tx_setup_1bd(struct hns3_desc *txdp, struct rte_mbuf **pkts)
+ {
+-	const uint16_t bd_flag = BIT(HNS3_TXD_VLD_B) | BIT(HNS3_TXD_FE_B);
++	uint16_t bd_flag = BIT(HNS3_TXD_VLD_B) | BIT(HNS3_TXD_FE_B);
+ 	uint64_t dma_addr;
+ 
+ 	dma_addr = rte_mbuf_data_iova(*pkts);
+@@ -4071,6 +4078,8 @@ hns3_tx_setup_1bd(struct hns3_desc *txdp, struct rte_mbuf **pkts)
+ 	txdp->tx.paylen_fd_dop_ol4cs = 0;
+ 	txdp->tx.type_cs_vlan_tso_len = 0;
+ 	txdp->tx.ol_type_vlan_len_msec = 0;
++	if (unlikely((*pkts)->ol_flags & RTE_MBUF_F_TX_IEEE1588_TMST))
++		bd_flag |= BIT(HNS3_TXD_TSYN_B);
+ 	txdp->tx.tp_fe_sc_vld_ra_ri = rte_cpu_to_le_16(bd_flag);
+ }
+ 
+@@ -4312,10 +4321,6 @@ hns3_tx_check_simple_support(struct rte_eth_dev *dev)
+ {
+ 	uint64_t offloads = dev->data->dev_conf.txmode.offloads;
+ 
+-	struct hns3_hw *hw = HNS3_DEV_PRIVATE_TO_HW(dev->data->dev_private);
+-	if (hns3_dev_get_support(hw, PTP))
+-		return false;
+-
+ 	return (offloads == (offloads & RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE));
+ }
+ 
+diff --git a/drivers/net/hns3/hns3_rxtx_vec.c b/drivers/net/hns3/hns3_rxtx_vec.c
+index 455110361a..73f0ab6bc8 100644
+--- a/drivers/net/hns3/hns3_rxtx_vec.c
++++ b/drivers/net/hns3/hns3_rxtx_vec.c
+@@ -17,15 +17,17 @@ int
+ hns3_tx_check_vec_support(struct rte_eth_dev *dev)
+ {
+ 	struct rte_eth_txmode *txmode = &dev->data->dev_conf.txmode;
+-
+-	struct hns3_hw *hw = HNS3_DEV_PRIVATE_TO_HW(dev->data->dev_private);
+-	if (hns3_dev_get_support(hw, PTP))
+-		return -ENOTSUP;
++	struct hns3_adapter *hns = dev->data->dev_private;
++	struct hns3_pf *pf = &hns->pf;
+ 
+ 	/* Only support RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE */
+ 	if (txmode->offloads != RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE)
+ 		return -ENOTSUP;
+ 
++	/* Vec is not supported when PTP enabled */
++	if (pf->ptp_enable)
++		return -ENOTSUP;
++
+ 	return 0;
+ }
+ 
+@@ -232,10 +234,8 @@ hns3_rx_check_vec_support(struct rte_eth_dev *dev)
+ 	struct rte_eth_rxmode *rxmode = &dev->data->dev_conf.rxmode;
+ 	uint64_t offloads_mask = RTE_ETH_RX_OFFLOAD_TCP_LRO |
+ 				 RTE_ETH_RX_OFFLOAD_VLAN;
+-
+-	struct hns3_hw *hw = HNS3_DEV_PRIVATE_TO_HW(dev->data->dev_private);
+-	if (hns3_dev_get_support(hw, PTP))
+-		return -ENOTSUP;
++	struct hns3_adapter *hns = dev->data->dev_private;
++	struct hns3_pf *pf = &hns->pf;
+ 
+ 	if (dev->data->scattered_rx)
+ 		return -ENOTSUP;
+@@ -249,5 +249,9 @@ hns3_rx_check_vec_support(struct rte_eth_dev *dev)
+ 	if (hns3_rxq_iterate(dev, hns3_rxq_vec_check, NULL) != 0)
+ 		return -ENOTSUP;
+ 
++	/* Vec is not supported when PTP enabled */
++	if (pf->ptp_enable)
++		return -ENOTSUP;
++
+ 	return 0;
+ }
+-- 
+2.33.0
+
