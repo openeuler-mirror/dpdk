@@ -1,0 +1,130 @@
+From 905b76987bd194e1356e6fe79949b5119c30f842 Mon Sep 17 00:00:00 2001
+From: "Min Hu (Connor)" <humin29@huawei.com>
+Date: Fri, 28 Jan 2022 10:25:32 +0800
+Subject: [PATCH] net/bonding: fix promiscuous and allmulticast state
+
+Currently, promiscuous or allmulticast state of bonding port will not be
+passed to the new primary slave when active/standby switch-over. It
+causes bugs in some scenario.
+
+For example, promiscuous state of bonding port is off now, primary slave
+(called A) is off but secondary slave(called B) is on.
+Then active/standby switch-over, promiscuous state of the bonding port
+is off, but the new primary slave turns to be B and its promiscuous
+state is still on.
+It is not consistent with bonding port. And this patch will fix it.
+
+Fixes: 2efb58cbab6e ("bond: new link bonding library")
+Fixes: 68218b87c184 ("net/bonding: prefer allmulti to promiscuous for LACP")
+Cc: stable@dpdk.org
+
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/bonding/rte_eth_bond_pmd.c | 70 ++++++++++++++++++++++++++
+ 1 file changed, 70 insertions(+)
+
+diff --git a/drivers/net/bonding/rte_eth_bond_pmd.c b/drivers/net/bonding/rte_eth_bond_pmd.c
+index e5abe90e07..d2fcfad676 100644
+--- a/drivers/net/bonding/rte_eth_bond_pmd.c
++++ b/drivers/net/bonding/rte_eth_bond_pmd.c
+@@ -2691,6 +2691,39 @@ bond_ethdev_promiscuous_disable(struct rte_eth_dev *dev)
+ 	return ret;
+ }
+ 
++static int
++bond_ethdev_promiscuous_update(struct rte_eth_dev *dev)
++{
++	struct bond_dev_private *internals = dev->data->dev_private;
++	uint16_t port_id = internals->current_primary_port;
++
++	switch (internals->mode) {
++	case BONDING_MODE_ROUND_ROBIN:
++	case BONDING_MODE_BALANCE:
++	case BONDING_MODE_BROADCAST:
++	case BONDING_MODE_8023AD:
++		/* As promiscuous mode is propagated to all slaves for these
++		 * mode, no need to update for bonding device.
++		 */
++		break;
++	case BONDING_MODE_ACTIVE_BACKUP:
++	case BONDING_MODE_TLB:
++	case BONDING_MODE_ALB:
++	default:
++		/* As promiscuous mode is propagated only to primary slave
++		 * for these mode. When active/standby switchover, promiscuous
++		 * mode should be set to new primary slave according to bonding
++		 * device.
++		 */
++		if (rte_eth_promiscuous_get(internals->port_id) == 1)
++			rte_eth_promiscuous_enable(port_id);
++		else
++			rte_eth_promiscuous_disable(port_id);
++	}
++
++	return 0;
++}
++
+ static int
+ bond_ethdev_allmulticast_enable(struct rte_eth_dev *eth_dev)
+ {
+@@ -2804,6 +2837,39 @@ bond_ethdev_allmulticast_disable(struct rte_eth_dev *eth_dev)
+ 	return ret;
+ }
+ 
++static int
++bond_ethdev_allmulticast_update(struct rte_eth_dev *dev)
++{
++	struct bond_dev_private *internals = dev->data->dev_private;
++	uint16_t port_id = internals->current_primary_port;
++
++	switch (internals->mode) {
++	case BONDING_MODE_ROUND_ROBIN:
++	case BONDING_MODE_BALANCE:
++	case BONDING_MODE_BROADCAST:
++	case BONDING_MODE_8023AD:
++		/* As allmulticast mode is propagated to all slaves for these
++		 * mode, no need to update for bonding device.
++		 */
++		break;
++	case BONDING_MODE_ACTIVE_BACKUP:
++	case BONDING_MODE_TLB:
++	case BONDING_MODE_ALB:
++	default:
++		/* As allmulticast mode is propagated only to primary slave
++		 * for these mode. When active/standby switchover, allmulticast
++		 * mode should be set to new primary slave according to bonding
++		 * device.
++		 */
++		if (rte_eth_allmulticast_get(internals->port_id) == 1)
++			rte_eth_allmulticast_enable(port_id);
++		else
++			rte_eth_allmulticast_disable(port_id);
++	}
++
++	return 0;
++}
++
+ static void
+ bond_ethdev_delayed_lsc_propagation(void *arg)
+ {
+@@ -2893,6 +2959,8 @@ bond_ethdev_lsc_event_callback(uint16_t port_id, enum rte_eth_event_type type,
+ 			lsc_flag = 1;
+ 
+ 			mac_address_slaves_update(bonded_eth_dev);
++			bond_ethdev_promiscuous_update(bonded_eth_dev);
++			bond_ethdev_allmulticast_update(bonded_eth_dev);
+ 		}
+ 
+ 		activate_slave(bonded_eth_dev, port_id);
+@@ -2922,6 +2990,8 @@ bond_ethdev_lsc_event_callback(uint16_t port_id, enum rte_eth_event_type type,
+ 			else
+ 				internals->current_primary_port = internals->primary_port;
+ 			mac_address_slaves_update(bonded_eth_dev);
++			bond_ethdev_promiscuous_update(bonded_eth_dev);
++			bond_ethdev_allmulticast_update(bonded_eth_dev);
+ 		}
+ 	}
+ 
+-- 
+2.33.0
+
