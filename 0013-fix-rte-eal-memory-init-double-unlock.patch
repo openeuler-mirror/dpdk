@@ -1,0 +1,29 @@
+From d9e578c64144bf35e3141d2a3f3ada2763534cb2 Mon Sep 17 00:00:00 2001
+From: Changsheng Wu <wuchangsheng2@huawei.com>
+Date: Thu, 16 Dec 2021 19:26:51 +0800
+Subject: [PATCH] huawei-0015-fix-rte-eal-memory-init-double-unlock
+
+---
+ lib/eal/common/eal_common_memory.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/lib/eal/common/eal_common_memory.c b/lib/eal/common/eal_common_memory.c
+index 15ce4341b0..d983e37cc8 100644
+--- a/lib/eal/common/eal_common_memory.c
++++ b/lib/eal/common/eal_common_memory.c
+@@ -1150,8 +1150,10 @@ rte_eal_sec_memory_init(const int sec_idx)
+ 	ret = __rte_eal_memory_init(rte_eal_sec_get_runtime_dir(sec_idx),
+ 			rte_eal_sec_get_internal_config(sec_idx), rte_cfg,
+ 			true, sec_idx);
+-
+-	rte_rwlock_read_unlock(&rte_cfg->mem_config->memory_hotplug_lock);
++       if (ret == 0) {
++               /* when ret != 0 unlock in __rte_eal_memory_init */
++	        rte_rwlock_read_unlock(&rte_cfg->mem_config->memory_hotplug_lock);
++       }
+ 
+ 	return ret;
+ }
+-- 
+2.27.0
+

@@ -1,0 +1,42 @@
+From 8ca5f1cfbea80f7524eb2f2dfa67760be80666c3 Mon Sep 17 00:00:00 2001
+From: Changsheng Wu <wuchangsheng2@huawei.com>
+Date: Sat, 18 Dec 2021 16:57:31 +0800
+Subject: [PATCH] 0011
+
+---
+ lib/eal/linux/eal.c          | 4 +++-
+ lib/eal/linux/eal_memalloc.c | 4 ++++
+ 2 files changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/lib/eal/linux/eal.c b/lib/eal/linux/eal.c
+index 2555043155..c833b46c36 100644
+--- a/lib/eal/linux/eal.c
++++ b/lib/eal/linux/eal.c
+@@ -1627,6 +1627,8 @@ rte_eal_sec_detach(const char *file_prefix, int length)
+ 		return -1;
+ 	}
+ 
+-	sec_count--;
++	if (sec_count) {
++		sec_count--;
++	}
+ 	return 0;
+ }
+diff --git a/lib/eal/linux/eal_memalloc.c b/lib/eal/linux/eal_memalloc.c
+index dac9098c8c..38543bf8c4 100644
+--- a/lib/eal/linux/eal_memalloc.c
++++ b/lib/eal/linux/eal_memalloc.c
+@@ -1814,6 +1814,10 @@ eal_sec_memalloc_destroy(const int sec_idx)
+ 	struct rte_mem_config *mcfg = rte_eal_sec_get_configuration(sec_idx)->mem_config;
+ 	int i, ret = 0;
+ 
++	if (mcfg == NULL) {
++		return 0;
++	}
++
+ 	for (i = 0; i < RTE_MAX_MEMSEG_LISTS; i++) {
+ 		struct rte_memseg_list *msl = &mcfg->memsegs[i];
+ 
+-- 
+2.27.0
+
