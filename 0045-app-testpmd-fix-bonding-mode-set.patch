@@ -1,0 +1,70 @@
+From 32d1817dbff6499dd1d126c466d0f7cb1c114713 Mon Sep 17 00:00:00 2001
+From: "Min Hu (Connor)" <humin29@huawei.com>
+Date: Fri, 28 Jan 2022 10:35:19 +0800
+Subject: [PATCH] app/testpmd: fix bonding mode set
+
+when start testpmd, and type command like this, it will lead to
+Segmentation fault, like:
+
+testpmd> create bonded device 4 0
+testpmd> add bonding slave 0 2
+testpmd> add bonding slave 1 2
+testpmd> port start 2
+testpmd> set bonding mode 0 2
+testpmd> quit
+Stopping port 0...
+Stopping ports...
+...
+Bye...
+Segmentation fault
+
+The reason to the bug is that rte timer do not be cancelled when quit.
+That is, in 'bond_ethdev_start', resources are allocated according to
+different bonding mode. In 'bond_ethdev_stop', resources are free by
+the corresponding mode.
+
+For example, 'bond_ethdev_start' start bond_mode_8023ad_ext_periodic_cb
+timer for bonding mode 4. and 'bond_ethdev_stop' cancel the timer only
+when the current bonding mode is 4. If the bonding mode is changed,
+and directly quit the process, the timer will still on, and freed memory
+will be accessed, then segmentation fault.
+
+'bonding mode' changed means resources changed, reallocate resources for
+different mode should be done, that is, device should be restarted.
+
+Fixes: 2950a769315e ("bond: testpmd support")
+Cc: stable@dpdk.org
+
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+Tested-by: Ferruh Yigit <ferruh.yigit@intel.com>
+---
+ app/test-pmd/cmdline.c | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/app/test-pmd/cmdline.c b/app/test-pmd/cmdline.c
+index e626b1c7d9..16ad4be005 100644
+--- a/app/test-pmd/cmdline.c
++++ b/app/test-pmd/cmdline.c
+@@ -5915,6 +5915,19 @@ static void cmd_set_bonding_mode_parsed(void *parsed_result,
+ {
+ 	struct cmd_set_bonding_mode_result *res = parsed_result;
+ 	portid_t port_id = res->port_id;
++	struct rte_port *port = &ports[port_id];
++
++	/*
++	 * Bonding mode changed means resources of device changed, like whether
++	 * started rte timer or not. Device should be restarted when resources
++	 * of device changed.
++	 */
++	if (port->port_status != RTE_PORT_STOPPED) {
++		fprintf(stderr,
++			"\t Error: Can't set bonding mode when port %d is not stopped\n",
++			port_id);
++		return;
++	}
+ 
+ 	/* Set the bonding mode for the relevant port. */
+ 	if (0 != rte_eth_bond_mode_set(port_id, res->value))
+-- 
+2.33.0
+
