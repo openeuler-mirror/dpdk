@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 6
+Release: 7
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -27,6 +27,30 @@ Patch9018:    0018-net-bonding-fix-offloading-configuration.patch
 Patch9019:    0019-net-hns3-fix-Rx-Tx-when-fast-path-operation-introduc.patch
 Patch9020:    0020-net-hns3-fix-mailbox-wait-time-uninitialization.patch
 Patch9021:    0021-net-hns3-fix-vector-burst-when-PTP-enable.patch
+Patch9022:    0022-net-hns3-remove-unnecessary-assignment.patch
+Patch9023:    0023-net-hns3-fix-using-enum-as-boolean.patch
+Patch9024:    0024-net-hns3-extract-common-function-to-initialize-MAC-a.patch
+Patch9025:    0025-net-hns3-make-control-plane-function-non-inline.patch
+Patch9026:    0026-net-hns3-remove-unnecessary-blank-lines.patch
+Patch9027:    0027-net-hns3-extract-reset-failure-handling-to-function.patch
+Patch9028:    0028-net-hns3-remove-unused-variables.patch
+Patch9029:    0029-net-hns3-remove-getting-number-of-queue-descriptors-.patch
+Patch9030:    0030-net-hns3-remove-logging-memory-addresses.patch
+Patch9031:    0031-net-hns3-extract-common-function-to-obtain-revision-.patch
+Patch9032:    0032-net-hns3-replace-single-line-functions.patch
+Patch9033:    0033-net-hns3-remove-non-re-entrant-strerror-call.patch
+Patch9034:    0034-net-hns3-rename-function.patch
+Patch9035:    0035-net-hns3-extract-functions-to-create-RSS-and-FDIR-fl.patch
+Patch9036:    0036-net-hns3-support-indirect-counter-flow-action.patch
+Patch9037:    0037-net-hns3-fix-max-packet-size-rollback-in-PF.patch
+Patch9038:    0038-net-hns3-fix-RSS-key-with-null.patch
+Patch9039:    0039-net-hns3-fix-insecure-way-to-query-MAC-statistics.patch
+Patch9040:    0040-net-hns3-fix-double-decrement-of-secondary-count.patch
+Patch9041:    0041-net-hns3-fix-operating-queue-when-TCAM-table-is-inva.patch
+Patch9042:    0042-net-hns3-delete-duplicated-RSS-type.patch
+Patch9043:    0043-net-bonding-fix-promiscuous-and-allmulticast-state.patch
+Patch9044:    0044-net-bonding-fix-reference-count-on-mbufs.patch
+Patch9045:    0045-app-testpmd-fix-bonding-mode-set.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -132,6 +156,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Wed Feb 09 2022 Min Hu(Connor) <humin29@huawei.com> - 21.11-7
+- sync patches from upstreaming branch.
+
 * Thu Jan 27 2022 Min Hu(Connor) <humin29@huawei.com> - 21.11-6
 - fix key bugfixes for hns3 PMD.
 

@@ -1,0 +1,30 @@
+From 7be11baa6e5fd2143f5574403c44e45fc9c5e393 Mon Sep 17 00:00:00 2001
+From: Jie Hai <haijie1@huawei.com>
+Date: Sat, 22 Jan 2022 09:51:31 +0800
+Subject: [PATCH] net/hns3: make control plane function non-inline
+
+This function is a control-plane interface and does
+not need to use inline.
+
+Signed-off-by: Jie Hai <haijie1@huawei.com>
+Acked-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 722660d0cc..f92832a4aa 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -4853,7 +4853,7 @@ hns3_check_port_speed(struct hns3_hw *hw, uint32_t link_speeds)
+ 	return 0;
+ }
+ 
+-static inline uint32_t
++static uint32_t
+ hns3_get_link_speed(uint32_t link_speeds)
+ {
+ 	uint32_t speed = RTE_ETH_SPEED_NUM_NONE;
+-- 
+2.33.0
+
