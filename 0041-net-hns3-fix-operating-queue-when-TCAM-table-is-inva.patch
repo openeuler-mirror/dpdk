@@ -1,0 +1,57 @@
+From 1c73c33c5ff07ac2a369f0d796e5892ed504e0d3 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Fri, 28 Jan 2022 10:07:07 +0800
+Subject: [PATCH] net/hns3: fix operating queue when TCAM table is invalid
+
+Reset queues will query the TCAM table. The table is cleared after global
+or imp reset. Currently, PF driver first resets Rx/Tx queues and then
+restore the table during the reset recovery process, which will fail to
+query the table and trigger a RAS error.
+
+Fixes: fa29fe45a7b4 ("net/hns3: support queue start and stop")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev.c | 12 ++++++++----
+ 1 file changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 57f1572340..2641b6f79b 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -4378,6 +4378,10 @@ hns3_init_hardware(struct hns3_adapter *hns)
+ 	struct hns3_hw *hw = &hns->hw;
+ 	int ret;
+ 
++	/*
++	 * All queue-related HW operations must be performed after the TCAM
++	 * table is configured.
++	 */
+ 	ret = hns3_map_tqp(hw);
+ 	if (ret) {
+ 		PMD_INIT_LOG(ERR, "Failed to map tqp: %d", ret);
+@@ -5547,15 +5551,15 @@ hns3_reinit_dev(struct hns3_adapter *hns)
+ 		return ret;
+ 	}
+ 
+-	ret = hns3_reset_all_tqps(hns);
++	ret = hns3_init_hardware(hns);
+ 	if (ret) {
+-		hns3_err(hw, "Failed to reset all queues: %d", ret);
++		hns3_err(hw, "Failed to init hardware: %d", ret);
+ 		return ret;
+ 	}
+ 
+-	ret = hns3_init_hardware(hns);
++	ret = hns3_reset_all_tqps(hns);
+ 	if (ret) {
+-		hns3_err(hw, "Failed to init hardware: %d", ret);
++		hns3_err(hw, "Failed to reset all queues: %d", ret);
+ 		return ret;
+ 	}
+ 
+-- 
+2.33.0
+

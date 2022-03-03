@@ -1,0 +1,205 @@
+From 2665a92054019bdb73cd2c43e5a581d081772915 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Sat, 22 Jan 2022 09:51:30 +0800
+Subject: [PATCH] net/hns3: extract common function to initialize MAC address
+
+The code logic to initialize "data->mac_addrs" for PF and VF is similar.
+This patch extracts a common API to initialize it to improve code
+maintainability.
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Acked-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_common.c    | 54 +++++++++++++++++++++++++++++++
+ drivers/net/hns3/hns3_common.h    |  1 +
+ drivers/net/hns3/hns3_ethdev.c    | 31 +++---------------
+ drivers/net/hns3/hns3_ethdev_vf.c | 33 +++----------------
+ 4 files changed, 63 insertions(+), 56 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_common.c b/drivers/net/hns3/hns3_common.c
+index 78158401f2..0f39d51a87 100644
+--- a/drivers/net/hns3/hns3_common.c
++++ b/drivers/net/hns3/hns3_common.c
+@@ -587,6 +587,60 @@ hns3_remove_mac_addr(struct rte_eth_dev *dev, uint32_t idx)
+ 	}
+ }
+ 
++int
++hns3_init_mac_addrs(struct rte_eth_dev *dev)
++{
++	struct hns3_hw *hw = HNS3_DEV_PRIVATE_TO_HW(dev->data->dev_private);
++	struct hns3_adapter *hns = HNS3_DEV_HW_TO_ADAPTER(hw);
++	const char *memory_name = hns->is_vf ? "hns3vf-mac" : "hns3-mac";
++	uint16_t mac_addrs_capa = hns->is_vf ? HNS3_VF_UC_MACADDR_NUM :
++						HNS3_UC_MACADDR_NUM;
++	char mac_str[RTE_ETHER_ADDR_FMT_SIZE];
++	struct rte_ether_addr *eth_addr;
++
++	/* Allocate memory for storing MAC addresses */
++	dev->data->mac_addrs = rte_zmalloc(memory_name,
++				sizeof(struct rte_ether_addr) * mac_addrs_capa,
++				0);
++	if (dev->data->mac_addrs == NULL) {
++		hns3_err(hw, "failed to allocate %zx bytes needed to store MAC addresses",
++			     sizeof(struct rte_ether_addr) * mac_addrs_capa);
++		return -ENOMEM;
++	}
++
++	eth_addr = (struct rte_ether_addr *)hw->mac.mac_addr;
++	if (!hns->is_vf) {
++		if (!rte_is_valid_assigned_ether_addr(eth_addr)) {
++			rte_eth_random_addr(hw->mac.mac_addr);
++			hns3_ether_format_addr(mac_str, RTE_ETHER_ADDR_FMT_SIZE,
++				(struct rte_ether_addr *)hw->mac.mac_addr);
++			hns3_warn(hw, "default mac_addr from firmware is an invalid "
++				  "unicast address, using random MAC address %s",
++				  mac_str);
++		}
++	} else {
++		/*
++		 * The hns3 PF ethdev driver in kernel support setting VF MAC
++		 * address on the host by "ip link set ..." command. To avoid
++		 * some incorrect scenes, for example, hns3 VF PMD driver fails
++		 * to receive and send packets after user configure the MAC
++		 * address by using the "ip link set ..." command, hns3 VF PMD
++		 * driver keep the same MAC address strategy as the hns3 kernel
++		 * ethdev driver in the initialization. If user configure a MAC
++		 * address by the ip command for VF device, then hns3 VF PMD
++		 * driver will start with it, otherwise start with a random MAC
++		 * address in the initialization.
++		 */
++		if (rte_is_zero_ether_addr(eth_addr))
++			rte_eth_random_addr(hw->mac.mac_addr);
++	}
++
++	rte_ether_addr_copy((struct rte_ether_addr *)hw->mac.mac_addr,
++			    &dev->data->mac_addrs[0]);
++
++	return 0;
++}
++
+ int
+ hns3_init_ring_with_vector(struct hns3_hw *hw)
+ {
+diff --git a/drivers/net/hns3/hns3_common.h b/drivers/net/hns3/hns3_common.h
+index 0dbb1c0413..a9e8a9cccf 100644
+--- a/drivers/net/hns3/hns3_common.h
++++ b/drivers/net/hns3/hns3_common.h
+@@ -52,6 +52,7 @@ int hns3_set_mc_mac_addr_list(struct rte_eth_dev *dev,
+ 			      uint32_t nb_mc_addr);
+ void hns3_ether_format_addr(char *buf, uint16_t size,
+ 			    const struct rte_ether_addr *ether_addr);
++int hns3_init_mac_addrs(struct rte_eth_dev *dev);
+ 
+ int hns3_init_ring_with_vector(struct hns3_hw *hw);
+ int hns3_map_rx_interrupt(struct rte_eth_dev *dev);
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index ef13d31d19..722660d0cc 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -6617,8 +6617,6 @@ static int
+ hns3_dev_init(struct rte_eth_dev *eth_dev)
+ {
+ 	struct hns3_adapter *hns = eth_dev->data->dev_private;
+-	char mac_str[RTE_ETHER_ADDR_FMT_SIZE];
+-	struct rte_ether_addr *eth_addr;
+ 	struct hns3_hw *hw = &hns->hw;
+ 	int ret;
+ 
+@@ -6661,30 +6659,9 @@ hns3_dev_init(struct rte_eth_dev *eth_dev)
+ 		goto err_init_pf;
+ 	}
+ 
+-	/* Allocate memory for storing MAC addresses */
+-	eth_dev->data->mac_addrs = rte_zmalloc("hns3-mac",
+-					       sizeof(struct rte_ether_addr) *
+-					       HNS3_UC_MACADDR_NUM, 0);
+-	if (eth_dev->data->mac_addrs == NULL) {
+-		PMD_INIT_LOG(ERR, "Failed to allocate %zx bytes needed "
+-			     "to store MAC addresses",
+-			     sizeof(struct rte_ether_addr) *
+-			     HNS3_UC_MACADDR_NUM);
+-		ret = -ENOMEM;
+-		goto err_rte_zmalloc;
+-	}
+-
+-	eth_addr = (struct rte_ether_addr *)hw->mac.mac_addr;
+-	if (!rte_is_valid_assigned_ether_addr(eth_addr)) {
+-		rte_eth_random_addr(hw->mac.mac_addr);
+-		hns3_ether_format_addr(mac_str, RTE_ETHER_ADDR_FMT_SIZE,
+-				(struct rte_ether_addr *)hw->mac.mac_addr);
+-		hns3_warn(hw, "default mac_addr from firmware is an invalid "
+-			  "unicast address, using random MAC address %s",
+-			  mac_str);
+-	}
+-	rte_ether_addr_copy((struct rte_ether_addr *)hw->mac.mac_addr,
+-			    &eth_dev->data->mac_addrs[0]);
++	ret = hns3_init_mac_addrs(eth_dev);
++	if (ret != 0)
++		goto err_init_mac_addrs;
+ 
+ 	hw->adapter_state = HNS3_NIC_INITIALIZED;
+ 
+@@ -6700,7 +6677,7 @@ hns3_dev_init(struct rte_eth_dev *eth_dev)
+ 	hns3_info(hw, "hns3 dev initialization successful!");
+ 	return 0;
+ 
+-err_rte_zmalloc:
++err_init_mac_addrs:
+ 	hns3_uninit_pf(eth_dev);
+ 
+ err_init_pf:
+diff --git a/drivers/net/hns3/hns3_ethdev_vf.c b/drivers/net/hns3/hns3_ethdev_vf.c
+index 5015fe0d5f..5a1286e17b 100644
+--- a/drivers/net/hns3/hns3_ethdev_vf.c
++++ b/drivers/net/hns3/hns3_ethdev_vf.c
+@@ -2400,34 +2400,9 @@ hns3vf_dev_init(struct rte_eth_dev *eth_dev)
+ 		goto err_init_vf;
+ 	}
+ 
+-	/* Allocate memory for storing MAC addresses */
+-	eth_dev->data->mac_addrs = rte_zmalloc("hns3vf-mac",
+-					       sizeof(struct rte_ether_addr) *
+-					       HNS3_VF_UC_MACADDR_NUM, 0);
+-	if (eth_dev->data->mac_addrs == NULL) {
+-		PMD_INIT_LOG(ERR, "Failed to allocate %zx bytes needed "
+-			     "to store MAC addresses",
+-			     sizeof(struct rte_ether_addr) *
+-			     HNS3_VF_UC_MACADDR_NUM);
+-		ret = -ENOMEM;
+-		goto err_rte_zmalloc;
+-	}
+-
+-	/*
+-	 * The hns3 PF ethdev driver in kernel support setting VF MAC address
+-	 * on the host by "ip link set ..." command. To avoid some incorrect
+-	 * scenes, for example, hns3 VF PMD fails to receive and send
+-	 * packets after user configure the MAC address by using the
+-	 * "ip link set ..." command, hns3 VF PMD keep the same MAC
+-	 * address strategy as the hns3 kernel ethdev driver in the
+-	 * initialization. If user configure a MAC address by the ip command
+-	 * for VF device, then hns3 VF PMD will start with it, otherwise
+-	 * start with a random MAC address in the initialization.
+-	 */
+-	if (rte_is_zero_ether_addr((struct rte_ether_addr *)hw->mac.mac_addr))
+-		rte_eth_random_addr(hw->mac.mac_addr);
+-	rte_ether_addr_copy((struct rte_ether_addr *)hw->mac.mac_addr,
+-			    &eth_dev->data->mac_addrs[0]);
++	ret = hns3_init_mac_addrs(eth_dev);
++	if (ret != 0)
++		goto err_init_mac_addrs;
+ 
+ 	hw->adapter_state = HNS3_NIC_INITIALIZED;
+ 
+@@ -2443,7 +2418,7 @@ hns3vf_dev_init(struct rte_eth_dev *eth_dev)
+ 			  eth_dev);
+ 	return 0;
+ 
+-err_rte_zmalloc:
++err_init_mac_addrs:
+ 	hns3vf_uninit_vf(eth_dev);
+ 
+ err_init_vf:
+-- 
+2.33.0
+
