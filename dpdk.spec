@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 7
+Release: 8
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -99,11 +99,18 @@ This package contains the pdump tool for capture the dpdk network packets.
 
 %build
 export CFLAGS="%{optflags}"
-meson build
+meson build -Dexamples=l3fwd-power,ethtool,l3fwd,kni,dma,ptpclient
 ninja -C build
 
 %install
 DESTDIR=$RPM_BUILD_ROOT/ ninja install -C build
+
+cp ./build/examples/dpdk-l3fwd $RPM_BUILD_ROOT/usr/local/bin
+cp ./build/examples/dpdk-l3fwd-power $RPM_BUILD_ROOT/usr/local/bin
+cp ./build/examples/dpdk-ethtool $RPM_BUILD_ROOT/usr/local/bin
+cp ./build/examples/dpdk-kni $RPM_BUILD_ROOT/usr/local/bin
+cp ./build/examples/dpdk-dma $RPM_BUILD_ROOT/usr/local/bin
+cp ./build/examples/dpdk-ptpclient $RPM_BUILD_ROOT/usr/local/bin
 
 mkdir -p $RPM_BUILD_ROOT/usr/lib64
 mv $RPM_BUILD_ROOT/usr/local/lib64/* $RPM_BUILD_ROOT/usr/lib64/
@@ -156,6 +163,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Mon March 14 2022 Min Hu(Connor) <humin29@huawei.com> - 21.11-8
+- add examples app.
+
 * Wed Feb 09 2022 Min Hu(Connor) <humin29@huawei.com> - 21.11-7
 - sync patches from upstreaming branch.
 
