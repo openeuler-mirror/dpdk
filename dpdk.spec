@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 8
+Release: 9
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -153,6 +153,12 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/local/bin/dpdk-proc-info
 /usr/local/bin/dpdk-test
 /usr/local/bin/dpdk-testpmd
+/usr/local/bin/dpdk-l3fwd
+/usr/local/bin/dpdk-l3fwd-power
+/usr/local/bin/dpdk-ethtool
+/usr/local/bin/dpdk-kni
+/usr/local/bin/dpdk-dma
+/usr/local/bin/dpdk-ptpclient
 
 %post
 /sbin/ldconfig
@@ -163,6 +169,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Wed March 23 2022 Min Hu(Connor) <humin29@huawei.com> - 21.11-9
+- fix adding examples app.
+
 * Mon March 14 2022 Min Hu(Connor) <humin29@huawei.com> - 21.11-8
 - add examples app.
 
