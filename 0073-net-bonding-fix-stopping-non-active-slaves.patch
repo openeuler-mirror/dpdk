@@ -1,0 +1,56 @@
+From f5e72e8e8d57b331baf1a86d15eb7fae921f57fb Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Tue, 3 May 2022 18:02:13 +0800
+Subject: [PATCH] net/bonding: fix stopping non-active slaves
+
+When stopping a bonded port, all slaves should be stopped. But only
+active slaves are stopped.
+So fix by stopping all slave ports and later do "deactivate_slave()" for
+active slaves.
+
+Fixes: 0911d4ec0183 ("net/bonding: fix crash when stopping mode 4 port")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/bonding/rte_eth_bond_pmd.c | 20 +++++++++++---------
+ 1 file changed, 11 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/net/bonding/rte_eth_bond_pmd.c b/drivers/net/bonding/rte_eth_bond_pmd.c
+index 5cbe89031b..605fc2ffb5 100644
+--- a/drivers/net/bonding/rte_eth_bond_pmd.c
++++ b/drivers/net/bonding/rte_eth_bond_pmd.c
+@@ -2118,18 +2118,20 @@ bond_ethdev_stop(struct rte_eth_dev *eth_dev)
+ 	internals->link_status_polling_enabled = 0;
+ 	for (i = 0; i < internals->slave_count; i++) {
+ 		uint16_t slave_id = internals->slaves[i].port_id;
++
++		internals->slaves[i].last_link_status = 0;
++		ret = rte_eth_dev_stop(slave_id);
++		if (ret != 0) {
++			RTE_BOND_LOG(ERR, "Failed to stop device on port %u",
++				     slave_id);
++			return ret;
++		}
++
++		/* active slaves need to be deactivated. */
+ 		if (find_slave_by_id(internals->active_slaves,
+ 				internals->active_slave_count, slave_id) !=
+-						internals->active_slave_count) {
+-			internals->slaves[i].last_link_status = 0;
+-			ret = rte_eth_dev_stop(slave_id);
+-			if (ret != 0) {
+-				RTE_BOND_LOG(ERR, "Failed to stop device on port %u",
+-					     slave_id);
+-				return ret;
+-			}
++					internals->active_slave_count)
+ 			deactivate_slave(eth_dev, slave_id);
+-		}
+ 	}
+ 
+ 	return 0;
+-- 
+2.33.0
+

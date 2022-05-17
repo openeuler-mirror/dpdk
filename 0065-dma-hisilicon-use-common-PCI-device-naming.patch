@@ -1,0 +1,79 @@
+From 033904450b1d52fd3d09e2bb53e529e3ba0ecf77 Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Thu, 17 Feb 2022 10:59:11 +0800
+Subject: [PATCH] dma/hisilicon: use common PCI device naming
+
+For DMA device 0000:7d:0.0, the original generated dmadev name starts
+with the "7d:0.0", which is not expected.
+This patch uses rte_pci_device_name API to generates the dmadev name.
+
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+---
+ doc/guides/dmadevs/hisilicon.rst    |  4 ++--
+ drivers/dma/hisilicon/hisi_dmadev.c | 23 +++++++----------------
+ 2 files changed, 9 insertions(+), 18 deletions(-)
+
+diff --git a/doc/guides/dmadevs/hisilicon.rst b/doc/guides/dmadevs/hisilicon.rst
+index 81bf090311..8c1f0f8886 100644
+--- a/doc/guides/dmadevs/hisilicon.rst
++++ b/doc/guides/dmadevs/hisilicon.rst
+@@ -30,8 +30,8 @@ which can be accessed using API from the ``rte_dmadev`` library.
+ 
+ The name of the ``dmadev`` created is like "B:D.F-chX", e.g. DMA 0000:7b:00.0
+ will create four ``dmadev``,
+-the 1st ``dmadev`` name is "7b:00.0-ch0",
+-and the 2nd ``dmadev`` name is "7b:00.0-ch1".
++the 1st ``dmadev`` name is "0000:7b:00.0-ch0",
++and the 2nd ``dmadev`` name is "0000:7b:00.0-ch1".
+ 
+ Device Configuration
+ ~~~~~~~~~~~~~~~~~~~~~
+diff --git a/drivers/dma/hisilicon/hisi_dmadev.c b/drivers/dma/hisilicon/hisi_dmadev.c
+index c36acf01be..9cef2cbfbe 100644
+--- a/drivers/dma/hisilicon/hisi_dmadev.c
++++ b/drivers/dma/hisilicon/hisi_dmadev.c
+@@ -784,24 +784,15 @@ hisi_dma_burst_capacity(const void *dev_private, uint16_t vchan)
+ 				      sq_head - 1 - sq_tail;
+ }
+ 
+-static void
+-hisi_dma_gen_pci_device_name(const struct rte_pci_device *pci_dev,
+-			     char *name, size_t size)
+-{
+-	memset(name, 0, size);
+-	(void)snprintf(name, size, "%x:%x.%x",
+-		 pci_dev->addr.bus, pci_dev->addr.devid,
+-		 pci_dev->addr.function);
+-}
+-
+ static void
+ hisi_dma_gen_dev_name(const struct rte_pci_device *pci_dev,
+-		      uint8_t queue_id, char *name, size_t size)
++		      uint8_t queue_id, char *dev_name, size_t size)
+ {
+-	memset(name, 0, size);
+-	(void)snprintf(name, size, "%x:%x.%x-ch%u",
+-		 pci_dev->addr.bus, pci_dev->addr.devid,
+-		 pci_dev->addr.function, queue_id);
++	char name[RTE_DEV_NAME_MAX_LEN] = { 0 };
++
++	memset(dev_name, 0, size);
++	rte_pci_device_name(&pci_dev->addr, name, sizeof(name));
++	(void)snprintf(dev_name, size, "%s-ch%u", name, queue_id);
+ }
+ 
+ /**
+@@ -917,7 +908,7 @@ hisi_dma_probe(struct rte_pci_driver *pci_drv __rte_unused,
+ 	uint8_t i;
+ 	int ret;
+ 
+-	hisi_dma_gen_pci_device_name(pci_dev, name, sizeof(name));
++	rte_pci_device_name(&pci_dev->addr, name, sizeof(name));
+ 
+ 	if (pci_dev->mem_resource[2].addr == NULL) {
+ 		HISI_DMA_LOG(ERR, "%s BAR2 is NULL!\n", name);
+-- 
+2.33.0
+

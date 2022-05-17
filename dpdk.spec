@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 9
+Release: 10
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -51,6 +51,46 @@ Patch9042:    0042-net-hns3-delete-duplicated-RSS-type.patch
 Patch9043:    0043-net-bonding-fix-promiscuous-and-allmulticast-state.patch
 Patch9044:    0044-net-bonding-fix-reference-count-on-mbufs.patch
 Patch9045:    0045-app-testpmd-fix-bonding-mode-set.patch
+Patch9046:    0046-ethdev-introduce-dump-API.patch
+Patch9047:    0047-app-procinfo-add-device-private-info-dump.patch
+Patch9048:    0048-net-hns3-dump-device-basic-info.patch
+Patch9049:    0049-net-hns3-dump-device-feature-capability.patch
+Patch9050:    0050-net-hns3-dump-device-MAC-info.patch
+Patch9051:    0051-net-hns3-dump-queue-info.patch
+Patch9052:    0052-net-hns3-dump-VLAN-configuration-info.patch
+Patch9053:    0053-net-hns3-dump-flow-director-basic-info.patch
+Patch9054:    0054-net-hns3-dump-TM-configuration-info.patch
+Patch9055:    0055-net-hns3-dump-flow-control-info.patch
+Patch9056:    0056-net-hns3-change-dump-file-name.patch
+Patch9057:    0057-net-hns3-fix-code-check-for-dump.patch
+Patch9058:    0058-ethdev-fix-ethdev-version-map.patch
+Patch9059:    0059-net-hns3-delete-simple-bd-cap.patch
+Patch9060:    0060-net-hns3-fix-TM-info-dump.patch
+Patch9061:    0061-dma-hisilicon-support-Kunpeng-930.patch
+Patch9062:    0062-dma-hisilicon-support-error-handling-with-Kunpeng-93.patch
+Patch9063:    0063-dma-hisilicon-support-registers-dump-for-Kunpeng-930.patch
+Patch9064:    0064-dma-hisilicon-add-queue-full-statistics.patch
+Patch9065:    0065-dma-hisilicon-use-common-PCI-device-naming.patch
+Patch9066:    0066-app-testpmd-check-starting-port-is-not-in-bonding.patch
+Patch9067:    0067-examples-vhost-remove-DMA-type-option-help-info.patch
+Patch9068:    0068-kni-fix-freeing-order-in-device-release.patch
+Patch9069:    0069-net-hns3-remove-duplicate-macro-definition.patch
+Patch9070:    0070-net-hns3-fix-RSS-TC-mode-entry.patch
+Patch9071:    0071-net-hns3-fix-VF-RSS-TC-mode-entry.patch
+Patch9072:    0072-net-hns3-increase-time-waiting-for-PF-reset-completi.patch
+Patch9073:    0073-net-bonding-fix-stopping-non-active-slaves.patch
+Patch9074:    0074-net-bonding-fix-slave-stop-and-remove-on-port-close.patch
+Patch9075:    0075-net-hns3-fix-order-of-clearing-imissed-register-in-P.patch
+Patch9076:    0076-net-hns3-fix-MAC-and-queues-HW-statistics-overflow.patch
+Patch9077:    0077-net-hns3-fix-pseudo-sharing-between-threads.patch
+Patch9078:    0078-net-hns3-fix-mbuf-free-on-Tx-done-cleanup.patch
+Patch9079:    0079-net-hns3-fix-RSS-disable.patch
+Patch9080:    0080-net-hns3-fix-rollback-on-RSS-hash-update.patch
+Patch9081:    0081-net-hns3-remove-redundant-RSS-tuple-field.patch
+Patch9082:    0082-ethdev-fix-RSS-update-when-RSS-is-disabled.patch
+Patch9083:    0083-net-hns3-remove-unnecessary-RSS-switch.patch
+Patch9084:    0084-app-testpmd-check-statistics-query-before-printing.patch
+Patch9085:    0085-app-testpmd-fix-MTU-verification.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -169,6 +209,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Tue May 17 2022 Min Hu(Connor) <humin29@huawei.com> - 21.11-10
+- sync patches from 22.03.
+
 * Wed March 23 2022 Min Hu(Connor) <humin29@huawei.com> - 21.11-9
 - fix adding examples app.
 
