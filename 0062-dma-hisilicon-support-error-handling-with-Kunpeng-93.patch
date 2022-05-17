@@ -1,0 +1,35 @@
+From 2265601837805a2fc70dd5935ffe3f2ccaec17d1 Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Thu, 17 Feb 2022 10:59:08 +0800
+Subject: [PATCH] dma/hisilicon: support error handling with Kunpeng 930
+
+The Kunpeng930 DMA supports the capability of handles errors.
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+---
+ drivers/dma/hisilicon/hisi_dmadev.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/dma/hisilicon/hisi_dmadev.c b/drivers/dma/hisilicon/hisi_dmadev.c
+index d4e08994a8..b99a9bce6c 100644
+--- a/drivers/dma/hisilicon/hisi_dmadev.c
++++ b/drivers/dma/hisilicon/hisi_dmadev.c
+@@ -328,11 +328,14 @@ hisi_dma_info_get(const struct rte_dma_dev *dev,
+ 		  struct rte_dma_info *dev_info,
+ 		  uint32_t info_sz)
+ {
+-	RTE_SET_USED(dev);
++	struct hisi_dma_dev *hw = dev->data->dev_private;
+ 	RTE_SET_USED(info_sz);
+ 
+ 	dev_info->dev_capa = RTE_DMA_CAPA_MEM_TO_MEM |
+ 			     RTE_DMA_CAPA_OPS_COPY;
++	if (hw->reg_layout == HISI_DMA_REG_LAYOUT_HIP09)
++		dev_info->dev_capa |= RTE_DMA_CAPA_HANDLES_ERRORS;
++
+ 	dev_info->max_vchans = 1;
+ 	dev_info->max_desc = HISI_DMA_MAX_DESC_NUM;
+ 	dev_info->min_desc = HISI_DMA_MIN_DESC_NUM;
+-- 
+2.33.0
+

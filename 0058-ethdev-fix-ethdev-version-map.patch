@@ -1,0 +1,31 @@
+From fe0c1c3ea1023ecece4bf5f5ef99a014fcb182b8 Mon Sep 17 00:00:00 2001
+From: "Min Hu (Connor)" <humin29@huawei.com>
+Date: Wed, 6 Apr 2022 09:29:30 +0800
+Subject: [PATCH 13/13] ethdev: fix ethdev version map
+
+This patch fix ethdev version map as new API introduced.
+
+Fixes: 2d2aea5495d1 ("ethdev: introduce dump API")
+
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ lib/ethdev/version.map | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/lib/ethdev/version.map b/lib/ethdev/version.map
+index c2fb0669a4..f29c60eda4 100644
+--- a/lib/ethdev/version.map
++++ b/lib/ethdev/version.map
+@@ -256,6 +256,9 @@ EXPERIMENTAL {
+ 	rte_flow_flex_item_create;
+ 	rte_flow_flex_item_release;
+ 	rte_flow_pick_transfer_proxy;
++
++	# added in 22.03
++	rte_eth_dev_priv_dump;
+ };
+ 
+ INTERNAL {
+-- 
+2.30.0
+
