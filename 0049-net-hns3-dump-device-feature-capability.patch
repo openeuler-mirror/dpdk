@@ -1,0 +1,63 @@
+From 9bbea26d3c903f5741447a1b1a943d02b275af56 Mon Sep 17 00:00:00 2001
+From: "Min Hu (Connor)" <humin29@huawei.com>
+Date: Fri, 11 Feb 2022 10:52:06 +0800
+Subject: [PATCH 04/13] net/hns3: dump device feature capability
+
+Kunpeng 920 and Kunpeng 930 support different feature capability.
+This patch dumps feature capability Current device supports.
+
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev_dump.c | 28 ++++++++++++++++++++++++++++
+ 1 file changed, 28 insertions(+)
+
+diff --git a/drivers/net/hns3/hns3_ethdev_dump.c b/drivers/net/hns3/hns3_ethdev_dump.c
+index bd95184b02..a0fa0a3584 100644
+--- a/drivers/net/hns3/hns3_ethdev_dump.c
++++ b/drivers/net/hns3/hns3_ethdev_dump.c
+@@ -55,6 +55,30 @@ hns3_get_io_func_hint_name(uint32_t hint)
+ }
+ 
+ static void
++hns3_get_dev_feature_capability(FILE *file, struct hns3_hw *hw)
++{
++	const char * const caps_name[] = {
++		"DCB",
++		"COPPER",
++		"FD QUEUE REGION",
++		"PTP",
++		"TX PUSH",
++		"INDEP TXRX",
++		"STASH",
++		"SIMPLE BD",
++		"RXD Advanced Layout",
++		"OUTER UDP CKSUM",
++		"RAS IMP",
++		"TM",
++	};
++	uint32_t i;
++
++	fprintf(file, "  - Dev Capability:\n");
++	for (i = 0; i < RTE_DIM(caps_name); i++)
++		fprintf(file, "\t  -- support %s: %s\n", caps_name[i],
++			hw->capability & BIT(i) ? "yes" : "no");
++}
++
+ hns3_get_device_basic_info(FILE *file, struct rte_eth_dev *dev)
+ {
+ 	struct hns3_adapter *hns = dev->data->dev_private;
+@@ -93,7 +117,11 @@ hns3_get_device_basic_info(FILE *file, struct rte_eth_dev *dev)
+ int
+ hns3_eth_dev_priv_dump(struct rte_eth_dev *dev, FILE *file)
+ {
++	struct hns3_adapter *hns = dev->data->dev_private;
++	struct hns3_hw *hw = &hns->hw;
++
+ 	hns3_get_device_basic_info(file, dev);
++	hns3_get_dev_feature_capability(file, hw);
+ 
+ 	return 0;
+ }
+-- 
+2.30.0
+

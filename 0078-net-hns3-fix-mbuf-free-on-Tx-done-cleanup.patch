@@ -1,0 +1,50 @@
+From 2d287ea3c2301219c201617df15efa161deabf76 Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Thu, 5 May 2022 20:27:04 +0800
+Subject: [PATCH] net/hns3: fix mbuf free on Tx done cleanup
+
+Currently, the hns3 PMD may free more mbufs than free_cnt parameter,
+this is an incorrect implementation. This patch fixes it.
+
+Fixes: 0b77e8f3d364 ("net/hns3: optimize Tx performance")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_rxtx.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_rxtx.c b/drivers/net/hns3/hns3_rxtx.c
+index a28de06dfd..0c91e4721e 100644
+--- a/drivers/net/hns3/hns3_rxtx.c
++++ b/drivers/net/hns3/hns3_rxtx.c
+@@ -4595,7 +4595,7 @@ hns3_dev_tx_queue_stop(struct rte_eth_dev *dev, uint16_t tx_queue_id)
+ static int
+ hns3_tx_done_cleanup_full(struct hns3_tx_queue *txq, uint32_t free_cnt)
+ {
+-	uint16_t round_free_cnt;
++	uint16_t round_cnt;
+ 	uint32_t idx;
+ 
+ 	if (free_cnt == 0 || free_cnt > txq->nb_tx_desc)
+@@ -4604,13 +4604,13 @@ hns3_tx_done_cleanup_full(struct hns3_tx_queue *txq, uint32_t free_cnt)
+ 	if (txq->tx_rs_thresh == 0)
+ 		return 0;
+ 
+-	round_free_cnt = roundup(free_cnt, txq->tx_rs_thresh);
+-	for (idx = 0; idx < round_free_cnt; idx += txq->tx_rs_thresh) {
++	round_cnt = rounddown(free_cnt, txq->tx_rs_thresh);
++	for (idx = 0; idx < round_cnt; idx += txq->tx_rs_thresh) {
+ 		if (hns3_tx_free_useless_buffer(txq) != 0)
+ 			break;
+ 	}
+ 
+-	return RTE_MIN(idx, free_cnt);
++	return idx;
+ }
+ 
+ int
+-- 
+2.33.0
+

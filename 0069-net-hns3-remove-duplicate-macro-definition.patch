@@ -1,0 +1,31 @@
+From 0983cdc1870f52a360eadb40eab84b34c20b464d Mon Sep 17 00:00:00 2001
+From: Jie Hai <haijie1@huawei.com>
+Date: Mon, 28 Feb 2022 11:21:41 +0800
+Subject: [PATCH] net/hns3: remove duplicate macro definition
+
+This patch fixes duplicate macro definition of HNS3_RSS_CFG_TBL_SIZE.
+
+Fixes: 737f30e1c3ab ("net/hns3: support command interface with firmware")
+Cc: stable@dpdk.org
+
+Signed-off-by: Jie Hai <haijie1@huawei.com>
+Acked-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_cmd.h | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/drivers/net/hns3/hns3_cmd.h b/drivers/net/hns3/hns3_cmd.h
+index 81bc9e9d98..f9addc6069 100644
+--- a/drivers/net/hns3/hns3_cmd.h
++++ b/drivers/net/hns3/hns3_cmd.h
+@@ -603,7 +603,6 @@ struct hns3_cfg_gro_status_cmd {
+ 
+ #define HNS3_RSS_HASH_KEY_OFFSET_B	4
+ 
+-#define HNS3_RSS_CFG_TBL_SIZE	16
+ #define HNS3_RSS_HASH_KEY_NUM	16
+ /* Configure the algorithm mode and Hash Key, opcode:0x0D01 */
+ struct hns3_rss_generic_config_cmd {
+-- 
+2.33.0
+
