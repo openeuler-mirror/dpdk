@@ -1,0 +1,38 @@
+From d8c079a572f3b76ca22fbfe665fb2e5e578ba881 Mon Sep 17 00:00:00 2001
+From: "Min Hu (Connor)" <humin29@huawei.com>
+Date: Thu, 17 Feb 2022 19:36:55 +0800
+Subject: [PATCH] app/testpmd: check starting port is not in bonding
+
+In bond, start or stop slave port should be operated by bonding port.
+This patch add port_is_bonding_slave in start_port function.
+
+Fixes: 0e545d3047fe ("app/testpmd: check stopping port is not in bonding")
+Cc: stable@dpdk.org
+
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+Reviewed-by: Ferruh Yigit <ferruh.yigit@intel.com>
+---
+ app/test-pmd/testpmd.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/app/test-pmd/testpmd.c b/app/test-pmd/testpmd.c
+index 6d2e52c790..fe2ce19f99 100644
+--- a/app/test-pmd/testpmd.c
++++ b/app/test-pmd/testpmd.c
+@@ -2726,6 +2726,13 @@ start_port(portid_t pid)
+ 		if (pid != pi && pid != (portid_t)RTE_PORT_ALL)
+ 			continue;
+ 
++		if (port_is_bonding_slave(pi)) {
++			fprintf(stderr,
++				"Please remove port %d from bonded device.\n",
++				pi);
++			continue;
++		}
++
+ 		need_check_link_status = 0;
+ 		port = &ports[pi];
+ 		if (port->port_status == RTE_PORT_STOPPED)
+-- 
+2.33.0
+
