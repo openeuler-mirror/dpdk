@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 19.11
-Release: 15
+Release: 16
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  19.11
@@ -36,6 +36,11 @@ Patch26: backport-0003-vhost-fix-crash-on-reconnect.patch
 Patch27: backport-0004-net-virtio-report-maximum-MTU-in-device-info.patch
 Patch28: backport-0005-bus-dpaa-fix-freeing-in-FMAN-interface-destructor.patch
 Patch29: backport-0006-distributor-fix-128-bit-write-alignment.patch
+Patch30: 0014-fix-rte-eal-sec-detach-coredump-count-rollover.patch
+Patch31: 0015-fix-rte-eal-memory-init-double-unlock.patch
+Patch32: 0016-fix-last-argv-pointer-change-to-first.patch
+Patch33: 0017-fix-internal-cfg-and-fbarray-attach-mememory-leak.patch
+Patch34: 0018-fix-error-that-the-secondary-attach-fails-due-to-detach.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -185,6 +190,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Thu Jun 9 2022 xiusailong <xiusailong@huawei.com> - 19.11-16
+- support gazelle feature
+
 * Mon Nov 15 2021 wuchangsheng <wuchangsheng2@huawei.com> - 19.11-15
 - backport pathes from community
 - net/softnic fix memory leak as profile is freed
