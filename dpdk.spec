@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 10
+Release: 11
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -91,6 +91,10 @@ Patch9082:    0082-ethdev-fix-RSS-update-when-RSS-is-disabled.patch
 Patch9083:    0083-net-hns3-remove-unnecessary-RSS-switch.patch
 Patch9084:    0084-app-testpmd-check-statistics-query-before-printing.patch
 Patch9085:    0085-app-testpmd-fix-MTU-verification.patch
+
+Patch6001:    CVE-2021-3839.patch
+Patch6002:    CVE-2022-0669.patch
+
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -209,6 +213,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Fri Jun 10 2022 xiusailong <xiusailong@huawei.com> - 21.11-11
+- fix CVE-2021-3839 CVE-2022-0669
+
 * Tue May 17 2022 Min Hu(Connor) <humin29@huawei.com> - 21.11-10
 - sync patches from 22.03.
 
