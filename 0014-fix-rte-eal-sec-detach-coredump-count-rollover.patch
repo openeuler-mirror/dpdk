@@ -1,0 +1,43 @@
+From 73a222f904e1c5d69966a7716f5a1fd5c82e66cc Mon Sep 17 00:00:00 2001
+From: wuchangsheng <wuchangsheng2@huawei.com>
+Date: Thu, 3 Jun 2021 17:31:51 +0800
+Subject: [PATCH] fix rte eal sec detach coredump
+
+---
+ lib/librte_eal/linux/eal/eal.c          | 4 +++-
+ lib/librte_eal/linux/eal/eal_memalloc.c | 5 ++++-
+ 2 files changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/lib/librte_eal/linux/eal/eal.c b/lib/librte_eal/linux/eal/eal.c
+index ff86ff9..7718e3a 100644
+--- a/lib/librte_eal/linux/eal/eal.c
++++ b/lib/librte_eal/linux/eal/eal.c
+@@ -1616,6 +1616,8 @@ rte_eal_sec_detach(const char *file_prefix, int length)
+ 		return -1;
+ 	}
+ 
+-	sec_count--;
++       if (sec_count) {
++               sec_count--;
++       }
+ 	return 0;
+ }
+diff --git a/lib/librte_eal/linux/eal/eal_memalloc.c b/lib/librte_eal/linux/eal/eal_memalloc.c
+index 8e7f120..80646a2 100644
+--- a/lib/librte_eal/linux/eal/eal_memalloc.c
++++ b/lib/librte_eal/linux/eal/eal_memalloc.c
+@@ -1667,7 +1667,10 @@ eal_memalloc_destroy(const int sec_idx)
+ 	int msl_idx = 0;
+ 	struct rte_memseg_list *msl;
+ 	struct rte_mem_config *mcfg = rte_eal_sec_get_configuration(sec_idx)->mem_config;
+-	
++
++       if (mcfg == NULL) {
++               return 0;
++       }
+ 	for (msl_idx = 0; msl_idx < RTE_MAX_MEMSEG_LISTS; msl_idx++) {
+ 	
+ 		msl = &mcfg->memsegs[msl_idx];
+-- 
+2.23.0
+

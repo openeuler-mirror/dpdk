@@ -1,0 +1,25 @@
+From 8f69aa023ffa1ea951615defb24138d7d5ef3db3 Mon Sep 17 00:00:00 2001
+From: wuchangsheng <wuchangsheng2@huawei.com>
+Date: Sun, 18 Jul 2021 19:43:51 +0800
+Subject: [PATCH] fix-arfgs
+
+---
+ lib/librte_eal/linux/eal/eal.c | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/lib/librte_eal/linux/eal/eal.c b/lib/librte_eal/linux/eal/eal.c
+index 60074ff..4385031 100644
+--- a/lib/librte_eal/linux/eal/eal.c
++++ b/lib/librte_eal/linux/eal/eal.c
+@@ -958,8 +958,6 @@ __eal_parse_args(int argc, char **argv, char *runtime_dir, const int buflen,
+ 		goto out;
+ 	}
+ 
+-	if (optind >= 0)
+-		argv[optind-1] = prgname;
+ 	ret = optind-1;
+ 
+ out:
+-- 
+2.23.0
+

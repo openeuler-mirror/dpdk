@@ -1,0 +1,26 @@
+From d4236bd136c94d8272a145525ac9128d2fefce13 Mon Sep 17 00:00:00 2001
+From: wuchangsheng <wuchangsheng2@huawei.com>
+Date: Wed, 21 Jul 2021 15:13:59 +0800
+Subject: [PATCH] fix detach memset rte mem config
+
+eal_memalloc_destroy memset rte_mem_config while detach. rte_mem_config  mmap from file witch share with primary proc. this break rte_mem_config of primary proc
+
+---
+ lib/librte_eal/linux/eal/eal_memalloc.c | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/lib/librte_eal/linux/eal/eal_memalloc.c b/lib/librte_eal/linux/eal/eal_memalloc.c
+index f50954e..e345d94 100644
+--- a/lib/librte_eal/linux/eal/eal_memalloc.c
++++ b/lib/librte_eal/linux/eal/eal_memalloc.c
+@@ -1688,7 +1688,6 @@ eal_memalloc_destroy(const int sec_idx)
+ 			RTE_LOG(ERR, EAL, "Failed to unmap memseg lists\n");
+ 			return -1;
+ 		}
+-		memset(msl, 0, sizeof(*msl));
+ 
+ 		if (fd_list_destroy_walk(msl, sec_idx)) {
+ 			RTE_LOG(ERR, EAL, "Failed to clear secondary fd_list.\n");
+-- 
+2.23.0
+

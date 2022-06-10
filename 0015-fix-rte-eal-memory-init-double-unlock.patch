@@ -1,0 +1,29 @@
+From 6271d4d2365298ea7e25fe867605618e559b15a4 Mon Sep 17 00:00:00 2001
+From: wuchangsheng <wuchangsheng2@huawei.com>
+Date: Fri, 11 Jun 2021 17:56:16 +0800
+Subject: [PATCH] stuck
+
+---
+ lib/librte_eal/common/eal_common_memory.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/lib/librte_eal/common/eal_common_memory.c b/lib/librte_eal/common/eal_common_memory.c
+index 842fc9b..ffb0c04 100644
+--- a/lib/librte_eal/common/eal_common_memory.c
++++ b/lib/librte_eal/common/eal_common_memory.c
+@@ -967,8 +967,10 @@ rte_eal_sec_memory_init(const int sec_idx)
+ 	ret = __rte_eal_memory_init(rte_eal_sec_get_runtime_dir(sec_idx),
+ 			rte_eal_sec_get_internal_config(sec_idx), rte_cfg,
+ 			true, sec_idx);
+-
+-	rte_rwlock_read_unlock(&rte_cfg->mem_config->memory_hotplug_lock);
++       if (ret == 0) {
++               /* when ret != 0 unlock in __rte_eal_memory_init */
++	        rte_rwlock_read_unlock(&rte_cfg->mem_config->memory_hotplug_lock);
++       }
+ 
+ 	return ret;
+ }
+-- 
+2.23.0
+
