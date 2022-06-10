@@ -1,0 +1,37 @@
+From 1c5c6cd85f8cab2af92d265b6c7671df0b82e6fb Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Tue, 3 May 2022 18:02:14 +0800
+Subject: [PATCH] net/bonding: fix slave stop and remove on port close
+
+All slaves will be stopped and removed when closing a bonded port.
+But the while loop can not end if both rte_eth_dev_stop and
+rte_eth_bond_slave_remove fails, runs infinitely.
+This is because the skipped slave port counted in both function failures
+but it should be counted only one.
+
+Fixing by not continue to process in the loop after first failure.
+
+Fixes: fb0379bc5db3 ("net/bonding: check stop call status")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/bonding/rte_eth_bond_pmd.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/net/bonding/rte_eth_bond_pmd.c b/drivers/net/bonding/rte_eth_bond_pmd.c
+index 605fc2ffb5..f0668a636f 100644
+--- a/drivers/net/bonding/rte_eth_bond_pmd.c
++++ b/drivers/net/bonding/rte_eth_bond_pmd.c
+@@ -2156,6 +2156,7 @@ bond_ethdev_close(struct rte_eth_dev *dev)
+ 			RTE_BOND_LOG(ERR, "Failed to stop device on port %u",
+ 				     port_id);
+ 			skipped++;
++			continue;
+ 		}
+ 
+ 		if (rte_eth_bond_slave_remove(bond_port_id, port_id) != 0) {
+-- 
+2.33.0
+

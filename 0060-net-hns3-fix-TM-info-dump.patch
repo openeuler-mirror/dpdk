@@ -1,0 +1,29 @@
+From 288da934034f84ab87b9e0d087db7e1e3c88bc8a Mon Sep 17 00:00:00 2001
+From: "Min Hu (Connor)" <humin29@huawei.com>
+Date: Fri, 8 Apr 2022 11:27:04 +0800
+Subject: [PATCH] net/hns3: fix TM info dump
+
+This patch add newline characterat the end of TM info dump.
+
+Fixes: 761dfa44be2f ("net/hns3: dump TM configuration info")
+
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_dump.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/net/hns3/hns3_dump.c b/drivers/net/hns3/hns3_dump.c
+index 3a30a585c5..6ec3125b10 100644
+--- a/drivers/net/hns3/hns3_dump.c
++++ b/drivers/net/hns3/hns3_dump.c
+@@ -684,6 +684,7 @@ hns3_get_tm_conf_queue_format_info(FILE *file, struct hns3_tm_node **queue_node,
+ 				queue_node[j] ? queue_node_tc[j] :
+ 				HNS3_MAX_TC_NUM);
+ 		}
++		fprintf(file, "\n");
+ 	}
+ }
+ 
+-- 
+2.33.0
+
