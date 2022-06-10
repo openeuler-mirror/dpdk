@@ -1,0 +1,51 @@
+From d6a9f8fb26b8d6adaac20d6a303faa5c5ba4d5bc Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Wed, 2 Mar 2022 08:35:01 +0800
+Subject: [PATCH] net/hns3: increase time waiting for PF reset completion
+
+On the case that PF and VF need to be reset, after the hardware reset is
+complete, VF needs wait for 1 second to restore the configuration so
+that VF does not fail to recover because PF reset isn't complete. But
+the estimated time is not sufficient. This patch fixes it to 5 seconds.
+
+Fixes: 2790c6464725 ("net/hns3: support device reset")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Acked-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev_vf.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_ethdev_vf.c b/drivers/net/hns3/hns3_ethdev_vf.c
+index 06ddf64184..9091706fe5 100644
+--- a/drivers/net/hns3/hns3_ethdev_vf.c
++++ b/drivers/net/hns3/hns3_ethdev_vf.c
+@@ -1877,6 +1877,7 @@ hns3vf_is_reset_pending(struct hns3_adapter *hns)
+ static int
+ hns3vf_wait_hardware_ready(struct hns3_adapter *hns)
+ {
++#define HNS3_WAIT_PF_RESET_READY_TIME 5
+ 	struct hns3_hw *hw = &hns->hw;
+ 	struct hns3_wait_data *wait_data = hw->reset.wait_data;
+ 	struct timeval tv;
+@@ -1897,12 +1898,14 @@ hns3vf_wait_hardware_ready(struct hns3_adapter *hns)
+ 			return 0;
+ 
+ 		wait_data->check_completion = NULL;
+-		wait_data->interval = 1 * MSEC_PER_SEC * USEC_PER_MSEC;
++		wait_data->interval = HNS3_WAIT_PF_RESET_READY_TIME *
++			MSEC_PER_SEC * USEC_PER_MSEC;
+ 		wait_data->count = 1;
+ 		wait_data->result = HNS3_WAIT_REQUEST;
+ 		rte_eal_alarm_set(wait_data->interval, hns3_wait_callback,
+ 				  wait_data);
+-		hns3_warn(hw, "hardware is ready, delay 1 sec for PF reset complete");
++		hns3_warn(hw, "hardware is ready, delay %d sec for PF reset complete",
++				HNS3_WAIT_PF_RESET_READY_TIME);
+ 		return -EAGAIN;
+ 	} else if (wait_data->result == HNS3_WAIT_TIMEOUT) {
+ 		hns3_clock_gettime(&tv);
+-- 
+2.33.0
+

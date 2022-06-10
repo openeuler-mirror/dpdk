@@ -1,0 +1,63 @@
+From 7041258cda77065d991d6ee8913edf110bd12531 Mon Sep 17 00:00:00 2001
+From: "Min Hu (Connor)" <humin29@huawei.com>
+Date: Fri, 11 Feb 2022 10:56:54 +0800
+Subject: [PATCH 05/13] net/hns3: dump device MAC info
+
+This patch dumps device MAC info which hns3 PMD private info offers.
+
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev_dump.c | 31 +++++++++++++++++++++++++++++
+ 1 file changed, 31 insertions(+)
+
+diff --git a/drivers/net/hns3/hns3_ethdev_dump.c b/drivers/net/hns3/hns3_ethdev_dump.c
+index a0fa0a3584..83601d9bda 100644
+--- a/drivers/net/hns3/hns3_ethdev_dump.c
++++ b/drivers/net/hns3/hns3_ethdev_dump.c
+@@ -54,6 +54,28 @@ hns3_get_io_func_hint_name(uint32_t hint)
+ 	}
+ }
+ 
++static void
++hns3_get_dev_mac_info(FILE *file, struct hns3_adapter *hns)
++{
++	struct hns3_hw *hw = &hns->hw;
++	struct hns3_pf *pf = &hns->pf;
++
++	fprintf(file, "  - MAC Info:\n");
++	fprintf(file,
++		"\t  -- query_type=%u\n"
++		"\t  -- supported_speed=0x%x\n"
++		"\t  -- advertising=0x%x\n"
++		"\t  -- lp_advertising=0x%x\n"
++		"\t  -- support_autoneg=%s\n"
++		"\t  -- support_fc_autoneg=%s\n",
++		hw->mac.query_type,
++		hw->mac.supported_speed,
++		hw->mac.advertising,
++		hw->mac.lp_advertising,
++		hw->mac.support_autoneg != 0 ? "Yes" : "No",
++		pf->support_fc_autoneg ? "Yes" : "No");
++}
++
+ static void
+ hns3_get_dev_feature_capability(FILE *file, struct hns3_hw *hw)
+ {
+@@ -123,5 +145,14 @@ hns3_eth_dev_priv_dump(struct rte_eth_dev *dev, FILE *file)
+ 	hns3_get_device_basic_info(file, dev);
+ 	hns3_get_dev_feature_capability(file, hw);
+ 
++	/*
++	 * VF only supports dumping basic info, feaure capability and queue
++	 * info.
++	 */
++	if (hns->is_vf)
++		return 0;
++
++	hns3_get_dev_mac_info(file, hns);
++
+ 	return 0;
+ }
+-- 
+2.30.0
+

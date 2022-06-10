@@ -1,0 +1,214 @@
+From 75ccc3f3d7fa06901d5b768448be4dc9f31f550a Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Thu, 5 May 2022 20:27:05 +0800
+Subject: [PATCH] net/hns3: fix RSS disable
+
+Currently, hns3 PMD disable RSS by resetting redirection table when user
+set rss_hf to 0 so as to all packets go to queue 0. The implementation
+may cause following problems:
+1) the same type packet may go to different queue on the case of
+   disabling all tuples and partial tuples. The problem is determined by
+   hardware design.
+2) affect the configuration of redirection table and user experience.
+
+For hns3 hardware, the packets with RSS disabled are always go to the
+queue corresponding to first entry of the redirection table. Generally,
+disable RSS should be implemented by disabling all tuples, This patch
+fix the implementation.
+
+Fixes: c37ca66f2b27 ("net/hns3: support RSS")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev.c |  1 -
+ drivers/net/hns3/hns3_flow.c   |  6 +--
+ drivers/net/hns3/hns3_rss.c    | 93 +++++++---------------------------
+ 3 files changed, 18 insertions(+), 82 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 1d9b19d83e..4d5a595aab 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -2015,7 +2015,6 @@ hns3_dev_configure(struct rte_eth_dev *dev)
+ 			goto cfg_err;
+ 	}
+ 
+-	/* When RSS is not configured, redirect the packet queue 0 */
+ 	if ((uint32_t)mq_mode & RTE_ETH_MQ_RX_RSS_FLAG) {
+ 		conf->rxmode.offloads |= RTE_ETH_RX_OFFLOAD_RSS_HASH;
+ 		rss_conf = conf->rx_adv_conf.rss_conf;
+diff --git a/drivers/net/hns3/hns3_flow.c b/drivers/net/hns3/hns3_flow.c
+index aba07aaa6f..feabac9f41 100644
+--- a/drivers/net/hns3/hns3_flow.c
++++ b/drivers/net/hns3/hns3_flow.c
+@@ -1446,13 +1446,9 @@ hns3_disable_rss(struct hns3_hw *hw)
+ {
+ 	int ret;
+ 
+-	/* Redirected the redirection table to queue 0 */
+-	ret = hns3_rss_reset_indir_table(hw);
++	ret = hns3_set_rss_tuple_by_rss_hf(hw, &hw->rss_info.rss_tuple_sets, 0);
+ 	if (ret)
+ 		return ret;
+-
+-	/* Disable RSS */
+-	hw->rss_info.conf.types = 0;
+ 	hw->rss_dis_flag = true;
+ 
+ 	return 0;
+diff --git a/drivers/net/hns3/hns3_rss.c b/drivers/net/hns3/hns3_rss.c
+index 1493b10f96..1c703952b9 100644
+--- a/drivers/net/hns3/hns3_rss.c
++++ b/drivers/net/hns3/hns3_rss.c
+@@ -237,31 +237,6 @@ hns3_rss_set_algo_key(struct hns3_hw *hw, const uint8_t *key)
+ 	return 0;
+ }
+ 
+-/*
+- * Used to configure the tuple selection for RSS hash input.
+- */
+-static int
+-hns3_rss_set_input_tuple(struct hns3_hw *hw)
+-{
+-	struct hns3_rss_conf *rss_config = &hw->rss_info;
+-	struct hns3_rss_input_tuple_cmd *req;
+-	struct hns3_cmd_desc desc_tuple;
+-	int ret;
+-
+-	hns3_cmd_setup_basic_desc(&desc_tuple, HNS3_OPC_RSS_INPUT_TUPLE, false);
+-
+-	req = (struct hns3_rss_input_tuple_cmd *)desc_tuple.data;
+-
+-	req->tuple_field =
+-		rte_cpu_to_le_64(rss_config->rss_tuple_sets.rss_tuple_fields);
+-
+-	ret = hns3_cmd_send(hw, &desc_tuple, 1);
+-	if (ret)
+-		hns3_err(hw, "Configure RSS input tuple mode failed %d", ret);
+-
+-	return ret;
+-}
+-
+ /*
+  * rss_indirection_table command function, opcode:0x0D07.
+  * Used to configure the indirection table of rss.
+@@ -382,6 +357,8 @@ hns3_set_rss_tuple_by_rss_hf(struct hns3_hw *hw,
+ 	}
+ 
+ 	tuple->rss_tuple_fields = rte_le_to_cpu_64(req->tuple_field);
++	/* Update supported flow types when set tuple success */
++	hw->rss_info.conf.types = rss_hf;
+ 
+ 	return 0;
+ }
+@@ -402,7 +379,6 @@ hns3_dev_rss_hash_update(struct rte_eth_dev *dev,
+ 	struct hns3_adapter *hns = dev->data->dev_private;
+ 	struct hns3_hw *hw = &hns->hw;
+ 	struct hns3_rss_tuple_cfg *tuple = &hw->rss_info.rss_tuple_sets;
+-	struct hns3_rss_conf *rss_cfg = &hw->rss_info;
+ 	uint8_t key_len = rss_conf->rss_key_len;
+ 	uint64_t rss_hf = rss_conf->rss_hf;
+ 	uint8_t *key = rss_conf->rss_key;
+@@ -416,22 +392,6 @@ hns3_dev_rss_hash_update(struct rte_eth_dev *dev,
+ 	if (ret)
+ 		goto conf_err;
+ 
+-	if (rss_cfg->conf.types && rss_hf == 0) {
+-		/* Disable RSS, reset indirection table by local variable */
+-		ret = hns3_rss_reset_indir_table(hw);
+-		if (ret)
+-			goto conf_err;
+-	} else if (rss_hf && rss_cfg->conf.types == 0) {
+-		/* Enable RSS, restore indirection table by hw's config */
+-		ret = hns3_set_rss_indir_table(hw, rss_cfg->rss_indirection_tbl,
+-					       hw->rss_ind_tbl_size);
+-		if (ret)
+-			goto conf_err;
+-	}
+-
+-	/* Update supported flow types when set tuple success */
+-	rss_cfg->conf.types = rss_hf;
+-
+ 	if (key) {
+ 		if (key_len != HNS3_RSS_KEY_SIZE) {
+ 			hns3_err(hw, "The hash key len(%u) is invalid",
+@@ -697,7 +657,8 @@ hns3_config_rss(struct hns3_adapter *hns)
+ 	struct hns3_hw *hw = &hns->hw;
+ 	struct hns3_rss_conf *rss_cfg = &hw->rss_info;
+ 	uint8_t *hash_key = rss_cfg->key;
+-	int ret, ret1;
++	uint64_t rss_hf;
++	int ret;
+ 
+ 	enum rte_eth_rx_mq_mode mq_mode = hw->data->dev_conf.rxmode.mq_mode;
+ 
+@@ -713,51 +674,31 @@ hns3_config_rss(struct hns3_adapter *hns)
+ 		break;
+ 	}
+ 
+-	/* When RSS is off, redirect the packet queue 0 */
+-	if (((uint32_t)mq_mode & RTE_ETH_MQ_RX_RSS_FLAG) == 0)
+-		hns3_rss_uninit(hns);
+-
+ 	/* Configure RSS hash algorithm and hash key offset */
+ 	ret = hns3_rss_set_algo_key(hw, hash_key);
+ 	if (ret)
+ 		return ret;
+ 
+-	/* Configure the tuple selection for RSS hash input */
+-	ret = hns3_rss_set_input_tuple(hw);
++	ret = hns3_set_rss_indir_table(hw, rss_cfg->rss_indirection_tbl,
++				       hw->rss_ind_tbl_size);
+ 	if (ret)
+ 		return ret;
+ 
+-	/*
+-	 * When RSS is off, it doesn't need to configure rss redirection table
+-	 * to hardware.
+-	 */
+-	if (((uint32_t)mq_mode & RTE_ETH_MQ_RX_RSS_FLAG)) {
+-		ret = hns3_set_rss_indir_table(hw, rss_cfg->rss_indirection_tbl,
+-					       hw->rss_ind_tbl_size);
+-		if (ret)
+-			goto rss_tuple_uninit;
+-	}
+-
+ 	ret = hns3_set_rss_tc_mode(hw);
+ 	if (ret)
+-		goto rss_indir_table_uninit;
+-
+-	return ret;
+-
+-rss_indir_table_uninit:
+-	if (((uint32_t)mq_mode & RTE_ETH_MQ_RX_RSS_FLAG)) {
+-		ret1 = hns3_rss_reset_indir_table(hw);
+-		if (ret1 != 0)
+-			return ret;
+-	}
+-
+-rss_tuple_uninit:
+-	hns3_rss_tuple_uninit(hw);
++		return ret;
+ 
+-	/* Disable RSS */
+-	hw->rss_info.conf.types = 0;
++	/*
++	 * When muli-queue RSS mode flag is not set or unsupported tuples are
++	 * set, disable all tuples.
++	 */
++	rss_hf = hw->rss_info.conf.types;
++	if (!((uint32_t)mq_mode & RTE_ETH_MQ_RX_RSS_FLAG) ||
++	    !(rss_hf & HNS3_ETH_RSS_SUPPORT))
++		rss_hf = 0;
+ 
+-	return ret;
++	return hns3_set_rss_tuple_by_rss_hf(hw, &hw->rss_info.rss_tuple_sets,
++					    rss_hf);
+ }
+ 
+ /*
+-- 
+2.33.0
+

@@ -1,0 +1,32 @@
+From 73d16d660b866aa209dcdc44a698427dac5f2eb7 Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Thu, 17 Feb 2022 11:24:51 +0800
+Subject: [PATCH] examples/vhost: remove DMA type option help info
+
+The dma-type parameter was not supported when dmadev was
+integrated in vhost, but the help info still exists. This
+patch deletes it.
+
+Fixes: 53d3f4778c1d ("vhost: integrate dmadev in asynchronous data-path")
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Reviewed-by: Chenbo Xia <chenbo.xia@intel.com>
+---
+ examples/vhost/main.c | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/examples/vhost/main.c b/examples/vhost/main.c
+index 3e784f5c6f..68afd398bb 100644
+--- a/examples/vhost/main.c
++++ b/examples/vhost/main.c
+@@ -608,7 +608,6 @@ us_vhost_usage(const char *prgname)
+ 	"		--tx-csum [0|1] disable/enable TX checksum offload.\n"
+ 	"		--tso [0|1] disable/enable TCP segment offload.\n"
+ 	"		--client register a vhost-user socket as client mode.\n"
+-	"		--dma-type register dma type for your vhost async driver. For example \"ioat\" for now.\n"
+ 	"		--dmas register dma channel for specific vhost device.\n",
+ 	       prgname);
+ }
+-- 
+2.33.0
+
