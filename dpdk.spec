@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 19.11
-Release: 16
+Release: 17
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  19.11
@@ -41,6 +41,8 @@ Patch31: 0015-fix-rte-eal-memory-init-double-unlock.patch
 Patch32: 0016-fix-last-argv-pointer-change-to-first.patch
 Patch33: 0017-fix-internal-cfg-and-fbarray-attach-mememory-leak.patch
 Patch34: 0018-fix-error-that-the-secondary-attach-fails-due-to-detach.patch
+Patch35: CVE-2021-3839.patch
+Patch36: CVE-2022-0669.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -190,6 +192,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Fri Jun 10 2022 xiusailong <xiusailong@huawei.com> - 19.11-17
+- fix CVE-2021-3839 CVE-2022-0669
+
 * Thu Jun 9 2022 xiusailong <xiusailong@huawei.com> - 19.11-16
 - support gazelle feature
 
