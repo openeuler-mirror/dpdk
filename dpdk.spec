@@ -219,10 +219,10 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 * Tue May 17 2022 Min Hu(Connor) <humin29@huawei.com> - 21.11-10
 - sync patches from 22.03.
 
-* Wed March 23 2022 Min Hu(Connor) <humin29@huawei.com> - 21.11-9
+* Wed Mar 23 2022 Min Hu(Connor) <humin29@huawei.com> - 21.11-9
 - fix adding examples app.
 
-* Mon March 14 2022 Min Hu(Connor) <humin29@huawei.com> - 21.11-8
+* Mon Mar 14 2022 Min Hu(Connor) <humin29@huawei.com> - 21.11-8
 - add examples app.
 
 * Wed Feb 09 2022 Min Hu(Connor) <humin29@huawei.com> - 21.11-7
@@ -274,7 +274,7 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 * Mon Sep 13 2021 Min Hu <humin29@huawei.com> - 20.11-10
 - add bugfixes for hns3 PMD
 
-* Thu Aug 30 2021 Min Hu <humin29@huawei.com> - 20.11-9
+* Tue Aug 31 2021 Min Hu <humin29@huawei.com> - 20.11-9
 - support link up/down for PF in hns3 PMD
 
 * Thu Jul 29 2021 Min Hu <humin29@huawei.com> - 20.11-8
