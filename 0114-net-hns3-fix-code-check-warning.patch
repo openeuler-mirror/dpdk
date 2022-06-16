@@ -1,0 +1,31 @@
+From 1c88a050b04c9dc12458d4127052f542a0919739 Mon Sep 17 00:00:00 2001
+From: "Min Hu (Connor)" <humin29@huawei.com>
+Date: Wed, 1 Jun 2022 11:52:46 +0800
+Subject: [PATCH 114/122] net/hns3: fix code check warning
+
+In bitwise operation, "val" should be an unsigned type.
+
+Fixes: 38b539d96eb6 ("net/hns3: support IEEE 1588 PTP")
+Cc: stable@dpdk.org
+
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_ptp.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/net/hns3/hns3_ptp.c b/drivers/net/hns3/hns3_ptp.c
+index 1442241a4e..0b0061bba5 100644
+--- a/drivers/net/hns3/hns3_ptp.c
++++ b/drivers/net/hns3/hns3_ptp.c
+@@ -81,7 +81,7 @@ hns3_timesync_configure(struct hns3_adapter *hns, bool en)
+ 	struct hns3_hw *hw = &hns->hw;
+ 	struct hns3_pf *pf = &hns->pf;
+ 	struct hns3_cmd_desc desc;
+-	int val;
++	uint32_t val;
+ 	int ret;
+ 
+ 	hns3_cmd_setup_basic_desc(&desc, HNS3_OPC_CFG_PTP_MODE, false);
+-- 
+2.22.0
+

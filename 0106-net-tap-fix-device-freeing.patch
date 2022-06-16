@@ -1,0 +1,38 @@
+From 601f63e2f591a0b191c0ab0d4b39e826b15a0226 Mon Sep 17 00:00:00 2001
+From: Yunjian Wang <wangyunjian@huawei.com>
+Date: Tue, 7 Jun 2022 14:50:57 +0800
+Subject: [PATCH 106/122] net/tap: fix device freeing
+
+The error path was calling rte_eth_dev_release_port() function,
+which frees eth_dev->data->dev_private, and then tries to free
+pmd->intr_handle, which causes the use after free issue.
+
+The free can be moved to before the release function is called.
+
+Fixes: d61138d4f0e ("drivers: remove direct access to interrupt handle")
+Cc: stable@dpdk.org
+
+Signed-off-by: Xiangjun Meng <mengxiangjun4@huawei.com>
+Signed-off-by: Yunjian Wang <wangyunjian@huawei.com>
+Reviewed-by: Andrew Rybchenko <andrew.rybchenko@oktetlabs.ru>
+---
+ drivers/net/tap/rte_eth_tap.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/net/tap/rte_eth_tap.c b/drivers/net/tap/rte_eth_tap.c
+index f1b48cae82..ddca630574 100644
+--- a/drivers/net/tap/rte_eth_tap.c
++++ b/drivers/net/tap/rte_eth_tap.c
+@@ -2099,8 +2099,8 @@ eth_dev_tap_create(struct rte_vdev_device *vdev, const char *tap_name,
+ 		close(pmd->ioctl_sock);
+ 	/* mac_addrs must not be freed alone because part of dev_private */
+ 	dev->data->mac_addrs = NULL;
+-	rte_eth_dev_release_port(dev);
+ 	rte_intr_instance_free(pmd->intr_handle);
++	rte_eth_dev_release_port(dev);
+ 
+ error_exit_nodev:
+ 	TAP_LOG(ERR, "%s Unable to initialize %s",
+-- 
+2.22.0
+
