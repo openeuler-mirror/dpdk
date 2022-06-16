@@ -1,0 +1,71 @@
+From 1650e90eef5c7be334b29d276479c8f4d997ba02 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Wed, 1 Jun 2022 11:52:45 +0800
+Subject: [PATCH 113/122] net/hns3: remove duplicate definition
+
+The default hash key array is defined twice. Remove the extra one.
+
+Fixes: c37ca66f2b27 ("net/hns3: support RSS")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_flow.c | 9 ---------
+ drivers/net/hns3/hns3_rss.c  | 6 ++----
+ drivers/net/hns3/hns3_rss.h  | 2 ++
+ 3 files changed, 4 insertions(+), 13 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_flow.c b/drivers/net/hns3/hns3_flow.c
+index 12afc24910..e994cac314 100644
+--- a/drivers/net/hns3/hns3_flow.c
++++ b/drivers/net/hns3/hns3_flow.c
+@@ -10,15 +10,6 @@
+ #include "hns3_logs.h"
+ #include "hns3_flow.h"
+ 
+-/* Default default keys */
+-static uint8_t hns3_hash_key[] = {
+-	0x6D, 0x5A, 0x56, 0xDA, 0x25, 0x5B, 0x0E, 0xC2,
+-	0x41, 0x67, 0x25, 0x3D, 0x43, 0xA3, 0x8F, 0xB0,
+-	0xD0, 0xCA, 0x2B, 0xCB, 0xAE, 0x7B, 0x30, 0xB4,
+-	0x77, 0xCB, 0x2D, 0xA3, 0x80, 0x30, 0xF2, 0x0C,
+-	0x6A, 0x42, 0xB7, 0x3B, 0xBE, 0xAC, 0x01, 0xFA
+-};
+-
+ static const uint8_t full_mask[VNI_OR_TNI_LEN] = { 0xFF, 0xFF, 0xFF };
+ static const uint8_t zero_mask[VNI_OR_TNI_LEN] = { 0x00, 0x00, 0x00 };
+ 
+diff --git a/drivers/net/hns3/hns3_rss.c b/drivers/net/hns3/hns3_rss.c
+index 4c546c9363..1003daf03e 100644
+--- a/drivers/net/hns3/hns3_rss.c
++++ b/drivers/net/hns3/hns3_rss.c
+@@ -9,10 +9,8 @@
+ #include "hns3_ethdev.h"
+ #include "hns3_logs.h"
+ 
+-/*
+- * The hash key used for rss initialization.
+- */
+-static const uint8_t hns3_hash_key[] = {
++/* Default hash keys */
++const uint8_t hns3_hash_key[] = {
+ 	0x6D, 0x5A, 0x56, 0xDA, 0x25, 0x5B, 0x0E, 0xC2,
+ 	0x41, 0x67, 0x25, 0x3D, 0x43, 0xA3, 0x8F, 0xB0,
+ 	0xD0, 0xCA, 0x2B, 0xCB, 0xAE, 0x7B, 0x30, 0xB4,
+diff --git a/drivers/net/hns3/hns3_rss.h b/drivers/net/hns3/hns3_rss.h
+index 7789f02a08..5b90d3a628 100644
+--- a/drivers/net/hns3/hns3_rss.h
++++ b/drivers/net/hns3/hns3_rss.h
+@@ -88,6 +88,8 @@ static inline uint32_t roundup_pow_of_two(uint32_t x)
+ 	return 1UL << fls(x - 1);
+ }
+ 
++extern const uint8_t hns3_hash_key[];
++
+ struct hns3_adapter;
+ 
+ int hns3_dev_rss_hash_update(struct rte_eth_dev *dev,
+-- 
+2.22.0
+

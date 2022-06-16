@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 11
+Release: 12
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -91,6 +91,43 @@ Patch9082:    0082-ethdev-fix-RSS-update-when-RSS-is-disabled.patch
 Patch9083:    0083-net-hns3-remove-unnecessary-RSS-switch.patch
 Patch9084:    0084-app-testpmd-check-statistics-query-before-printing.patch
 Patch9085:    0085-app-testpmd-fix-MTU-verification.patch
+Patch9086:    0086-app-testpmd-fix-port-status-of-bonding-slave-device.patch
+Patch9087:    0087-ethdev-clarify-null-location-case-in-xstats-get.patch
+Patch9088:    0088-ethdev-simplify-xstats-get-implementation.patch
+Patch9089:    0089-net-hns3-fix-xstats-get-return-if-xstats-is-null.patch
+Patch9090:    0090-net-ipn3ke-fix-xstats-get-return-if-xstats-is-null.patch
+Patch9091:    0091-net-mvpp2-fix-xstats-get-return-if-xstats-is-null.patch
+Patch9092:    0092-net-axgbe-fix-xstats-get-return-if-xstats-is-null.patch
+Patch9093:    0093-ethdev-fix-memory-leak-in-xstats-telemetry.patch
+Patch9094:    0094-ethdev-fix-possible-null-pointer-access.patch
+Patch9095:    0095-net-cnxk-fix-possible-null-dereference-in-telemetry.patch
+Patch9096:    0096-net-bonding-fix-mbuf-fast-free-usage.patch
+Patch9097:    0097-ethdev-fix-port-state-when-stop.patch
+Patch9098:    0098-ethdev-fix-port-close-in-secondary-process.patch
+Patch9099:    0099-examples-dma-fix-MTU-configuration.patch
+Patch9100:    0100-examples-dma-fix-Tx-drop-statistics.patch
+Patch9101:    0101-examples-dma-add-force-minimal-copy-size-parameter.patch
+Patch9102:    0102-dma-hisilicon-fix-index-returned-when-no-DMA-complet.patch
+Patch9103:    0103-test-dma-check-index-when-no-DMA-completed.patch
+Patch9104:    0104-dma-hisilicon-enhance-CQ-scan-robustness.patch
+Patch9105:    0105-net-failsafe-fix-device-freeing.patch
+Patch9106:    0106-net-tap-fix-device-freeing.patch
+Patch9107:    0107-net-bonding-fix-RSS-inconsistent-between-bonded-and-.patch
+Patch9108:    0108-app-test-fix-bonding-RSS-test-when-disable-RSS.patch
+Patch9109:    0109-net-hns3-add-check-for-deferred-start-queue-when-rol.patch
+Patch9110:    0110-net-hns3-remove-redundant-parentheses.patch
+Patch9111:    0111-net-hns3-adjust-the-data-type-of-some-variables.patch
+Patch9112:    0112-net-hns3-fix-an-unreasonable-memset.patch
+Patch9113:    0113-net-hns3-remove-duplicate-definition.patch
+Patch9114:    0114-net-hns3-fix-code-check-warning.patch
+Patch9115:    0115-net-hns3-fix-return-value-for-unsupported-tuple.patch
+Patch9116:    0116-net-hns3-modify-a-function-name.patch
+Patch9117:    0117-net-hns3-unify-the-code-wrap-style.patch
+Patch9118:    0118-net-hns3-fix-a-segfault-from-secondary-process.patch
+Patch9119:    0119-net-hns3-fix-TM-capability-incorrectly-defined.patch
+Patch9120:    0120-app-testpmd-add-help-messages-for-multi-process.patch
+Patch9121:    0121-app-testpmd-fix-use-of-indirect-action-after-port-cl.patch
+Patch9122:    0122-app-testpmd-fix-bonding-slave-devices-not-released.patch
 
 Patch6001:    CVE-2021-3839.patch
 Patch6002:    CVE-2022-0669.patch
@@ -215,6 +252,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Thu Jun 16 2022 Dongdong Liu <liudongdong3@huawei.com> - 21.11-12
+- sync patches from upstreaming branch.
+
 * Fri Jun 10 2022 xiusailong <xiusailong@huawei.com> - 21.11-11
 - fix CVE-2021-3839 CVE-2022-0669
 
