@@ -1,0 +1,32 @@
+From a0077b01d8ba2b5310ca6fdee7c61e40ae6eeca3 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Wed, 1 Jun 2022 11:52:47 +0800
+Subject: [PATCH 115/122] net/hns3: fix return value for unsupported tuple
+
+Driver should return false for unsupported tuple.
+
+Fixes: 18a4b4c3fa80 ("net/hns3: add default to switch when parsing fd tuple")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_fdir.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/net/hns3/hns3_fdir.c b/drivers/net/hns3/hns3_fdir.c
+index 2a7978ac07..a0d6598e57 100644
+--- a/drivers/net/hns3/hns3_fdir.c
++++ b/drivers/net/hns3/hns3_fdir.c
+@@ -631,7 +631,7 @@ static bool hns3_fd_convert_tuple(struct hns3_hw *hw,
+ 		break;
+ 	default:
+ 		hns3_warn(hw, "not support tuple of (%u)", tuple);
+-		break;
++		return false;
+ 	}
+ 	return true;
+ }
+-- 
+2.22.0
+

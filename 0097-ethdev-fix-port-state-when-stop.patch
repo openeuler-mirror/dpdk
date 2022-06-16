@@ -1,0 +1,36 @@
+From df393a512efe98bffa9b872844ea999507e51fba Mon Sep 17 00:00:00 2001
+From: "Min Hu (Connor)" <humin29@huawei.com>
+Date: Tue, 3 May 2022 18:02:17 +0800
+Subject: [PATCH 097/122] ethdev: fix port state when stop
+
+Currently, 'dev_started' is always set to be 0 when dev stop, whether
+it succeeded or failed. This is unreasonable and this patch fixed it.
+
+Fixes: 62024eb82756 ("ethdev: change stop operation callback to return int")
+Cc: stable@dpdk.org
+
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+Acked-by: Thomas Monjalon <thomas@monjalon.net>
+Acked-by: Ferruh Yigit <ferruh.yigit@xilinx.com>
+---
+ lib/ethdev/rte_ethdev.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/lib/ethdev/rte_ethdev.c b/lib/ethdev/rte_ethdev.c
+index e55d11937e..2671f47738 100644
+--- a/lib/ethdev/rte_ethdev.c
++++ b/lib/ethdev/rte_ethdev.c
+@@ -1879,8 +1879,9 @@ rte_eth_dev_stop(uint16_t port_id)
+ 	/* point fast-path functions to dummy ones */
+ 	eth_dev_fp_ops_reset(rte_eth_fp_ops + port_id);
+ 
+-	dev->data->dev_started = 0;
+ 	ret = (*dev->dev_ops->dev_stop)(dev);
++	if (ret == 0)
++		dev->data->dev_started = 0;
+ 	rte_ethdev_trace_stop(port_id, ret);
+ 
+ 	return ret;
+-- 
+2.22.0
+
