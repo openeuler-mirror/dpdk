@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 12
+Release: 13
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -142,6 +142,7 @@ ExclusiveArch: i686 x86_64 aarch64
 BuildRequires: meson ninja-build gcc diffutils python3-pyelftools python-pyelftools
 BuildRequires: kernel-devel numactl-devel
 BuildRequires: libpcap libpcap-devel
+BuildRequires: rdma-core-devel
 BuildRequires: uname-build-checks
 BuildRequires: chrpath
 BuildRequires: groff-base
@@ -252,6 +253,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Tue Jul 05 2022 Honggang Li <honggangli@163.com> - 21.11-13
+- Build mlx5 and mlx4 PMD
+
 * Thu Jun 16 2022 Dongdong Liu <liudongdong3@huawei.com> - 21.11-12
 - sync patches from upstreaming branch.
 
