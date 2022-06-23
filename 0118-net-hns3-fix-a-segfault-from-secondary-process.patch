@@ -1,0 +1,39 @@
+From 0526fc076a0e45de04597722128d4a2b87a44255 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Wed, 1 Jun 2022 11:52:50 +0800
+Subject: [PATCH 118/122] net/hns3: fix a segfault from secondary process
+
+If a hns3 device in the secondary process is attached to do probing
+operation, 'rx_queues' and 'tx_queues' in dev->data are null in
+eth_dev_fp_ops_setup when calling rte_eth_dev_probing_finish. The primary
+process calls dev_start to re-setup their fp_ops. But the secondary process
+can't call dev_start and has no chance to do it. If the application sends
+and receives packets at this time, a segfault will occur. So this patch
+uses the MP communication of the PMD to update the fp_ops of the device in
+the secondary process.
+
+Fixes: 96c33cfb06cf ("net/hns3: fix Rx/Tx functions update")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_rxtx.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/drivers/net/hns3/hns3_rxtx.c b/drivers/net/hns3/hns3_rxtx.c
+index 3f576fbf4b..0dc1d8cb60 100644
+--- a/drivers/net/hns3/hns3_rxtx.c
++++ b/drivers/net/hns3/hns3_rxtx.c
+@@ -4420,6 +4420,8 @@ hns3_eth_dev_fp_ops_config(const struct rte_eth_dev *dev)
+ 	fpo[port_id].tx_pkt_prepare = dev->tx_pkt_prepare;
+ 	fpo[port_id].rx_descriptor_status = dev->rx_descriptor_status;
+ 	fpo[port_id].tx_descriptor_status = dev->tx_descriptor_status;
++	fpo[port_id].rxq.data = dev->data->rx_queues;
++	fpo[port_id].txq.data = dev->data->tx_queues;
+ }
+ 
+ void
+-- 
+2.22.0
+

@@ -1,0 +1,79 @@
+From 21658b863d246055c225286d9bce8a0a884fc9d9 Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Fri, 13 May 2022 10:53:49 +0800
+Subject: [PATCH 087/122] ethdev: clarify null location case in xstats get
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+When xstats location is null in rte_eth_xstats_get() the return value
+is not clearly specified.  Some PMDs (eg. hns3/ipn3ke/mvpp2/axgbe) return
+zero while others return the required number of elements.
+
+In this patch, special parameter combinations are restricted:
+ 1. highlight that xstats location may be null if and only if n is 0.
+ 2. amend n parameter description to specify that if n is lower than
+    the required number of elements, the function returns the required
+    number of elements.
+ 3. specify that if n is zero, the xstats must be NULL, the function
+    returns the required number of elements (a duplicate which should
+    help to not very attentive readers).
+
+Add sanity check for null xstats and non-zero n case on API level to
+make it unnecessary to care about it in drivers.
+
+Fixes: ce757f5c9a4d ("ethdev: new method to retrieve extended statistics")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Acked-by: Morten Brørup <mb@smartsharesystems.com>
+Reviewed-by: Andrew Rybchenko <andrew.rybchenko@oktetlabs.ru>
+---
+ lib/ethdev/rte_ethdev.c | 4 +++-
+ lib/ethdev/rte_ethdev.h | 6 +++++-
+ 2 files changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/lib/ethdev/rte_ethdev.c b/lib/ethdev/rte_ethdev.c
+index cea2f0b498..b4a331b671 100644
+--- a/lib/ethdev/rte_ethdev.c
++++ b/lib/ethdev/rte_ethdev.c
+@@ -3319,6 +3319,8 @@ rte_eth_xstats_get(uint16_t port_id, struct rte_eth_xstat *xstats,
+ 	int ret;
+ 
+ 	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
++	if (xstats == NULL && n > 0)
++		return -EINVAL;
+ 	dev = &rte_eth_devices[port_id];
+ 
+ 	nb_rxqs = RTE_MIN(dev->data->nb_rx_queues, RTE_ETHDEV_QUEUE_STAT_CNTRS);
+@@ -3335,7 +3337,7 @@ rte_eth_xstats_get(uint16_t port_id, struct rte_eth_xstat *xstats,
+ 		 * xstats struct.
+ 		 */
+ 		xcount = (*dev->dev_ops->xstats_get)(dev,
+-				     xstats ? xstats + count : NULL,
++				     (n > count) ? xstats + count : NULL,
+ 				     (n > count) ? n - count : 0);
+ 
+ 		if (xcount < 0)
+diff --git a/lib/ethdev/rte_ethdev.h b/lib/ethdev/rte_ethdev.h
+index b8f135ba3f..082166ed42 100644
+--- a/lib/ethdev/rte_ethdev.h
++++ b/lib/ethdev/rte_ethdev.h
+@@ -3105,9 +3105,13 @@ int rte_eth_xstats_get_names(uint16_t port_id,
+  * @param xstats
+  *   A pointer to a table of structure of type *rte_eth_xstat*
+  *   to be filled with device statistics ids and values.
+- *   This parameter can be set to NULL if n is 0.
++ *   This parameter can be set to NULL if and only if n is 0.
+  * @param n
+  *   The size of the xstats array (number of elements).
++ *   If lower than the required number of elements, the function returns
++ *   the required number of elements.
++ *   If equal to zero, the xstats must be NULL, the function returns the
++ *   required number of elements.
+  * @return
+  *   - A positive value lower or equal to n: success. The return value
+  *     is the number of entries filled in the stats table.
+-- 
+2.22.0
+

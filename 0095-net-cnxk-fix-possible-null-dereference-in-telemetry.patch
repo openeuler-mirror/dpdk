@@ -1,0 +1,37 @@
+From d3078f7a0fe21d94fa8d6027f2541311a990585a Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Fri, 13 May 2022 10:53:57 +0800
+Subject: [PATCH 095/122] net/cnxk: fix possible null dereference in telemetry
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The return value of rte_tel_data_alloc() may be null pointer.
+Add missing check vs null.
+
+Fixes: 5ea354a1f2cc ("net/cnxk: support telemetry")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Acked-by: Morten Brørup <mb@smartsharesystems.com>
+Reviewed-by: Andrew Rybchenko <andrew.rybchenko@oktetlabs.ru>
+---
+ drivers/net/cnxk/cnxk_ethdev_telemetry.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/drivers/net/cnxk/cnxk_ethdev_telemetry.c b/drivers/net/cnxk/cnxk_ethdev_telemetry.c
+index 83bc65848c..4fd9048643 100644
+--- a/drivers/net/cnxk/cnxk_ethdev_telemetry.c
++++ b/drivers/net/cnxk/cnxk_ethdev_telemetry.c
+@@ -49,6 +49,8 @@ ethdev_tel_handle_info(const char *cmd __rte_unused,
+ 	rte_tel_data_add_dict_int(d, "n_ports", n_ports);
+ 
+ 	i_data = rte_tel_data_alloc();
++	if (i_data == NULL)
++		return -ENOMEM;
+ 	rte_tel_data_start_array(i_data, RTE_TEL_U64_VAL);
+ 
+ 	for (i = 0; i < RTE_MAX_ETHPORTS; i++) {
+-- 
+2.22.0
+
