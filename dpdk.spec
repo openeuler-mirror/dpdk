@@ -225,6 +225,8 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/local/include
 /usr/lib64/*.a
 /usr/lib64/dpdk/pmds-22.0/include/*.h
+/usr/lib64/pkgconfig/libdpdk-libs.pc
+/usr/lib64/pkgconfig/libdpdk.pc
 
 %files doc
 
