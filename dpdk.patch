@@ -1,0 +1,319 @@
+diff --git a/dpdk-21.11/drivers/net/virtio/virtio_pci_ethdev.c b/dpdk-21.11/drivers/net/virtio/virtio_pci_ethdev.c
+index 54645dc..a6c1e51 100644
+--- a/dpdk-21.11/drivers/net/virtio/virtio_pci_ethdev.c
++++ b/dpdk-21.11/drivers/net/virtio/virtio_pci_ethdev.c
+@@ -24,6 +24,8 @@
+ #include "virtio_pci.h"
+ #include "virtio_logs.h"
+ 
++#define HUAWEI_VIRTIO_BAR_NUM    3
++
+ /*
+  * The set of PCI devices this driver supports
+  */
+@@ -178,12 +180,32 @@ virtio_pci_devargs_parse(struct rte_devargs *devargs, int *vdpa)
+ 	return ret;
+ }
+ 
++static int
++device_check_bar_num(struct rte_mem_resource *mem_resource, int len)
++{
++    int num = 0;
++    for (int i = 0; i < len; i++) {
++        if (mem_resource[i].len != 0) {
++            num++;
++        }
++    }
++    if (num == HUAWEI_VIRTIO_BAR_NUM) {
++        return 0;
++    }
++    return -1;
++}
++
+ static int eth_virtio_pci_probe(struct rte_pci_driver *pci_drv __rte_unused,
+ 	struct rte_pci_device *pci_dev)
+ {
+ 	int vdpa = 0;
+ 	int ret = 0;
+ 
++	/* virtio pmd skips probe if device is huawei virtio */
++	if (device_check_bar_num(pci_dev->mem_resource, PCI_MAX_RESOURCE) == 0) {
++		return 1;
++	}
++
+ 	ret = virtio_pci_devargs_parse(pci_dev->device.devargs, &vdpa);
+ 	if (ret < 0) {
+ 		PMD_INIT_LOG(ERR, "devargs parsing is failed");
+diff --git a/dpdk-21.11/lib/eal/common/rte_malloc.c b/dpdk-21.11/lib/eal/common/rte_malloc.c
+index d0bec26..db79e60 100644
+--- a/dpdk-21.11/lib/eal/common/rte_malloc.c
++++ b/dpdk-21.11/lib/eal/common/rte_malloc.c
+@@ -49,6 +49,42 @@ rte_free(void *addr)
+ 	return mem_free(addr, true);
+ }
+ 
++int rte_free_ex(void *addr)
++{
++    struct malloc_elem *elem = NULL;
++
++    if (!addr) {
++        return -1;
++    }
++
++    elem = malloc_elem_from_data(addr);
++    if (!elem) {
++        return -1;
++    }
++
++    return malloc_heap_free(elem);
++}
++
++void* rte_malloc_socket_ex(const char *type, size_t size, int socket_arg, unsigned int flags, size_t align,
++                           size_t bound, int contig)
++{
++    return malloc_heap_alloc(type, size, socket_arg, flags, align, bound, (bool)contig);
++}
++
++int rte_malloc_elem_from_addr(const void *data, unsigned long long *pg_size, int *socket_id)
++{
++    struct malloc_elem *elem = NULL;
++
++    elem = malloc_elem_from_data(data);
++    if (!elem) {
++        return -1;
++    }
++
++    *socket_id = elem->msl->socket_id;
++    *pg_size = elem->msl->page_sz;
++    return 0;
++}
++
+ void
+ eal_free_no_trace(void *addr)
+ {
+diff --git a/dpdk-21.11/lib/eal/include/rte_malloc.h b/dpdk-21.11/lib/eal/include/rte_malloc.h
+index ed02e15..921f876 100644
+--- a/dpdk-21.11/lib/eal/include/rte_malloc.h
++++ b/dpdk-21.11/lib/eal/include/rte_malloc.h
+@@ -188,6 +188,13 @@ void *
+ rte_malloc_socket(const char *type, size_t size, unsigned align, int socket)
+ 	__rte_alloc_size(2);
+ 
++void* rte_malloc_socket_ex(const char *type, size_t size, int socket_arg, unsigned int flags, size_t align,
++    size_t bound, int contig);
++
++int rte_malloc_elem_from_addr(const void *data, unsigned long long *pg_size, int *socket_id);
++
++int rte_free_ex(void *addr);
++
+ /**
+  * Allocate zero'ed memory from the heap.
+  *
+diff --git a/dpdk-21.11/lib/eal/version.map b/dpdk-21.11/lib/eal/version.map
+index ab28c22..0c0200f 100644
+--- a/dpdk-21.11/lib/eal/version.map
++++ b/dpdk-21.11/lib/eal/version.map
+@@ -155,6 +155,9 @@ DPDK_22 {
+ 	rte_malloc_heap_socket_is_external;
+ 	rte_malloc_set_limit;
+ 	rte_malloc_socket;
++	rte_malloc_socket_ex;
++	rte_malloc_elem_from_addr;
++	rte_free_ex;
+ 	rte_malloc_validate;
+ 	rte_malloc_virt2iova;
+ 	rte_mcfg_get_single_file_segments;
+diff --git a/dpdk-21.11/lib/ethdev/ethdev_driver.h b/dpdk-21.11/lib/ethdev/ethdev_driver.h
+index d95605a..23403b7 100644
+--- a/dpdk-21.11/lib/ethdev/ethdev_driver.h
++++ b/dpdk-21.11/lib/ethdev/ethdev_driver.h
+@@ -650,6 +650,15 @@ typedef int (*eth_get_module_info_t)(struct rte_eth_dev *dev,
+ typedef int (*eth_get_module_eeprom_t)(struct rte_eth_dev *dev,
+ 				       struct rte_dev_eeprom_info *info);
+ 
++typedef int (*eth_dev_extra_config_set_t)(struct rte_eth_dev *dev,
++                  char* type,
++                  char* conf);
++
++typedef int (*eth_dev_extra_config_get_t)(struct rte_eth_dev *dev,
++                  char* type,
++                  char* conf);
++
++
+ struct rte_flow_ops;
+ /**
+  * @internal
+@@ -1186,6 +1195,8 @@ struct eth_dev_ops {
+ 	 * kinds of metadata to the PMD
+ 	 */
+ 	eth_rx_metadata_negotiate_t rx_metadata_negotiate;
++    eth_dev_extra_config_set_t extra_config_set;
++    eth_dev_extra_config_get_t extra_config_get;
+ };
+ 
+ /**
+diff --git a/dpdk-21.11/lib/ethdev/rte_ethdev.c b/dpdk-21.11/lib/ethdev/rte_ethdev.c
+index a1d475a..de98483 100644
+--- a/dpdk-21.11/lib/ethdev/rte_ethdev.c
++++ b/dpdk-21.11/lib/ethdev/rte_ethdev.c
+@@ -1671,6 +1671,14 @@ rollback:
+ 	return ret;
+ }
+ 
++void *rte_eth_dev_get_private_data(uint16_t port_id)
++{
++    struct rte_eth_dev *dev;
++    RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, NULL);
++    dev = &rte_eth_devices[port_id];
++    return dev->data->dev_private;
++}
++
+ void
+ rte_eth_dev_internal_reset(struct rte_eth_dev *dev)
+ {
+@@ -6472,6 +6480,16 @@ rte_eth_rx_metadata_negotiate(uint16_t port_id, uint64_t *features)
+ 		       (*dev->dev_ops->rx_metadata_negotiate)(dev, features));
+ }
+ 
++int
++rte_eth_port_extra_config_set(uint16_t port_id, char* type, char* conf)
++{
++    struct rte_eth_dev *dev;
++    RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
++    dev = &rte_eth_devices[port_id];
++    RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->extra_config_set, -ENOTSUP);
++    return eth_err(port_id, (*dev->dev_ops->extra_config_set)(dev, type, conf));
++}
++
+ RTE_LOG_REGISTER_DEFAULT(rte_eth_dev_logtype, INFO);
+ 
+ RTE_INIT(ethdev_init_telemetry)
+diff --git a/dpdk-21.11/lib/ethdev/rte_ethdev.h b/dpdk-21.11/lib/ethdev/rte_ethdev.h
+index fa299c8..ffbaf5d 100644
+--- a/dpdk-21.11/lib/ethdev/rte_ethdev.h
++++ b/dpdk-21.11/lib/ethdev/rte_ethdev.h
+@@ -2394,6 +2394,11 @@ const char *rte_eth_dev_capability_name(uint64_t capability);
+ int rte_eth_dev_configure(uint16_t port_id, uint16_t nb_rx_queue,
+ 		uint16_t nb_tx_queue, const struct rte_eth_conf *eth_conf);
+ 
++/*
++ * Get Ethernet device private data.
++ */
++void *rte_eth_dev_get_private_data(uint16_t port_id);
++
+ /**
+  * Check if an Ethernet device was physically removed.
+  *
+@@ -5187,6 +5192,8 @@ int rte_eth_representor_info_get(uint16_t port_id,
+  */
+ __rte_experimental
+ int rte_eth_rx_metadata_negotiate(uint16_t port_id, uint64_t *features);
++__rte_experimental
++int rte_eth_port_extra_config_set(uint16_t port_id, char* type, char* conf);
+ 
+ #include <rte_ethdev_core.h>
+ 
+diff --git a/dpdk-21.11/lib/ethdev/rte_flow.h b/dpdk-21.11/lib/ethdev/rte_flow.h
+index 1031fb2..b29773c 100644
+--- a/dpdk-21.11/lib/ethdev/rte_flow.h
++++ b/dpdk-21.11/lib/ethdev/rte_flow.h
+@@ -660,6 +660,36 @@ enum rte_flow_item_type {
+ 	 * See struct rte_flow_item_ppp.
+ 	 */
+ 	RTE_FLOW_ITEM_TYPE_PPP,
++
++	/*
++	 * special type for hiovs offload
++	 * which pmd offload the flow
++	 */
++	RTE_FLOW_ITEM_TYPE_PMD_ID,
++
++	/*
++	 * special type for hiovs offload
++	 * offload packets batch
++	 */
++	RTE_FLOW_ITEM_TYPE_PACKETS,
++
++	/*
++	 * special type for hiovs offload
++	 * ovs flow ufid
++	 */
++	RTE_FLOW_ITEM_TYPE_SW_UFID,
++
++	/*
++	 * special type for hiovs offload
++	 * recircle rte flow
++	 */
++	RTE_FLOW_ITEM_TYPE_FLOW,
++
++	/*
++	 * special type for hiovs offload
++	 * the input port type, hiovs port or no
++	 */
++	RTE_FLOW_ITEM_TYPE_PORT_TYPE,
+ };
+ 
+ /**
+@@ -2860,6 +2890,20 @@ enum rte_flow_action_type {
+ 	 * @see struct rte_flow_action_ethdev
+ 	 */
+ 	RTE_FLOW_ACTION_TYPE_REPRESENTED_PORT,
++#ifdef HAVE_HWOFF_AGENT
++	/*
++	 * conntrack action.
++	 *
++	 * See struct .
++	 */
++	RTE_FLOW_ACTION_TYPE_CT,
++	/*
++	 * recirle.
++	 *
++	 * See struct .
++	 */
++	RTE_FLOW_ACTION_TYPE_RECIRC,
++#endif
+ };
+ 
+ /**
+diff --git a/dpdk-21.11/lib/ethdev/version.map b/dpdk-21.11/lib/ethdev/version.map
+index c2fb066..e71c93a 100644
+--- a/dpdk-21.11/lib/ethdev/version.map
++++ b/dpdk-21.11/lib/ethdev/version.map
+@@ -14,6 +14,7 @@ DPDK_22 {
+ 	rte_eth_dev_callback_unregister;
+ 	rte_eth_dev_close;
+ 	rte_eth_dev_configure;
++	rte_eth_dev_get_private_data;
+ 	rte_eth_dev_count_avail;
+ 	rte_eth_dev_count_total;
+ 	rte_eth_dev_default_mac_addr_set;
+@@ -252,6 +253,7 @@ EXPERIMENTAL {
+ 	rte_eth_dev_capability_name;
+ 	rte_eth_dev_conf_get;
+ 	rte_eth_macaddrs_get;
++	rte_eth_port_extra_config_set;
+ 	rte_eth_rx_metadata_negotiate;
+ 	rte_flow_flex_item_create;
+ 	rte_flow_flex_item_release;
+diff --git a/dpdk-21.11/lib/mbuf/rte_mbuf_core.h b/dpdk-21.11/lib/mbuf/rte_mbuf_core.h
+index 321a419..47d2def 100644
+--- a/dpdk-21.11/lib/mbuf/rte_mbuf_core.h
++++ b/dpdk-21.11/lib/mbuf/rte_mbuf_core.h
+@@ -757,8 +757,16 @@ struct rte_mbuf {
+ 
+ 	/** Timesync flags for use with IEEE1588. */
+ 	uint16_t timesync;
++	uint32_t dynfield0;
+ 
+-	uint32_t dynfield1[9]; /**< Reserved for dynamic fields. */
++	RTE_STD_C11
++	union {
++		void *userdata;   /**< Can be used for external metadata */
++		uint64_t udata64; /**< Allow 8-byte userdata on 32-bit */
++	};
++
++	uint32_t internal;     /**< internal use mbuf, evs set it to 0 */
++	uint32_t dynfield1[5]; /**< Reserved for dynamic fields. */
+ } __rte_cache_aligned;
+ 
+ /**
