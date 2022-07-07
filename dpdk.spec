@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 13
+Release: 14
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -139,7 +139,7 @@ License: BSD and LGPLv2 and GPLv2
 
 ExclusiveArch: i686 x86_64 aarch64
 
-BuildRequires: meson ninja-build gcc diffutils python3-pyelftools python-pyelftools
+BuildRequires: meson ninja-build gcc diffutils python3-pyelftools
 BuildRequires: kernel-devel numactl-devel
 BuildRequires: libpcap libpcap-devel
 BuildRequires: rdma-core-devel
@@ -253,6 +253,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Thu Jul 07 2022 Honggang Li <honggangli@163.com> - 21.11-14
+- Remove duplicated BuildRequires python-pyelftools
+
 * Tue Jul 05 2022 Honggang Li <honggangli@163.com> - 21.11-13
 - Build mlx5 and mlx4 PMD
 
