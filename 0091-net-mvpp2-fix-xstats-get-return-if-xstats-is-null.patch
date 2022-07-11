@@ -1,0 +1,61 @@
+From ae30c4a7b550e0ac12857279c0a337d80f73261c Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Fri, 13 May 2022 10:53:53 +0800
+Subject: [PATCH 091/122] net/mvpp2: fix xstats get return if xstats is null
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Many user (e.g. telemetry) invokes rte_eth_xstats_get(port_id, NULL, 0)
+to retrieve the required number of elements, but currently mvpp2 PMD
+returns zero when xstats is null.
+
+Remove the logic of "return zero when xstats is NULL", and add the logic
+of "return the required number of entries when n is lower than the
+required number of entries".
+
+Fixes: a77b5378cd41 ("net/mrvl: add extended statistics")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Acked-by: Morten Brørup <mb@smartsharesystems.com>
+Reviewed-by: Andrew Rybchenko <andrew.rybchenko@oktetlabs.ru>
+---
+ drivers/net/mvpp2/mrvl_ethdev.c | 11 ++++++-----
+ 1 file changed, 6 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/net/mvpp2/mrvl_ethdev.c b/drivers/net/mvpp2/mrvl_ethdev.c
+index 9c7fe13f7f..2a8fb6cbce 100644
+--- a/drivers/net/mvpp2/mrvl_ethdev.c
++++ b/drivers/net/mvpp2/mrvl_ethdev.c
+@@ -1626,13 +1626,14 @@ mrvl_xstats_get(struct rte_eth_dev *dev,
+ {
+ 	struct mrvl_priv *priv = dev->data->dev_private;
+ 	struct pp2_ppio_statistics ppio_stats;
+-	unsigned int i;
++	unsigned int i, count;
+ 
+-	if (!stats)
+-		return 0;
++	count = RTE_DIM(mrvl_xstats_tbl);
++	if (n < count)
++		return count;
+ 
+ 	pp2_ppio_get_statistics(priv->ppio, &ppio_stats, 0);
+-	for (i = 0; i < n && i < RTE_DIM(mrvl_xstats_tbl); i++) {
++	for (i = 0; i < count; i++) {
+ 		uint64_t val;
+ 
+ 		if (mrvl_xstats_tbl[i].size == sizeof(uint32_t))
+@@ -1648,7 +1649,7 @@ mrvl_xstats_get(struct rte_eth_dev *dev,
+ 		stats[i].value = val;
+ 	}
+ 
+-	return n;
++	return count;
+ }
+ 
+ /**
+-- 
+2.22.0
+

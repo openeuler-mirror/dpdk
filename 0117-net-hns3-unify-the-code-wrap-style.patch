@@ -1,0 +1,516 @@
+From 9a1166d20bc7b1b07207ec2f8c1964f59053570b Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Wed, 1 Jun 2022 11:52:49 +0800
+Subject: [PATCH 117/122] net/hns3: unify the code wrap style
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_cmd.c       |  2 +-
+ drivers/net/hns3/hns3_common.c    | 10 +++++-----
+ drivers/net/hns3/hns3_dcb.c       |  5 ++---
+ drivers/net/hns3/hns3_ethdev.c    | 18 ++++++++----------
+ drivers/net/hns3/hns3_ethdev_vf.c | 23 +++++++++++------------
+ drivers/net/hns3/hns3_fdir.c      | 26 +++++++++++++-------------
+ drivers/net/hns3/hns3_flow.c      | 10 ++++------
+ drivers/net/hns3/hns3_rxtx.c      | 28 +++++++++++++---------------
+ drivers/net/hns3/hns3_stats.c     | 28 ++++++++++++++--------------
+ 9 files changed, 71 insertions(+), 79 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_cmd.c b/drivers/net/hns3/hns3_cmd.c
+index 96f8f38cbb..e3d096d9cb 100644
+--- a/drivers/net/hns3/hns3_cmd.c
++++ b/drivers/net/hns3/hns3_cmd.c
+@@ -108,7 +108,7 @@ hns3_alloc_cmd_queue(struct hns3_hw *hw, int ring_type)
+ 	ret = hns3_alloc_cmd_desc(hw, ring);
+ 	if (ret)
+ 		hns3_err(hw, "descriptor %s alloc error %d",
+-			    (ring_type == HNS3_TYPE_CSQ) ? "CSQ" : "CRQ", ret);
++			 (ring_type == HNS3_TYPE_CSQ) ? "CSQ" : "CRQ", ret);
+ 
+ 	return ret;
+ }
+diff --git a/drivers/net/hns3/hns3_common.c b/drivers/net/hns3/hns3_common.c
+index edd16d8076..7a65db907e 100644
+--- a/drivers/net/hns3/hns3_common.c
++++ b/drivers/net/hns3/hns3_common.c
+@@ -604,7 +604,7 @@ hns3_init_mac_addrs(struct rte_eth_dev *dev)
+ 				0);
+ 	if (dev->data->mac_addrs == NULL) {
+ 		hns3_err(hw, "failed to allocate %zx bytes needed to store MAC addresses",
+-			     sizeof(struct rte_ether_addr) * mac_addrs_capa);
++			 sizeof(struct rte_ether_addr) * mac_addrs_capa);
+ 		return -ENOMEM;
+ 	}
+ 
+@@ -680,16 +680,16 @@ hns3_init_ring_with_vector(struct hns3_hw *hw)
+ 		ret = hw->ops.bind_ring_with_vector(hw, vec, false,
+ 						    HNS3_RING_TYPE_TX, i);
+ 		if (ret) {
+-			PMD_INIT_LOG(ERR, "fail to unbind TX ring(%d) with "
+-					  "vector: %u, ret=%d", i, vec, ret);
++			PMD_INIT_LOG(ERR, "fail to unbind TX ring(%d) with vector: %u, ret=%d",
++				     i, vec, ret);
+ 			return ret;
+ 		}
+ 
+ 		ret = hw->ops.bind_ring_with_vector(hw, vec, false,
+ 						    HNS3_RING_TYPE_RX, i);
+ 		if (ret) {
+-			PMD_INIT_LOG(ERR, "fail to unbind RX ring(%d) with "
+-					  "vector: %u, ret=%d", i, vec, ret);
++			PMD_INIT_LOG(ERR, "fail to unbind RX ring(%d) with vector: %u, ret=%d",
++				     i, vec, ret);
+ 			return ret;
+ 		}
+ 	}
+diff --git a/drivers/net/hns3/hns3_dcb.c b/drivers/net/hns3/hns3_dcb.c
+index d88757611c..b22f618e0a 100644
+--- a/drivers/net/hns3/hns3_dcb.c
++++ b/drivers/net/hns3/hns3_dcb.c
+@@ -876,9 +876,8 @@ hns3_dcb_pri_tc_base_dwrr_cfg(struct hns3_hw *hw)
+ 
+ 		ret = hns3_dcb_pri_weight_cfg(hw, i, dwrr);
+ 		if (ret) {
+-			hns3_err(hw,
+-			       "fail to send priority weight cmd: %d, ret = %d",
+-			       i, ret);
++			hns3_err(hw, "fail to send priority weight cmd: %d, ret = %d",
++				 i, ret);
+ 			return ret;
+ 		}
+ 
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 97cf27d2a1..8a8f3f1950 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -1627,7 +1627,7 @@ hns3_set_default_mac_addr(struct rte_eth_dev *dev,
+ 	ret = hw->ops.del_uc_mac_addr(hw, oaddr);
+ 	if (ret) {
+ 		hns3_ether_format_addr(mac_str, RTE_ETHER_ADDR_FMT_SIZE,
+-				      oaddr);
++				       oaddr);
+ 		hns3_warn(hw, "Remove old uc mac address(%s) fail: %d",
+ 			  mac_str, ret);
+ 
+@@ -1659,7 +1659,7 @@ hns3_set_default_mac_addr(struct rte_eth_dev *dev,
+ 	ret_val = hw->ops.del_uc_mac_addr(hw, mac_addr);
+ 	if (ret_val) {
+ 		hns3_ether_format_addr(mac_str, RTE_ETHER_ADDR_FMT_SIZE,
+-				      mac_addr);
++				       mac_addr);
+ 		hns3_warn(hw,
+ 			  "Failed to roll back to del setted mac addr(%s): %d",
+ 			  mac_str, ret_val);
+@@ -1670,7 +1670,7 @@ hns3_set_default_mac_addr(struct rte_eth_dev *dev,
+ 	if (ret_val) {
+ 		hns3_ether_format_addr(mac_str, RTE_ETHER_ADDR_FMT_SIZE, oaddr);
+ 		hns3_warn(hw, "Failed to restore old uc mac addr(%s): %d",
+-				  mac_str, ret_val);
++			  mac_str, ret_val);
+ 	}
+ 	rte_spinlock_unlock(&hw->lock);
+ 
+@@ -1747,7 +1747,7 @@ hns3_add_mc_mac_addr(struct hns3_hw *hw, struct rte_ether_addr *mac_addr)
+ 		if (ret == -ENOSPC)
+ 			hns3_err(hw, "mc mac vlan table is full");
+ 		hns3_ether_format_addr(mac_str, RTE_ETHER_ADDR_FMT_SIZE,
+-				      mac_addr);
++				       mac_addr);
+ 		hns3_err(hw, "failed to add mc mac addr(%s): %d", mac_str, ret);
+ 	}
+ 
+@@ -2676,9 +2676,8 @@ hns3_check_dev_specifications(struct hns3_hw *hw)
+ {
+ 	if (hw->rss_ind_tbl_size == 0 ||
+ 	    hw->rss_ind_tbl_size > HNS3_RSS_IND_TBL_SIZE_MAX) {
+-		hns3_err(hw, "the size of hash lookup table configured (%u)"
+-			      " exceeds the maximum(%u)", hw->rss_ind_tbl_size,
+-			      HNS3_RSS_IND_TBL_SIZE_MAX);
++		hns3_err(hw, "the size of hash lookup table configured (%u) exceeds the maximum(%u)",
++			 hw->rss_ind_tbl_size, HNS3_RSS_IND_TBL_SIZE_MAX);
+ 		return -EINVAL;
+ 	}
+ 
+@@ -3916,7 +3915,7 @@ hns3_dev_promiscuous_enable(struct rte_eth_dev *dev)
+ 		ret = hns3_enable_vlan_filter(hns, false);
+ 		if (ret) {
+ 			hns3_err(hw, "failed to enable promiscuous mode due to "
+-				     "failure to disable vlan filter, ret = %d",
++				 "failure to disable vlan filter, ret = %d",
+ 				 ret);
+ 			err = hns3_set_promisc_mode(hw, false, allmulti);
+ 			if (err)
+@@ -5993,8 +5992,7 @@ hns3_reset_service(void *param)
+ 		timersub(&tv, &tv_start, &tv_delta);
+ 		msec = hns3_clock_calctime_ms(&tv_delta);
+ 		if (msec > HNS3_RESET_PROCESS_MS)
+-			hns3_err(hw, "%d handle long time delta %" PRIu64
+-				     " ms time=%ld.%.6ld",
++			hns3_err(hw, "%d handle long time delta %" PRIu64 " ms time=%ld.%.6ld",
+ 				 hw->reset.level, msec,
+ 				 tv.tv_sec, tv.tv_usec);
+ 		if (ret == -EAGAIN)
+diff --git a/drivers/net/hns3/hns3_ethdev_vf.c b/drivers/net/hns3/hns3_ethdev_vf.c
+index 0c170797f4..7323e47f15 100644
+--- a/drivers/net/hns3/hns3_ethdev_vf.c
++++ b/drivers/net/hns3/hns3_ethdev_vf.c
+@@ -142,7 +142,7 @@ hns3vf_enable_msix(const struct rte_pci_device *device, bool op)
+ 	pos = hns3vf_find_pci_capability(device, PCI_CAP_ID_MSIX);
+ 	if (pos) {
+ 		ret = rte_pci_read_config(device, &control, sizeof(control),
+-				    (pos + PCI_MSIX_FLAGS));
++					  (pos + PCI_MSIX_FLAGS));
+ 		if (ret < 0) {
+ 			PMD_INIT_LOG(ERR, "Failed to read PCI offset 0x%x",
+ 				     (pos + PCI_MSIX_FLAGS));
+@@ -154,10 +154,10 @@ hns3vf_enable_msix(const struct rte_pci_device *device, bool op)
+ 		else
+ 			control &= ~PCI_MSIX_FLAGS_ENABLE;
+ 		ret = rte_pci_write_config(device, &control, sizeof(control),
+-					  (pos + PCI_MSIX_FLAGS));
++					   (pos + PCI_MSIX_FLAGS));
+ 		if (ret < 0) {
+ 			PMD_INIT_LOG(ERR, "failed to write PCI offset 0x%x",
+-				    (pos + PCI_MSIX_FLAGS));
++				     (pos + PCI_MSIX_FLAGS));
+ 			return -ENXIO;
+ 		}
+ 
+@@ -199,7 +199,7 @@ hns3vf_remove_uc_mac_addr(struct hns3_hw *hw, struct rte_ether_addr *mac_addr)
+ 				false, NULL, 0);
+ 	if (ret) {
+ 		hns3_ether_format_addr(mac_str, RTE_ETHER_ADDR_FMT_SIZE,
+-				      mac_addr);
++				       mac_addr);
+ 		hns3_err(hw, "failed to add uc mac addr(%s), ret = %d",
+ 			 mac_str, ret);
+ 	}
+@@ -242,11 +242,11 @@ hns3vf_set_default_mac_addr(struct rte_eth_dev *dev,
+ 		if (ret == -EPERM) {
+ 			hns3_ether_format_addr(mac_str, RTE_ETHER_ADDR_FMT_SIZE,
+ 					      old_addr);
+-			hns3_warn(hw, "Has permanet mac addr(%s) for vf",
++			hns3_warn(hw, "Has permanent mac addr(%s) for vf",
+ 				  mac_str);
+ 		} else {
+ 			hns3_ether_format_addr(mac_str, RTE_ETHER_ADDR_FMT_SIZE,
+-					      mac_addr);
++					       mac_addr);
+ 			hns3_err(hw, "Failed to set mac addr(%s) for vf: %d",
+ 				 mac_str, ret);
+ 		}
+@@ -293,7 +293,7 @@ hns3vf_remove_mc_mac_addr(struct hns3_hw *hw,
+ 				NULL, 0);
+ 	if (ret) {
+ 		hns3_ether_format_addr(mac_str, RTE_ETHER_ADDR_FMT_SIZE,
+-				      mac_addr);
++				       mac_addr);
+ 		hns3_err(hw, "Failed to remove mc mac addr(%s) for vf: %d",
+ 			 mac_str, ret);
+ 	}
+@@ -715,9 +715,8 @@ hns3vf_check_dev_specifications(struct hns3_hw *hw)
+ {
+ 	if (hw->rss_ind_tbl_size == 0 ||
+ 	    hw->rss_ind_tbl_size > HNS3_RSS_IND_TBL_SIZE_MAX) {
+-		hns3_warn(hw, "the size of hash lookup table configured (%u)"
+-			      " exceeds the maximum(%u)", hw->rss_ind_tbl_size,
+-			      HNS3_RSS_IND_TBL_SIZE_MAX);
++		hns3_warn(hw, "the size of hash lookup table configured (%u) exceeds the maximum(%u)",
++			  hw->rss_ind_tbl_size, HNS3_RSS_IND_TBL_SIZE_MAX);
+ 		return -EINVAL;
+ 	}
+ 
+@@ -1168,8 +1167,8 @@ hns3vf_vlan_offload_set(struct rte_eth_dev *dev, int mask)
+ 	int ret = 0;
+ 
+ 	if (__atomic_load_n(&hw->reset.resetting, __ATOMIC_RELAXED)) {
+-		hns3_err(hw, "vf set vlan offload failed during resetting, "
+-			     "mask = 0x%x", mask);
++		hns3_err(hw, "vf set vlan offload failed during resetting, mask = 0x%x",
++			 mask);
+ 		return -EIO;
+ 	}
+ 
+diff --git a/drivers/net/hns3/hns3_fdir.c b/drivers/net/hns3/hns3_fdir.c
+index 762b89a51e..30e5e66772 100644
+--- a/drivers/net/hns3/hns3_fdir.c
++++ b/drivers/net/hns3/hns3_fdir.c
+@@ -321,7 +321,7 @@ int hns3_init_fd_config(struct hns3_adapter *hns)
+ 		break;
+ 	default:
+ 		hns3_err(hw, "Unsupported flow director mode %u",
+-			    pf->fdir.fd_cfg.fd_mode);
++			 pf->fdir.fd_cfg.fd_mode);
+ 		return -EOPNOTSUPP;
+ 	}
+ 
+@@ -337,7 +337,7 @@ int hns3_init_fd_config(struct hns3_adapter *hns)
+ 	    BIT(INNER_SRC_IP) | BIT(INNER_DST_IP) |
+ 	    BIT(INNER_SRC_PORT) | BIT(INNER_DST_PORT);
+ 	hns3_dbg(hw, "fdir tuple: inner<vlan_tag1 eth_type ip_src ip_dst "
+-		  "ip_proto ip_tos l4_src_port l4_dst_port>");
++		 "ip_proto ip_tos l4_src_port l4_dst_port>");
+ 
+ 	/* If use max 400bit key, we can support tuples for ether type */
+ 	if (pf->fdir.fd_cfg.max_key_length == MAX_KEY_LENGTH) {
+@@ -348,8 +348,8 @@ int hns3_init_fd_config(struct hns3_adapter *hns)
+ 		    BIT(OUTER_TUN_VNI) | BIT(OUTER_TUN_FLOW_ID) |
+ 		    BIT(OUTER_ETH_TYPE) | BIT(OUTER_IP_PROTO);
+ 		hns3_dbg(hw, "fdir tuple more: inner<dst_mac src_mac "
+-			  "vlan_tag2 sctp_tag> outer<eth_type ip_proto "
+-			  "l4_src_port l4_dst_port tun_vni tun_flow_id>");
++			 "vlan_tag2 sctp_tag> outer<eth_type ip_proto "
++			 "l4_src_port l4_dst_port tun_vni tun_flow_id>");
+ 	}
+ 
+ 	/* roce_type is used to filter roce frames
+@@ -367,12 +367,11 @@ int hns3_init_fd_config(struct hns3_adapter *hns)
+ 	if (ret)
+ 		return ret;
+ 
+-	hns3_dbg(hw, "fdir: stage1<rules-%u counters-%u> stage2<rules-%u "
+-		  "counters=%u>",
+-		  pf->fdir.fd_cfg.rule_num[HNS3_FD_STAGE_1],
+-		  pf->fdir.fd_cfg.cnt_num[HNS3_FD_STAGE_1],
+-		  pf->fdir.fd_cfg.rule_num[HNS3_FD_STAGE_2],
+-		  pf->fdir.fd_cfg.cnt_num[HNS3_FD_STAGE_2]);
++	hns3_dbg(hw, "fdir: stage1<rules-%u counters-%u> stage2<rules-%u counters=%u>",
++		 pf->fdir.fd_cfg.rule_num[HNS3_FD_STAGE_1],
++		 pf->fdir.fd_cfg.cnt_num[HNS3_FD_STAGE_1],
++		 pf->fdir.fd_cfg.rule_num[HNS3_FD_STAGE_2],
++		 pf->fdir.fd_cfg.cnt_num[HNS3_FD_STAGE_2]);
+ 
+ 	return hns3_set_fd_key_config(hns);
+ }
+@@ -420,7 +419,7 @@ static int hns3_fd_tcam_config(struct hns3_hw *hw, bool sel_x, int loc,
+ 	ret = hns3_cmd_send(hw, desc, FD_TCAM_CMD_NUM);
+ 	if (ret)
+ 		hns3_err(hw, "Config tcam key fail, ret=%d loc=%d add=%d",
+-			    ret, loc, is_add);
++			 ret, loc, is_add);
+ 	return ret;
+ }
+ 
+@@ -673,6 +672,7 @@ static void hns3_fd_convert_meta_data(struct hns3_fd_key_cfg *cfg,
+ 		} else if (i == VLAN_NUMBER) {
+ 			uint32_t vlan_tag;
+ 			uint8_t vlan_num;
++
+ 			if (rule->key_conf.spec.tunnel_type == 0)
+ 				vlan_num = rule->key_conf.vlan_num;
+ 			else
+@@ -758,14 +758,14 @@ static int hns3_config_key(struct hns3_adapter *hns,
+ 	ret = hns3_fd_tcam_config(hw, false, rule->location, key_y, true);
+ 	if (ret) {
+ 		hns3_err(hw, "Config fd key_y fail, loc=%u, ret=%d",
+-			    rule->queue_id, ret);
++			 rule->queue_id, ret);
+ 		return ret;
+ 	}
+ 
+ 	ret = hns3_fd_tcam_config(hw, true, rule->location, key_x, true);
+ 	if (ret)
+ 		hns3_err(hw, "Config fd key_x fail, loc=%u, ret=%d",
+-			    rule->queue_id, ret);
++			 rule->queue_id, ret);
+ 	return ret;
+ }
+ 
+diff --git a/drivers/net/hns3/hns3_flow.c b/drivers/net/hns3/hns3_flow.c
+index b60ad596dc..5e0a9bc93f 100644
+--- a/drivers/net/hns3/hns3_flow.c
++++ b/drivers/net/hns3/hns3_flow.c
+@@ -285,9 +285,8 @@ hns3_handle_action_queue(struct rte_eth_dev *dev,
+ 
+ 	queue = (const struct rte_flow_action_queue *)action->conf;
+ 	if (queue->index >= hw->data->nb_rx_queues) {
+-		hns3_err(hw, "queue ID(%u) is greater than number of "
+-			  "available queue (%u) in driver.",
+-			  queue->index, hw->data->nb_rx_queues);
++		hns3_err(hw, "queue ID(%u) is greater than number of available queue (%u) in driver.",
++			 queue->index, hw->data->nb_rx_queues);
+ 		return rte_flow_error_set(error, EINVAL,
+ 					  RTE_FLOW_ERROR_TYPE_ACTION_CONF,
+ 					  action, "Invalid queue ID in PF");
+@@ -1656,9 +1655,8 @@ hns3_clear_rss_filter(struct rte_eth_dev *dev)
+ 	}
+ 
+ 	if (rss_rule_fail_cnt) {
+-		hns3_err(hw, "fail to delete all RSS filters, success num = %d "
+-			     "fail num = %d", rss_rule_succ_cnt,
+-			     rss_rule_fail_cnt);
++		hns3_err(hw, "fail to delete all RSS filters, success num = %d fail num = %d",
++			 rss_rule_succ_cnt, rss_rule_fail_cnt);
+ 		ret = -EIO;
+ 	}
+ 
+diff --git a/drivers/net/hns3/hns3_rxtx.c b/drivers/net/hns3/hns3_rxtx.c
+index 5a2cfe5a54..3f576fbf4b 100644
+--- a/drivers/net/hns3/hns3_rxtx.c
++++ b/drivers/net/hns3/hns3_rxtx.c
+@@ -606,8 +606,8 @@ hns3_send_reset_tqp_cmd(struct hns3_hw *hw, uint16_t queue_id, bool enable)
+ 	hns3_set_bit(req->reset_req, HNS3_TQP_RESET_B, enable ? 1 : 0);
+ 	ret = hns3_cmd_send(hw, &desc, 1);
+ 	if (ret)
+-		hns3_err(hw, "send tqp reset cmd error, queue_id = %u, "
+-			     "ret = %d", queue_id, ret);
++		hns3_err(hw, "send tqp reset cmd error, queue_id = %u, ret = %d",
++			 queue_id, ret);
+ 
+ 	return ret;
+ }
+@@ -627,8 +627,8 @@ hns3_get_tqp_reset_status(struct hns3_hw *hw, uint16_t queue_id,
+ 
+ 	ret = hns3_cmd_send(hw, &desc, 1);
+ 	if (ret) {
+-		hns3_err(hw, "get tqp reset status error, queue_id = %u, "
+-			     "ret = %d.", queue_id, ret);
++		hns3_err(hw, "get tqp reset status error, queue_id = %u, ret = %d.",
++			 queue_id, ret);
+ 		return ret;
+ 	}
+ 	*reset_status = hns3_get_bit(req->ready_to_reset, HNS3_TQP_RESET_B);
+@@ -669,7 +669,7 @@ hns3pf_reset_tqp(struct hns3_hw *hw, uint16_t queue_id)
+ 	if (!reset_status) {
+ 		ret = -ETIMEDOUT;
+ 		hns3_err(hw, "reset tqp timeout, queue_id = %u, ret = %d",
+-			     queue_id, ret);
++			 queue_id, ret);
+ 		goto tqp_reset_fail;
+ 	}
+ 
+@@ -752,15 +752,14 @@ hns3pf_reset_all_tqps(struct hns3_hw *hw)
+ 		for (i = 0; i < hw->cfg_max_queues; i++) {
+ 			ret = hns3pf_reset_tqp(hw, i);
+ 			if (ret) {
+-				hns3_err(hw,
+-				  "fail to reset tqp, queue_id = %d, ret = %d.",
+-				  i, ret);
++				hns3_err(hw, "fail to reset tqp, queue_id = %d, ret = %d.",
++					 i, ret);
+ 				return ret;
+ 			}
+ 		}
+ 	} else if (reset_status != HNS3_RESET_ALL_TQP_SUCCESS) {
+ 		hns3_err(hw, "fail to reset all tqps, reset_status = %u.",
+-				reset_status);
++			 reset_status);
+ 		return -EIO;
+ 	}
+ 
+@@ -813,9 +812,8 @@ hns3_reset_all_tqps(struct hns3_adapter *hns)
+ 	for (i = 0; i < hw->cfg_max_queues; i++) {
+ 		ret = hns3_tqp_enable(hw, i, false);
+ 		if (ret) {
+-			hns3_err(hw,
+-			    "fail to disable tqps before tqps reset, ret = %d.",
+-			    ret);
++			hns3_err(hw, "fail to disable tqps before tqps reset, ret = %d.",
++				 ret);
+ 			return ret;
+ 		}
+ 	}
+@@ -922,9 +920,9 @@ hns3_reset_queue(struct hns3_hw *hw, uint16_t queue_id,
+ 	}
+ 
+ 	if (!reset_status) {
+-		hns3_err(hw, "reset queue timeout, queue_id = %u, "
+-			     "queue_type = %s", queue_id,
+-			     queue_type == HNS3_RING_TYPE_TX ? "Tx" : "Rx");
++		hns3_err(hw, "reset queue timeout, queue_id = %u, queue_type = %s",
++			 queue_id,
++			 queue_type == HNS3_RING_TYPE_TX ? "Tx" : "Rx");
+ 		ret = -ETIMEDOUT;
+ 		goto queue_reset_fail;
+ 	}
+diff --git a/drivers/net/hns3/hns3_stats.c b/drivers/net/hns3/hns3_stats.c
+index e69761c8b3..bf8af4531f 100644
+--- a/drivers/net/hns3/hns3_stats.c
++++ b/drivers/net/hns3/hns3_stats.c
+@@ -507,8 +507,8 @@ hns3_update_port_rx_ssu_drop_stats(struct hns3_hw *hw)
+ 
+ 	req = (struct hns3_query_ssu_cmd *)desc[0].data;
+ 	cnt = rte_le_to_cpu_32(req->oq_drop_cnt) +
+-		rte_le_to_cpu_32(req->full_drop_cnt) +
+-		rte_le_to_cpu_32(req->part_drop_cnt);
++	      rte_le_to_cpu_32(req->full_drop_cnt) +
++	      rte_le_to_cpu_32(req->part_drop_cnt);
+ 
+ 	stats->ssu_rx_drop_cnt += cnt;
+ 
+@@ -532,8 +532,8 @@ hns3_update_port_tx_ssu_drop_stats(struct hns3_hw *hw)
+ 
+ 	req = (struct hns3_query_ssu_cmd *)desc[0].data;
+ 	cnt = rte_le_to_cpu_32(req->oq_drop_cnt) +
+-		rte_le_to_cpu_32(req->full_drop_cnt) +
+-		rte_le_to_cpu_32(req->part_drop_cnt);
++	      rte_le_to_cpu_32(req->full_drop_cnt) +
++	      rte_le_to_cpu_32(req->part_drop_cnt);
+ 
+ 	hw->oerror_stats += cnt;
+ 
+@@ -1337,8 +1337,8 @@ hns3_dev_xstats_get_by_id(struct rte_eth_dev *dev, const uint64_t *ids,
+ 	len = cnt_stats * sizeof(struct rte_eth_xstat);
+ 	values_copy = rte_zmalloc("hns3_xstats_values", len, 0);
+ 	if (values_copy == NULL) {
+-		hns3_err(hw, "Failed to allocate 0x%" PRIx64 " bytes needed "
+-			     "to store statistics values", len);
++		hns3_err(hw, "Failed to allocate 0x%" PRIx64 " bytes needed to store statistics values",
++			 len);
+ 		return -ENOMEM;
+ 	}
+ 
+@@ -1359,8 +1359,8 @@ hns3_dev_xstats_get_by_id(struct rte_eth_dev *dev, const uint64_t *ids,
+ 
+ 	for (i = 0; i < size; i++) {
+ 		if (ids[i] >= cnt_stats) {
+-			hns3_err(hw, "ids[%u] (%" PRIu64 ") is invalid, "
+-				     "should < %u", i, ids[i], cnt_stats);
++			hns3_err(hw, "ids[%u] (%" PRIu64 ") is invalid, should < %u",
++				 i, ids[i], cnt_stats);
+ 			rte_free(values_copy);
+ 			return -EINVAL;
+ 		}
+@@ -1419,8 +1419,8 @@ hns3_dev_xstats_get_names_by_id(struct rte_eth_dev *dev,
+ 	len = cnt_stats * sizeof(struct rte_eth_xstat_name);
+ 	names_copy = rte_zmalloc("hns3_xstats_names", len, 0);
+ 	if (names_copy == NULL) {
+-		hns3_err(hw, "Failed to allocate 0x%" PRIx64 " bytes needed "
+-			     "to store statistics names", len);
++		hns3_err(hw, "Failed to allocate 0x%" PRIx64 " bytes needed to store statistics names",
++			 len);
+ 		return -ENOMEM;
+ 	}
+ 
+@@ -1428,8 +1428,8 @@ hns3_dev_xstats_get_names_by_id(struct rte_eth_dev *dev,
+ 
+ 	for (i = 0; i < size; i++) {
+ 		if (ids[i] >= cnt_stats) {
+-			hns3_err(hw, "ids[%u] (%" PRIu64 ") is invalid, "
+-				     "should < %u", i, ids[i], cnt_stats);
++			hns3_err(hw, "ids[%u] (%" PRIu64 ") is invalid, should < %u",
++				 i, ids[i], cnt_stats);
+ 			rte_free(names_copy);
+ 			return -EINVAL;
+ 		}
+@@ -1501,14 +1501,14 @@ hns3_tqp_stats_init(struct hns3_hw *hw)
+ 	struct hns3_tqp_stats *tqp_stats = &hw->tqp_stats;
+ 
+ 	tqp_stats->rcb_rx_ring_pktnum = rte_zmalloc("hns3_rx_ring_pkt_num",
+-					 sizeof(uint64_t) * hw->tqps_num, 0);
++					sizeof(uint64_t) * hw->tqps_num, 0);
+ 	if (tqp_stats->rcb_rx_ring_pktnum == NULL) {
+ 		hns3_err(hw, "failed to allocate rx_ring pkt_num.");
+ 		return -ENOMEM;
+ 	}
+ 
+ 	tqp_stats->rcb_tx_ring_pktnum = rte_zmalloc("hns3_tx_ring_pkt_num",
+-					 sizeof(uint64_t) * hw->tqps_num, 0);
++					sizeof(uint64_t) * hw->tqps_num, 0);
+ 	if (tqp_stats->rcb_tx_ring_pktnum == NULL) {
+ 		hns3_err(hw, "failed to allocate tx_ring pkt_num.");
+ 		rte_free(tqp_stats->rcb_rx_ring_pktnum);
+-- 
+2.22.0
+

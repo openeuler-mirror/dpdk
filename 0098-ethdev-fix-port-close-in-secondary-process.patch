@@ -1,0 +1,40 @@
+From 8c0618338ca0b8a540980b4a475322f2cf48d9a6 Mon Sep 17 00:00:00 2001
+From: "Min Hu (Connor)" <humin29@huawei.com>
+Date: Wed, 1 Jun 2022 11:15:13 +0800
+Subject: [PATCH 098/122] ethdev: fix port close in secondary process
+
+Secondary process needs to close device to release process private
+resources.  But secondary process should not be obliged to wait for
+device stop before closing ethdev.
+
+Fixes: febc855b358e ("ethdev: forbid closing started device")
+Cc: stable@dpdk.org
+
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+Reviewed-by: Andrew Rybchenko <andrew.rybchenko@oktetlabs.ru>
+---
+ lib/ethdev/rte_ethdev.c | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/lib/ethdev/rte_ethdev.c b/lib/ethdev/rte_ethdev.c
+index 2671f47738..25c9f0c123 100644
+--- a/lib/ethdev/rte_ethdev.c
++++ b/lib/ethdev/rte_ethdev.c
+@@ -1921,7 +1921,13 @@ rte_eth_dev_close(uint16_t port_id)
+ 	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
+ 	dev = &rte_eth_devices[port_id];
+ 
+-	if (dev->data->dev_started) {
++	/*
++	 * Secondary process needs to close device to release process private
++	 * resources. But secondary process should not be obliged to wait
++	 * for device stop before closing ethdev.
++	 */
++	if (rte_eal_process_type() == RTE_PROC_PRIMARY &&
++			dev->data->dev_started) {
+ 		RTE_ETHDEV_LOG(ERR, "Cannot close started device (port %u)\n",
+ 			       port_id);
+ 		return -EINVAL;
+-- 
+2.22.0
+
