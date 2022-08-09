@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 19.11
-Release: 17
+Release: 18
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  19.11
@@ -61,7 +61,7 @@ ExclusiveArch: i686 x86_64 aarch64
 
 BuildRequires: gcc
 BuildRequires: kernel-devel, libpcap-devel
-BuildRequires: numactl-devel libconfig-devel
+BuildRequires: numactl-devel libconfig-devel rdma-core-devel
 BuildRequires: module-init-tools uname-build-checks libnl3 libmnl
 BuildRequires: glibc glibc-devel libibverbs libibverbs-devel libmnl-devel
 
@@ -107,6 +107,8 @@ make O=%{target} T=%{config} config
 #make .a and .so libraries for spdk
 sed -ri 's,(RTE_BUILD_BOTH_STATIC_AND_SHARED_LIBS=).*,\1y,' %{target}/.config
 sed -ri 's,(CONFIG_RTE_LIB_LIBOS=).*,\1n,' %{target}/.config
+sed -ri 's,(CONFIG_RTE_LIBRTE_MLX4_PMD=).*,\1y,' %{target}/.config
+sed -ri 's,(CONFIG_RTE_LIBRTE_MLX5_PMD=).*,\1y,' %{target}/.config
 sed -ri 's,(RTE_MACHINE=).*,\1%{machine},' %{target}/.config
 sed -ri 's,(RTE_APP_TEST=).*,\1n,'         %{target}/.config
 sed -ri 's,(RTE_NEXT_ABI=).*,\1n,'         %{target}/.config
@@ -162,6 +164,7 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 %{_sbindir}/dpdk-devbind
 /lib/modules/%{kern_devel_ver}/extra/dpdk/*
 /lib64/librte*.so*
+%{_libdir}/*.so*
 
 %files devel
 %{_includedir}/dpdk
@@ -170,7 +173,7 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 %{_datadir}/dpdk/%{target}
 %{_datadir}/dpdk/examples
 %{_bindir}/*
-%{_libdir}/*
+%{_libdir}/*.a
 %dir /usr/include/%{name}-%{version}/
 /usr/include/%{name}-%{version}/*
 %dir /usr/include/dpdk/
@@ -192,6 +195,10 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Tue Aug 9 2022 wuchangsheng <wuchangsheng2@huawei.com> - 19.11-18
+- enable mlx4 mlx5 pmd driver
+- mv so lib in main package from devel-package
+
 * Fri Jun 10 2022 xiusailong <xiusailong@huawei.com> - 19.11-17
 - fix CVE-2021-3839 CVE-2022-0669
 
