@@ -1,3 +1,48 @@
+diff --git a/dpdk-21.11/drivers/bus/pci/linux/pci.c b/dpdk-21.11/drivers/bus/pci/linux/pci.c
+index e521459..2b8ff33 100644
+--- a/dpdk-21.11/drivers/bus/pci/linux/pci.c
++++ b/dpdk-21.11/drivers/bus/pci/linux/pci.c
+@@ -208,6 +208,23 @@ error:
+ 	return -1;
+ }
+ 
++#define HW_VIRTIO_VF_BAR_NUM    3
++#define VIRTIO_PCI_VENDORID    0x1AF4
++#define VIRTIO_PCI_LEGACY_DEVICEID_NET    0x1000
++
++static int pci_get_virtio_device_bar_num(struct rte_pci_device *dev)
++{
++	int num = 0;
++	if (dev->id.vendor_id == VIRTIO_PCI_VENDORID && dev->id.device_id == VIRTIO_PCI_LEGACY_DEVICEID_NET) {
++		for (int i = 0; i < PCI_MAX_RESOURCE; i++) {
++			if (dev->mem_resource[i].len != 0) {
++				num++;
++			}
++		}
++	}
++	return num;
++}
++
+ /* Scan one pci sysfs entry, and fill the devices list from it. */
+ static int
+ pci_scan_one(const char *dirname, const struct rte_pci_addr *addr)
+@@ -327,8 +344,14 @@ pci_scan_one(const char *dirname, const struct rte_pci_addr *addr)
+ 		else
+ 			dev->kdrv = RTE_PCI_KDRV_UNKNOWN;
+ 	} else {
+-		free(dev);
+-		return 0;
++		int num = pci_get_virtio_device_bar_num(dev);
++		if (num == HW_VIRTIO_VF_BAR_NUM) {
++			dev->kdrv = RTE_PCI_KDRV_NONE;
++		} else {
++			free(dev);
++			return 0;
++		}
++		
+ 	}
+ 	/* device is valid, add in list (sorted) */
+ 	if (TAILQ_EMPTY(&rte_pci_bus.device_list)) {
 diff --git a/dpdk-21.11/drivers/net/virtio/virtio_pci_ethdev.c b/dpdk-21.11/drivers/net/virtio/virtio_pci_ethdev.c
 index 54645dc..a6c1e51 100644
 --- a/dpdk-21.11/drivers/net/virtio/virtio_pci_ethdev.c
