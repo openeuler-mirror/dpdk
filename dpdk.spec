@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 19.11
-Release: 18
+Release: 19
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  19.11
@@ -43,6 +43,10 @@ Patch33: 0017-fix-internal-cfg-and-fbarray-attach-mememory-leak.patch
 Patch34: 0018-fix-error-that-the-secondary-attach-fails-due-to-detach.patch
 Patch35: CVE-2021-3839.patch
 Patch36: CVE-2022-0669.patch
+
+Patch6000: backport-vhost-handle-mbuf-allocation-failure.patch
+Patch6001: backport-0001-CVE-2022-2132.patch
+Patch6002: backport-0002-CVE-2022-2131.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -195,6 +199,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Thu Sep 8 2022 jiangheng <jiangheng14@huawei.com> - 19.11-19
+- fix CVE-2022-2132
+
 * Tue Aug 9 2022 wuchangsheng <wuchangsheng2@huawei.com> - 19.11-18
 - enable mlx4 mlx5 pmd driver
 - mv so lib in main package from devel-package
