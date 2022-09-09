@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 19.11
-Release: 19
+Release: 20
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  19.11
@@ -47,6 +47,7 @@ Patch36: CVE-2022-0669.patch
 Patch6000: backport-vhost-handle-mbuf-allocation-failure.patch
 Patch6001: backport-0001-CVE-2022-2132.patch
 Patch6002: backport-0002-CVE-2022-2131.patch
+Patch6003: backport-CVE-2022-28199.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -199,6 +200,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Fri Sep 9 2022 jiangheng <jiangheng14@huawei.com> - 19.11-20
+- fix CVE-2022-28199
+
 * Thu Sep 8 2022 jiangheng <jiangheng14@huawei.com> - 19.11-19
 - fix CVE-2022-2132
 
