@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 15
+Release: 16
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -133,6 +133,7 @@ Patch6001:    CVE-2021-3839.patch
 Patch6002:    CVE-2022-0669.patch
 Patch6003:    backport-0001-CVE-2022-2132.patch
 Patch6004:    backport-0002-CVE-2022-2132.patch
+Patch6005:    backport-CVE-2022-28199.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -254,6 +255,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Fri Sep 09 2022 jiangheng <jiangheng14@huawei.com> - 21.11-16
+- fix CVE-2022-28199
+
 * Thu Sep 08 2022 jiangheng <jiangheng14@huawei.com> - 21.11-15
 - fix CVE-2022-2132
 
