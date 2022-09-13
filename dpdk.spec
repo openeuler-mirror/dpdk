@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 16
+Release: 17
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -128,6 +128,7 @@ Patch9119:    0119-net-hns3-fix-TM-capability-incorrectly-defined.patch
 Patch9120:    0120-app-testpmd-add-help-messages-for-multi-process.patch
 Patch9121:    0121-app-testpmd-fix-use-of-indirect-action-after-port-cl.patch
 Patch9122:    0122-app-testpmd-fix-bonding-slave-devices-not-released.patch
+Patch9123:    0123-secure-complilation-options-rpath.patch
 
 Patch6001:    CVE-2021-3839.patch
 Patch6002:    CVE-2022-0669.patch
@@ -184,10 +185,17 @@ This package contains the pdump tool for capture the dpdk network packets.
 %build
 export CFLAGS="%{optflags}"
 meson build -Dexamples=l3fwd-power,ethtool,l3fwd,kni,dma,ptpclient
-ninja -C build
+ninja -C build -v
 
 %install
 DESTDIR=$RPM_BUILD_ROOT/ ninja install -C build
+
+chrpath -d ./build/examples/dpdk-l3fwd
+chrpath -d ./build/examples/dpdk-l3fwd-power
+chrpath -d ./build/examples/dpdk-ethtool
+chrpath -d ./build/examples/dpdk-kni
+chrpath -d ./build/examples/dpdk-dma
+chrpath -d ./build/examples/dpdk-ptpclient
 
 cp ./build/examples/dpdk-l3fwd $RPM_BUILD_ROOT/usr/local/bin
 cp ./build/examples/dpdk-l3fwd-power $RPM_BUILD_ROOT/usr/local/bin
@@ -255,6 +263,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Tue Sep 13 2022 jiangheng <jiangheng14@huawei.com> - 21.11-17
+- remove secure compilation options rpath
+
 * Fri Sep 09 2022 jiangheng <jiangheng14@huawei.com> - 21.11-16
 - fix CVE-2022-28199
 
