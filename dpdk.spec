@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 17
+Release: 18
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -129,6 +129,7 @@ Patch9120:    0120-app-testpmd-add-help-messages-for-multi-process.patch
 Patch9121:    0121-app-testpmd-fix-use-of-indirect-action-after-port-cl.patch
 Patch9122:    0122-app-testpmd-fix-bonding-slave-devices-not-released.patch
 Patch9123:    0123-secure-complilation-options-rpath.patch
+Patch9124:    0124-reinit-support-return-ok.patch
 
 Patch6001:    CVE-2021-3839.patch
 Patch6002:    CVE-2022-0669.patch
@@ -263,6 +264,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Thu Oct 6 2022 wuchangsheng <wuchangsheng2@huawei.com> - 21.11-18
+- reinit support return ok
+
 * Tue Sep 13 2022 jiangheng <jiangheng14@huawei.com> - 21.11-17
 - remove secure compilation options rpath
 
