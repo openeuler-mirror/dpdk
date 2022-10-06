@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 19.11
-Release: 20
+Release: 21
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  19.11
@@ -43,6 +43,7 @@ Patch33: 0017-fix-internal-cfg-and-fbarray-attach-mememory-leak.patch
 Patch34: 0018-fix-error-that-the-secondary-attach-fails-due-to-detach.patch
 Patch35: CVE-2021-3839.patch
 Patch36: CVE-2022-0669.patch
+Patch37: 0019-reinit-support-return-ok.patch
 
 Patch6000: backport-vhost-handle-mbuf-allocation-failure.patch
 Patch6001: backport-0001-CVE-2022-2132.patch
@@ -200,6 +201,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Thu Oct 6 2022 wuchangsheng <wuchangsheng2@huawei.com> - 19.11-21
+- reinit support return ok
+
 * Fri Sep 9 2022 jiangheng <jiangheng14@huawei.com> - 19.11-20
 - fix CVE-2022-28199
 
