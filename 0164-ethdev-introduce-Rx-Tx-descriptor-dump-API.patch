@@ -1,0 +1,238 @@
+From e4f2f2e047f123e5aff0a9a5699bf2d4ece4ebb8 Mon Sep 17 00:00:00 2001
+From: "Min Hu (Connor)" <humin29@huawei.com>
+Date: Fri, 21 Oct 2022 15:36:40 +0800
+Subject: [PATCH 164/189] ethdev: introduce Rx/Tx descriptor dump API
+
+Added the ethdev Rx/Tx desc dump API which provides functions for query
+descriptor from device. HW descriptor info differs in different NICs.
+The information demonstrates I/O process which is important for debug.
+As the information is different between NICs, the new API is introduced.
+
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+Reviewed-by: Ferruh Yigit <ferruh.yigit@xilinx.com>
+---
+ lib/ethdev/ethdev_driver.h | 53 ++++++++++++++++++++++++++++++++++++
+ lib/ethdev/rte_ethdev.c    | 52 +++++++++++++++++++++++++++++++++++
+ lib/ethdev/rte_ethdev.h    | 55 ++++++++++++++++++++++++++++++++++++++
+ lib/ethdev/version.map     |  4 +++
+ 4 files changed, 164 insertions(+)
+
+diff --git a/lib/ethdev/ethdev_driver.h b/lib/ethdev/ethdev_driver.h
+index e24ff7064c..41f67f2740 100644
+--- a/lib/ethdev/ethdev_driver.h
++++ b/lib/ethdev/ethdev_driver.h
+@@ -1010,6 +1010,54 @@ typedef int (*eth_rx_metadata_negotiate_t)(struct rte_eth_dev *dev,
+  */
+ typedef int (*eth_dev_priv_dump_t)(struct rte_eth_dev *dev, FILE *file);
+ 
++/**
++ * @internal
++ * Dump Rx descriptor info to a file.
++ *
++ * It is used for debugging, not a dataplane API.
++ *
++ * @param dev
++ *   Port (ethdev) handle.
++ * @param queue_id
++ *   A Rx queue identifier on this port.
++ * @param offset
++ *   The offset of the descriptor starting from tail. (0 is the next
++ *   packet to be received by the driver).
++ * @param num
++ *   The number of the descriptors to dump.
++ * @param file
++ *   A pointer to a file for output.
++ * @return
++ *   Negative errno value on error, zero on success.
++ */
++typedef int (*eth_rx_descriptor_dump_t)(const struct rte_eth_dev *dev,
++					uint16_t queue_id, uint16_t offset,
++					uint16_t num, FILE *file);
++
++/**
++ * @internal
++ * Dump Tx descriptor info to a file.
++ *
++ * This API is used for debugging, not a dataplane API.
++ *
++ * @param dev
++ *   Port (ethdev) handle.
++ * @param queue_id
++ *   A Tx queue identifier on this port.
++ * @param offset
++ *   The offset of the descriptor starting from tail. (0 is the place where
++ *   the next packet will be send).
++ * @param num
++ *   The number of the descriptors to dump.
++ * @param file
++ *   A pointer to a file for output.
++ * @return
++ *   Negative errno value on error, zero on success.
++ */
++typedef int (*eth_tx_descriptor_dump_t)(const struct rte_eth_dev *dev,
++					uint16_t queue_id, uint16_t offset,
++					uint16_t num, FILE *file);
++
+ /**
+  * @internal A structure containing the functions exported by an Ethernet driver.
+  */
+@@ -1209,6 +1257,11 @@ struct eth_dev_ops {
+ 
+ 	/** Dump private info from device */
+ 	eth_dev_priv_dump_t eth_dev_priv_dump;
++
++	/** Dump Rx descriptor info */
++	eth_rx_descriptor_dump_t eth_rx_descriptor_dump;
++	/** Dump Tx descriptor info */
++	eth_tx_descriptor_dump_t eth_tx_descriptor_dump;
+ };
+ 
+ /**
+diff --git a/lib/ethdev/rte_ethdev.c b/lib/ethdev/rte_ethdev.c
+index 25c9f0c123..b95f501b51 100644
+--- a/lib/ethdev/rte_ethdev.c
++++ b/lib/ethdev/rte_ethdev.c
+@@ -6509,6 +6509,58 @@ rte_eth_dev_priv_dump(uint16_t port_id, FILE *file)
+ 	return eth_err(port_id, (*dev->dev_ops->eth_dev_priv_dump)(dev, file));
+ }
+ 
++int
++rte_eth_rx_descriptor_dump(uint16_t port_id, uint16_t queue_id,
++			   uint16_t offset, uint16_t num, FILE *file)
++{
++	struct rte_eth_dev *dev;
++
++	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
++	dev = &rte_eth_devices[port_id];
++
++	if (queue_id >= dev->data->nb_rx_queues) {
++		RTE_ETHDEV_LOG(ERR, "Invalid Rx queue_id=%u\n", queue_id);
++		return -EINVAL;
++	}
++
++	if (file == NULL) {
++		RTE_ETHDEV_LOG(ERR, "Invalid file (NULL)\n");
++		return -EINVAL;
++	}
++
++	if (*dev->dev_ops->eth_rx_descriptor_dump == NULL)
++		return -ENOTSUP;
++
++	return eth_err(port_id, (*dev->dev_ops->eth_rx_descriptor_dump)(dev,
++						queue_id, offset, num, file));
++}
++
++int
++rte_eth_tx_descriptor_dump(uint16_t port_id, uint16_t queue_id,
++			   uint16_t offset, uint16_t num, FILE *file)
++{
++	struct rte_eth_dev *dev;
++
++	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
++	dev = &rte_eth_devices[port_id];
++
++	if (queue_id >= dev->data->nb_tx_queues) {
++		RTE_ETHDEV_LOG(ERR, "Invalid Tx queue_id=%u\n", queue_id);
++		return -EINVAL;
++	}
++
++	if (file == NULL) {
++		RTE_ETHDEV_LOG(ERR, "Invalid file (NULL)\n");
++		return -EINVAL;
++	}
++
++	if (*dev->dev_ops->eth_tx_descriptor_dump == NULL)
++		return -ENOTSUP;
++
++	return eth_err(port_id, (*dev->dev_ops->eth_tx_descriptor_dump)(dev,
++						queue_id, offset, num, file));
++}
++
+ RTE_LOG_REGISTER_DEFAULT(rte_eth_dev_logtype, INFO);
+ 
+ RTE_INIT(ethdev_init_telemetry)
+diff --git a/lib/ethdev/rte_ethdev.h b/lib/ethdev/rte_ethdev.h
+index 082166ed42..8c894e090d 100644
+--- a/lib/ethdev/rte_ethdev.h
++++ b/lib/ethdev/rte_ethdev.h
+@@ -5213,6 +5213,61 @@ int rte_eth_rx_metadata_negotiate(uint16_t port_id, uint64_t *features);
+ __rte_experimental
+ int rte_eth_dev_priv_dump(uint16_t port_id, FILE *file);
+ 
++/**
++ * @warning
++ * @b EXPERIMENTAL: this API may change, or be removed, without prior notice
++ *
++ * Dump ethdev Rx descriptor info to a file.
++ *
++ * This API is used for debugging, not a dataplane API.
++ *
++ * @param port_id
++ *   The port identifier of the Ethernet device.
++ * @param queue_id
++ *   A Rx queue identifier on this port.
++ * @param offset
++ *  The offset of the descriptor starting from tail. (0 is the next
++ *  packet to be received by the driver).
++ * @param num
++ *   The number of the descriptors to dump.
++ * @param file
++ *   A pointer to a file for output.
++ * @return
++ *   - On success, zero.
++ *   - On failure, a negative value.
++ */
++__rte_experimental
++int rte_eth_rx_descriptor_dump(uint16_t port_id, uint16_t queue_id,
++			       uint16_t offset, uint16_t num, FILE *file);
++
++/**
++ * @warning
++ * @b EXPERIMENTAL: this API may change, or be removed, without prior notice
++ *
++ * Dump ethdev Tx descriptor info to a file.
++ *
++ * This API is used for debugging, not a dataplane API.
++ *
++ * @param port_id
++ *   The port identifier of the Ethernet device.
++ * @param queue_id
++ *   A Tx queue identifier on this port.
++ * @param offset
++ *  The offset of the descriptor starting from tail. (0 is the place where
++ *  the next packet will be send).
++ * @param num
++ *   The number of the descriptors to dump.
++ * @param file
++ *   A pointer to a file for output.
++ * @return
++ *   - On success, zero.
++ *   - On failure, a negative value.
++ */
++__rte_experimental
++int rte_eth_tx_descriptor_dump(uint16_t port_id, uint16_t queue_id,
++			       uint16_t offset, uint16_t num, FILE *file);
++
++
+ #include <rte_ethdev_core.h>
+ 
+ /**
+diff --git a/lib/ethdev/version.map b/lib/ethdev/version.map
+index f29c60eda4..09dba86bee 100644
+--- a/lib/ethdev/version.map
++++ b/lib/ethdev/version.map
+@@ -259,6 +259,10 @@ EXPERIMENTAL {
+ 
+ 	# added in 22.03
+ 	rte_eth_dev_priv_dump;
++
++	# added in 22.11
++	rte_eth_rx_descriptor_dump;
++	rte_eth_tx_descriptor_dump;
+ };
+ 
+ INTERNAL {
+-- 
+2.23.0
+

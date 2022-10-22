@@ -1,0 +1,158 @@
+From 11186d5e167f1b11c436f0ca550789e855d5292c Mon Sep 17 00:00:00 2001
+From: Dongdong Liu <liudongdong3@huawei.com>
+Date: Fri, 21 Oct 2022 15:36:45 +0800
+Subject: [PATCH 169/189] net/hns3: add VLAN filter query in dump file
+
+Add VLAN filter query in dump file.
+
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+Signed-off-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/hns3/hns3_dump.c | 80 +++++++++++++++++++++++++++++++-----
+ 1 file changed, 69 insertions(+), 11 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_dump.c b/drivers/net/hns3/hns3_dump.c
+index 1007b09bd2..8268506f6f 100644
+--- a/drivers/net/hns3/hns3_dump.c
++++ b/drivers/net/hns3/hns3_dump.c
+@@ -4,11 +4,10 @@
+ 
+ #include <rte_malloc.h>
+ 
+-#include "hns3_ethdev.h"
+ #include "hns3_common.h"
+-#include "hns3_rxtx.h"
+-#include "hns3_regs.h"
+ #include "hns3_logs.h"
++#include "hns3_regs.h"
++#include "hns3_rxtx.h"
+ #include "hns3_dump.h"
+ 
+ #define HNS3_BD_DW_NUM 8
+@@ -394,11 +393,6 @@ hns3_get_rxtx_queue_enable_state(FILE *file, struct rte_eth_dev *dev)
+ 	uint32_t nb_tx_queues;
+ 	uint32_t bitmap_size;
+ 
+-	bitmap_size = (hw->tqps_num * sizeof(uint32_t) + HNS3_UINT32_BIT) /
+-			HNS3_UINT32_BIT;
+-	rx_queue_state = (uint32_t *)rte_zmalloc(NULL, bitmap_size, 0);
+-	tx_queue_state = (uint32_t *)rte_zmalloc(NULL, bitmap_size, 0);
+-
+ 	nb_rx_queues = dev->data->nb_rx_queues;
+ 	nb_tx_queues = dev->data->nb_tx_queues;
+ 	if (nb_rx_queues == 0) {
+@@ -410,6 +404,21 @@ hns3_get_rxtx_queue_enable_state(FILE *file, struct rte_eth_dev *dev)
+ 		return;
+ 	}
+ 
++	bitmap_size = (hw->tqps_num * sizeof(uint32_t) + HNS3_UINT32_BIT) /
++			HNS3_UINT32_BIT;
++	rx_queue_state = (uint32_t *)rte_zmalloc(NULL, bitmap_size, 0);
++	if (rx_queue_state == NULL) {
++		hns3_err(hw, "Failed to allocate memory for rx queue state!");
++		return;
++	}
++
++	tx_queue_state = (uint32_t *)rte_zmalloc(NULL, bitmap_size, 0);
++	if (tx_queue_state == NULL) {
++		hns3_err(hw, "Failed to allocate memory for tx queue state!");
++		rte_free(rx_queue_state);
++		return;
++	}
++
+ 	fprintf(file, "\t  -- enable state:\n");
+ 	hns3_get_queue_enable_state(hw, rx_queue_state, nb_rx_queues, true);
+ 	hns3_display_queue_enable_state(file, rx_queue_state, nb_rx_queues,
+@@ -448,6 +457,51 @@ hns3_get_rxtx_queue_info(FILE *file, struct rte_eth_dev *dev)
+ 	hns3_get_rxtx_queue_enable_state(file, dev);
+ }
+ 
++static int
++hns3_get_vlan_filter_cfg(FILE *file, struct hns3_hw *hw)
++{
++#define HNS3_FILTER_TYPE_VF		0
++#define HNS3_FILTER_TYPE_PORT		1
++#define HNS3_FILTER_FE_NIC_INGRESS_B	BIT(0)
++#define HNS3_FILTER_FE_NIC_EGRESS_B	BIT(1)
++	struct hns3_vlan_filter_ctrl_cmd *req;
++	struct hns3_cmd_desc desc;
++	uint8_t i;
++	int ret;
++
++	static const uint32_t vlan_filter_type[] = {
++		HNS3_FILTER_TYPE_PORT,
++		HNS3_FILTER_TYPE_VF
++	};
++
++	for (i = 0; i < RTE_DIM(vlan_filter_type); i++) {
++		hns3_cmd_setup_basic_desc(&desc, HNS3_OPC_VLAN_FILTER_CTRL,
++						true);
++		req = (struct hns3_vlan_filter_ctrl_cmd *)desc.data;
++		req->vlan_type = vlan_filter_type[i];
++		req->vf_id = HNS3_PF_FUNC_ID;
++		ret = hns3_cmd_send(hw, &desc, 1);
++		if (ret != 0) {
++			hns3_err(hw,
++				"NIC IMP exec ret=%d desc_num=%d optcode=0x%x!",
++				ret, 1, rte_le_to_cpu_16(desc.opcode));
++			return ret;
++		}
++		fprintf(file,
++			"\t  -- %s VLAN filter configuration\n"
++			"\t       nic_ingress           :%s\n"
++			"\t       nic_egress            :%s\n",
++			req->vlan_type == HNS3_FILTER_TYPE_PORT ?
++			"Port" : "VF",
++			req->vlan_fe & HNS3_FILTER_FE_NIC_INGRESS_B ?
++			"Enable" : "Disable",
++			req->vlan_fe & HNS3_FILTER_FE_NIC_EGRESS_B ?
++			"Enable" : "Disable");
++	}
++
++	return 0;
++}
++
+ static int
+ hns3_get_vlan_rx_offload_cfg(FILE *file, struct hns3_hw *hw)
+ {
+@@ -583,6 +637,10 @@ hns3_get_vlan_config_info(FILE *file, struct hns3_hw *hw)
+ 	int ret;
+ 
+ 	fprintf(file, "  - VLAN Config Info:\n");
++	ret = hns3_get_vlan_filter_cfg(file, hw);
++	if (ret < 0)
++		return;
++
+ 	ret = hns3_get_vlan_rx_offload_cfg(file, hw);
+ 	if (ret < 0)
+ 		return;
+@@ -619,7 +677,7 @@ hns3_get_tm_conf_port_node_info(FILE *file, struct hns3_tm_conf *conf)
+ 		return;
+ 
+ 	fprintf(file,
+-		"  port_node: \n"
++		"  port_node:\n"
+ 		"    node_id=%u reference_count=%u shaper_profile_id=%d\n",
+ 		conf->root->id, conf->root->reference_count,
+ 		conf->root->shaper_profile ?
+@@ -637,7 +695,7 @@ hns3_get_tm_conf_tc_node_info(FILE *file, struct hns3_tm_conf *conf)
+ 	if (conf->nb_tc_node == 0)
+ 		return;
+ 
+-	fprintf(file, "  tc_node: \n");
++	fprintf(file, "  tc_node:\n");
+ 	memset(tc_node, 0, sizeof(tc_node));
+ 	TAILQ_FOREACH(tm_node, tc_list, node) {
+ 		tidx = hns3_tm_calc_node_tc_no(conf, tm_node->id);
+@@ -705,7 +763,7 @@ hns3_get_tm_conf_queue_node_info(FILE *file, struct hns3_tm_conf *conf,
+ 		return;
+ 
+ 	fprintf(file,
+-		"  queue_node: \n"
++		"  queue_node:\n"
+ 		"    tx queue id | mapped tc (8 mean node not exist)\n");
+ 
+ 	memset(queue_node, 0, sizeof(queue_node));
+-- 
+2.23.0
+

@@ -1,0 +1,46 @@
+From 982c9eabe68c6d5a0e8328df8dc11c5f315eddf0 Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Fri, 21 Oct 2022 15:36:14 +0800
+Subject: [PATCH 138/189] net/hns3: fix next-to-use overflow in simple Tx
+
+If txq's next-to-use plus nb_pkts equal txq's nb_tx_desc when using
+simple xmit algorithm, the txq's next-to-use will equal nb_tx_desc
+fter the xmit, this does not cause Tx exceptions, but may affect other
+ops that depend on this field, such as tx_descriptor_status.
+
+Fixes: 7ef933908f04 ("net/hns3: add simple Tx path")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_rxtx.c | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_rxtx.c b/drivers/net/hns3/hns3_rxtx.c
+index 840ca384ce..93cc70477d 100644
+--- a/drivers/net/hns3/hns3_rxtx.c
++++ b/drivers/net/hns3/hns3_rxtx.c
+@@ -4129,14 +4129,16 @@ hns3_xmit_pkts_simple(void *tx_queue,
+ 	}
+ 
+ 	txq->tx_bd_ready -= nb_pkts;
+-	if (txq->next_to_use + nb_pkts > txq->nb_tx_desc) {
++	if (txq->next_to_use + nb_pkts >= txq->nb_tx_desc) {
+ 		nb_tx = txq->nb_tx_desc - txq->next_to_use;
+ 		hns3_tx_fill_hw_ring(txq, tx_pkts, nb_tx);
+ 		txq->next_to_use = 0;
+ 	}
+ 
+-	hns3_tx_fill_hw_ring(txq, tx_pkts + nb_tx, nb_pkts - nb_tx);
+-	txq->next_to_use += nb_pkts - nb_tx;
++	if (nb_pkts > nb_tx) {
++		hns3_tx_fill_hw_ring(txq, tx_pkts + nb_tx, nb_pkts - nb_tx);
++		txq->next_to_use += nb_pkts - nb_tx;
++	}
+ 
+ 	hns3_write_txq_tail_reg(txq, nb_pkts);
+ 
+-- 
+2.23.0
+
