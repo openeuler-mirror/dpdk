@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 18
+Release: 19
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -137,6 +137,72 @@ Patch6003:    backport-0001-CVE-2022-2132.patch
 Patch6004:    backport-0002-CVE-2022-2132.patch
 Patch6005:    backport-CVE-2022-28199.patch
 
+Patch9125:    0125-net-hns3-fix-link-status-capability-query-from-VF.patch
+Patch9126:    0126-net-hns3-support-backplane-media-type.patch
+Patch9127:    0127-net-hns3-cancel-heartbeat-alarm-when-VF-reset.patch
+Patch9128:    0128-net-hns3-fix-PTP-interrupt-logging.patch
+Patch9129:    0129-net-hns3-fix-statistics-locking.patch
+Patch9130:    0130-net-hns3-fix-descriptors-check-with-SVE.patch
+Patch9131:    0131-net-hns3-clean-some-functions.patch
+Patch9132:    0132-net-hns3-delete-unused-code.patch
+Patch9133:    0133-examples-dma-support-dequeue-when-no-packet-received.patch
+Patch9134:    0134-net-hns3-add-dump-of-VF-VLAN-filter-modify-capabilit.patch
+Patch9135:    0135-net-hns3-fix-Rx-with-PTP.patch
+Patch9136:    0136-net-hns3-fix-crash-in-SVE-Tx.patch
+Patch9137:    0137-net-hns3-fix-next-to-use-overflow-in-SVE-Tx.patch
+Patch9138:    0138-net-hns3-fix-next-to-use-overflow-in-simple-Tx.patch
+Patch9139:    0139-net-hns3-optimize-SVE-Tx-performance.patch
+Patch9140:    0140-net-hns3-fix-crash-when-secondary-process-access-FW.patch
+Patch9141:    0141-net-hns3-delete-unused-markup.patch
+Patch9142:    0142-net-hns3-fix-clearing-hardware-MAC-statistics.patch
+Patch9143:    0143-net-hns3-revert-Tx-performance-optimization.patch
+Patch9144:    0144-net-hns3-fix-RSS-rule-restore.patch
+Patch9145:    0145-net-hns3-fix-RSS-filter-restore.patch
+Patch9146:    0146-net-hns3-fix-lock-protection-of-RSS-flow-rule.patch
+Patch9147:    0147-net-hns3-fix-RSS-flow-rule-restore.patch
+Patch9148:    0148-net-hns3-move-flow-direction-rule-recovery.patch
+Patch9149:    0149-net-hns3-fix-restore-filter-function-input.patch
+Patch9150:    0150-net-hns3-fix-build-with-gcov.patch
+Patch9151:    0151-net-hns3-fix-packet-type-for-GENEVE.patch
+Patch9152:    0152-net-hns3-remove-magic-numbers-for-MAC-address.patch
+Patch9153:    0153-net-hns3-fix-code-check-warnings.patch
+Patch9154:    0154-net-hns3-fix-header-files-includes.patch
+Patch9155:    0155-net-hns3-remove-unused-structures.patch
+Patch9156:    0156-net-hns3-rename-header-guards.patch
+Patch9157:    0157-net-hns3-fix-IPv4-and-IPv6-RSS.patch
+Patch9158:    0158-net-hns3-fix-types-in-IPv6-SCTP-fields.patch
+Patch9159:    0159-net-hns3-fix-IPv4-RSS.patch
+Patch9160:    0160-net-hns3-add-check-for-L3-and-L4-type.patch
+Patch9161:    0161-net-hns3-revert-fix-mailbox-communication-with-HW.patch
+Patch9162:    0162-net-hns3-fix-VF-mailbox-message-handling.patch
+Patch9163:    0163-net-hns3-fix-minimum-Tx-frame-length.patch
+Patch9164:    0164-ethdev-introduce-Rx-Tx-descriptor-dump-API.patch
+Patch9165:    0165-net-hns3-support-Rx-Tx-descriptor-dump.patch
+Patch9166:    0166-remove-unnecessary-null-checks.patch
+Patch9167:    0167-ethdev-introduce-generic-dummy-packet-burst-function.patch
+Patch9168:    0168-fix-spelling-in-comments-and-strings.patch
+Patch9169:    0169-net-hns3-add-VLAN-filter-query-in-dump-file.patch
+Patch9170:    0170-net-bonding-fix-array-overflow-in-Rx-burst.patch
+Patch9171:    0171-net-bonding-fix-double-slave-link-status-query.patch
+Patch9172:    0172-app-testpmd-fix-supported-RSS-offload-display.patch
+Patch9173:    0173-app-testpmd-unify-name-of-L2-payload-offload.patch
+Patch9174:    0174-app-testpmd-refactor-config-all-RSS-command.patch
+Patch9175:    0175-app-testpmd-unify-RSS-types-display.patch
+Patch9176:    0176-app-testpmd-compact-RSS-types-output.patch
+Patch9177:    0177-app-testpmd-reorder-RSS-type-table.patch
+Patch9178:    0178-app-testpmd-fix-RSS-types-display.patch
+Patch9179:    0179-ethdev-support-telemetry-private-dump.patch
+Patch9180:    0180-dmadev-add-telemetry.patch
+Patch9181:    0181-dmadev-support-telemetry-dump-dmadev.patch
+Patch9182:    0182-telemetry-add-missing-C-guards.patch
+Patch9183:    0183-telemetry-limit-characters-allowed-in-dictionary-nam.patch
+Patch9184:    0184-telemetry-fix-escaping-of-invalid-json-characters.patch
+Patch9185:    0185-telemetry-add-escaping-of-strings-in-arrays.patch
+Patch9186:    0186-telemetry-add-escaping-of-strings-in-dicts.patch
+Patch9187:    0187-telemetry-limit-command-characters.patch
+Patch9188:    0188-telemetry-eliminate-duplicate-code-for-json-output.patch
+Patch9189:    0189-telemetry-make-help-command-more-helpful.patch
+
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
 License: BSD and LGPLv2 and GPLv2
@@ -264,6 +330,17 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Sat Oct 22 2022 Huisong Li <lihuisong@huawei.com> - 21.11-19
+  Sync some patches for hns3 PMD, telemetry and testpmd. And main
+  modifications are as follows:
+   - backport some bugfixes for hns3
+   - revert Tx performance optimization for hns3
+   - add Rx/Tx descriptor dump feature for hns3
+   - refactor some RSS commands for testpmd
+   - add ethdev telemetry private dump
+   - add dmadev telemetry
+   - sync telemetry lib
+
 * Thu Oct 6 2022 wuchangsheng <wuchangsheng2@huawei.com> - 21.11-18
 - reinit support return ok
 

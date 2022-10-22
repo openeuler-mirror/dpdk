@@ -1,0 +1,146 @@
+From 926dc7ff064ee81e6b9732247ddb7785a4ab98b8 Mon Sep 17 00:00:00 2001
+From: Bruce Richardson <bruce.richardson@intel.com>
+Date: Fri, 21 Oct 2022 15:36:59 +0800
+Subject: [PATCH 183/189] telemetry: limit characters allowed in dictionary names
+
+To save issues with encoding the names of values in dicts, we limit the
+allowed names to a subset of character values. This list of allowed
+characters can be expanded as necessary in future.
+
+Signed-off-by: Bruce Richardson <bruce.richardson@intel.com>
+Acked-by: Ciara Power <ciara.power@intel.com>
+Acked-by: Morten Brørup <mb@smartsharesystems.com>
+Acked-by: Chengwen Feng <fengchengwen@huawei.com>
+
+---
+ lib/telemetry/rte_telemetry.h  |  8 ++++++++
+ lib/telemetry/telemetry_data.c | 31 +++++++++++++++++++++++++++++++
+ 2 files changed, 39 insertions(+)
+
+diff --git a/lib/telemetry/rte_telemetry.h b/lib/telemetry/rte_telemetry.h
+index 3372b32f38..fadea48cb9 100644
+--- a/lib/telemetry/rte_telemetry.h
++++ b/lib/telemetry/rte_telemetry.h
+@@ -64,6 +64,10 @@ rte_tel_data_start_array(struct rte_tel_data *d, enum rte_tel_value_type type);
+ /**
+  * Start a dictionary of values for returning from a callback
+  *
++ * Dictionaries consist of key-values pairs to be returned, where the keys,
++ * or names, are strings and the values can be any of the types supported by telemetry.
++ * Name strings may only contain alphanumeric characters as well as '_' or '/'
++ *
+  * @param d
+  *   The data structure passed to the callback
+  * @return
+@@ -159,6 +163,7 @@ rte_tel_data_add_array_container(struct rte_tel_data *d,
+  *   The data structure passed to the callback
+  * @param name
+  *   The name the value is to be stored under in the dict
++ *   Must contain only alphanumeric characters or the symbols: '_' or '/'
+  * @param val
+  *   The string to be stored in the dict
+  * @return
+@@ -177,6 +182,7 @@ rte_tel_data_add_dict_string(struct rte_tel_data *d, const char *name,
+  *   The data structure passed to the callback
+  * @param name
+  *   The name the value is to be stored under in the dict
++ *   Must contain only alphanumeric characters or the symbols: '_' or '/'
+  * @param val
+  *   The number to be stored in the dict
+  * @return
+@@ -193,6 +199,7 @@ rte_tel_data_add_dict_int(struct rte_tel_data *d, const char *name, int val);
+  *   The data structure passed to the callback
+  * @param name
+  *   The name the value is to be stored under in the dict
++ *   Must contain only alphanumeric characters or the symbols: '_' or '/'
+  * @param val
+  *   The number to be stored in the dict
+  * @return
+@@ -212,6 +219,7 @@ rte_tel_data_add_dict_u64(struct rte_tel_data *d,
+  *   The data structure passed to the callback
+  * @param name
+  *   The name the value is to be stored under in the dict.
++ *   Must contain only alphanumeric characters or the symbols: '_' or '/'
+  * @param val
+  *   The pointer to the container to be stored in the dict.
+  * @param keep
+diff --git a/lib/telemetry/telemetry_data.c b/lib/telemetry/telemetry_data.c
+index e14ae3c4d4..be46054c29 100644
+--- a/lib/telemetry/telemetry_data.c
++++ b/lib/telemetry/telemetry_data.c
+@@ -3,6 +3,7 @@
+  */
+ 
+ #undef RTE_USE_LIBBSD
++#include <stdbool.h>
+ #include <rte_string_fns.h>
+ 
+ #include "telemetry_data.h"
+@@ -92,6 +93,24 @@ rte_tel_data_add_array_container(struct rte_tel_data *d,
+ 	return 0;
+ }
+ 
++static bool
++valid_name(const char *name)
++{
++	char allowed[128] = {
++			['0' ... '9'] = 1,
++			['A' ... 'Z'] = 1,
++			['a' ... 'z'] = 1,
++			['_'] = 1,
++			['/'] = 1,
++	};
++	while (*name != '\0') {
++		if ((size_t)*name >= RTE_DIM(allowed) || allowed[(int)*name] == 0)
++			return false;
++		name++;
++	}
++	return true;
++}
++
+ int
+ rte_tel_data_add_dict_string(struct rte_tel_data *d, const char *name,
+ 		const char *val)
+@@ -104,6 +123,9 @@ rte_tel_data_add_dict_string(struct rte_tel_data *d, const char *name,
+ 	if (d->data_len >= RTE_TEL_MAX_DICT_ENTRIES)
+ 		return -ENOSPC;
+ 
++	if (!valid_name(name))
++		return -EINVAL;
++
+ 	d->data_len++;
+ 	e->type = RTE_TEL_STRING_VAL;
+ 	vbytes = strlcpy(e->value.sval, val, RTE_TEL_MAX_STRING_LEN);
+@@ -123,6 +145,9 @@ rte_tel_data_add_dict_int(struct rte_tel_data *d, const char *name, int val)
+ 	if (d->data_len >= RTE_TEL_MAX_DICT_ENTRIES)
+ 		return -ENOSPC;
+ 
++	if (!valid_name(name))
++		return -EINVAL;
++
+ 	d->data_len++;
+ 	e->type = RTE_TEL_INT_VAL;
+ 	e->value.ival = val;
+@@ -140,6 +165,9 @@ rte_tel_data_add_dict_u64(struct rte_tel_data *d,
+ 	if (d->data_len >= RTE_TEL_MAX_DICT_ENTRIES)
+ 		return -ENOSPC;
+ 
++	if (!valid_name(name))
++		return -EINVAL;
++
+ 	d->data_len++;
+ 	e->type = RTE_TEL_U64_VAL;
+ 	e->value.u64val = val;
+@@ -161,6 +189,9 @@ rte_tel_data_add_dict_container(struct rte_tel_data *d, const char *name,
+ 	if (d->data_len >= RTE_TEL_MAX_DICT_ENTRIES)
+ 		return -ENOSPC;
+ 
++	if (!valid_name(name))
++		return -EINVAL;
++
+ 	d->data_len++;
+ 	e->type = RTE_TEL_CONTAINER;
+ 	e->value.container.data = val;
+-- 
+2.23.0
+

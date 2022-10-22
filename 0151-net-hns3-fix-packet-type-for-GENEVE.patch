@@ -1,0 +1,44 @@
+From c2fd801565933c744bc6342f9dad56de644d68a3 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Fri, 21 Oct 2022 15:36:27 +0800
+Subject: [PATCH 151/189] net/hns3: fix packet type for GENEVE
+
+Currently, hns3 reports VXLAN tunnel packet type for GENEVE,
+which is misleading to user. In fact, hns3 hardware cannot
+distinguish between VXLAN and GENEVE packet. So this patch
+uses RTE_PTYPE_TUNNEL_GRENAT packet type to report.
+
+Fixes: 7d6df32cf742 ("net/hns3: fix missing outer L4 UDP flag for VXLAN")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_rxtx.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_rxtx.c b/drivers/net/hns3/hns3_rxtx.c
+index 21c3ef72b1..089caccd7f 100644
+--- a/drivers/net/hns3/hns3_rxtx.c
++++ b/drivers/net/hns3/hns3_rxtx.c
+@@ -1995,7 +1995,7 @@ hns3_dev_supported_ptypes_get(struct rte_eth_dev *dev)
+ 		RTE_PTYPE_INNER_L4_TCP,
+ 		RTE_PTYPE_INNER_L4_SCTP,
+ 		RTE_PTYPE_INNER_L4_ICMP,
+-		RTE_PTYPE_TUNNEL_VXLAN,
++		RTE_PTYPE_TUNNEL_GRENAT,
+ 		RTE_PTYPE_TUNNEL_NVGRE,
+ 		RTE_PTYPE_UNKNOWN
+ 	};
+@@ -2092,7 +2092,7 @@ hns3_init_tunnel_ptype_tbl(struct hns3_ptype_table *tbl)
+ 	tbl->ol3table[5] = RTE_PTYPE_L2_ETHER | RTE_PTYPE_L3_IPV6_EXT;
+ 
+ 	tbl->ol4table[0] = RTE_PTYPE_UNKNOWN;
+-	tbl->ol4table[1] = RTE_PTYPE_L4_UDP | RTE_PTYPE_TUNNEL_VXLAN;
++	tbl->ol4table[1] = RTE_PTYPE_L4_UDP | RTE_PTYPE_TUNNEL_GRENAT;
+ 	tbl->ol4table[2] = RTE_PTYPE_TUNNEL_NVGRE;
+ }
+ 
+-- 
+2.23.0
+

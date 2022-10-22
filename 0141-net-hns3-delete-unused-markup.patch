@@ -1,0 +1,81 @@
+From a3cc39e81492da62dc98146c33f8f5dbb632e746 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Fri, 21 Oct 2022 15:36:17 +0800
+Subject: [PATCH 141/189] net/hns3: delete unused markup
+
+The '__rte_unused' tag in the input parameter  of 'hns3_mac_stats_reset'
+is redundant. This patch remove this tag. In addition, this function is
+aimed to clear MAC statics. So using 'struct hns3_hw' as input parameter
+is better than 'struct rte_eth_dev', and it also facilitates the call of
+this function.
+
+Fixes: 8839c5e202f3 ("net/hns3: support device stats")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_stats.c | 22 +++++-----------------
+ 1 file changed, 5 insertions(+), 17 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_stats.c b/drivers/net/hns3/hns3_stats.c
+index d56d3ec174..c2af3bd231 100644
+--- a/drivers/net/hns3/hns3_stats.c
++++ b/drivers/net/hns3/hns3_stats.c
+@@ -406,15 +406,6 @@ hns3_query_mac_stats_reg_num(struct hns3_hw *hw)
+ 	return 0;
+ }
+ 
+-static int
+-hns3_query_update_mac_stats(struct rte_eth_dev *dev)
+-{
+-	struct hns3_adapter *hns = dev->data->dev_private;
+-	struct hns3_hw *hw = &hns->hw;
+-
+-	return hns3_update_mac_stats(hw);
+-}
+-
+ static int
+ hns3_update_port_rpu_drop_stats(struct hns3_hw *hw)
+ {
+@@ -763,14 +754,13 @@ hns3_stats_reset(struct rte_eth_dev *eth_dev)
+ }
+ 
+ static int
+-hns3_mac_stats_reset(__rte_unused struct rte_eth_dev *dev)
++hns3_mac_stats_reset(struct hns3_hw *hw)
+ {
+-	struct hns3_adapter *hns = dev->data->dev_private;
+-	struct hns3_hw *hw = &hns->hw;
+ 	struct hns3_mac_stats *mac_stats = &hw->mac_stats;
+ 	int ret;
+ 
+-	ret = hns3_query_update_mac_stats(dev);
++	/* Clear hardware MAC statistics by reading it. */
++	ret = hns3_update_mac_stats(hw);
+ 	if (ret) {
+ 		hns3_err(hw, "Clear Mac stats fail : %d", ret);
+ 		return ret;
+@@ -1063,8 +1053,7 @@ hns3_dev_xstats_get(struct rte_eth_dev *dev, struct rte_eth_xstat *xstats,
+ 	hns3_tqp_basic_stats_get(dev, xstats, &count);
+ 
+ 	if (!hns->is_vf) {
+-		/* Update Mac stats */
+-		ret = hns3_query_update_mac_stats(dev);
++		ret = hns3_update_mac_stats(hw);
+ 		if (ret < 0) {
+ 			hns3_err(hw, "Update Mac stats fail : %d", ret);
+ 			rte_spinlock_unlock(&hw->stats_lock);
+@@ -1482,8 +1471,7 @@ hns3_dev_xstats_reset(struct rte_eth_dev *dev)
+ 	if (hns->is_vf)
+ 		goto out;
+ 
+-	/* HW registers are cleared on read */
+-	ret = hns3_mac_stats_reset(dev);
++	ret = hns3_mac_stats_reset(hw);
+ 
+ out:
+ 	rte_spinlock_unlock(&hw->stats_lock);
+-- 
+2.23.0
+

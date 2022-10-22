@@ -1,0 +1,175 @@
+From 93df9193174fc6190ec793a0fdfc7bf2ee105669 Mon Sep 17 00:00:00 2001
+From: Ferruh Yigit <ferruh.yigit@intel.com>
+Date: Fri, 21 Oct 2022 15:36:43 +0800
+Subject: [PATCH 167/189] ethdev: introduce generic dummy packet burst function
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Multiple PMDs have dummy/noop Rx/Tx packet burst functions.
+These dummy functions are very simple, introduce a common function in
+the ethdev and update drivers to use it instead of each driver having
+its own functions.
+
+Note:
+Note: This patch only captures some hns3 modification from the
+following patch:
+Fixes: a41f593f1bce ("ethdev: introduce generic dummy packet burst function")
+
+Signed-off-by: Ferruh Yigit <ferruh.yigit@intel.com>
+Acked-by: Morten Brørup <mb@smartsharesystems.com>
+Acked-by: Viacheslav Ovsiienko <viacheslavo@nvidia.com>
+Acked-by: Thomas Monjalon <thomas@monjalon.net>
+---
+ drivers/net/hns3/hns3_rxtx.c | 18 +++++-------------
+ drivers/net/hns3/hns3_rxtx.h |  3 ---
+ lib/ethdev/ethdev_driver.c   | 13 +++++++++++++
+ lib/ethdev/ethdev_driver.h   | 17 +++++++++++++++++
+ lib/ethdev/meson.build       |  1 +
+ lib/ethdev/version.map       |  1 +
+ 6 files changed, 37 insertions(+), 16 deletions(-)
+ create mode 100644 lib/ethdev/ethdev_driver.c
+
+diff --git a/drivers/net/hns3/hns3_rxtx.c b/drivers/net/hns3/hns3_rxtx.c
+index 29caaeafbd..3c02fd54e1 100644
+--- a/drivers/net/hns3/hns3_rxtx.c
++++ b/drivers/net/hns3/hns3_rxtx.c
+@@ -4365,14 +4365,6 @@ hns3_get_tx_function(struct rte_eth_dev *dev, eth_tx_prep_t *prep)
+ 	return hns3_xmit_pkts;
+ }
+ 
+-uint16_t
+-hns3_dummy_rxtx_burst(void *dpdk_txq __rte_unused,
+-		      struct rte_mbuf **pkts __rte_unused,
+-		      uint16_t pkts_n __rte_unused)
+-{
+-	return 0;
+-}
+-
+ static void
+ hns3_trace_rxtx_function(struct rte_eth_dev *dev)
+ {
+@@ -4416,14 +4408,14 @@ hns3_set_rxtx_function(struct rte_eth_dev *eth_dev)
+ 		eth_dev->rx_pkt_burst = hns3_get_rx_function(eth_dev);
+ 		eth_dev->rx_descriptor_status = hns3_dev_rx_descriptor_status;
+ 		eth_dev->tx_pkt_burst = hw->set_link_down ?
+-					hns3_dummy_rxtx_burst :
++					rte_eth_pkt_burst_dummy :
+ 					hns3_get_tx_function(eth_dev, &prep);
+ 		eth_dev->tx_pkt_prepare = prep;
+ 		eth_dev->tx_descriptor_status = hns3_dev_tx_descriptor_status;
+ 		hns3_trace_rxtx_function(eth_dev);
+ 	} else {
+-		eth_dev->rx_pkt_burst = hns3_dummy_rxtx_burst;
+-		eth_dev->tx_pkt_burst = hns3_dummy_rxtx_burst;
++		eth_dev->rx_pkt_burst = rte_eth_pkt_burst_dummy;
++		eth_dev->tx_pkt_burst = rte_eth_pkt_burst_dummy;
+ 		eth_dev->tx_pkt_prepare = NULL;
+ 	}
+ 
+@@ -4637,7 +4629,7 @@ hns3_tx_done_cleanup(void *txq, uint32_t free_cnt)
+ 
+ 	if (dev->tx_pkt_burst == hns3_xmit_pkts)
+ 		return hns3_tx_done_cleanup_full(q, free_cnt);
+-	else if (dev->tx_pkt_burst == hns3_dummy_rxtx_burst)
++	else if (dev->tx_pkt_burst == rte_eth_pkt_burst_dummy)
+ 		return 0;
+ 	else
+ 		return -ENOTSUP;
+@@ -4747,7 +4739,7 @@ hns3_enable_rxd_adv_layout(struct hns3_hw *hw)
+ void
+ hns3_stop_tx_datapath(struct rte_eth_dev *dev)
+ {
+-	dev->tx_pkt_burst = hns3_dummy_rxtx_burst;
++	dev->tx_pkt_burst = rte_eth_pkt_burst_dummy;
+ 	dev->tx_pkt_prepare = NULL;
+ 	hns3_eth_dev_fp_ops_config(dev);
+ 
+diff --git a/drivers/net/hns3/hns3_rxtx.h b/drivers/net/hns3/hns3_rxtx.h
+index ed40621b3a..e633b336b1 100644
+--- a/drivers/net/hns3/hns3_rxtx.h
++++ b/drivers/net/hns3/hns3_rxtx.h
+@@ -742,9 +742,6 @@ void hns3_init_rx_ptype_tble(struct rte_eth_dev *dev);
+ void hns3_set_rxtx_function(struct rte_eth_dev *eth_dev);
+ eth_tx_burst_t hns3_get_tx_function(struct rte_eth_dev *dev,
+ 				    eth_tx_prep_t *prep);
+-uint16_t hns3_dummy_rxtx_burst(void *dpdk_txq __rte_unused,
+-			       struct rte_mbuf **pkts __rte_unused,
+-			       uint16_t pkts_n __rte_unused);
+ 
+ uint32_t hns3_get_tqp_intr_reg_offset(uint16_t tqp_intr_id);
+ void hns3_set_queue_intr_gl(struct hns3_hw *hw, uint16_t queue_id,
+diff --git a/lib/ethdev/ethdev_driver.c b/lib/ethdev/ethdev_driver.c
+new file mode 100644
+index 0000000000..fb7323f4d3
+--- /dev/null
++++ b/lib/ethdev/ethdev_driver.c
+@@ -0,0 +1,13 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2022 Intel Corporation
++ */
++
++#include "ethdev_driver.h"
++
++uint16_t
++rte_eth_pkt_burst_dummy(void *queue __rte_unused,
++		struct rte_mbuf **pkts __rte_unused,
++		uint16_t nb_pkts __rte_unused)
++{
++	return 0;
++}
+diff --git a/lib/ethdev/ethdev_driver.h b/lib/ethdev/ethdev_driver.h
+index 41f67f2740..d3de203d7a 100644
+--- a/lib/ethdev/ethdev_driver.h
++++ b/lib/ethdev/ethdev_driver.h
+@@ -1497,6 +1497,23 @@ rte_eth_linkstatus_get(const struct rte_eth_dev *dev,
+ 	*dst = __atomic_load_n(src, __ATOMIC_SEQ_CST);
+ }
+ 
++/**
++ * @internal
++ * Dummy DPDK callback for Rx/Tx packet burst.
++ *
++ * @param queue
++ *  Pointer to Rx/Tx queue
++ * @param pkts
++ *  Packet array
++ * @param nb_pkts
++ *  Number of packets in packet array
++ */
++__rte_internal
++uint16_t
++rte_eth_pkt_burst_dummy(void *queue __rte_unused,
++                struct rte_mbuf **pkts __rte_unused,
++                uint16_t nb_pkts __rte_unused);
++
+ /**
+  * Allocate an unique switch domain identifier.
+  *
+diff --git a/lib/ethdev/meson.build b/lib/ethdev/meson.build
+index 0205c853df..a094585bf7 100644
+--- a/lib/ethdev/meson.build
++++ b/lib/ethdev/meson.build
+@@ -2,6 +2,7 @@
+ # Copyright(c) 2017 Intel Corporation
+ 
+ sources = files(
++        'ethdev_driver.c',
+         'ethdev_private.c',
+         'ethdev_profile.c',
+         'ethdev_trace_points.c',
+diff --git a/lib/ethdev/version.map b/lib/ethdev/version.map
+index 09dba86bee..590aa5a0a6 100644
+--- a/lib/ethdev/version.map
++++ b/lib/ethdev/version.map
+@@ -286,6 +286,7 @@ INTERNAL {
+ 	rte_eth_hairpin_queue_peer_bind;
+ 	rte_eth_hairpin_queue_peer_unbind;
+ 	rte_eth_hairpin_queue_peer_update;
++	rte_eth_pkt_burst_dummy;
+ 	rte_eth_representor_id_get;
+ 	rte_eth_switch_domain_alloc;
+ 	rte_eth_switch_domain_free;
+-- 
+2.23.0
+
