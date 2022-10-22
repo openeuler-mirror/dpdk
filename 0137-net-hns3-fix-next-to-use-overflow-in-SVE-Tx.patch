@@ -1,0 +1,46 @@
+From e95f25b7cda1108b4e0579dd70f1bf90516b7e2c Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Fri, 21 Oct 2022 15:36:13 +0800
+Subject: [PATCH 137/189] net/hns3: fix next-to-use overflow in SVE Tx
+
+If txq's next-to-use plus nb_pkts equal txq's nb_tx_desc when using
+SVE xmit algorithm, the txq's next-to-use will equal nb_tx_desc after
+the xmit, this does not cause Tx exceptions, but may affect other ops
+that depend on this field, such as tx_descriptor_status.
+
+Fixes: f0c243a6cb6f ("net/hns3: support SVE Tx")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_rxtx_vec_sve.c | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_rxtx_vec_sve.c b/drivers/net/hns3/hns3_rxtx_vec_sve.c
+index b0dfb052bb..f09a81dbd5 100644
+--- a/drivers/net/hns3/hns3_rxtx_vec_sve.c
++++ b/drivers/net/hns3/hns3_rxtx_vec_sve.c
+@@ -464,14 +464,16 @@ hns3_xmit_fixed_burst_vec_sve(void *__restrict tx_queue,
+ 		return 0;
+ 	}
+ 
+-	if (txq->next_to_use + nb_pkts > txq->nb_tx_desc) {
++	if (txq->next_to_use + nb_pkts >= txq->nb_tx_desc) {
+ 		nb_tx = txq->nb_tx_desc - txq->next_to_use;
+ 		hns3_tx_fill_hw_ring_sve(txq, tx_pkts, nb_tx);
+ 		txq->next_to_use = 0;
+ 	}
+ 
+-	hns3_tx_fill_hw_ring_sve(txq, tx_pkts + nb_tx, nb_pkts - nb_tx);
+-	txq->next_to_use += nb_pkts - nb_tx;
++	if (nb_pkts > nb_tx) {
++		hns3_tx_fill_hw_ring_sve(txq, tx_pkts + nb_tx, nb_pkts - nb_tx);
++		txq->next_to_use += nb_pkts - nb_tx;
++	}
+ 
+ 	txq->tx_bd_ready -= nb_pkts;
+ 	hns3_write_txq_tail_reg(txq, nb_pkts);
+-- 
+2.23.0
+

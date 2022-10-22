@@ -1,0 +1,123 @@
+From ac646ee28e8c9780d02ec685b7581486c13f6961 Mon Sep 17 00:00:00 2001
+From: Jie Hai <haijie1@huawei.com>
+Date: Fri, 21 Oct 2022 15:36:39 +0800
+Subject: [PATCH 163/189] net/hns3: fix minimum Tx frame length
+
+When packet length in Tx is less than length hardware supported,
+the minimum frame length in hns3 is used to do padding to avoid
+hardware error. Currently, this length is fixed by macro, which
+is very unfavorable for subsequent hardware evolution. So fix it
+as firmware report.
+
+Fixes: 395b5e08ef8d ("net/hns3: add Tx short frame padding compatibility")
+Cc: stable@dpdk.org
+
+Signed-off-by: Jie Hai <haijie1@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_cmd.h       | 6 ++++++
+ drivers/net/hns3/hns3_ethdev.c    | 4 +++-
+ drivers/net/hns3/hns3_ethdev.h    | 3 +--
+ drivers/net/hns3/hns3_ethdev_vf.c | 4 +++-
+ 4 files changed, 13 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_cmd.h b/drivers/net/hns3/hns3_cmd.h
+index 8ac8b45819..994dfc48cc 100644
+--- a/drivers/net/hns3/hns3_cmd.h
++++ b/drivers/net/hns3/hns3_cmd.h
+@@ -967,6 +967,12 @@ struct hns3_dev_specs_0_cmd {
+ 	uint32_t max_tm_rate;
+ };
+ 
++struct hns3_dev_specs_1_cmd {
++	uint8_t rsv0[12];
++	uint8_t min_tx_pkt_len;
++	uint8_t rsv1[11];
++};
++
+ struct hns3_query_rpu_cmd {
+ 	uint32_t tc_queue_num;
+ 	uint32_t rsv1[2];
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 7b0e8fc77d..7330515535 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -2661,14 +2661,17 @@ static void
+ hns3_parse_dev_specifications(struct hns3_hw *hw, struct hns3_cmd_desc *desc)
+ {
+ 	struct hns3_dev_specs_0_cmd *req0;
++	struct hns3_dev_specs_1_cmd *req1;
+ 
+ 	req0 = (struct hns3_dev_specs_0_cmd *)desc[0].data;
++	req1 = (struct hns3_dev_specs_1_cmd *)desc[1].data;
+ 
+ 	hw->max_non_tso_bd_num = req0->max_non_tso_bd_num;
+ 	hw->rss_ind_tbl_size = rte_le_to_cpu_16(req0->rss_ind_tbl_size);
+ 	hw->rss_key_size = rte_le_to_cpu_16(req0->rss_key_size);
+ 	hw->max_tm_rate = rte_le_to_cpu_32(req0->max_tm_rate);
+ 	hw->intr.int_ql_max = rte_le_to_cpu_16(req0->intr_ql_max);
++	hw->min_tx_pkt_len = req1->min_tx_pkt_len;
+ }
+ 
+ static int
+@@ -2763,7 +2766,6 @@ hns3_get_capability(struct hns3_hw *hw)
+ 	hw->tso_mode = HNS3_TSO_HW_CAL_PSEUDO_H_CSUM;
+ 	hw->vlan_mode = HNS3_HW_SHIFT_AND_DISCARD_MODE;
+ 	hw->drop_stats_mode = HNS3_PKTS_DROP_STATS_MODE2;
+-	hw->min_tx_pkt_len = HNS3_HIP09_MIN_TX_PKT_LEN;
+ 	pf->tqp_config_mode = HNS3_FLEX_MAX_TQP_NUM_MODE;
+ 	hw->rss_info.ipv6_sctp_offload_supported = true;
+ 	hw->udp_cksum_mode = HNS3_SPECIAL_PORT_HW_CKSUM_MODE;
+diff --git a/drivers/net/hns3/hns3_ethdev.h b/drivers/net/hns3/hns3_ethdev.h
+index 40476bf882..4406611fe9 100644
+--- a/drivers/net/hns3/hns3_ethdev.h
++++ b/drivers/net/hns3/hns3_ethdev.h
+@@ -75,7 +75,6 @@
+ #define HNS3_DEFAULT_MTU		1500UL
+ #define HNS3_DEFAULT_FRAME_LEN		(HNS3_DEFAULT_MTU + HNS3_ETH_OVERHEAD)
+ #define HNS3_HIP08_MIN_TX_PKT_LEN	33
+-#define HNS3_HIP09_MIN_TX_PKT_LEN	9
+ 
+ #define HNS3_BITS_PER_BYTE	8
+ 
+@@ -550,7 +549,7 @@ struct hns3_hw {
+ 	 * The minimum length of the packet supported by hardware in the Tx
+ 	 * direction.
+ 	 */
+-	uint32_t min_tx_pkt_len;
++	uint8_t min_tx_pkt_len;
+ 
+ 	struct hns3_queue_intr intr;
+ 	/*
+diff --git a/drivers/net/hns3/hns3_ethdev_vf.c b/drivers/net/hns3/hns3_ethdev_vf.c
+index 72d60191ab..6976a9f23d 100644
+--- a/drivers/net/hns3/hns3_ethdev_vf.c
++++ b/drivers/net/hns3/hns3_ethdev_vf.c
+@@ -701,13 +701,16 @@ static void
+ hns3vf_parse_dev_specifications(struct hns3_hw *hw, struct hns3_cmd_desc *desc)
+ {
+ 	struct hns3_dev_specs_0_cmd *req0;
++	struct hns3_dev_specs_1_cmd *req1;
+ 
+ 	req0 = (struct hns3_dev_specs_0_cmd *)desc[0].data;
++	req1 = (struct hns3_dev_specs_1_cmd *)desc[1].data;
+ 
+ 	hw->max_non_tso_bd_num = req0->max_non_tso_bd_num;
+ 	hw->rss_ind_tbl_size = rte_le_to_cpu_16(req0->rss_ind_tbl_size);
+ 	hw->rss_key_size = rte_le_to_cpu_16(req0->rss_key_size);
+ 	hw->intr.int_ql_max = rte_le_to_cpu_16(req0->intr_ql_max);
++	hw->min_tx_pkt_len = req1->min_tx_pkt_len;
+ }
+ 
+ static int
+@@ -846,7 +849,6 @@ hns3vf_get_capability(struct hns3_hw *hw)
+ 	hw->intr.gl_unit = HNS3_INTR_COALESCE_GL_UINT_1US;
+ 	hw->tso_mode = HNS3_TSO_HW_CAL_PSEUDO_H_CSUM;
+ 	hw->drop_stats_mode = HNS3_PKTS_DROP_STATS_MODE2;
+-	hw->min_tx_pkt_len = HNS3_HIP09_MIN_TX_PKT_LEN;
+ 	hw->rss_info.ipv6_sctp_offload_supported = true;
+ 	hw->promisc_mode = HNS3_LIMIT_PROMISC_MODE;
+ 
+-- 
+2.23.0
+
