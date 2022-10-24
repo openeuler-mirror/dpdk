@@ -1,0 +1,89 @@
+From 9fd76879f458693e1cf368aeeb08238c579c8ff3 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Fri, 21 Oct 2022 15:36:11 +0800
+Subject: [PATCH 135/189] net/hns3: fix Rx with PTP
+
+The Rx and Tx vector algorithm of hns3 PMD don't support PTP
+function. Currently, hns3 driver uses 'pf->ptp_enable' to check
+whether PTP is enabled so as to not select Rx and Tx vector
+algorithm. And the variable is set when call rte_eth_timesync_enable().
+Namely, it may not be set before selecting Rx/Tx function, let's say
+the case: set PTP offload in dev_configure(), do dev_start() and then
+call rte_eth_timesync_enable(). In this case, all PTP packets can not
+be received to application. So this patch fixes the check based on the
+RTE_ETH_RX_OFFLOAD_TIMESTAMP flag.
+
+Fixes: 3ca3dcd65101 ("net/hns3: fix vector Rx/Tx when PTP enabled")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_ptp.c      |  1 -
+ drivers/net/hns3/hns3_rxtx_vec.c | 20 +++++++++-----------
+ 2 files changed, 9 insertions(+), 12 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_ptp.c b/drivers/net/hns3/hns3_ptp.c
+index 0b0061bba5..6bbd85ba23 100644
+--- a/drivers/net/hns3/hns3_ptp.c
++++ b/drivers/net/hns3/hns3_ptp.c
+@@ -125,7 +125,6 @@ hns3_timesync_enable(struct rte_eth_dev *dev)
+ 
+ 	if (pf->ptp_enable)
+ 		return 0;
+-	hns3_warn(hw, "note: please ensure Rx/Tx burst mode is simple or common when enabling PTP!");
+ 
+ 	rte_spinlock_lock(&hw->lock);
+ 	ret = hns3_timesync_configure(hns, true);
+diff --git a/drivers/net/hns3/hns3_rxtx_vec.c b/drivers/net/hns3/hns3_rxtx_vec.c
+index 73f0ab6bc8..153866cf03 100644
+--- a/drivers/net/hns3/hns3_rxtx_vec.c
++++ b/drivers/net/hns3/hns3_rxtx_vec.c
+@@ -17,15 +17,18 @@ int
+ hns3_tx_check_vec_support(struct rte_eth_dev *dev)
+ {
+ 	struct rte_eth_txmode *txmode = &dev->data->dev_conf.txmode;
+-	struct hns3_adapter *hns = dev->data->dev_private;
+-	struct hns3_pf *pf = &hns->pf;
++	struct rte_eth_rxmode *rxmode = &dev->data->dev_conf.rxmode;
+ 
+ 	/* Only support RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE */
+ 	if (txmode->offloads != RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE)
+ 		return -ENOTSUP;
+ 
+-	/* Vec is not supported when PTP enabled */
+-	if (pf->ptp_enable)
++	/*
++	 * PTP function requires the cooperation of Rx and Tx.
++	 * Tx vector isn't supported if RTE_ETH_RX_OFFLOAD_TIMESTAMP is set
++	 * in Rx offloads.
++	 */
++	if (rxmode->offloads & RTE_ETH_RX_OFFLOAD_TIMESTAMP)
+ 		return -ENOTSUP;
+ 
+ 	return 0;
+@@ -233,9 +236,8 @@ hns3_rx_check_vec_support(struct rte_eth_dev *dev)
+ 	struct rte_eth_fdir_conf *fconf = &dev->data->dev_conf.fdir_conf;
+ 	struct rte_eth_rxmode *rxmode = &dev->data->dev_conf.rxmode;
+ 	uint64_t offloads_mask = RTE_ETH_RX_OFFLOAD_TCP_LRO |
+-				 RTE_ETH_RX_OFFLOAD_VLAN;
+-	struct hns3_adapter *hns = dev->data->dev_private;
+-	struct hns3_pf *pf = &hns->pf;
++				 RTE_ETH_RX_OFFLOAD_VLAN |
++				 RTE_ETH_RX_OFFLOAD_TIMESTAMP;
+ 
+ 	if (dev->data->scattered_rx)
+ 		return -ENOTSUP;
+@@ -249,9 +251,5 @@ hns3_rx_check_vec_support(struct rte_eth_dev *dev)
+ 	if (hns3_rxq_iterate(dev, hns3_rxq_vec_check, NULL) != 0)
+ 		return -ENOTSUP;
+ 
+-	/* Vec is not supported when PTP enabled */
+-	if (pf->ptp_enable)
+-		return -ENOTSUP;
+-
+ 	return 0;
+ }
+-- 
+2.23.0
+

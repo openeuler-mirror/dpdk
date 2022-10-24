@@ -1,0 +1,39 @@
+From a087560ab1d0e5920f77859f5a06245cc5d7bafe Mon Sep 17 00:00:00 2001
+From: Yunjian Wang <wangyunjian@huawei.com>
+Date: Fri, 21 Oct 2022 15:36:46 +0800
+Subject: [PATCH 170/189] net/bonding: fix array overflow in Rx burst
+
+In bond_ethdev_rx_burst() function, we check the validity of the
+'active_slave' as this code:
+if (++active_slave == slave_count)
+	active_slave = 0;
+However, the value of 'active_slave' maybe equal to 'slave_count',
+when a slave is down. This is wrong and it can cause buffer overflow.
+This patch fixes the issue by using '>=' instead of '=='.
+
+Fixes: e1110e977648 ("net/bonding: fix Rx slave fairness")
+Cc: stable@dpdk.org
+
+Signed-off-by: Lei Ji <jilei8@huawei.com>
+Signed-off-by: Yunjian Wang <wangyunjian@huawei.com>
+Acked-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/bonding/rte_eth_bond_pmd.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/net/bonding/rte_eth_bond_pmd.c b/drivers/net/bonding/rte_eth_bond_pmd.c
+index 09636321cd..828fb5f96d 100644
+--- a/drivers/net/bonding/rte_eth_bond_pmd.c
++++ b/drivers/net/bonding/rte_eth_bond_pmd.c
+@@ -82,7 +82,7 @@ bond_ethdev_rx_burst(void *queue, struct rte_mbuf **bufs, uint16_t nb_pkts)
+ 					 bufs + num_rx_total, nb_pkts);
+ 		num_rx_total += num_rx_slave;
+ 		nb_pkts -= num_rx_slave;
+-		if (++active_slave == slave_count)
++		if (++active_slave >= slave_count)
+ 			active_slave = 0;
+ 	}
+ 
+-- 
+2.23.0
+
