@@ -1,0 +1,40 @@
+From 36416b8c0fd1918ed0f89cca83b8c21e22a529c7 Mon Sep 17 00:00:00 2001
+From: Jie Hai <haijie1@huawei.com>
+Date: Fri, 21 Oct 2022 15:36:28 +0800
+Subject: [PATCH 152/189] net/hns3: remove magic numbers for MAC address
+
+Removing magic numbers with macros.
+
+Signed-off-by: Jie Hai <haijie1@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 45b5d699b4..adc47d815d 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -1713,6 +1713,7 @@ hns3_add_mc_mac_addr(struct hns3_hw *hw, struct rte_ether_addr *mac_addr)
+ 	char mac_str[RTE_ETHER_ADDR_FMT_SIZE];
+ 	uint8_t vf_id;
+ 	int ret;
++	int idx;
+ 
+ 	/* Check if mac addr is valid */
+ 	if (!rte_is_multicast_ether_addr(mac_addr)) {
+@@ -1730,9 +1731,8 @@ hns3_add_mc_mac_addr(struct hns3_hw *hw, struct rte_ether_addr *mac_addr)
+ 					HNS3_MC_MAC_VLAN_OPS_DESC_NUM);
+ 	if (ret) {
+ 		/* This mac addr do not exist, add new entry for it */
+-		memset(desc[0].data, 0, sizeof(desc[0].data));
+-		memset(desc[1].data, 0, sizeof(desc[0].data));
+-		memset(desc[2].data, 0, sizeof(desc[0].data));
++		for (idx = 0; idx < HNS3_MC_MAC_VLAN_OPS_DESC_NUM; idx++)
++			memset(desc[idx].data, 0, sizeof(desc[idx].data));
+ 	}
+ 
+ 	/*
+-- 
+2.23.0
+

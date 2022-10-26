@@ -1,0 +1,44 @@
+From 70cecb90da490a7f0d484ab9cd8bd481c17f20a3 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Fri, 21 Oct 2022 15:36:18 +0800
+Subject: [PATCH 142/189] net/hns3: fix clearing hardware MAC statistics
+
+In the situation that the driver hns3 exits abnormally during packets
+sending and receiving, the hardware statistics are not cleared when the
+driver hns3 is reloaded. It need to be cleared during driver hns3
+initialization that hardware MAC statistics.
+
+Fixes: 8839c5e202f3 ("net/hns3: support device stats")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_stats.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/drivers/net/hns3/hns3_stats.c b/drivers/net/hns3/hns3_stats.c
+index c2af3bd231..552ae9d30c 100644
+--- a/drivers/net/hns3/hns3_stats.c
++++ b/drivers/net/hns3/hns3_stats.c
+@@ -1528,6 +1528,7 @@ hns3_tqp_stats_clear(struct hns3_hw *hw)
+ int
+ hns3_stats_init(struct hns3_hw *hw)
+ {
++	struct hns3_adapter *hns = HNS3_DEV_HW_TO_ADAPTER(hw);
+ 	int ret;
+ 
+ 	rte_spinlock_init(&hw->stats_lock);
+@@ -1538,6 +1539,9 @@ hns3_stats_init(struct hns3_hw *hw)
+ 		return ret;
+ 	}
+ 
++	if (!hns->is_vf)
++		hns3_mac_stats_reset(hw);
++
+ 	return hns3_tqp_stats_init(hw);
+ }
+ 
+-- 
+2.23.0
+
