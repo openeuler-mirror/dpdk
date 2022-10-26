@@ -1,0 +1,31 @@
+From 29cb11b1bfafa7a4cefaffbbd5b05afab32957ba Mon Sep 17 00:00:00 2001
+From: Jie Hai <haijie1@huawei.com>
+Date: Fri, 21 Oct 2022 15:36:10 +0800
+Subject: [PATCH 134/189] net/hns3: add dump of VF VLAN filter modify
+ capability
+
+Show whether support modifying VF VLAN filter or not.
+Sample output changes:
++          -- support VF VLAN FILTER MOD: Yes
+
+Signed-off-by: Jie Hai <haijie1@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_dump.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/net/hns3/hns3_dump.c b/drivers/net/hns3/hns3_dump.c
+index ef3e5c0fb4..646e93d8e6 100644
+--- a/drivers/net/hns3/hns3_dump.c
++++ b/drivers/net/hns3/hns3_dump.c
+@@ -98,6 +98,7 @@ hns3_get_dev_feature_capability(FILE *file, struct hns3_hw *hw)
+ 		{HNS3_DEV_SUPPORT_OUTER_UDP_CKSUM_B, "OUTER UDP CKSUM"},
+ 		{HNS3_DEV_SUPPORT_RAS_IMP_B, "RAS IMP"},
+ 		{HNS3_DEV_SUPPORT_TM_B, "TM"},
++		{HNS3_DEV_SUPPORT_VF_VLAN_FLT_MOD_B, "VF VLAN FILTER MOD"},
+ 	};
+ 	uint32_t i;
+ 
+-- 
+2.23.0
+

@@ -1,0 +1,62 @@
+From ab50c70fe965fb931156eddfbde0ead68323849a Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Fri, 21 Oct 2022 15:36:09 +0800
+Subject: [PATCH 133/189] examples/dma: support dequeue when no packet received
+
+Currently the example using DMA in asynchronous mode, which are:
+	nb_rx = rte_eth_rx_burst();
+	if (nb_rx == 0)
+		continue;
+	...
+	dma_enqueue(); // enqueue the received packets copy request
+	nb_cpl = dma_dequeue(); // get copy completed packets
+	...
+
+There are no waiting inside dma_dequeue(), and this is why it's called
+asynchronus. If there are no packet received, it won't call
+dma_dequeue(), but some packets may still in the DMA queue which
+enqueued in last cycle. As a result, when the traffic is stopped, the
+sent packets and received packets are unbalanced from the perspective
+of the traffic generator.
+
+The patch supports DMA dequeue when no packet received, it helps to
+judge the test result by comparing the sent packets with the received
+packets on traffic generator sides.
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Acked-by: Bruce Richardson <bruce.richardson@intel.com>
+Acked-by: Kevin Laatz <kevin.laatz@intel.com>
+---
+ examples/dma/dmafwd.c | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/examples/dma/dmafwd.c b/examples/dma/dmafwd.c
+index 9b17b40dbf..b06042e5fe 100644
+--- a/examples/dma/dmafwd.c
++++ b/examples/dma/dmafwd.c
+@@ -408,8 +408,13 @@ dma_rx_port(struct rxtx_port_config *rx_config)
+ 		nb_rx = rte_eth_rx_burst(rx_config->rxtx_port, i,
+ 			pkts_burst, MAX_PKT_BURST);
+ 
+-		if (nb_rx == 0)
++		if (nb_rx == 0) {
++			if (copy_mode == COPY_MODE_DMA_NUM &&
++				(nb_rx = dma_dequeue(pkts_burst, pkts_burst_copy,
++					MAX_PKT_BURST, rx_config->dmadev_ids[i])) > 0)
++				goto handle_tx;
+ 			continue;
++		}
+ 
+ 		port_statistics.rx[rx_config->rxtx_port] += nb_rx;
+ 
+@@ -450,6 +455,7 @@ dma_rx_port(struct rxtx_port_config *rx_config)
+ 					pkts_burst_copy[j]);
+ 		}
+ 
++handle_tx:
+ 		rte_mempool_put_bulk(dma_pktmbuf_pool,
+ 			(void *)pkts_burst, nb_rx);
+ 
+-- 
+2.23.0
+

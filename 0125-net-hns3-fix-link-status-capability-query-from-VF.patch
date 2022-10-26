@@ -1,0 +1,52 @@
+From fe5e02e38e96e0b6ac33fd56a0f0b8cbad30b66f Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Fri, 21 Oct 2022 15:36:01 +0800
+Subject: [PATCH 125/189] net/hns3: fix link status capability query from VF
+
+Currently, the VF LSC capability is obtained from PF driver in
+the interrupt mailbox interrupt thread, it is asynchronous.
+The VF driver waits for 500ms to get this capability in probe
+process.
+
+The primary process will receive a message and do probe in the
+interrupt thread context when attach a device in the secondary
+process. At this case, VF driver never obtains this capability
+from PF.
+
+The root cause is that 'vf->pf_push_lsc_cap' is not updated by
+the handling mailbox thread until finishing probe. The reason
+this update wouldn't be done is that the handling mailbox interrupt
+thread and the probe alarm thread are both in epool thread, and
+the probe alarm thread is before the mailbox interrupt thread.
+
+Fixes: 9bc2289fe5ea ("net/hns3: refactor VF LSC event report")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev_vf.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/drivers/net/hns3/hns3_ethdev_vf.c b/drivers/net/hns3/hns3_ethdev_vf.c
+index 7323e47f15..b85f68cb1d 100644
+--- a/drivers/net/hns3/hns3_ethdev_vf.c
++++ b/drivers/net/hns3/hns3_ethdev_vf.c
+@@ -778,6 +778,14 @@ hns3vf_get_push_lsc_cap(struct hns3_hw *hw)
+ 
+ 	while (remain_ms > 0) {
+ 		rte_delay_ms(HNS3_POLL_RESPONE_MS);
++		/*
++		 * The probe process may perform in interrupt thread context.
++		 * For example, users attach a device in the secondary process.
++		 * At the moment, the handling mailbox task will be blocked. So
++		 * driver has to actively handle the HNS3_MBX_LINK_STAT_CHANGE
++		 * mailbox from PF driver to get this capability.
++		 */
++		hns3_dev_handle_mbx_msg(hw);
+ 		if (__atomic_load_n(&vf->pf_push_lsc_cap, __ATOMIC_ACQUIRE) !=
+ 			HNS3_PF_PUSH_LSC_CAP_UNKNOWN)
+ 			break;
+-- 
+2.23.0
+

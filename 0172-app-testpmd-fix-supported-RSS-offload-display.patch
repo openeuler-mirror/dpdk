@@ -1,0 +1,121 @@
+From 4ba54bf73c3f5038f03163d70e60d43e968878d5 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Fri, 21 Oct 2022 15:36:48 +0800
+Subject: [PATCH 172/189] app/testpmd: fix supported RSS offload display
+
+The rte_eth_dev_info.flow_type_rss_offloads is populated in terms of
+RTE_ETH_RSS_* bits. If PMD sets RTE_ETH_RSS_L3_SRC_ONLY to
+dev_info->flow_type_rss_offloads. testpmd will display "user defined 63"
+when run 'show port info 0'. Because testpmd use flowtype_to_str()
+to display the supported RSS offload of PMD. In fact, the function is
+used to display flow type in FDIR commands for i40e or ixgbe. This patch
+uses the RTE_ETH_RSS_* bits to display supported RSS offload of PMD.
+
+Fixes: b12964f621dc ("ethdev: unification of RSS offload types")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Ferruh Yigit <ferruh.yigit@xilinx.com>
+---
+ app/test-pmd/config.c  | 40 ++++++++++++++++++++++++++--------------
+ app/test-pmd/testpmd.h |  2 ++
+ 2 files changed, 28 insertions(+), 14 deletions(-)
+
+diff --git a/app/test-pmd/config.c b/app/test-pmd/config.c
+index a7fffc3d1d..2849ee7e7c 100644
+--- a/app/test-pmd/config.c
++++ b/app/test-pmd/config.c
+@@ -66,8 +66,6 @@
+ 
+ #define NS_PER_SEC 1E9
+ 
+-static char *flowtype_to_str(uint16_t flow_type);
+-
+ static const struct {
+ 	enum tx_pkt_split split;
+ 	const char *name;
+@@ -674,6 +672,19 @@ print_dev_capabilities(uint64_t capabilities)
+ 	}
+ }
+ 
++const char *
++rsstypes_to_str(uint64_t rss_type)
++{
++	uint16_t i;
++
++	for (i = 0; rss_type_table[i].str != NULL; i++) {
++		if (rss_type_table[i].rss_type == rss_type)
++			return rss_type_table[i].str;
++	}
++
++	return NULL;
++}
++
+ void
+ port_infos_display(portid_t port_id)
+ {
+@@ -778,19 +789,20 @@ port_infos_display(portid_t port_id)
+ 	if (!dev_info.flow_type_rss_offloads)
+ 		printf("No RSS offload flow type is supported.\n");
+ 	else {
++		uint64_t rss_offload_types = dev_info.flow_type_rss_offloads;
+ 		uint16_t i;
+-		char *p;
+ 
+ 		printf("Supported RSS offload flow types:\n");
+-		for (i = RTE_ETH_FLOW_UNKNOWN + 1;
+-		     i < sizeof(dev_info.flow_type_rss_offloads) * CHAR_BIT; i++) {
+-			if (!(dev_info.flow_type_rss_offloads & (1ULL << i)))
+-				continue;
+-			p = flowtype_to_str(i);
+-			if (p)
+-				printf("  %s\n", p);
+-			else
+-				printf("  user defined %d\n", i);
++		for (i = 0; i < sizeof(rss_offload_types) * CHAR_BIT; i++) {
++			uint64_t rss_offload = RTE_BIT64(i);
++			if ((rss_offload_types & rss_offload) != 0) {
++				const char *p = rsstypes_to_str(rss_offload);
++				if (p)
++					printf("  %s\n", p);
++				else
++					printf("  user defined %u\n",
++					       i);
++			}
+ 		}
+ 	}
+ 
+@@ -4811,6 +4823,8 @@ set_record_burst_stats(uint8_t on_off)
+ 	record_burst_stats = on_off;
+ }
+ 
++#if defined(RTE_NET_I40E) || defined(RTE_NET_IXGBE)
++
+ static char*
+ flowtype_to_str(uint16_t flow_type)
+ {
+@@ -4854,8 +4868,6 @@ flowtype_to_str(uint16_t flow_type)
+ 	return NULL;
+ }
+ 
+-#if defined(RTE_NET_I40E) || defined(RTE_NET_IXGBE)
+-
+ static inline void
+ print_fdir_mask(struct rte_eth_fdir_masks *mask)
+ {
+diff --git a/app/test-pmd/testpmd.h b/app/test-pmd/testpmd.h
+index 569b4300cf..d6a775c485 100644
+--- a/app/test-pmd/testpmd.h
++++ b/app/test-pmd/testpmd.h
+@@ -1105,6 +1105,8 @@ extern int flow_parse(const char *src, void *result, unsigned int size,
+ 		      struct rte_flow_item **pattern,
+ 		      struct rte_flow_action **actions);
+ 
++const char *rsstypes_to_str(uint64_t rss_type);
++
+ /*
+  * Work-around of a compilation error with ICC on invocations of the
+  * rte_be_to_cpu_16() function.
+-- 
+2.23.0
+
