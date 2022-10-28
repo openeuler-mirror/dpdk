@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 19.11
-Release: 21
+Release: 22
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  19.11
@@ -49,6 +49,9 @@ Patch6000: backport-vhost-handle-mbuf-allocation-failure.patch
 Patch6001: backport-0001-CVE-2022-2132.patch
 Patch6002: backport-0002-CVE-2022-2131.patch
 Patch6003: backport-CVE-2022-28199.patch
+Patch6004: backport-gro-fix-chain-index-for-more-than-2-packets.patch
+Patch6005: backport-gro-trim-tail-padding-bytes.patch
+Patch6006: backport-gro-check-payload-length-after-trim.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -201,6 +204,11 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Sat Oct 29 2022 jiangheng <jiangheng14@huawei.com> - 19.11-22
+- gro: fix chain index for more than 2 packets
+- gro: trim tail padding bytes
+- gro: check payload length after trim
+
 * Thu Oct 6 2022 wuchangsheng <wuchangsheng2@huawei.com> - 19.11-21
 - reinit support return ok
 

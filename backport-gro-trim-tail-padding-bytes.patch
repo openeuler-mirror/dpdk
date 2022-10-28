@@ -1,0 +1,52 @@
+From b8a55871d5af6f5b8694b1cb5eacbc629734e403 Mon Sep 17 00:00:00 2001
+From: Jun Qiu <jun.qiu@jaguarmicro.com>
+Date: Wed, 27 Jul 2022 08:00:36 +0000
+Subject: [PATCH] gro: trim tail padding bytes
+
+Exclude CRC fields, the minimum Ethernet packet
+length is 60 bytes. When the actual packet length
+is less than 60 bytes, padding is added to the tail.
+When GRO is performed on a packet containing a padding
+field, mbuf->pkt_len is the one that contains the
+padding field, which leads to the error of thinking
+of the padding field as the actual content of the packet.
+We need to trim away this extra padding field during
+GRO processing.
+
+Fixes: 0d2cbe59b719 ("lib/gro: support TCP/IPv4")
+Cc: stable@dpdk.org
+
+Signed-off-by: Jun Qiu <jun.qiu@jaguarmicro.com>
+Acked-by: Jiayu Hu <Jiayu.hu@intel.com>
+---
+ lib/gro/gro_tcp4.c | 7 ++++++-
+ 2 files changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/lib/librte_gro/gro_tcp4.c b/lib/librte_gro/gro_tcp4.c
+index 9758e28fd5..8f5e800250 100644
+--- a/lib/librte_gro/gro_tcp4.c
++++ b/lib/librte_gro/gro_tcp4.c
+@@ -198,7 +198,7 @@ gro_tcp4_reassemble(struct rte_mbuf *pkt,
+ 	struct rte_tcp_hdr *tcp_hdr;
+ 	uint32_t sent_seq;
+ 	int32_t tcp_dl;
+-	uint16_t ip_id, hdr_len, frag_off;
++	uint16_t ip_id, hdr_len, frag_off, ip_tlen;
+ 	uint8_t is_atomic;
+ 
+ 	struct tcp4_flow_key key;
+@@ -233,6 +233,11 @@ gro_tcp4_reassemble(struct rte_mbuf *pkt,
+ 	if (tcp_dl <= 0)
+ 		return -1;
+ 
++	/* trim the tail padding bytes */
++	ip_tlen = rte_be_to_cpu_16(ipv4_hdr->total_length);
++	if (pkt->pkt_len > (uint32_t)(ip_tlen + pkt->l2_len))
++		rte_pktmbuf_trim(pkt, pkt->pkt_len - ip_tlen - pkt->l2_len);
++
+ 	/*
+ 	 * Save IPv4 ID for the packet whose DF bit is 0. For the packet
+ 	 * whose DF bit is 1, IPv4 ID is ignored.
+-- 
+2.23.0
+
