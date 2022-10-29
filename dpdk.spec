@@ -205,7 +205,7 @@ Patch9189:    0189-telemetry-make-help-command-more-helpful.patch
 
 Patch6006:    backport-gro-fix-chain-index-for-more-than-2-packets.patch
 Patch6007:    backport-gro-trim-tail-padding-bytes.patch
-Patch6008:    backport-gro-check-payload-length-after-trm.patch
+Patch6008:    backport-gro-check-payload-length-after-trim.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
