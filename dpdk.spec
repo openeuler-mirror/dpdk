@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 19
+Release: 20
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -203,6 +203,10 @@ Patch9187:    0187-telemetry-limit-command-characters.patch
 Patch9188:    0188-telemetry-eliminate-duplicate-code-for-json-output.patch
 Patch9189:    0189-telemetry-make-help-command-more-helpful.patch
 
+Patch6006:    backport-gro-fix-chain-index-for-more-than-2-packets.patch
+Patch6007:    backport-gro-trim-tail-padding-bytes.patch
+Patch6008:    backport-gro-check-payload-length-after-trm.patch
+
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
 License: BSD and LGPLv2 and GPLv2
@@ -330,6 +334,11 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Fri Oct 28 2022 jiangheng <jiangheng14@huawei.com> - 21.11-20
+- gro: trim tail padding bytes
+- gro: check payload length after trim
+- gro: fix chain index for more than 2 packets
+
 * Sat Oct 22 2022 Huisong Li <lihuisong@huawei.com> - 21.11-19
   Sync some patches for hns3 PMD, telemetry and testpmd. And main
   modifications are as follows:
