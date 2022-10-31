@@ -1,0 +1,62 @@
+From f099709983c155337a14340da3d9607a2a08a7f9 Mon Sep 17 00:00:00 2001
+From: Ferruh Yigit <ferruh.yigit@intel.com>
+Date: Fri, 28 Oct 2022 15:32:45 +0800
+Subject: net/bonding: fix MTU set for slaves
+
+ethdev requires device to be configured before setting MTU.
+
+In bonding PMD, while configuring slaves, bonding first sets MTU later
+configures them, which causes failure if slaves are not configured in
+advance.
+
+Fixing by changing the order in slave configure as requested in ethdev
+layer, configure first and set MTU later.
+
+Bugzilla ID: 864
+Fixes: b26bee10ee37 ("ethdev: forbid MTU set before device configure")
+Cc: stable@dpdk.org
+
+Signed-off-by: Ferruh Yigit <ferruh.yigit@intel.com>
+Tested-by: Yu Jiang <yux.jiang@intel.com>
+Acked-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/bonding/rte_eth_bond_pmd.c | 16 ++++++++--------
+ 1 file changed, 8 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/net/bonding/rte_eth_bond_pmd.c b/drivers/net/bonding/rte_eth_bond_pmd.c
+index 4e82f7b145..ab1196e505 100644
+--- a/drivers/net/bonding/rte_eth_bond_pmd.c
++++ b/drivers/net/bonding/rte_eth_bond_pmd.c
+@@ -1770,14 +1770,6 @@ slave_configure(struct rte_eth_dev *bonded_eth_dev,
+ 		}
+ 	}
+ 
+-	errval = rte_eth_dev_set_mtu(slave_eth_dev->data->port_id,
+-				     bonded_eth_dev->data->mtu);
+-	if (errval != 0 && errval != -ENOTSUP) {
+-		RTE_BOND_LOG(ERR, "rte_eth_dev_set_mtu: port %u, err (%d)",
+-				slave_eth_dev->data->port_id, errval);
+-		return errval;
+-	}
+-
+ 	/* Configure device */
+ 	errval = rte_eth_dev_configure(slave_eth_dev->data->port_id,
+ 			nb_rx_queues, nb_tx_queues,
+@@ -1788,6 +1780,14 @@ slave_configure(struct rte_eth_dev *bonded_eth_dev,
+ 		return errval;
+ 	}
+ 
++	errval = rte_eth_dev_set_mtu(slave_eth_dev->data->port_id,
++				     bonded_eth_dev->data->mtu);
++	if (errval != 0 && errval != -ENOTSUP) {
++		RTE_BOND_LOG(ERR, "rte_eth_dev_set_mtu: port %u, err (%d)",
++				slave_eth_dev->data->port_id, errval);
++		return errval;
++	}
++
+ 	/* Setup Rx Queues */
+ 	for (q_id = 0; q_id < bonded_eth_dev->data->nb_rx_queues; q_id++) {
+ 		bd_rx_q = (struct bond_rx_queue *)bonded_eth_dev->data->rx_queues[q_id];
+-- 
+2.23.0
+
