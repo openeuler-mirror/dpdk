@@ -1,0 +1,121 @@
+From 20204b1f3811015975a5dac2012ca770be174acb Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Fri, 28 Oct 2022 15:32:46 +0800
+Subject: app/testpmd: remove jumbo offload related code
+
+The jumbo offload was removed from patch [1], but testpmd still exist
+jumbo offload related code, this patch removes it, and also updates
+the rst file.
+
+[1] ethdev: remove jumbo offload flag
+
+Fixes: b563c1421282 ("ethdev: remove jumbo offload flag")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Reviewed-by: Andrew Rybchenko <andrew.rybchenko@oktetlabs.ru>
+---
+ app/test-pmd/cmdline.c                      | 12 ++++++------
+ app/test-pmd/testpmd.h                      |  1 -
+ doc/guides/testpmd_app_ug/testpmd_funcs.rst |  8 ++++----
+ 3 files changed, 10 insertions(+), 11 deletions(-)
+
+diff --git a/app/test-pmd/cmdline.c b/app/test-pmd/cmdline.c
+index 6cb095f965..8d4a88bb85 100644
+--- a/app/test-pmd/cmdline.c
++++ b/app/test-pmd/cmdline.c
+@@ -861,7 +861,7 @@ static void cmd_help_long_parsed(void *parsed_result,
+ 			"port config <port_id> rx_offload vlan_strip|"
+ 			"ipv4_cksum|udp_cksum|tcp_cksum|tcp_lro|qinq_strip|"
+ 			"outer_ipv4_cksum|macsec_strip|header_split|"
+-			"vlan_filter|vlan_extend|jumbo_frame|scatter|"
++			"vlan_filter|vlan_extend|scatter|"
+ 			"buffer_split|timestamp|security|keep_crc on|off\n"
+ 			"     Enable or disable a per port Rx offloading"
+ 			" on all Rx queues of a port\n\n"
+@@ -869,7 +869,7 @@ static void cmd_help_long_parsed(void *parsed_result,
+ 			"port (port_id) rxq (queue_id) rx_offload vlan_strip|"
+ 			"ipv4_cksum|udp_cksum|tcp_cksum|tcp_lro|qinq_strip|"
+ 			"outer_ipv4_cksum|macsec_strip|header_split|"
+-			"vlan_filter|vlan_extend|jumbo_frame|scatter|"
++			"vlan_filter|vlan_extend|scatter|"
+ 			"buffer_split|timestamp|security|keep_crc on|off\n"
+ 			"    Enable or disable a per queue Rx offloading"
+ 			" only on a specific Rx queue\n\n"
+@@ -16080,7 +16080,7 @@ cmdline_parse_token_string_t cmd_config_per_port_rx_offload_result_offload =
+ 		(struct cmd_config_per_port_rx_offload_result,
+ 		 offload, "vlan_strip#ipv4_cksum#udp_cksum#tcp_cksum#tcp_lro#"
+ 			   "qinq_strip#outer_ipv4_cksum#macsec_strip#"
+-			   "header_split#vlan_filter#vlan_extend#jumbo_frame#"
++			   "header_split#vlan_filter#vlan_extend#"
+ 			   "scatter#buffer_split#timestamp#security#"
+ 			   "keep_crc#rss_hash");
+ cmdline_parse_token_string_t cmd_config_per_port_rx_offload_result_on_off =
+@@ -16163,7 +16163,7 @@ cmdline_parse_inst_t cmd_config_per_port_rx_offload = {
+ 	.help_str = "port config <port_id> rx_offload vlan_strip|ipv4_cksum|"
+ 		    "udp_cksum|tcp_cksum|tcp_lro|qinq_strip|outer_ipv4_cksum|"
+ 		    "macsec_strip|header_split|vlan_filter|vlan_extend|"
+-		    "jumbo_frame|scatter|buffer_split|timestamp|security|"
++		    "scatter|buffer_split|timestamp|security|"
+ 		    "keep_crc|rss_hash on|off",
+ 	.tokens = {
+ 		(void *)&cmd_config_per_port_rx_offload_result_port,
+@@ -16212,7 +16212,7 @@ cmdline_parse_token_string_t cmd_config_per_queue_rx_offload_result_offload =
+ 		(struct cmd_config_per_queue_rx_offload_result,
+ 		 offload, "vlan_strip#ipv4_cksum#udp_cksum#tcp_cksum#tcp_lro#"
+ 			   "qinq_strip#outer_ipv4_cksum#macsec_strip#"
+-			   "header_split#vlan_filter#vlan_extend#jumbo_frame#"
++			   "header_split#vlan_filter#vlan_extend#"
+ 			   "scatter#buffer_split#timestamp#security#keep_crc");
+ cmdline_parse_token_string_t cmd_config_per_queue_rx_offload_result_on_off =
+ 	TOKEN_STRING_INITIALIZER
+@@ -16271,7 +16271,7 @@ cmdline_parse_inst_t cmd_config_per_queue_rx_offload = {
+ 		    "vlan_strip|ipv4_cksum|"
+ 		    "udp_cksum|tcp_cksum|tcp_lro|qinq_strip|outer_ipv4_cksum|"
+ 		    "macsec_strip|header_split|vlan_filter|vlan_extend|"
+-		    "jumbo_frame|scatter|buffer_split|timestamp|security|"
++		    "scatter|buffer_split|timestamp|security|"
+ 		    "keep_crc on|off",
+ 	.tokens = {
+ 		(void *)&cmd_config_per_queue_rx_offload_result_port,
+diff --git a/app/test-pmd/testpmd.h b/app/test-pmd/testpmd.h
+index 9c3a5d9bc5..ab6642585e 100644
+--- a/app/test-pmd/testpmd.h
++++ b/app/test-pmd/testpmd.h
+@@ -1097,7 +1097,6 @@ uint16_t tx_pkt_set_dynf(uint16_t port_id, __rte_unused uint16_t queue,
+ void add_tx_dynf_callback(portid_t portid);
+ void remove_tx_dynf_callback(portid_t portid);
+ int update_mtu_from_frame_size(portid_t portid, uint32_t max_rx_pktlen);
+-int update_jumbo_frame_offload(portid_t portid);
+ void flex_item_create(portid_t port_id, uint16_t flex_id, const char *filename);
+ void flex_item_destroy(portid_t port_id, uint16_t flex_id);
+ void port_flex_item_flush(portid_t port_id);
+diff --git a/doc/guides/testpmd_app_ug/testpmd_funcs.rst b/doc/guides/testpmd_app_ug/testpmd_funcs.rst
+index e15dc0c4c4..e0edd349bc 100644
+--- a/doc/guides/testpmd_app_ug/testpmd_funcs.rst
++++ b/doc/guides/testpmd_app_ug/testpmd_funcs.rst
+@@ -1767,8 +1767,8 @@ Enable or disable a per port Rx offloading on all Rx queues of a port::
+ * ``offloading``: can be any of these offloading capability:
+                   vlan_strip, ipv4_cksum, udp_cksum, tcp_cksum, tcp_lro,
+                   qinq_strip, outer_ipv4_cksum, macsec_strip,
+-                  header_split, vlan_filter, vlan_extend, jumbo_frame,
+-                  scatter, timestamp, security, keep_crc, rss_hash
++                  header_split, vlan_filter, vlan_extend, scatter, timestamp, security,
++                  keep_crc, rss_hash
+ 
+ This command should be run when the port is stopped, or else it will fail.
+ 
+@@ -1782,8 +1782,8 @@ Enable or disable a per queue Rx offloading only on a specific Rx queue::
+ * ``offloading``: can be any of these offloading capability:
+                   vlan_strip, ipv4_cksum, udp_cksum, tcp_cksum, tcp_lro,
+                   qinq_strip, outer_ipv4_cksum, macsec_strip,
+-                  header_split, vlan_filter, vlan_extend, jumbo_frame,
+-                  scatter, timestamp, security, keep_crc
++                  header_split, vlan_filter, vlan_extend, scatter, timestamp, security,
++                  keep_crc
+ 
+ This command should be run when the port is stopped, or else it will fail.
+ 
+-- 
+2.23.0
+
