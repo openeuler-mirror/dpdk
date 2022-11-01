@@ -1,0 +1,112 @@
+From b92c505e9506f38e76dcf094fbbb2e765e5452a8 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Fri, 28 Oct 2022 15:32:43 +0800
+Subject: net/bonding: add link speeds configuration
+
+This patch adds link speeds configuration.
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Acked-by: Chas Williams <3chas3@gmail.com>
+---
+ drivers/net/bonding/eth_bond_private.h |  3 +++
+ drivers/net/bonding/rte_eth_bond_api.c |  3 +++
+ drivers/net/bonding/rte_eth_bond_pmd.c | 27 ++++++++++++++++++++++++++
+ 3 files changed, 33 insertions(+)
+
+diff --git a/drivers/net/bonding/eth_bond_private.h b/drivers/net/bonding/eth_bond_private.h
+index 9626b26d67..c338e11d4f 100644
+--- a/drivers/net/bonding/eth_bond_private.h
++++ b/drivers/net/bonding/eth_bond_private.h
+@@ -131,6 +131,9 @@ struct bond_dev_private {
+ 	uint32_t link_down_delay_ms;
+ 	uint32_t link_up_delay_ms;
+ 
++	uint32_t speed_capa;
++	/**< Supported speeds bitmap (RTE_ETH_LINK_SPEED_). */
++
+ 	uint16_t nb_rx_queues;			/**< Total number of rx queues */
+ 	uint16_t nb_tx_queues;			/**< Total number of tx queues*/
+ 
+diff --git a/drivers/net/bonding/rte_eth_bond_api.c b/drivers/net/bonding/rte_eth_bond_api.c
+index 2d5cac6c51..b74477128a 100644
+--- a/drivers/net/bonding/rte_eth_bond_api.c
++++ b/drivers/net/bonding/rte_eth_bond_api.c
+@@ -513,6 +513,8 @@ __eth_bond_slave_add_lock_free(uint16_t bonded_port_id, uint16_t slave_port_id)
+ 		internals->primary_port = slave_port_id;
+ 		internals->current_primary_port = slave_port_id;
+ 
++		internals->speed_capa = dev_info.speed_capa;
++
+ 		/* Inherit queues settings from first slave */
+ 		internals->nb_rx_queues = slave_eth_dev->data->nb_rx_queues;
+ 		internals->nb_tx_queues = slave_eth_dev->data->nb_tx_queues;
+@@ -527,6 +529,7 @@ __eth_bond_slave_add_lock_free(uint16_t bonded_port_id, uint16_t slave_port_id)
+ 	} else {
+ 		int ret;
+ 
++		internals->speed_capa &= dev_info.speed_capa;
+ 		eth_bond_slave_inherit_dev_info_rx_next(internals, &dev_info);
+ 		eth_bond_slave_inherit_dev_info_tx_next(internals, &dev_info);
+ 
+diff --git a/drivers/net/bonding/rte_eth_bond_pmd.c b/drivers/net/bonding/rte_eth_bond_pmd.c
+index 18754e3299..b5b706901a 100644
+--- a/drivers/net/bonding/rte_eth_bond_pmd.c
++++ b/drivers/net/bonding/rte_eth_bond_pmd.c
+@@ -1721,6 +1721,8 @@ slave_configure(struct rte_eth_dev *bonded_eth_dev,
+ 
+ 	slave_eth_dev->data->dev_conf.rxmode.mtu =
+ 			bonded_eth_dev->data->dev_conf.rxmode.mtu;
++	slave_eth_dev->data->dev_conf.link_speeds =
++			bonded_eth_dev->data->dev_conf.link_speeds;
+ 
+ 	slave_eth_dev->data->dev_conf.txmode.offloads |=
+ 		bonded_eth_dev->data->dev_conf.txmode.offloads;
+@@ -2257,6 +2259,7 @@ bond_ethdev_info(struct rte_eth_dev *dev, struct rte_eth_dev_info *dev_info)
+ 
+ 	dev_info->reta_size = internals->reta_size;
+ 	dev_info->hash_key_size = internals->rss_key_len;
++	dev_info->speed_capa = internals->speed_capa;
+ 
+ 	return 0;
+ }
+@@ -3571,6 +3574,7 @@ bond_ethdev_configure(struct rte_eth_dev *dev)
+ 	uint64_t offloads;
+ 	int arg_count;
+ 	uint16_t port_id = dev - rte_eth_devices;
++	uint32_t link_speeds;
+ 	uint8_t agg_mode;
+ 
+ 	static const uint8_t default_rss_key[40] = {
+@@ -3629,6 +3633,29 @@ bond_ethdev_configure(struct rte_eth_dev *dev)
+ 		dev->data->dev_conf.txmode.offloads = offloads;
+ 	}
+ 
++	link_speeds = dev->data->dev_conf.link_speeds;
++	/*
++	 * The default value of 'link_speeds' is zero. From its definition,
++	 * this value actually means auto-negotiation. But not all PMDs support
++	 * auto-negotiation. So ignore the check for the auto-negotiation and
++	 * only consider fixed speed to reduce the impact on PMDs.
++	 */
++	if (link_speeds & RTE_ETH_LINK_SPEED_FIXED) {
++		if ((link_speeds &
++		    (internals->speed_capa & ~RTE_ETH_LINK_SPEED_FIXED)) == 0) {
++			RTE_BOND_LOG(ERR, "the fixed speed is not supported by all slave devices.");
++			return -EINVAL;
++		}
++		/*
++		 * Two '1' in binary of 'link_speeds': bit0 and a unique
++		 * speed bit.
++		 */
++		if (__builtin_popcountl(link_speeds) != 2) {
++			RTE_BOND_LOG(ERR, "please set a unique speed.");
++			return -EINVAL;
++		}
++	}
++
+ 	/* set the max_rx_pktlen */
+ 	internals->max_rx_pktlen = internals->candidate_max_rx_pktlen;
+ 
+-- 
+2.23.0
+

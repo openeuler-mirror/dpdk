@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 20
+Release: 21
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -207,6 +207,12 @@ Patch6006:    backport-gro-fix-chain-index-for-more-than-2-packets.patch
 Patch6007:    backport-gro-trim-tail-padding-bytes.patch
 Patch6008:    backport-gro-check-payload-length-after-trim.patch
 
+Patch9190:    0190-net-bonding-fix-Tx-hash-for-TCP.patch
+Patch9191:    0191-net-bonding-add-link-speeds-configuration.patch
+Patch9192:    0192-net-bonding-call-Tx-prepare-before-Tx-burst.patch
+Patch9193:    0193-net-bonding-fix-MTU-set-for-slaves.patch
+Patch9194:    0194-app-testpmd-remove-jumbo-offload-related-code.patch
+
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
 License: BSD and LGPLv2 and GPLv2
@@ -334,6 +340,15 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Sat Oct 29 2022 chenjiji <chenjiji09@163.com> - 21.11-21
+  Sync some patches for bonding PMD and testpmd. And patchs 
+  are as follows:
+   - net/bonding: fix Tx hash for TCP
+   - net/bonding: add link speeds configuration
+   - net/bonding: call Tx prepare before Tx burst
+   - net/bonding: fix MTU set for slaves
+   - app/testpmd: remove jumbo offload related code
+
 * Fri Oct 28 2022 jiangheng <jiangheng14@huawei.com> - 21.11-20
 - gro: trim tail padding bytes
 - gro: check payload length after trim
