@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 21
+Release: 22
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -261,7 +261,7 @@ This package contains the pdump tool for capture the dpdk network packets.
 
 %build
 export CFLAGS="%{optflags}"
-meson build -Dexamples=l3fwd-power,ethtool,l3fwd,kni,dma,ptpclient
+meson build -Dplatform=generic -Dexamples=l3fwd-power,ethtool,l3fwd,kni,dma,ptpclient
 ninja -C build -v
 
 %install
@@ -340,6 +340,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Mon Nov 07 2022 jiangheng <jiangheng14@huawei.com> - 21.11-22
+- set platform to generic for compatibility
+
 * Sat Oct 29 2022 chenjiji <chenjiji09@163.com> - 21.11-21
   Sync some patches for bonding PMD and testpmd. And patchs 
   are as follows:
