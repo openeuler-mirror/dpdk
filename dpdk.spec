@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 22
+Release: 23
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -264,6 +264,13 @@ export CFLAGS="%{optflags}"
 meson build -Dplatform=generic -Dexamples=l3fwd-power,ethtool,l3fwd,kni,dma,ptpclient
 ninja -C build -v
 
+#build gazelle-pdump
+cd build/app/dpdk-pdump.p
+export GAZELLE_FLAGS="-lm -lpthread -lrt -lnuma"
+export GAZELLE_LIBS="-lrte_pci -lrte_bus_pci -lrte_cmdline -lrte_hash -lrte_mempool -lrte_mempool_ring -lrte_timer -lrte_eal -lrte_gro -lrte_ring -lrte_mbuf -lrte_telemetry -lrte_kni -lrte_net_ixgbe -lrte_kvargs -lrte_net_hinic -lrte_net_i40e -lrte_net_virtio -lrte_bus_vdev -lrte_net -lrte_rcu -lrte_ethdev -lrte_pdump -lrte_bpf -lrte_security -lrte_cryptodev -lrte_net_pcap"
+export SECURE_OPTIONS="-fstack-protector-strong -D_FORTIFY_SOURCE=2 -O2 -Wall -Wl,-z,relro,-z,now,-z,noexecstack -Wtrampolines -fPIE -pie -fPIC -g"
+gcc -o gazelle-pdump -m64 ${GAZELLE_FLAGS} ${SOCURE_OPTIONS} -L../../drivers -L../../lib ${GAZELLE_LIBS} pdump_main.c.o
+
 %install
 DESTDIR=$RPM_BUILD_ROOT/ ninja install -C build
 
@@ -280,6 +287,7 @@ cp ./build/examples/dpdk-ethtool $RPM_BUILD_ROOT/usr/local/bin
 cp ./build/examples/dpdk-kni $RPM_BUILD_ROOT/usr/local/bin
 cp ./build/examples/dpdk-dma $RPM_BUILD_ROOT/usr/local/bin
 cp ./build/examples/dpdk-ptpclient $RPM_BUILD_ROOT/usr/local/bin
+cp ./build/app/dpdk-pdump.p/gazelle-pdump $RPM_BUILD_ROOT/usr/local/bin
 
 mkdir -p $RPM_BUILD_ROOT/usr/lib64
 mv $RPM_BUILD_ROOT/usr/local/lib64/* $RPM_BUILD_ROOT/usr/lib64/
@@ -330,6 +338,7 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/local/bin/dpdk-kni
 /usr/local/bin/dpdk-dma
 /usr/local/bin/dpdk-ptpclient
+/usr/local/bin/gazelle-pdump
 
 %post
 /sbin/ldconfig
@@ -340,6 +349,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Mon Nov 14 2022 kircher <majun65@huawei.com> - 21.11-23
+- pdump: add gazelle-pdump for pcap
+
 * Mon Nov 07 2022 jiangheng <jiangheng14@huawei.com> - 21.11-22
 - set platform to generic for compatibility
 
