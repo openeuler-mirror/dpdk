@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 19.11
-Release: 22
+Release: 23
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  19.11
@@ -111,8 +111,8 @@ This package contains the pdump tool for capture the dpdk network packets.
 %build
 namer=%{kern_devel_ver}
 export RTE_KERNELDIR=/lib/modules/${namer}/build
-export EXTRA_CFLAGS="-fstack-protector-strong"
-make O=%{target} T=%{config} config
+export EXTRA_CFLAGS="-fstack-protector-strong -g"
+make O=%{target} T=%{config} V=2 config
 #make .a and .so libraries for spdk
 sed -ri 's,(RTE_BUILD_BOTH_STATIC_AND_SHARED_LIBS=).*,\1y,' %{target}/.config
 sed -ri 's,(CONFIG_RTE_LIB_LIBOS=).*,\1n,' %{target}/.config
@@ -122,8 +122,19 @@ sed -ri 's,(RTE_MACHINE=).*,\1%{machine},' %{target}/.config
 sed -ri 's,(RTE_APP_TEST=).*,\1n,'         %{target}/.config
 sed -ri 's,(RTE_NEXT_ABI=).*,\1n,'         %{target}/.config
 sed -ri 's,(LIBRTE_VHOST=).*,\1y,'         %{target}/.config
-#sed -ri 's,(LIBRTE_PMD_PCAP=).*,\1y,'      %{target}/.config
-make O=%{target} -j16
+sed -ri 's,(LIBRTE_PMD_PCAP=).*,\1y,'      %{target}/.config
+make O=%{target} V=2 -j16
+
+#build gazelle-pdump
+cd %{target}/build/app/pdump
+export GAZELLE_FLAGS="-lm -lpthread -lrt -lnuma -lconfig"
+%ifarch x86_64
+export GAZELLE_FLAGS="${GAZELLE_FLAGS} -mssse3"
+%endif
+export GAZELLE_LIBS="-lrte_pci -lrte_bus_pci -lrte_cmdline -lrte_hash -lrte_mempool -lrte_mempool_ring -lrte_timer -lrte_eal -lrte_gro -lrte_ring -lrte_mbuf -lrte_kni -lrte_pmd_ixgbe -lrte_kvargs -lrte_pmd_hinic -lrte_pmd_i40e -lrte_pmd_virtio -lrte_bus_vdev -lrte_net -lrte_ethdev -lrte_pdump -lrte_pmd_pcap"
+export SECURE_OPTIONS="-fstack-protector-strong -D_FORTIFY_SOURCE=2 -O2 -Wall -Wl,-z,relro,-z,now,-z,noexecstack -Wtrampolines -fPIE -pie -fPIC -g"
+gcc -o gazelle-pdump -m64 ${GAZELLE_FLAGS} ${SECURE_OPTIONS} -I../../../include -L../../../lib ${GAZELLE_LIBS} main.o
+
 
 %install
 namer=%{kern_devel_ver}
@@ -160,6 +171,7 @@ ln -s /usr/share/dpdk/%{target} $RPM_BUILD_ROOT/usr/include/dpdk/
 
 mkdir -p $RPM_BUILD_ROOT/usr/bin
 cp ./%{target}/app/dpdk-pdump  $RPM_BUILD_ROOT/usr/bin
+cp ./%{target}/build/app/pdump/gazelle-pdump $RPM_BUILD_ROOT/usr/bin
 
 strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/igb_uio.ko
 strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
@@ -187,13 +199,14 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/include/%{name}-%{version}/*
 %dir /usr/include/dpdk/
 /usr/include/dpdk/*
-%exclude /usr/bin/dpdk-pdump
+%exclude /usr/bin/*-pdump
 
 %files doc
 #%doc %{_docdir}/dpdk
 
 %files tools
 /usr/bin/dpdk-pdump
+/usr/bin/gazelle-pdump
 
 %post
 /sbin/ldconfig
@@ -204,6 +217,10 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Mon Nov 14 2022 kircher <majun65@huawei.com> - 19.11-23
+- pdump: add pmd_pcap support for dpdk
+- pdump: build gazelle-pdump for gazelle
+
 * Sat Oct 29 2022 jiangheng <jiangheng14@huawei.com> - 19.11-22
 - gro: fix chain index for more than 2 packets
 - gro: trim tail padding bytes
