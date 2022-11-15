@@ -1,0 +1,43 @@
+From 3be4c6f38ea1e2fd66f21872f38a2fb42d0fd36c Mon Sep 17 00:00:00 2001
+From: Guoyang Zhou <zhouguoyang@huawei.com>
+Date: Tue, 23 Mar 2021 21:17:51 +0800
+Subject: [PATCH] net/hinic: fix crash in secondary process
+
+[ upstream commit 4c670dfaa417bc5604c9c58b505a74e2725acdb2 ]
+
+Some apps, such as fstack, will use secondary process to access the
+memory of eth_dev_ops, and they want to get the info of dev, but hinic
+driver does not initialized it when in secondary process.
+
+Fixes: 66f64dd6dc86 ("net/hinic: fix secondary process")
+
+Signed-off-by: Guoyang Zhou <zhouguoyang@huawei.com>
+---
+ drivers/net/hinic/hinic_pmd_ethdev.c  |  5 +++++
+ 2 files changed, 13 insertions(+), 17 deletions(-)
+diff --git a/drivers/net/hinic/hinic_pmd_ethdev.c b/drivers/net/hinic/hinic_pmd_ethdev.c
+index a0499da7d4..89ee5b7a78 100644
+--- a/drivers/net/hinic/hinic_pmd_ethdev.c
++++ b/drivers/net/hinic/hinic_pmd_ethdev.c
+@@ -2972,6 +2972,10 @@ static const struct eth_dev_ops hinic_pmd_vf_ops = {
+ 	.filter_ctrl                   = hinic_dev_filter_ctrl,
+ };
+ 
++static const struct eth_dev_ops hinic_dev_sec_ops = {
++	.dev_infos_get                 = hinic_dev_infos_get,
++};
++
+ static int hinic_func_init(struct rte_eth_dev *eth_dev)
+ {
+ 	struct rte_pci_device *pci_dev;
+@@ -2985,6 +2989,7 @@ static int hinic_func_init(struct rte_eth_dev *eth_dev)
+ 
+ 	/* EAL is SECONDARY and eth_dev is already created */
+ 	if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
++		eth_dev->dev_ops = &hinic_dev_sec_ops;
+ 		PMD_DRV_LOG(INFO, "Initialize %s in secondary process",
+ 			    eth_dev->data->name);
+ 
+-- 
+2.23.0
+
