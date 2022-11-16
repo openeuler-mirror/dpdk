@@ -1,0 +1,86 @@
+From 44f34b117cb446f9dce03e683942a40a8a04436c Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Tue, 15 Nov 2022 12:06:07 +0800
+Subject: net/bonding: fix bond4 drop valid MAC packets
+
+[ upstream commit 2176782ec87589927e1b13737b60ee8be28d76af ]
+
+Currently, by default, bond4 will first try to enable allmulti and
+then enable promiscuous if fail to enable allmulti. On reception,
+whether unicast and multicast packets should be dropped depends on
+which mode has been enabled on the bonding interface.
+
+In fact, if MAC address of packets in mac_addrs array of bonding
+interface, these packets should not be dropped. However, now only
+check the default MAC address, which will cause the packets with
+MAC added by the '.mac_addr_add' are dropped.
+
+Fixes: 68218b87c184 ("net/bonding: prefer allmulti to promiscuous for LACP")
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Reviewed-by: Andrew Rybchenko <andrew.rybchenko@oktetlabs.ru>
+---
+ drivers/net/bonding/rte_eth_bond_pmd.c | 33 +++++++++++++++++++-------
+ 1 file changed, 25 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/net/bonding/rte_eth_bond_pmd.c b/drivers/net/bonding/rte_eth_bond_pmd.c
+index ab1196e505..f1e7b6459a 100644
+--- a/drivers/net/bonding/rte_eth_bond_pmd.c
++++ b/drivers/net/bonding/rte_eth_bond_pmd.c
+@@ -271,6 +271,24 @@ bond_ethdev_8023ad_flow_set(struct rte_eth_dev *bond_dev, uint16_t slave_port) {
+ 	return 0;
+ }
+ 
++static bool
++is_bond_mac_addr(const struct rte_ether_addr *ea,
++		 const struct rte_ether_addr *mac_addrs, uint32_t max_mac_addrs)
++{
++	uint32_t i;
++
++	for (i = 0; i < max_mac_addrs; i++) {
++		/* skip zero address */
++		if (rte_is_zero_ether_addr(&mac_addrs[i]))
++			continue;
++
++		if (rte_is_same_ether_addr(ea, &mac_addrs[i]))
++			return true;
++	}
++
++	return false;
++}
++
+ static inline uint16_t
+ rx_burst_8023ad(void *queue, struct rte_mbuf **bufs, uint16_t nb_pkts,
+ 		bool dedicated_rxq)
+@@ -331,8 +349,9 @@ rx_burst_8023ad(void *queue, struct rte_mbuf **bufs, uint16_t nb_pkts,
+ 			/* Remove packet from array if:
+ 			 * - it is slow packet but no dedicated rxq is present,
+ 			 * - slave is not in collecting state,
+-			 * - bonding interface is not in promiscuous mode:
+-			 *   - packet is unicast and address does not match,
++			 * - bonding interface is not in promiscuous mode and
++			 *   packet address isn't in mac_addrs array:
++			 *   - packet is unicast,
+ 			 *   - packet is multicast and bonding interface
+ 			 *     is not in allmulti,
+ 			 */
+@@ -342,12 +361,10 @@ rx_burst_8023ad(void *queue, struct rte_mbuf **bufs, uint16_t nb_pkts,
+ 						 bufs[j])) ||
+ 				!collecting ||
+ 				(!promisc &&
+-				 ((rte_is_unicast_ether_addr(&hdr->dst_addr) &&
+-				   !rte_is_same_ether_addr(bond_mac,
+-						       &hdr->dst_addr)) ||
+-				  (!allmulti &&
+-				   rte_is_multicast_ether_addr(&hdr->dst_addr)))))) {
+-
++				 !is_bond_mac_addr(&hdr->dst_addr, bond_mac,
++						   BOND_MAX_MAC_ADDRS) &&
++				 (rte_is_unicast_ether_addr(&hdr->dst_addr) ||
++				  !allmulti)))) {
+ 				if (hdr->ether_type == ether_type_slow_be) {
+ 					bond_mode_8023ad_handle_slow_pkt(
+ 					    internals, slaves[idx], bufs[j]);
+-- 
+2.23.0
+
