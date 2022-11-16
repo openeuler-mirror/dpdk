@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 24
+Release: 25
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -212,6 +212,16 @@ Patch9191:    0191-net-bonding-add-link-speeds-configuration.patch
 Patch9192:    0192-net-bonding-call-Tx-prepare-before-Tx-burst.patch
 Patch9193:    0193-net-bonding-fix-MTU-set-for-slaves.patch
 Patch9194:    0194-app-testpmd-remove-jumbo-offload-related-code.patch
+Patch9195:    0195-app-testpmd-revert-MAC-update-in-checksum-forwarding.patch
+Patch9196:    0196-net-bonding-fix-bond4-drop-valid-MAC-packets.patch
+Patch9197:    0197-net-bonding-fix-slave-device-Rx-Tx-offload-configura.patch
+Patch9198:    0198-app-testpmd-fix-MAC-header-in-csum-forward-engine.patch
+Patch9199:    0199-app-testpmd-update-bond-port-configurations-when-add.patch
+Patch9200:    0200-app-testpmd-fix-GENEVE-parsing-in-checksum-mode.patch
+Patch9201:    0201-net-add-UDP-TCP-checksum-in-mbuf-segments.patch
+Patch9202:    0202-app-testpmd-add-SW-L4-checksum-in-multi-segments.patch
+Patch9203:    0203-app-testpmd-fix-L4-checksum-in-multi-segments.patch
+Patch9204:    0204-net-bonding-fix-mbuf-fast-free-handling.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -354,6 +364,20 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Wed Nov 16 2022 chenjiji <chenjiji09@163.com> - 21.11-25
+  Sync some patches for bonding PMD and testpmd. And patchs  
+  are as follows:
+   - app/testpmd: revert MAC update in checksum forwarding
+   - net/bonding: fix bond4 drop valid MAC packets
+   - net/bonding: fix slave device Rx/Tx offload configuration
+   - app/testpmd: fix MAC header in csum forward engine
+   - app/testpmd: update bond port configurations when add slave
+   - app/testpmd: fix GENEVE parsing in checksum mode
+   - net: add UDP/TCP checksum in mbuf segments
+   - app/testpmd: add SW L4 checksum in multi-segments
+   - app/testpmd: fix L4 checksum in multi-segments
+   - net/bonding: fix mbuf fast free handling
+  
 * Tue Nov 15 2022 jiangheng <jiangheng14@huawei.com> - 21.11-24
 - proc-info: add gazelle-proc-info support in dpdk
 
