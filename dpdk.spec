@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 25
+Release: 26
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -222,6 +222,15 @@ Patch9201:    0201-net-add-UDP-TCP-checksum-in-mbuf-segments.patch
 Patch9202:    0202-app-testpmd-add-SW-L4-checksum-in-multi-segments.patch
 Patch9203:    0203-app-testpmd-fix-L4-checksum-in-multi-segments.patch
 Patch9204:    0204-net-bonding-fix-mbuf-fast-free-handling.patch
+Patch9205:    0205-doc-fix-application-name-in-procinfo-guide.patch
+Patch9206:    0206-doc-document-device-dump-in-procinfo-guide.patch
+Patch9207:    0207-app-procinfo-remove-doxygen-comments.patch
+Patch9208:    0208-app-procinfo-dump-DPDK-version.patch
+Patch9209:    0209-app-procinfo-dump-firmware-version.patch
+Patch9210:    0210-app-procinfo-dump-RSS-RETA.patch
+Patch9211:    0211-app-procinfo-dump-module-EEPROM-info.patch
+Patch9212:    0212-app-procinfo-add-burst-mode-to-Rx-Tx-queue-info.patch
+Patch9213:    0213-app-procinfo-dump-detailed-info-for-Rx-Tx-descriptor.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -364,6 +373,15 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Wed Nov 16 2022 chenjiji <chenjiji09@163.com> - 21.11-26
+  proc-info adds dumping the following features:
+   - dpdk version
+   - firmware version
+   - RSS RETA
+   - module eeprom information
+   - Rx/Tx burst mode 
+   - Rx/Tx descriptor
+
 * Wed Nov 16 2022 chenjiji <chenjiji09@163.com> - 21.11-25
   Sync some patches for bonding PMD and testpmd. And patchs  
   are as follows:
