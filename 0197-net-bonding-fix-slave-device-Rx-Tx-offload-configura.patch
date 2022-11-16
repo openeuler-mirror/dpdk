@@ -1,0 +1,54 @@
+From 6ca88723b7df208ffa5c43fdfda06381103e488a Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Tue, 15 Nov 2022 12:06:08 +0800
+Subject: net/bonding: fix slave device Rx/Tx offload configuration
+
+[ upstream commit fdbc4e7704a7de0f41f72d4f5337b0eddaa81991 ]
+
+Normally, the Rx/Tx offload capability of bonding interface is
+the intersection of the capability of all slave devices. And
+Rx/Tx offloads configuration of slave device comes from bonding
+interface. But now there is a risk that slave device retains its
+previous offload configurations which is not within the offload
+configurations of bond interface.
+
+Fixes: 57b156540f51 ("net/bonding: fix offloading configuration")
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Acked-by: Min Hu (Connor) <humin29@huawei.com>
+---
+ drivers/net/bonding/rte_eth_bond_pmd.c | 17 ++++-------------
+ 1 file changed, 4 insertions(+), 13 deletions(-)
+
+diff --git a/drivers/net/bonding/rte_eth_bond_pmd.c b/drivers/net/bonding/rte_eth_bond_pmd.c
+index f1e7b6459a..2bf28b829d 100644
+--- a/drivers/net/bonding/rte_eth_bond_pmd.c
++++ b/drivers/net/bonding/rte_eth_bond_pmd.c
+@@ -1762,20 +1762,11 @@ slave_configure(struct rte_eth_dev *bonded_eth_dev,
+ 	slave_eth_dev->data->dev_conf.link_speeds =
+ 			bonded_eth_dev->data->dev_conf.link_speeds;
+ 
+-	slave_eth_dev->data->dev_conf.txmode.offloads |=
+-		bonded_eth_dev->data->dev_conf.txmode.offloads;
+-
+-	slave_eth_dev->data->dev_conf.txmode.offloads &=
+-		(bonded_eth_dev->data->dev_conf.txmode.offloads |
+-		~internals->tx_offload_capa);
+-
+-	slave_eth_dev->data->dev_conf.rxmode.offloads |=
+-		bonded_eth_dev->data->dev_conf.rxmode.offloads;
+-
+-	slave_eth_dev->data->dev_conf.rxmode.offloads &=
+-		(bonded_eth_dev->data->dev_conf.rxmode.offloads |
+-		~internals->rx_offload_capa);
++	slave_eth_dev->data->dev_conf.txmode.offloads =
++			bonded_eth_dev->data->dev_conf.txmode.offloads;
+ 
++	slave_eth_dev->data->dev_conf.rxmode.offloads =
++			bonded_eth_dev->data->dev_conf.rxmode.offloads;
+ 
+ 	nb_rx_queues = bonded_eth_dev->data->nb_rx_queues;
+ 	nb_tx_queues = bonded_eth_dev->data->nb_tx_queues;
+-- 
+2.23.0
+
