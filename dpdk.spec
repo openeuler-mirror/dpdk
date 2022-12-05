@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 19.11
-Release: 24
+Release: 25
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  19.11
@@ -53,6 +53,7 @@ Patch6004: backport-gro-fix-chain-index-for-more-than-2-packets.patch
 Patch6005: backport-gro-trim-tail-padding-bytes.patch
 Patch6006: backport-gro-check-payload-length-after-trim.patch
 Patch6007: backport-net-hinic-fix-crash-in-secondary-process.patch
+Patch6008: fix-virtio-hardthrough-scenes-device-init-bug.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -222,6 +223,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Sat Dec 3 2022 wangzongchao <wangzongchao@huawei.com> - 19.11-25
+- fix the  virtio hardthrough scenes device init bug
+
 * Tue Nov 15 2022 jiangheng <jiangheng14@huawei.com> - 19.11-24
 - proc-info: build gazelle-proc-info for gazelle
 
