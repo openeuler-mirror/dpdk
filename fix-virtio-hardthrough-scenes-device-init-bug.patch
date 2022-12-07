@@ -1,0 +1,45 @@
+From c168e40a0b80b02976ed1698339bc5182b2c0f39 Mon Sep 17 00:00:00 2001
+From: root <wangzongchao@huawei.com>
+Date: Sat, 3 Dec 2022 15:13:22 +0800
+Subject: [PATCH] fix virtio hardthrough scenes device init bug
+
+---
+ drivers/net/virtio/virtio_ethdev.c | 1 +
+ drivers/net/virtio/virtio_pci.c    | 2 ++
+ 2 files changed, 3 insertions(+)
+
+diff --git a/drivers/net/virtio/virtio_ethdev.c b/drivers/net/virtio/virtio_ethdev.c
+index 89e4c23..b54abe5 100644
+--- a/drivers/net/virtio/virtio_ethdev.c
++++ b/drivers/net/virtio/virtio_ethdev.c
+@@ -1331,6 +1331,7 @@ virtio_negotiate_features(struct virtio_hw *hw, uint64_t req_features)
+ 		req_features);
+ 
+ 	/* Read device(host) feature bits */
++	usleep(3000);
+ 	host_features = VTPCI_OPS(hw)->get_features(hw);
+ 	PMD_INIT_LOG(DEBUG, "host_features before negotiate = %" PRIx64,
+ 		host_features);
+diff --git a/drivers/net/virtio/virtio_pci.c b/drivers/net/virtio/virtio_pci.c
+index 4468e89..2fade8f 100644
+--- a/drivers/net/virtio/virtio_pci.c
++++ b/drivers/net/virtio/virtio_pci.c
+@@ -2,6 +2,7 @@
+  * Copyright(c) 2010-2014 Intel Corporation
+  */
+ #include <stdint.h>
++#include <unistd.h>
+ 
+ #ifdef RTE_EXEC_ENV_LINUX
+  #include <dirent.h>
+@@ -472,6 +473,7 @@ vtpci_reset(struct virtio_hw *hw)
+ {
+ 	VTPCI_OPS(hw)->set_status(hw, VIRTIO_CONFIG_STATUS_RESET);
+ 	/* flush status write */
++	usleep(1000);
+ 	VTPCI_OPS(hw)->get_status(hw);
+ }
+ 
+-- 
+2.27.0
+
