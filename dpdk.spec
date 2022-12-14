@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 26
+Release: 27
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -231,6 +231,7 @@ Patch9210:    0210-app-procinfo-dump-RSS-RETA.patch
 Patch9211:    0211-app-procinfo-dump-module-EEPROM-info.patch
 Patch9212:    0212-app-procinfo-add-burst-mode-to-Rx-Tx-queue-info.patch
 Patch9213:    0213-app-procinfo-dump-detailed-info-for-Rx-Tx-descriptor.patch
+Patch9214:    0214-dma-hisilicon-support-vchan-status-query.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -373,6 +374,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Wed Dec 14 2022 chenjiji <chenjiji09@163.com> - 21.11-27
+- dma/hisilicon: support vchan status query
+
 * Wed Nov 16 2022 chenjiji <chenjiji09@163.com> - 21.11-26
   proc-info adds dumping the following features:
    - dpdk version
