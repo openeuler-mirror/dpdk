@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 27
+Release: 28
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -232,6 +232,11 @@ Patch9211:    0211-app-procinfo-dump-module-EEPROM-info.patch
 Patch9212:    0212-app-procinfo-add-burst-mode-to-Rx-Tx-queue-info.patch
 Patch9213:    0213-app-procinfo-dump-detailed-info-for-Rx-Tx-descriptor.patch
 Patch9214:    0214-dma-hisilicon-support-vchan-status-query.patch
+Patch9215:    0215-kni-fix-build-with-Linux-5.18.patch
+Patch9216:    0216-kni-use-dedicated-function-to-set-random-MAC-address.patch
+Patch9217:    0217-kni-use-dedicated-function-to-set-MAC-address.patch
+Patch9218:    0218-linux-igb_uio-fix-build-for-switch-fall-through.patch
+Patch9219:    0219-linux-igb_uio-fix-build-with-liux-5.18.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -374,6 +379,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Wed Jan 18 2023 jiangheng <jiangheng14@huawei.com> - 21.11-28
+- fix build failed due to kernel upgrate to 6.1
+
 * Wed Dec 14 2022 chenjiji <chenjiji09@163.com> - 21.11-27
 - dma/hisilicon: support vchan status query
 
