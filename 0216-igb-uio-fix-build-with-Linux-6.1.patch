@@ -1,0 +1,100 @@
+From 9312bf5b08a1f4532d7aeb702fd59f794cca9044 Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng14@huawei.com>
+Date: Wed, 18 Jan 2023 19:29:17 +0800
+Subject: [PATCH] igb_uio: fix build whit Linux 6.1
+
+---
+ kernel/linux/igb_uio/igb_uio.c | 10 +++++-----
+ 3 files changed, 10 insertions(+), 10 deletions(-)
+
+diff --git a/kernel/linux/igb_uio/igb_uio.c b/kernel/linux/igb_uio/igb_uio.c
+index ea439d1..311cc87 100644
+--- a/kernel/linux/igb_uio/igb_uio.c
++++ b/kernel/linux/igb_uio/igb_uio.c
+@@ -250,7 +250,7 @@ igbuio_pci_enable_interrupts(struct rte_uio_pci_dev *udev)
+ 		}
+ #endif
+ 
+-	/* falls through - to MSI */
++	/* fall through */
+ 	case RTE_INTR_MODE_MSI:
+ #ifndef HAVE_ALLOC_IRQ_VECTORS
+ 		if (pci_enable_msi(udev->pdev) == 0) {
+@@ -269,7 +269,7 @@ igbuio_pci_enable_interrupts(struct rte_uio_pci_dev *udev)
+ 			break;
+ 		}
+ #endif
+-	/* falls through - to INTX */
++	/* fall through */
+ 	case RTE_INTR_MODE_LEGACY:
+ 		if (pci_intx_mask_supported(udev->pdev)) {
+ 			dev_dbg(&udev->pdev->dev, "using INTX");
+@@ -279,7 +279,7 @@ igbuio_pci_enable_interrupts(struct rte_uio_pci_dev *udev)
+ 			break;
+ 		}
+ 		dev_notice(&udev->pdev->dev, "PCI INTX mask not supported\n");
+-	/* falls through - to no IRQ */
++	/* fall through */
+ 	case RTE_INTR_MODE_NONE:
+ 		udev->mode = RTE_INTR_MODE_NONE;
+ 		udev->info.irq = UIO_IRQ_NONE;
+@@ -512,13 +512,13 @@ igbuio_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
+ 		goto fail_release_iomem;
+ 
+ 	/* set 64-bit DMA mask */
+-	err = pci_set_dma_mask(dev,  DMA_BIT_MASK(64));
++	err = dma_set_mask_and_coherent(&dev->dev,  DMA_BIT_MASK(64));
+ 	if (err != 0) {
+ 		dev_err(&dev->dev, "Cannot set DMA mask\n");
+ 		goto fail_release_iomem;
+ 	}
+ 
+-	err = pci_set_consistent_dma_mask(dev, DMA_BIT_MASK(64));
++	err = dma_set_mask_and_coherent(&dev->dev, DMA_BIT_MASK(64));
+ 	if (err != 0) {
+ 		dev_err(&dev->dev, "Cannot set consistent DMA mask\n");
+ 		goto fail_release_iomem;
+diff --git a/kernel/linux/kni/kni_misc.c b/kernel/linux/kni/kni_misc.c
+index ad1582d..c5a20e7 100644
+--- a/kernel/linux/kni/kni_misc.c
++++ b/kernel/linux/kni/kni_misc.c
+@@ -405,10 +405,10 @@ kni_ioctl_create(struct net *net, uint32_t ioctl_num,
+ 
+ 	/* if user has provided a valid mac address */
+ 	if (is_valid_ether_addr(dev_info.mac_addr))
+-		memcpy(net_dev->dev_addr, dev_info.mac_addr, ETH_ALEN);
++		memcpy((void *)net_dev->dev_addr, (void *)dev_info.mac_addr, ETH_ALEN);
+ 	else
+ 		/* Generate random MAC address. */
+-		eth_random_addr(net_dev->dev_addr);
++		eth_random_addr((u8 *)net_dev->dev_addr);
+ 
+ 	if (dev_info.mtu)
+ 		net_dev->mtu = dev_info.mtu;
+diff --git a/kernel/linux/kni/kni_net.c b/kernel/linux/kni/kni_net.c
+index 29e5b9e..32048e6 100644
+--- a/kernel/linux/kni/kni_net.c
++++ b/kernel/linux/kni/kni_net.c
+@@ -441,7 +441,7 @@ kni_net_rx_normal(struct kni_dev *kni)
+ 		skb->ip_summed = CHECKSUM_UNNECESSARY;
+ 
+ 		/* Call netif interface */
+-		netif_rx_ni(skb);
++		netif_rx(skb);
+ 
+ 		/* Update statistics */
+ 		dev->stats.rx_bytes += len;
+@@ -778,8 +778,8 @@ kni_net_set_mac(struct net_device *netdev, void *p)
+ 	if (!is_valid_ether_addr((unsigned char *)(addr->sa_data)))
+ 		return -EADDRNOTAVAIL;
+ 
+-	memcpy(req.mac_addr, addr->sa_data, netdev->addr_len);
+-	memcpy(netdev->dev_addr, addr->sa_data, netdev->addr_len);
++	memcpy((void *)req.mac_addr, (void *)addr->sa_data, netdev->addr_len);
++	memcpy((void *)netdev->dev_addr, (void *)addr->sa_data, netdev->addr_len);
+ 
+ 	ret = kni_net_process_request(netdev, &req);
+ 
+-- 
+2.23.0
+
