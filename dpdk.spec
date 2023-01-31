@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 28
+Release: 29
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -379,6 +379,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Tue Jan 31 2023 jiangheng <jiangheng14@huawei.com> - 21.11-29
+- remove unused patch
+
 * Wed Jan 18 2023 jiangheng <jiangheng14@huawei.com> - 21.11-28
 - fix build failed due to kernel upgrate to 6.1
 
