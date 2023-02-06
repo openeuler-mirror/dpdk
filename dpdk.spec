@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 31
+Release: 32
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -237,8 +237,7 @@ Patch9215:    0215-kni-fix-build-with-Linux-5.18.patch
 Patch9216:    0216-kni-use-dedicated-function-to-set-random-MAC-address.patch
 Patch9217:    0217-kni-use-dedicated-function-to-set-MAC-address.patch
 Patch9218:    0218-linux-igb_uio-fix-build-for-switch-fall-through.patch
-Patch9219:    0219-linux-igb_uio-fix-build-with-liux-5.18.patch
-
+Patch9219:    0219-linux-igb_uio-fix-build-with-kernel-5.18.patch
 Patch9220:    0220-net-hns3-fix-inaccurate-RTC-time-to-read.patch
 Patch9221:    0221-net-hns3-fix-log-about-indirection-table-size.patch
 Patch9222:    0222-net-hns3-extract-common-function-to-query-device.patch
@@ -392,6 +391,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Tue Feb 28 2023 jiangheng <jiangheng14@huawei.com> - 21.11-32
+- linux/igb_uio: fix build with kernel 5.18+
+
 * Tue Feb 28 2023 jiangheng <jiangheng14@huawei.com> - 21.11-31
 - remove unused patch
 
