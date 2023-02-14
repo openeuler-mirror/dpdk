@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 28
+Release: 29
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -233,6 +233,16 @@ Patch9212:    0212-app-procinfo-add-burst-mode-to-Rx-Tx-queue-info.patch
 Patch9213:    0213-app-procinfo-dump-detailed-info-for-Rx-Tx-descriptor.patch
 Patch9214:    0214-dma-hisilicon-support-vchan-status-query.patch
 Patch9215:	0215-net-hns3-fix-inaccurate-RTC-time-to-read.patch
+Patch9218:    0216-net-hns3-fix-log-about-indirection-table-size.patch
+Patch9219:    0217-net-hns3-extract-common-function-to-query-device.patch
+Patch9220:    0218-net-hns3-refactor-set-RSS-hash-algorithm-and-key-int.patch
+Patch9221:    0219-net-hns3-fix-RSS-key-size-compatibility.patch
+Patch9222:    0220-net-hns3-fix-clearing-RSS-configuration.patch
+Patch9223:    0221-net-hns3-use-RSS-filter-list-to-check-duplicated-rul.patch
+Patch9224:    0222-net-hns3-remove-useless-code-when-destroy-valid-RSS-.patch
+Patch9225:    0223-net-hns3-fix-warning-on-flush-or-destroy-rule.patch
+Patch9226:    0224-net-hns3-fix-config-struct-used-for-conversion.patch
+Patch9227:    0225-net-hns3-fix-duplicate-RSS-rule-check.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -375,6 +385,19 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Tue Feb 14 2023 chenjiji <chenjiji09@163.com> - 21.11-29
+ Sync some RSS bugfix for hns3 PMD. And patchs are as follows:
+  - net/hns3: fix log about indirection table size
+  - net/hns3: extract common function to query device
+  - net/hns3: refactor set RSS hash algorithm and key interface
+  - net/hns3: fix RSS key size compatibility
+  - net/hns3: fix clearing RSS configuration
+  - net/hns3: use RSS filter list to check duplicated rule
+  - net/hns3: remove useless code when destroy valid RSS rule
+  - net/hns3: fix warning on flush or destroy rule
+  - net/hns3: fix config struct used for conversion
+  - net/hns3: fix duplicate RSS rule check
+
 * Tue Jan 31 2023 chenjiji <chenjiji09@163.com> - 21.11-28
 - net/hns3: fix inaccurate RTC time to read
 
