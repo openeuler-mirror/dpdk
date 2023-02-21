@@ -1,0 +1,108 @@
+From 4aa7369a34a576a630beb0680b55b7c3c8b982f5 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Tue, 31 Jan 2023 21:03:00 +0800
+Subject: net/hns3: fix duplicate RSS rule check
+
+[ upstream commit 150fd8f839e332d68aa7b60646c2033084544cb7 ]
+
+Currently, the interface for verifying duplicate RSS rules has
+some problems:
+1) If the value of 'func' in configuring RSS rule is default
+   value, this rule is mistakenly considered as a duplicate rule.
+2) If key length is zero or 'key' is NULL in configuring RSS rule
+   this rule is also mistakenly considered as a duplicate rule.
+3) If 'key' or 'queue' in struct rte_flow_action_rss being NULL
+   is used to memcpy, which may cause segment fault.
+
+Fixes: c37ca66f2b27 ("net/hns3: support RSS")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_flow.c | 63 +++++++++++++++++++++++++++---------
+ 1 file changed, 47 insertions(+), 16 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_flow.c b/drivers/net/hns3/hns3_flow.c
+index a30b19cfdb..e80ec0f053 100644
+--- a/drivers/net/hns3/hns3_flow.c
++++ b/drivers/net/hns3/hns3_flow.c
+@@ -1272,28 +1272,59 @@ hns3_filterlist_flush(struct rte_eth_dev *dev)
+ 	}
+ }
+ 
++static bool
++hns3_flow_rule_key_same(const struct rte_flow_action_rss *comp,
++			const struct rte_flow_action_rss *with)
++{
++	if (comp->key_len != with->key_len)
++		return false;
++
++	if (with->key_len == 0)
++		return true;
++
++	if (comp->key == NULL && with->key == NULL)
++		return true;
++
++	if (!(comp->key != NULL && with->key != NULL))
++		return false;
++
++	return !memcmp(comp->key, with->key, with->key_len);
++}
++
++static bool
++hns3_flow_rule_queues_same(const struct rte_flow_action_rss *comp,
++			   const struct rte_flow_action_rss *with)
++{
++	if (comp->queue_num != with->queue_num)
++		return false;
++
++	if (with->queue_num == 0)
++		return true;
++
++	if (comp->queue == NULL && with->queue == NULL)
++		return true;
++
++	if (!(comp->queue != NULL && with->queue != NULL))
++		return false;
++
++	return !memcmp(comp->queue, with->queue, with->queue_num);
++}
++
+ static bool
+ hns3_action_rss_same(const struct rte_flow_action_rss *comp,
+ 		     const struct rte_flow_action_rss *with)
+ {
+-	bool rss_key_is_same;
+-	bool func_is_same;
++	bool same_level;
++	bool same_types;
++	bool same_func;
+ 
+-	func_is_same = (with->func != RTE_ETH_HASH_FUNCTION_DEFAULT) ?
+-			(comp->func == with->func) : true;
++	same_level = (comp->level == with->level);
++	same_types = (comp->types == with->types);
++	same_func = (comp->func == with->func);
+ 
+-	if (with->key_len == 0 || with->key == NULL)
+-		rss_key_is_same = 1;
+-	else
+-		rss_key_is_same = comp->key_len == with->key_len &&
+-		!memcmp(comp->key, with->key, with->key_len);
+-
+-	return (func_is_same && rss_key_is_same &&
+-		comp->types == with->types &&
+-		comp->level == with->level &&
+-		comp->queue_num == with->queue_num &&
+-		!memcmp(comp->queue, with->queue,
+-			sizeof(*with->queue) * with->queue_num));
++	return same_level && same_types && same_func &&
++		hns3_flow_rule_key_same(comp, with) &&
++		hns3_flow_rule_queues_same(comp, with);
+ }
+ 
+ static bool
+-- 
+2.23.0
+
