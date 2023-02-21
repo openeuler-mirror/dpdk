@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 32
+Release: 33
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -248,6 +248,12 @@ Patch9227:    0227-net-hns3-remove-useless-code-when-destroy-valid-RSS-.patch
 Patch9228:    0228-net-hns3-fix-warning-on-flush-or-destroy-rule.patch
 Patch9229:    0229-net-hns3-fix-config-struct-used-for-conversion.patch
 Patch9230:    0230-net-hns3-fix-duplicate-RSS-rule-check.patch
+Patch9231:    0231-net-hns3-fix-burst-mode-query-with-dummy-function.patch
+Patch9232:    0232-net-hns3-add-debug-info-for-Rx-Tx-dummy-function.patch
+Patch9233:    0233-net-hns3-remove-debug-condition-for-Tx-prepare.patch
+Patch9234:    0234-net-hns3-separate-Tx-prepare-from-getting-Tx-functio.patch
+Patch9235:    0235-net-hns3-make-getting-Tx-function-static.patch
+Patch9236:    0236-net-hns3-extract-common-functions-to-set-Rx-Tx.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -390,6 +396,16 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Tue Feb 21 2023 chenjiji <chenjiji09@163.com> - 21.11-33
+ refactor Rc/Tx function of hns3 PMD
+ And patchs are as follows:
+  - net/hns3: fix burst mode query with dummy function
+  - net/hns3: add debug info for Rx/Tx dummy function
+  - net/hns3: remove debug condition for Tx prepare
+  - net/hns3: separate Tx prepare from getting Tx function
+  - net/hns3: make getting Tx function static
+  - net/hns3: extract common functions to set Rx/Tx
+
 * Wed Feb 15 2023 chenjiji <chenjiji09@163.com> - 21.11-32
  Sync some RSS bugfix for hns3 PMD. And patchs are as follows:
   - net/hns3: fix log about indirection table size
