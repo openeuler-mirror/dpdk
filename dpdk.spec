@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 30
+Release: 31
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -239,7 +239,7 @@ Patch9217:    0217-kni-use-dedicated-function-to-set-MAC-address.patch
 Patch9218:    0218-linux-igb_uio-fix-build-for-switch-fall-through.patch
 Patch9219:    0219-linux-igb_uio-fix-build-with-liux-5.18.patch
 
-Patch9220:	0220-net-hns3-fix-inaccurate-RTC-time-to-read.patch
+Patch9220:    0220-net-hns3-fix-inaccurate-RTC-time-to-read.patch
 Patch9221:    0221-net-hns3-fix-log-about-indirection-table-size.patch
 Patch9222:    0222-net-hns3-extract-common-function-to-query-device.patch
 Patch9223:    0223-net-hns3-refactor-set-RSS-hash-algorithm-and-key-int.patch
@@ -392,7 +392,10 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
-* Mon Feb 27 2023 jiangheng <jiangheng14@huawei.com> - 21.11-29
+* Tue Feb 28 2023 jiangheng <jiangheng14@huawei.com> - 21.11-31
+- remove unused patch
+
+* Mon Feb 27 2023 jiangheng <jiangheng14@huawei.com> - 21.11-30
 - fix build failed due to kernel upgrate to 6.1
 
 * Tue Feb 14 2023 chenjiji <chenjiji09@163.com> - 21.11-29
