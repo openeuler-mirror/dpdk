@@ -1,0 +1,106 @@
+From c4daf6ffbb78fb4cb2ec3b6d632364d5e077cf10 Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Thu, 15 Dec 2022 01:41:42 +0000
+Subject: app/testpmd: add --disable-flow-flush option
+
+[ upstream commit 543df472bced6a9bf0e45c290c3af852486b474a ]
+
+This patch adds "--disable-flow-flush" parameter, which could used to
+disable port flow flush when stop port. It allows testing keep flow
+rules or shared flow objects across restart.
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Acked-by: Ori Kam <orika@nvidia.com>
+Acked-by: Aman Singh <aman.deep.singh@intel.com>
+---
+ app/test-pmd/parameters.c             | 4 ++++
+ app/test-pmd/testpmd.c                | 7 ++++++-
+ app/test-pmd/testpmd.h                | 1 +
+ doc/guides/testpmd_app_ug/run_app.rst | 5 +++++
+ 4 files changed, 16 insertions(+), 1 deletion(-)
+
+diff --git a/app/test-pmd/parameters.c b/app/test-pmd/parameters.c
+index 435687fa6d..e147be28b3 100644
+--- a/app/test-pmd/parameters.c
++++ b/app/test-pmd/parameters.c
+@@ -184,6 +184,7 @@ usage(char* progname)
+ 	       "disable print of designated event or all of them.\n");
+ 	printf("  --flow-isolate-all: "
+ 	       "requests flow API isolated mode on all ports at initialization time.\n");
++	printf("  --disable-flow-flush: disable port flow flush when stop port.\n");
+ 	printf("  --tx-offloads=0xXXXXXXXX: hexadecimal bitmask of TX queue offloads\n");
+ 	printf("  --rx-offloads=0xXXXXXXXX: hexadecimal bitmask of RX queue offloads\n");
+ 	printf("  --hot-plug: enable hot plug for device.\n");
+@@ -674,6 +675,7 @@ launch_args_parse(int argc, char** argv)
+ 		{ "rxfreet",                    1, 0, 0 },
+ 		{ "no-flush-rx",	0, 0, 0 },
+ 		{ "flow-isolate-all",	        0, 0, 0 },
++		{ "disable-flow-flush",         0, 0, 0 },
+ 		{ "rxoffs",			1, 0, 0 },
+ 		{ "rxpkts",			1, 0, 0 },
+ 		{ "txpkts",			1, 0, 0 },
+@@ -1381,6 +1383,8 @@ launch_args_parse(int argc, char** argv)
+ 				rmv_interrupt = 0;
+ 			if (!strcmp(lgopts[opt_idx].name, "flow-isolate-all"))
+ 				flow_isolate_all = 1;
++			if (!strcmp(lgopts[opt_idx].name, "disable-flow-flush"))
++				no_flow_flush = 1;
+ 			if (!strcmp(lgopts[opt_idx].name, "tx-offloads")) {
+ 				char *end = NULL;
+ 				n = strtoull(optarg, &end, 16);
+diff --git a/app/test-pmd/testpmd.c b/app/test-pmd/testpmd.c
+index 32098d4701..20134c5234 100644
+--- a/app/test-pmd/testpmd.c
++++ b/app/test-pmd/testpmd.c
+@@ -371,6 +371,11 @@ uint8_t no_flush_rx = 0; /* flush by default */
+  */
+ uint8_t flow_isolate_all;
+ 
++/*
++ * Disable port flow flush when stop port.
++ */
++uint8_t no_flow_flush = 0; /* do flow flush by default */
++
+ /*
+  * Avoids to check link status when starting/stopping a port.
+  */
+@@ -3173,7 +3178,7 @@ stop_port(portid_t pid)
+ 			}
+ 		}
+ 
+-		if (port->flow_list)
++		if (port->flow_list && !no_flow_flush)
+ 			port_flow_flush(pi);
+ 
+ 		if (eth_dev_stop_mp(pi) != 0)
+diff --git a/app/test-pmd/testpmd.h b/app/test-pmd/testpmd.h
+index 480dc3fa34..be7454ab44 100644
+--- a/app/test-pmd/testpmd.h
++++ b/app/test-pmd/testpmd.h
+@@ -398,6 +398,7 @@ extern uint8_t  numa_support; /**< set by "--numa" parameter */
+ extern uint16_t port_topology; /**< set by "--port-topology" parameter */
+ extern uint8_t no_flush_rx; /**<set by "--no-flush-rx" parameter */
+ extern uint8_t flow_isolate_all; /**< set by "--flow-isolate-all */
++extern uint8_t no_flow_flush; /**< set by "--disable-flow-flush" parameter */
+ extern uint8_t  mp_alloc_type;
+ /**< set by "--mp-anon" or "--mp-alloc" parameter */
+ extern uint32_t eth_link_speed;
+diff --git a/doc/guides/testpmd_app_ug/run_app.rst b/doc/guides/testpmd_app_ug/run_app.rst
+index 30edef07ea..e0b99d34cd 100644
+--- a/doc/guides/testpmd_app_ug/run_app.rst
++++ b/doc/guides/testpmd_app_ug/run_app.rst
+@@ -459,6 +459,11 @@ The command line options are:
+ 
+     Ports that do not support this mode are automatically discarded.
+ 
++*   ``--disable-flow-flush``
++
++    Disable port flow flush when stopping port.
++    This allows testing keep flow rules or shared flow objects across restart.
++
+ *   ``--tx-offloads=0xXXXXXXXX``
+ 
+     Set the hexadecimal bitmask of TX queue offloads.
+-- 
+2.23.0
+
