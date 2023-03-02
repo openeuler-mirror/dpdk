@@ -1,0 +1,46 @@
+From 25a54df88c36a76f4914287ba393d2251f4492ec Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Sat, 11 Feb 2023 17:18:27 +0800
+Subject: net/hns3: remove debug condition for Tx prepare
+
+[ upstream commit a8d240786e1af129fdf789391d574bf4a7fe60e6 ]
+
+The Tx prepare in driver is always needed if RTE_LIBRTE_ETHDEV_DEBUG
+is defined. But it doesn't matter with this macro. Let's remove it.
+
+Fixes: d7ec2c076579 ("net/hns3: select Tx prepare based on Tx offload")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_rxtx.c | 6 ------
+ 1 file changed, 6 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_rxtx.c b/drivers/net/hns3/hns3_rxtx.c
+index 52393b1f6f..9fc54d50f1 100644
+--- a/drivers/net/hns3/hns3_rxtx.c
++++ b/drivers/net/hns3/hns3_rxtx.c
+@@ -4311,11 +4311,6 @@ hns3_tx_check_simple_support(struct rte_eth_dev *dev)
+ static bool
+ hns3_get_tx_prep_needed(struct rte_eth_dev *dev)
+ {
+-#ifdef RTE_LIBRTE_ETHDEV_DEBUG
+-	RTE_SET_USED(dev);
+-	/* always perform tx_prepare when debug */
+-	return true;
+-#else
+ #define HNS3_DEV_TX_CSKUM_TSO_OFFLOAD_MASK (\
+ 		RTE_ETH_TX_OFFLOAD_IPV4_CKSUM | \
+ 		RTE_ETH_TX_OFFLOAD_TCP_CKSUM | \
+@@ -4333,7 +4328,6 @@ hns3_get_tx_prep_needed(struct rte_eth_dev *dev)
+ 		return true;
+ 
+ 	return false;
+-#endif
+ }
+ 
+ eth_tx_burst_t
+-- 
+2.23.0
+
