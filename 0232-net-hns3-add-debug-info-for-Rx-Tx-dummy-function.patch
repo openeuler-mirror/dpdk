@@ -1,0 +1,41 @@
+From cd3db5d9c5aea3efa6b0bbaefecb7fb8367a7719 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Sat, 11 Feb 2023 17:18:26 +0800
+Subject: net/hns3: add debug info for Rx/Tx dummy function
+
+[ upstream commit a8f52a5cf13715c61dfe224815c7f4e4858be82f ]
+
+Now dummy function can be report by rte_eth_rx/tx_burst_mode_get.
+So this patch adds debug info for Rx/Tx dummy function.
+
+Fixes: 7feb2aee0e2c ("net/hns3: log selected datapath")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_rxtx.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/net/hns3/hns3_rxtx.c b/drivers/net/hns3/hns3_rxtx.c
+index c69fb38402..52393b1f6f 100644
+--- a/drivers/net/hns3/hns3_rxtx.c
++++ b/drivers/net/hns3/hns3_rxtx.c
+@@ -4420,13 +4420,13 @@ hns3_set_rxtx_function(struct rte_eth_dev *eth_dev)
+ 					hns3_get_tx_function(eth_dev, &prep);
+ 		eth_dev->tx_pkt_prepare = prep;
+ 		eth_dev->tx_descriptor_status = hns3_dev_tx_descriptor_status;
+-		hns3_trace_rxtx_function(eth_dev);
+ 	} else {
+ 		eth_dev->rx_pkt_burst = rte_eth_pkt_burst_dummy;
+ 		eth_dev->tx_pkt_burst = rte_eth_pkt_burst_dummy;
+ 		eth_dev->tx_pkt_prepare = NULL;
+ 	}
+ 
++	hns3_trace_rxtx_function(eth_dev);
+ 	hns3_eth_dev_fp_ops_config(eth_dev);
+ }
+ 
+-- 
+2.23.0
+
