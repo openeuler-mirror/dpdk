@@ -1,0 +1,45 @@
+From 1ee0d9b0270d2a6954c6276aa08f437232707f18 Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Thu, 15 Dec 2022 01:41:41 +0000
+Subject: net/hns3: declare flow rule keeping capability
+
+[ upstream commit 27fd46521517cae0f456dad850a04f18de0690f8 ]
+
+The driver supports create flow rules when device is stopped, and
+re-setup flow rules when restarting, so declare support
+RTE_ETH_DEV_CAPA_FLOW_RULE_KEEP.
+
+The driver also supports to create indirect actions when device is
+stopped, and keeps the indirect actions when restarting, so declare
+support RTE_ETH_DEV_CAPA_FLOW_SHARED_OBJECT_KEEP.
+
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Acked-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_common.c | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_common.c b/drivers/net/hns3/hns3_common.c
+index 9bfbe1161f..3c5e07f1bd 100644
+--- a/drivers/net/hns3/hns3_common.c
++++ b/drivers/net/hns3/hns3_common.c
+@@ -91,10 +91,11 @@ hns3_dev_infos_get(struct rte_eth_dev *eth_dev, struct rte_eth_dev_info *info)
+ 	if (hns3_dev_get_support(hw, OUTER_UDP_CKSUM))
+ 		info->tx_offload_capa |= RTE_ETH_TX_OFFLOAD_OUTER_UDP_CKSUM;
+ 
++	info->dev_capa = RTE_ETH_DEV_CAPA_FLOW_RULE_KEEP |
++			 RTE_ETH_DEV_CAPA_FLOW_SHARED_OBJECT_KEEP;
+ 	if (hns3_dev_get_support(hw, INDEP_TXRX))
+-		info->dev_capa = RTE_ETH_DEV_CAPA_RUNTIME_RX_QUEUE_SETUP |
+-				 RTE_ETH_DEV_CAPA_RUNTIME_TX_QUEUE_SETUP;
+-	info->dev_capa &= ~RTE_ETH_DEV_CAPA_FLOW_RULE_KEEP;
++		info->dev_capa |= RTE_ETH_DEV_CAPA_RUNTIME_RX_QUEUE_SETUP |
++				  RTE_ETH_DEV_CAPA_RUNTIME_TX_QUEUE_SETUP;
+ 
+ 	if (hns3_dev_get_support(hw, PTP))
+ 		info->rx_offload_capa |= RTE_ETH_RX_OFFLOAD_TIMESTAMP;
+-- 
+2.23.0
+
