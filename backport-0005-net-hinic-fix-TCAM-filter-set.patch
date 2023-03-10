@@ -1,0 +1,40 @@
+From 19cc028345f3c2318fad89db34eec276a0af4dd2 Mon Sep 17 00:00:00 2001
+From: Xiaoyun Wang <cloud.wangxiaoyun@huawei.com>
+Date: Mon, 14 Sep 2020 22:31:43 +0800
+Subject: [PATCH] net/hinic: fix TCAM filter set
+
+hinic supports two methods: linear table and tcam table,
+if tcam filter enables failed but linear table is ok,
+which also needs to enable filter, so for this scene,
+driver should not close fdir switch.
+
+Fixes: f4ca3fd54c4d ("net/hinic: create and destroy flow director filter")
+Cc: stable@dpdk.org
+
+Signed-off-by: Xiaoyun Wang <cloud.wangxiaoyun@huawei.com>
+---
+ drivers/net/hinic/hinic_pmd_flow.c | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/hinic/hinic_pmd_flow.c b/drivers/net/hinic/hinic_pmd_flow.c
+index 9888a8793b..d71a42afbd 100644
+--- a/drivers/net/hinic/hinic_pmd_flow.c
++++ b/drivers/net/hinic/hinic_pmd_flow.c
+@@ -2809,8 +2809,12 @@ static int hinic_add_tcam_filter(struct rte_eth_dev *dev,
+ 
+ 		rc = hinic_set_fdir_tcam_rule_filter(nic_dev->hwdev, true);
+ 		if (rc && rc != HINIC_MGMT_CMD_UNSUPPORTED) {
+-			(void)hinic_set_fdir_filter(nic_dev->hwdev, 0, 0, 0,
+-						false);
++			/*
++			 * hinic supports two methods: linear table and tcam
++			 * table, if tcam filter enables failed but linear table
++			 * is ok, which also needs to enable filter, so for this
++			 * scene, driver should not close fdir switch.
++			 */
+ 			(void)hinic_del_tcam_rule(nic_dev->hwdev,
+ 						fdir_tcam_rule->index);
+ 			return rc;
+-- 
+2.23.0
+
