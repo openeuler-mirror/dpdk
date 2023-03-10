@@ -1,0 +1,150 @@
+From 0023e525a52cd5c9463332c5f5b9e95a4c07d938 Mon Sep 17 00:00:00 2001
+From: Xiaoyun Wang <cloud.wangxiaoyun@huawei.com>
+Date: Sat, 27 Jun 2020 11:55:47 +0800
+Subject: [PATCH] net/hinic: add TCAM filter switch for flow director
+
+When the filter rule needs to use the TCAM method, driver
+enables the TCAM filter switch, otherwise disables it, which
+can improve the performance of microcode in FDIR scenarios that
+does not use TCAM method.
+
+Fixes: 1fe89aa37f36 ("net/hinic: add flow director filter")
+Cc: stable@dpdk.org
+
+Signed-off-by: Xiaoyun Wang <cloud.wangxiaoyun@huawei.com>
+---
+ drivers/net/hinic/base/hinic_pmd_cmd.h    |  1 +
+ drivers/net/hinic/base/hinic_pmd_niccfg.c | 41 +++++++++++++++++++++++
+ drivers/net/hinic/base/hinic_pmd_niccfg.h | 11 ++++++
+ drivers/net/hinic/hinic_pmd_flow.c        | 13 +++++++
+ 4 files changed, 66 insertions(+)
+
+diff --git a/drivers/net/hinic/base/hinic_pmd_cmd.h b/drivers/net/hinic/base/hinic_pmd_cmd.h
+index 09918a76fa..9ecb712334 100644
+--- a/drivers/net/hinic/base/hinic_pmd_cmd.h
++++ b/drivers/net/hinic/base/hinic_pmd_cmd.h
+@@ -120,6 +120,7 @@ enum hinic_port_cmd {
+ 	HINIC_PORT_CMD_UP_TC_GET_FLOW		= 0xb1,
+ 	HINIC_PORT_CMD_UP_TC_FLUSH_TCAM		= 0xb2,
+ 	HINIC_PORT_CMD_UP_TC_CTRL_TCAM_BLOCK	= 0xb3,
++	HINIC_PORT_CMD_UP_TC_ENABLE		= 0xb4,
+ 
+ 	HINIC_PORT_CMD_SET_IPSU_MAC		= 0xcb,
+ 	HINIC_PORT_CMD_GET_IPSU_MAC		= 0xcc,
+diff --git a/drivers/net/hinic/base/hinic_pmd_niccfg.c b/drivers/net/hinic/base/hinic_pmd_niccfg.c
+index e894503d73..67f6bc4070 100644
+--- a/drivers/net/hinic/base/hinic_pmd_niccfg.c
++++ b/drivers/net/hinic/base/hinic_pmd_niccfg.c
+@@ -2114,3 +2114,44 @@ int hinic_flush_tcam_rule(void *hwdev)
+ 	return err;
+ }
+ 
++int hinic_set_fdir_tcam_rule_filter(void *hwdev, bool enable)
++{
++	struct hinic_port_tcam_info port_tcam_cmd;
++	u16 out_size = sizeof(port_tcam_cmd);
++	int err;
++
++	if (!hwdev)
++		return -EINVAL;
++
++	memset(&port_tcam_cmd, 0, sizeof(port_tcam_cmd));
++	port_tcam_cmd.mgmt_msg_head.resp_aeq_num = HINIC_AEQ1;
++	port_tcam_cmd.func_id = hinic_global_func_id(hwdev);
++	port_tcam_cmd.tcam_enable = (u8)enable;
++
++	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC_PORT_CMD_UP_TC_ENABLE,
++			&port_tcam_cmd, sizeof(port_tcam_cmd),
++			&port_tcam_cmd, &out_size);
++	if ((port_tcam_cmd.mgmt_msg_head.status != HINIC_MGMT_CMD_UNSUPPORTED &&
++		port_tcam_cmd.mgmt_msg_head.status) || err || !out_size) {
++		if (err == HINIC_MBOX_VF_CMD_ERROR &&
++			HINIC_IS_VF((struct hinic_hwdev *)hwdev)) {
++			err = HINIC_MGMT_CMD_UNSUPPORTED;
++			PMD_DRV_LOG(WARNING, "VF doesn't support setting fdir tcam filter");
++			return err;
++		}
++		PMD_DRV_LOG(ERR, "Set fdir tcam filter failed, err: %d, "
++			"status: 0x%x, out size: 0x%x, enable: 0x%x",
++			err, port_tcam_cmd.mgmt_msg_head.status, out_size,
++			enable);
++		return -EFAULT;
++	}
++
++	if (port_tcam_cmd.mgmt_msg_head.status == HINIC_MGMT_CMD_UNSUPPORTED) {
++		err = HINIC_MGMT_CMD_UNSUPPORTED;
++		PMD_DRV_LOG(WARNING, "Fw doesn't support setting fdir tcam filter");
++	}
++
++	return err;
++}
++
++
+diff --git a/drivers/net/hinic/base/hinic_pmd_niccfg.h b/drivers/net/hinic/base/hinic_pmd_niccfg.h
+index 846b5973ec..73b16b4d69 100644
+--- a/drivers/net/hinic/base/hinic_pmd_niccfg.h
++++ b/drivers/net/hinic/base/hinic_pmd_niccfg.h
+@@ -766,6 +766,15 @@ struct hinic_port_qfilter_info {
+ 	u32 key;
+ };
+ 
++struct hinic_port_tcam_info {
++	struct hinic_mgmt_msg_head mgmt_msg_head;
++
++	u16 func_id;
++	u8 tcam_enable;
++	u8 rsvd1;
++	u32 rsvd2;
++};
++
+ #define HINIC_MAX_TCAM_RULES_NUM   (10240)
+ #define HINIC_TCAM_BLOCK_ENABLE      1
+ #define HINIC_TCAM_BLOCK_DISABLE     0
+@@ -941,4 +950,6 @@ int hinic_free_tcam_block(void *hwdev, u8 block_type, u16 *index);
+ 
+ int hinic_flush_tcam_rule(void *hwdev);
+ 
++int hinic_set_fdir_tcam_rule_filter(void *hwdev, bool enable);
++
+ #endif /* _HINIC_PMD_NICCFG_H_ */
+diff --git a/drivers/net/hinic/hinic_pmd_flow.c b/drivers/net/hinic/hinic_pmd_flow.c
+index cc0744da2d..a7bad570bb 100644
+--- a/drivers/net/hinic/hinic_pmd_flow.c
++++ b/drivers/net/hinic/hinic_pmd_flow.c
+@@ -1900,6 +1900,8 @@ void hinic_free_fdir_filter(struct hinic_nic_dev *nic_dev)
+ {
+ 	(void)hinic_set_fdir_filter(nic_dev->hwdev, 0, 0, 0, false);
+ 
++	(void)hinic_set_fdir_tcam_rule_filter(nic_dev->hwdev, false);
++
+ 	(void)hinic_clear_fdir_tcam(nic_dev->hwdev, TCAM_PKT_BGP_DPORT);
+ 
+ 	(void)hinic_clear_fdir_tcam(nic_dev->hwdev, TCAM_PKT_BGP_SPORT);
+@@ -2801,6 +2803,15 @@ static int hinic_add_tcam_filter(struct rte_eth_dev *dev,
+ 						fdir_tcam_rule->index);
+ 			return rc;
+ 		}
++
++		rc = hinic_set_fdir_tcam_rule_filter(nic_dev->hwdev, true);
++		if (rc && rc != HINIC_MGMT_CMD_UNSUPPORTED) {
++			(void)hinic_set_fdir_filter(nic_dev->hwdev, 0, 0, 0,
++						false);
++			(void)hinic_del_tcam_rule(nic_dev->hwdev,
++						fdir_tcam_rule->index);
++			return rc;
++		}
+ 	}
+ 
+ 	TAILQ_INSERT_TAIL(&tcam_info->tcam_list, tcam_filter, entries);
+@@ -3197,6 +3208,8 @@ static void hinic_clear_all_fdir_filter(struct rte_eth_dev *dev)
+ 
+ 	(void)hinic_set_fdir_filter(nic_dev->hwdev, 0, 0, 0, false);
+ 
++	(void)hinic_set_fdir_tcam_rule_filter(nic_dev->hwdev, false);
++
+ 	(void)hinic_flush_tcam_rule(nic_dev->hwdev);
+ }
+ 
+-- 
+2.23.0
+
