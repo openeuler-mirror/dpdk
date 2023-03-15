@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 34
+Release: 35
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -257,6 +257,22 @@ Patch9235:    0235-net-hns3-make-getting-Tx-function-static.patch
 Patch9236:    0236-net-hns3-extract-common-functions-to-set-Rx-Tx.patch
 Patch9237:    0237-net-hns3-declare-flow-rule-keeping-capability.patch
 Patch9238:    0238-app-testpmd-add-disable-flow-flush-option.patch
+Patch9239:    0239-net-hns3-fix-possible-truncation-of-hash-key-when-co.patch
+Patch9240:    0240-net-hns3-fix-possible-truncation-of-redirection-tabl.patch
+Patch9241:    0241-net-hns3-use-hardware-config-to-report-hash-key.patch
+Patch9242:    0242-net-hns3-use-hardware-config-to-report-hash-types.patch
+Patch9243:    0243-net-hns3-use-hardware-config-to-report-redirection-t.patch
+Patch9244:    0244-net-hns3-separate-setting-hash-algorithm.patch
+Patch9245:    0245-net-hns3-separate-setting-hash-key.patch
+Patch9246:    0246-net-hns3-separate-setting-redirection-table.patch
+Patch9247:    0247-net-hns3-separate-setting-RSS-types.patch
+Patch9248:    0248-net-hns3-separate-setting-and-clearing-RSS-rule.patch
+Patch9249:    0249-net-hns3-use-new-RSS-rule-to-configure-hardware.patch
+Patch9250:    0250-net-hns3-save-hash-algo-to-RSS-filter-list-node.patch
+Patch9251:    0251-net-hns3-allow-adding-queue-buffer-size-hash-rule.patch
+Patch9252:    0252-net-hns3-separate-flow-RSS-config-from-RSS-conf.patch
+Patch9253:    0253-net-hns3-reimplement-hash-flow-function.patch
+Patch9254:    0254-net-hns3-add-verification-of-RSS-types.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -399,6 +415,12 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Wed Mar 15 2023 chenjiji <chenjiji09@163.com> - 21.11-35
+ Fix some RSS bugs and reimplement hash flow function for hns3:
+  - fix some RSS bugs and optimize RSS codes for hns3
+  - reimplement hash flow function for hns3 to satisfy the
+    mainstream usage of rte flow hash in the community
+
 * Fri Mar 03 2023 chenjiji <chenjiji09@163.com> - 21.11-34
  Support flow rule keeping capability for hns3 PMD and
  testpmd. Patchs are as follow:
