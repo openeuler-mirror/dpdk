@@ -1,0 +1,37 @@
+From 9810ccb9266f09bef6f0d8cfcab6ac0d203d8e23 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Fri, 10 Mar 2023 17:35:15 +0800
+Subject: net/hns3: allow adding queue buffer size hash rule
+
+[ upstream commit 8095bf3e6d8ca7349e0a15f95407acd2063e7be0 ]
+
+The maximum queue number from RSS flow rule allowed depends on
+the maximum queue number (512) under one TC instead of the one
+of Rx/Tx queue so as to eliminate restrictions on user usage.
+
+Fixes: c37ca66f2b27 ("net/hns3: support RSS")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_rss.h | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/net/hns3/hns3_rss.h b/drivers/net/hns3/hns3_rss.h
+index 21b90789d0..cc0bb8431d 100644
+--- a/drivers/net/hns3/hns3_rss.h
++++ b/drivers/net/hns3/hns3_rss.h
+@@ -37,7 +37,8 @@
+ #define HNS3_RSS_HASH_ALGO_SYMMETRIC_TOEP 2
+ #define HNS3_RSS_HASH_ALGO_MASK		0xf
+ 
+-#define HNS3_RSS_QUEUES_BUFFER_NUM	64 /* Same as the Max rx/tx queue num */
++/* Same as the Max queue num under TC */
++#define HNS3_RSS_QUEUES_BUFFER_NUM	512
+ struct hns3_rss_conf {
+ 	/* RSS parameters :algorithm, flow_types,  key, queue */
+ 	struct rte_flow_action_rss conf;
+-- 
+2.23.0
+
