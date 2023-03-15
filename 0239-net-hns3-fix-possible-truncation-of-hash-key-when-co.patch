@@ -1,0 +1,37 @@
+From eeeacb6170dabebbfb5fcbcb3fa240db11cdd362 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Fri, 10 Mar 2023 17:35:03 +0800
+Subject: net/hns3: fix possible truncation of hash key when config
+
+[ upstream commit bb38316e738ad6009b3f20b3abfaf27ea8cb0202 ]
+
+The hash key length of hns3 driver is obtained from firmware. If the
+length is a multiple of HNS3_RSS_HASH_KEY_NUM (16), the last part
+of hash key will be truncated.
+
+Fixes: 88347111eb53 ("net/hns3: refactor set RSS hash algorithm and key interface")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_rss.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/net/hns3/hns3_rss.c b/drivers/net/hns3/hns3_rss.c
+index d6e0754273..2011c18b9b 100644
+--- a/drivers/net/hns3/hns3_rss.c
++++ b/drivers/net/hns3/hns3_rss.c
+@@ -301,7 +301,8 @@ hns3_rss_set_algo_key(struct hns3_hw *hw, uint8_t hash_algo,
+ 		req->hash_config |= (hash_algo & HNS3_RSS_HASH_ALGO_MASK);
+ 		req->hash_config |= (idx << HNS3_RSS_HASH_KEY_OFFSET_B);
+ 
+-		if (idx == max_bd_num - 1)
++		if (idx == max_bd_num - 1 &&
++		    (key_len % HNS3_RSS_HASH_KEY_NUM) != 0)
+ 			cur_key_size = key_len % HNS3_RSS_HASH_KEY_NUM;
+ 		else
+ 			cur_key_size = HNS3_RSS_HASH_KEY_NUM;
+-- 
+2.23.0
+
