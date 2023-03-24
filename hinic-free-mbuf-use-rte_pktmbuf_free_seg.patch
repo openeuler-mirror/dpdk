@@ -1,0 +1,107 @@
+From 5600cdc0dcdc7e70a44fb6c8c9e7594cce62f119 Mon Sep 17 00:00:00 2001
+From: jiangheng12 <jiangheng14@huawei.com>
+Date: Fri, 24 Mar 2023 16:58:43 +0800
+Subject: [PATCH] hinic: free mbuf use rte_pktmbuf_free_seg
+
+---
+ drivers/net/hinic/hinic_pmd_tx.c | 27 ++++++++++++++++++---------
+ drivers/net/hinic/hinic_pmd_tx.h |  9 +++++++++
+ 2 files changed, 27 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/net/hinic/hinic_pmd_tx.c b/drivers/net/hinic/hinic_pmd_tx.c
+index 985540a..670247b 100644
+--- a/drivers/net/hinic/hinic_pmd_tx.c
++++ b/drivers/net/hinic/hinic_pmd_tx.c
+@@ -30,13 +30,6 @@
+ #define TX_MSS_DEFAULT			0x3E00
+ #define TX_MSS_MIN			0x50
+ 
+-#define HINIC_NONTSO_PKT_MAX_SGE		17	/* non-tso max sge 17 */
+-#define HINIC_NONTSO_SEG_NUM_INVALID(num)	\
+-			((num) > HINIC_NONTSO_PKT_MAX_SGE)
+-
+-#define HINIC_TSO_PKT_MAX_SGE			127	/* tso max sge 127 */
+-#define HINIC_TSO_SEG_NUM_INVALID(num)		((num) > HINIC_TSO_PKT_MAX_SGE)
+-
+ #define HINIC_TX_OUTER_CHECKSUM_FLAG_SET       1
+ #define HINIC_TX_OUTER_CHECKSUM_FLAG_NO_SET    0
+ 
+@@ -608,6 +601,7 @@ static inline void hinic_xmit_mbuf_cleanup(struct hinic_txq *txq)
+ 		if (likely(mbuf->nb_segs == 1)) {
+ 			m = rte_pktmbuf_prefree_seg(mbuf);
+ 			tx_info->mbuf = NULL;
++			tx_info->nb_segs = 0;
+ 
+ 			if (unlikely(m == NULL))
+ 				continue;
+@@ -621,8 +615,11 @@ static inline void hinic_xmit_mbuf_cleanup(struct hinic_txq *txq)
+ 				mbuf_free[nb_free++] = m;
+ 			}
+ 		} else {
+-			rte_pktmbuf_free(mbuf);
++			for (int j = 0; j < tx_info->nb_segs; j++) {
++				rte_pktmbuf_free_seg(tx_info->mbufs[j]);
++			}
+ 			tx_info->mbuf = NULL;
++			tx_info->nb_segs = 0;
+ 		}
+ 	}
+ 
+@@ -1129,6 +1126,13 @@ u16 hinic_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, u16 nb_pkts)
+ 		tx_info->mbuf = mbuf_pkt;
+ 		tx_info->wqebb_cnt = wqe_wqebb_cnt;
+ 
++		tx_info->nb_segs = mbuf_pkt->nb_segs;
++		struct rte_mbuf *tmp = mbuf_pkt;
++		for (int j = 0; j < mbuf_pkt->nb_segs; j++) {
++			tx_info->mbufs[j] = tmp;
++			tmp = tmp->next;
++		}
++
+ 		/* 7. fill sq wqe header section */
+ 		hinic_fill_sq_wqe_header(&sq_wqe->ctrl, queue_info,
+ 					 sqe_info.sge_cnt, sqe_info.owner);
+@@ -1169,7 +1173,12 @@ void hinic_free_all_tx_mbufs(struct hinic_txq *txq)
+ 			tx_info->cpy_mbuf = NULL;
+ 		}
+ 
+-		rte_pktmbuf_free(tx_info->mbuf);
++		for (int j = 0; j < tx_info->nb_segs; j++) {
++			rte_pktmbuf_free_seg(tx_info->mbufs[j]);
++			tx_info->mbufs[j] = NULL;
++		}
++		tx_info->nb_segs = 0;
++
+ 		hinic_update_sq_local_ci(nic_dev->hwdev, txq->q_id,
+ 					 tx_info->wqebb_cnt);
+ 
+diff --git a/drivers/net/hinic/hinic_pmd_tx.h b/drivers/net/hinic/hinic_pmd_tx.h
+index a1ca580..dd2baff 100644
+--- a/drivers/net/hinic/hinic_pmd_tx.h
++++ b/drivers/net/hinic/hinic_pmd_tx.h
+@@ -21,6 +21,13 @@
+ 		PKT_TX_OUTER_IP_CKSUM |	\
+ 		PKT_TX_TCP_SEG)
+ 
++#define HINIC_NONTSO_PKT_MAX_SGE        17  /* non-tso max sge 17 */
++#define HINIC_NONTSO_SEG_NUM_INVALID(num)   \
++            ((num) > HINIC_NONTSO_PKT_MAX_SGE)
++
++#define HINIC_TSO_PKT_MAX_SGE           127 /* tso max sge 127 */
++#define HINIC_TSO_SEG_NUM_INVALID(num)      ((num) > HINIC_TSO_PKT_MAX_SGE)
++
+ enum sq_wqe_type {
+ 	SQ_NORMAL_WQE = 0,
+ };
+@@ -97,6 +104,8 @@ struct hinic_txq_stats {
+ 
+ struct hinic_tx_info {
+ 	struct rte_mbuf *mbuf;
++	struct rte_mbuf *mbufs[HINIC_TSO_PKT_MAX_SGE];
++	int nb_segs;
+ 	int wqebb_cnt;
+ 	struct rte_mbuf *cpy_mbuf;
+ };
+-- 
+2.23.0
+
