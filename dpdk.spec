@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 19.11
-Release: 26
+Release: 27
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  19.11
@@ -59,6 +59,8 @@ Patch6010: backport-0002-net-hinic-add-TCAM-filter-switch-for-flow-director.patc
 Patch6011: backport-0003-net-hinic-check-memory-allocations-in-flow-creation.patch
 Patch6012: backport-0004-net-hinic-fix-filters-on-memory-allocation-failure.patch
 Patch6013: backport-0005-net-hinic-fix-TCAM-filter-set.patch
+
+Patch9000: hinic-free-mbuf-use-rte_pktmbuf_free_seg.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -228,6 +230,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/${namer}/extra/dpdk/rte_kni.ko
 /usr/sbin/depmod
 
 %changelog
+* Fri Mar 24 2023 jiangheng <jiangheng14@huawei.com> - 19.11-27
+- hinic: free tx mbuf use rte_pktmbuf_free_seg
+
 * Thu Mar 09 2023 jiangheng <jiangheng14@huawei.com> - 19.11-26
 - sync patches to enable hinic flow director
 
