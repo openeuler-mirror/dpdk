@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 37
+Release: 38
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -325,7 +325,7 @@ This package contains the pdump tool for capture the dpdk network packets.
 
 %build
 export CFLAGS="%{optflags}"
-meson build -Dplatform=generic -Dexamples=l3fwd-power,ethtool,l3fwd,kni,dma,ptpclient
+meson build -Dplatform=generic -Dexamples=l3fwd-power,ethtool,l3fwd,kni,dma,ptpclient --default-library=shared
 ninja -C build -v
 
 #build gazelle-pdump/gazell-proc-info
@@ -347,6 +347,8 @@ chrpath -d ./build/examples/dpdk-ethtool
 chrpath -d ./build/examples/dpdk-kni
 chrpath -d ./build/examples/dpdk-dma
 chrpath -d ./build/examples/dpdk-ptpclient
+chrpath -d ./build/app/dpdk-pdump.p/gazelle-pdump
+chrpath -d ./build/app/dpdk-proc-info.p/gazelle-proc-info
 
 cp ./build/examples/dpdk-l3fwd $RPM_BUILD_ROOT/usr/local/bin
 cp ./build/examples/dpdk-l3fwd-power $RPM_BUILD_ROOT/usr/local/bin
@@ -418,6 +420,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Sat Apr 01 2023 jiangheng <jiangheng14@huawei.com> - 21.11-38
+- build as shared libraries to reduce the size of debug packet
+
 * Sat Apr 01 2023 jiangheng <jiangheng14@huawei.com> - 21.11-37
 - hinic: free tx mbuf use rte_pktmbuf_free_seg
 
