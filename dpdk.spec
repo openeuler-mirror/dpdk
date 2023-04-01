@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 36
+Release: 37
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -274,6 +274,7 @@ Patch9253:    0253-net-hns3-reimplement-hash-flow-function.patch
 Patch9254:    0254-net-hns3-add-verification-of-RSS-types.patch
 Patch9255:    0255-test-mbuf-fix-mbuf-reset-test.patch
 Patch9256:    0256-examples-l3fwd-power-support-CPPC-cpufreq.patch
+Patch9257:    0257-hinic-free-mbuf-use-rte_pktmbuf_free_seg.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -416,6 +417,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Sat Apr 01 2023 jiangheng <jiangheng14@huawei.com> - 21.11-37
+- hinic: free tx mbuf use rte_pktmbuf_free_seg
+
 * Thu Mar 23 2023 chenjiji <chenjiji09@163.com> - 21.11-36
  Fix a m_buf pool was not freed bugs for test and support
  CPPC cpufreq for l3fwd-power. Patchs are as follow:
