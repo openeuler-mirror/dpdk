@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 33
+Release: 34
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -255,6 +255,8 @@ Patch9233:    0233-net-hns3-remove-debug-condition-for-Tx-prepare.patch
 Patch9234:    0234-net-hns3-separate-Tx-prepare-from-getting-Tx-functio.patch
 Patch9235:    0235-net-hns3-make-getting-Tx-function-static.patch
 Patch9236:    0236-net-hns3-extract-common-functions-to-set-Rx-Tx.patch
+Patch9237:    0237-net-hns3-declare-flow-rule-keeping-capability.patch
+Patch9238:    0238-app-testpmd-add-disable-flow-flush-option.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -397,6 +399,12 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Fri Mar 03 2023 chenjiji <chenjiji09@163.com> - 21.11-34
+ Support flow rule keeping capability for hns3 PMD and
+ testpmd. Patchs are as follow:
+  - net/hns3: declare flow rule keeping capability
+  - app/testpmd: add --disable-flow-flush option
+
 * Tue Feb 21 2023 chenjiji <chenjiji09@163.com> - 21.11-33
  refactor Rc/Tx function of hns3 PMD
  And patchs are as follows:
