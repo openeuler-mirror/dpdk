@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 39
+Release: 40
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -377,6 +377,8 @@ cd -
 cd $RPM_BUILD_ROOT/usr/lib64/dpdk/pmds-22.0/lib
 ln -fs ../../../*.so .
 cd -
+mkdir -p $RPM_BUILD_ROOT/usr/local/lib64/dpdk
+ln -fs /usr/lib64/dpdk/pmds-22.0 $RPM_BUILD_ROOT/usr/local/lib64/dpdk/pmds-22.0
 
 strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/rte_kni.ko
 strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
@@ -390,6 +392,7 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /lib/modules/%{kern_devel_ver}/extra/dpdk/*.ko
 /usr/lib64/*.so*
 /usr/lib64/dpdk/*
+/usr/local/lib64/dpdk/*
 %exclude /usr/lib64/dpdk/pmds-22.0/include/*.h
 
 %files devel
@@ -425,6 +428,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Tue Apr 11 2023 bigclouds99 <yuelg@chinaunicom.cn> - 21.11-40
+- Create a softlink to dpdk default driver path
+
 * Tue Apr 04 2023 chenjiji <chenjiji09@163.com> - 21.11-39
  Sync some patchs from upstreaming branch and modifies
  are as follow:
