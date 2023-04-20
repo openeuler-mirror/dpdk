@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 35
+Release: 36
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -272,6 +272,8 @@ Patch9251:    0251-net-hns3-allow-adding-queue-buffer-size-hash-rule.patch
 Patch9252:    0252-net-hns3-separate-flow-RSS-config-from-RSS-conf.patch
 Patch9253:    0253-net-hns3-reimplement-hash-flow-function.patch
 Patch9254:    0254-net-hns3-add-verification-of-RSS-types.patch
+Patch9255:    0255-test-mbuf-fix-mbuf-reset-test.patch
+Patch9256:    0256-examples-l3fwd-power-support-CPPC-cpufreq.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -414,6 +416,12 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Thu Mar 23 2023 chenjiji <chenjiji09@163.com> - 21.11-36
+ Fix a m_buf pool was not freed bugs for test and support
+ CPPC cpufreq for l3fwd-power. Patchs are as follow:
+  - test/mbuf: fix mbuf reset test
+  - examples/l3fwd-power: support CPPC cpufreq
+
 * Wed Mar 15 2023 chenjiji <chenjiji09@163.com> - 21.11-35
  Fix some RSS bugs and reimplement hash flow function for hns3:
   - fix some RSS bugs and optimize RSS codes for hns3
