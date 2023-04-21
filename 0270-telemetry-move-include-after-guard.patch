@@ -1,0 +1,52 @@
+From 46fdcb394e83402924e6fdcf2d6da2873570d2f4 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Mon, 19 Dec 2022 15:06:41 +0800
+Subject: telemetry: move include after guard
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+[ upstream commit f7b74387be1de6803716262d7988794accd6d39f ]
+
+The "stdint.h" header is outside '_RTE_TELEMETRY_H_' macro, which cause
+this header is unconditional. So this patch moves this header to inside
+'_RTE_TELEMETRY_H_'.
+
+Fixes: 99a2dd955fba ("lib: remove librte_ prefix from directory names")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Acked-by: Morten Brørup <mb@smartsharesystems.com>
+Acked-by: Chengwen Feng <fengchengwen@huawei.com>
+Acked-by: Bruce Richardson <bruce.richardson@intel.com>
+---
+ lib/telemetry/rte_telemetry.h | 6 ++----
+ 1 file changed, 2 insertions(+), 4 deletions(-)
+
+diff --git a/lib/telemetry/rte_telemetry.h b/lib/telemetry/rte_telemetry.h
+index fadea48cb9..08d7f18dff 100644
+--- a/lib/telemetry/rte_telemetry.h
++++ b/lib/telemetry/rte_telemetry.h
+@@ -2,10 +2,6 @@
+  * Copyright(c) 2018 Intel Corporation
+  */
+ 
+-#include <stdint.h>
+-
+-#include <rte_compat.h>
+-
+ #ifndef _RTE_TELEMETRY_H_
+ #define _RTE_TELEMETRY_H_
+ 
+@@ -13,6 +9,8 @@
+ extern "C" {
+ #endif
+ 
++#include <stdint.h>
++
+ /** Maximum length for string used in object. */
+ #define RTE_TEL_MAX_STRING_LEN 128
+ /** Maximum length of string. */
+-- 
+2.23.0
+

@@ -1,0 +1,70 @@
+From 2d3ca311972da8c7d4770697e62e6a4812665c5b Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Mon, 19 Dec 2022 15:06:43 +0800
+Subject: mempool: fix telemetry data truncation
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+[ upstream commit 4eebfcf70a21b2b608e3bb9f20b5ee23338172ec ]
+
+The 'u32' and 'u64' data can not assigned to 'int' type variable.
+They need to use the 'u64' APIs to add.
+
+Fixes: 2f5c4025abb3 ("mempool: add telemetry endpoint")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Acked-by: Morten Brørup <mb@smartsharesystems.com>
+Acked-by: Chengwen Feng <fengchengwen@huawei.com>
+---
+ lib/mempool/rte_mempool.c | 24 ++++++++++++------------
+ 1 file changed, 12 insertions(+), 12 deletions(-)
+
+diff --git a/lib/mempool/rte_mempool.c b/lib/mempool/rte_mempool.c
+index c5a699b1d6..871f4d1fe3 100644
+--- a/lib/mempool/rte_mempool.c
++++ b/lib/mempool/rte_mempool.c
+@@ -1517,27 +1517,27 @@ mempool_info_cb(struct rte_mempool *mp, void *arg)
+ 		return;
+ 
+ 	rte_tel_data_add_dict_string(info->d, "name", mp->name);
+-	rte_tel_data_add_dict_int(info->d, "pool_id", mp->pool_id);
+-	rte_tel_data_add_dict_int(info->d, "flags", mp->flags);
++	rte_tel_data_add_dict_u64(info->d, "pool_id", mp->pool_id);
++	rte_tel_data_add_dict_u64(info->d, "flags", mp->flags);
+ 	rte_tel_data_add_dict_int(info->d, "socket_id", mp->socket_id);
+-	rte_tel_data_add_dict_int(info->d, "size", mp->size);
+-	rte_tel_data_add_dict_int(info->d, "cache_size", mp->cache_size);
+-	rte_tel_data_add_dict_int(info->d, "elt_size", mp->elt_size);
+-	rte_tel_data_add_dict_int(info->d, "header_size", mp->header_size);
+-	rte_tel_data_add_dict_int(info->d, "trailer_size", mp->trailer_size);
+-	rte_tel_data_add_dict_int(info->d, "private_data_size",
++	rte_tel_data_add_dict_u64(info->d, "size", mp->size);
++	rte_tel_data_add_dict_u64(info->d, "cache_size", mp->cache_size);
++	rte_tel_data_add_dict_u64(info->d, "elt_size", mp->elt_size);
++	rte_tel_data_add_dict_u64(info->d, "header_size", mp->header_size);
++	rte_tel_data_add_dict_u64(info->d, "trailer_size", mp->trailer_size);
++	rte_tel_data_add_dict_u64(info->d, "private_data_size",
+ 				  mp->private_data_size);
+ 	rte_tel_data_add_dict_int(info->d, "ops_index", mp->ops_index);
+-	rte_tel_data_add_dict_int(info->d, "populated_size",
++	rte_tel_data_add_dict_u64(info->d, "populated_size",
+ 				  mp->populated_size);
+ 
+ 	mz = mp->mz;
+ 	rte_tel_data_add_dict_string(info->d, "mz_name", mz->name);
+-	rte_tel_data_add_dict_int(info->d, "mz_len", mz->len);
+-	rte_tel_data_add_dict_int(info->d, "mz_hugepage_sz",
++	rte_tel_data_add_dict_u64(info->d, "mz_len", mz->len);
++	rte_tel_data_add_dict_u64(info->d, "mz_hugepage_sz",
+ 				  mz->hugepage_sz);
+ 	rte_tel_data_add_dict_int(info->d, "mz_socket_id", mz->socket_id);
+-	rte_tel_data_add_dict_int(info->d, "mz_flags", mz->flags);
++	rte_tel_data_add_dict_u64(info->d, "mz_flags", mz->flags);
+ }
+ 
+ static int
+-- 
+2.23.0
+

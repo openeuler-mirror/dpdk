@@ -1,0 +1,62 @@
+From baa8bc0cc5736e2804e53c09b6cadf193993ce45 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Mon, 19 Dec 2022 15:06:48 +0800
+Subject: ethdev: get capabilities from telemetry in hexadecimal
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+[ upstream commit 796b031608d8d52e040f83304c676d3cda5af617 ]
+
+The 'dev_flags', 'rx_offloads', 'tx_offloads' and 'rss_hf' are better
+displayed in hexadecimal format.
+
+Like:
+ --> old display by input /ethdev/info,0
+      "dev_flags": 3,
+      "rx_offloads": 524288,
+      "tx_offloads": 65536,
+      "ethdev_rss_hf": 9100
+
+ --> new display
+     "dev_flags": "0x3",
+     "rx_offloads": "0x80000",
+     "tx_offloads": "0x10000",
+     "ethdev_rss_hf": "0x238c"
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Acked-by: Morten Brørup <mb@smartsharesystems.com>
+Acked-by: Chengwen Feng <fengchengwen@huawei.com>
+---
+ lib/ethdev/rte_ethdev.c | 15 ++++++++-------
+ 1 file changed, 8 insertions(+), 7 deletions(-)
+
+diff --git a/lib/ethdev/rte_ethdev.c b/lib/ethdev/rte_ethdev.c
+index c216091e79..4e5499ad2d 100644
+--- a/lib/ethdev/rte_ethdev.c
++++ b/lib/ethdev/rte_ethdev.c
+@@ -6428,13 +6428,14 @@ eth_dev_handle_port_info(const char *cmd __rte_unused,
+ 	rte_tel_data_add_dict_container(d, "rxq_state", rxq_state, 0);
+ 	rte_tel_data_add_dict_container(d, "txq_state", txq_state, 0);
+ 	rte_tel_data_add_dict_int(d, "numa_node", eth_dev->data->numa_node);
+-	rte_tel_data_add_dict_u64(d, "dev_flags", eth_dev->data->dev_flags);
+-	rte_tel_data_add_dict_u64(d, "rx_offloads",
+-			eth_dev->data->dev_conf.rxmode.offloads);
+-	rte_tel_data_add_dict_u64(d, "tx_offloads",
+-			eth_dev->data->dev_conf.txmode.offloads);
+-	rte_tel_data_add_dict_u64(d, "ethdev_rss_hf",
+-			eth_dev->data->dev_conf.rx_adv_conf.rss_conf.rss_hf);
++	rte_tel_data_add_dict_uint_hex(d, "dev_flags",
++			eth_dev->data->dev_flags, 0);
++	rte_tel_data_add_dict_uint_hex(d, "rx_offloads",
++			eth_dev->data->dev_conf.rxmode.offloads, 0);
++	rte_tel_data_add_dict_uint_hex(d, "tx_offloads",
++			eth_dev->data->dev_conf.txmode.offloads, 0);
++	rte_tel_data_add_dict_uint_hex(d, "ethdev_rss_hf",
++			eth_dev->data->dev_conf.rx_adv_conf.rss_conf.rss_hf, 0);
+ 
+ 	return 0;
+ }
+-- 
+2.23.0
+

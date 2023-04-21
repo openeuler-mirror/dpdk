@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 40
+Release: 41
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -281,6 +281,19 @@ Patch9260:    0260-net-virtio-support-private-dump.patch
 Patch9261:    0261-net-vhost-support-private-dump.patch
 Patch9262:    0262-app-testpmd-show-private-info-in-port-info.patch
 Patch9263:    0263-app-testpmd-display-RSS-hash-key-of-flow-rule.patch
+Patch9264:    0264-ethdev-fix-Rx-queue-telemetry-memory-leak-on-failure.patch
+Patch9265:    0265-ethdev-fix-MAC-address-in-telemetry-device-info.patch
+Patch9266:    0266-eventdev-eth_rx-fix-telemetry-Rx-stats-reset.patch
+Patch9267:    0267-test-telemetry_data-refactor-for-maintainability.patch
+Patch9268:    0268-test-telemetry_data-add-test-cases-for-character-esc.patch
+Patch9269:    0269-usertools-telemetry-add-JSON-pretty-print.patch
+Patch9270:    0270-telemetry-move-include-after-guard.patch
+Patch9271:    0271-ethdev-fix-telemetry-data-truncation.patch
+Patch9272:    0272-mempool-fix-telemetry-data-truncation.patch
+Patch9273:    0273-cryptodev-fix-telemetry-data-truncation.patch
+Patch9274:    0274-mem-fix-telemetry-data-truncation.patch
+Patch9275:    0275-telemetry-support-adding-integer-as-hexadecimal.patch
+Patch9276:    0276-ethdev-get-capabilities-from-telemetry-in-hexadecima.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -428,6 +441,14 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Fri Apr 21 2023 chenjiji <chenjiji09@163.com> - 21.11-41
+- Telemetry: support display as hexadecimal
+ Sync some patchs from upstreaming for telemetry and modifies
+ are as follow:
+ 1. Support dispaly integer as hexadecimal.
+ 2. Fix data truncation for some u64 accept as int.
+ 3. Add JSON pretty print.
+
 * Tue Apr 11 2023 bigclouds99 <yuelg@chinaunicom.cn> - 21.11-40
 - Create a softlink to dpdk default driver path
 

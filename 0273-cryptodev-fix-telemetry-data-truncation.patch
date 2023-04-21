@@ -1,0 +1,39 @@
+From 5af68a4b3406c0477a2a0c33c546795d6be7f6a5 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Mon, 19 Dec 2022 15:06:44 +0800
+Subject: cryptodev: fix telemetry data truncation
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+[ upstream commit 45038f04ab577db8844ef54d7f523119be6c205f ]
+
+The 'u32' data can not assigned to 'int' type variable. The 'u32' data
+needs to use the 'u64' APIs to add.
+
+Fixes: d3d98f5ce9d0 ("cryptodev: support telemetry")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Acked-by: Morten Brørup <mb@smartsharesystems.com>
+Acked-by: Chengwen Feng <fengchengwen@huawei.com>
+---
+ lib/cryptodev/rte_cryptodev.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/cryptodev/rte_cryptodev.c b/lib/cryptodev/rte_cryptodev.c
+index a40536c5ea..23e079d639 100644
+--- a/lib/cryptodev/rte_cryptodev.c
++++ b/lib/cryptodev/rte_cryptodev.c
+@@ -2472,7 +2472,7 @@ cryptodev_handle_dev_info(const char *cmd __rte_unused,
+ 	rte_tel_data_start_dict(d);
+ 	rte_tel_data_add_dict_string(d, "device_name",
+ 		cryptodev_info.device->name);
+-	rte_tel_data_add_dict_int(d, "max_nb_queue_pairs",
++	rte_tel_data_add_dict_u64(d, "max_nb_queue_pairs",
+ 		cryptodev_info.max_nb_queue_pairs);
+ 
+ 	return 0;
+-- 
+2.23.0
+
