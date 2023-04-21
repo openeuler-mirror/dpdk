@@ -1,0 +1,92 @@
+diff -up dpdk-21.11/app/meson.build.orig2 dpdk-21.11/app/meson.build
+--- dpdk-21.11/app/meson.build.orig2	2023-04-21 18:37:25.851994629 +0800
++++ dpdk-21.11/app/meson.build	2023-04-21 21:25:13.631388908 +0800
+@@ -21,9 +21,12 @@ apps = [
+ ]
+ 
+ default_cflags = machine_args + ['-DALLOW_EXPERIMENTAL_API']
+-default_cflags += ['-fPIE', '-pie', '-fPIC', '-fstack-protector-strong', '-D_FORTIFY_SOURCE=2', '-O2', '-Wall', '-Werror']
+-default_cflags += ['-Wl,-z,relro,-z,now,-z,noexecstack', '-Wtrampolines']
+-default_ldflags = []
++if meson.get_compiler('c').get_id() == 'clang'
++  default_ldflags = ['-pie', '-Wl,-z,relro,-z,now,-z,noexecstack']
++else
++  default_cflags += ['-fPIE', '-fPIC', '-fstack-protector-strong', '-D_FORTIFY_SOURCE=2', '-O2', '-Wall', '-Werror']
++  default_cflags += ['-Wl,-z,relro,-z,now,-z,noexecstack', '-Wtrampolines']
++endif
+ if get_option('default_library') == 'static' and not is_windows
+     default_ldflags += ['-Wl,--export-dynamic']
+ endif
+diff -up dpdk-21.11/buildtools/chkincs/meson.build.orig2 dpdk-21.11/buildtools/chkincs/meson.build
+--- dpdk-21.11/buildtools/chkincs/meson.build.orig2	2023-04-21 18:38:05.196444066 +0800
++++ dpdk-21.11/buildtools/chkincs/meson.build	2023-04-21 21:25:14.095512696 +0800
+@@ -13,9 +13,12 @@ gen_c_files = generator(gen_c_file_for_h
+ 
+ cflags = machine_args
+ cflags += '-DALLOW_EXPERIMENTAL_API'
+-cflags += ['-fPIE', '-pie', '-fPIC', '-fstack-protector-strong', '-D_FORTIFY_SOURCE=2', '-O2', '-Wall', '-Werror']
+-cflags += ['-Wl,-z,relro,-z,now,-z,noexecstack', '-Wtrampolines']
+-
++if meson.get_compiler('c').get_id() == 'clang'
++  ldflags = ['-pie', '-Wl,-z,relro,-z,now,-z,noexecstack']
++else
++  cflags += ['-fPIE', '-fPIC', '-fstack-protector-strong', '-D_FORTIFY_SOURCE=2', '-O2', '-Wall', '-Werror']
++  cflags += ['-Wl,-z,relro,-z,now,-z,noexecstack', '-Wtrampolines']
++endif
+ sources = files('main.c')
+ sources += gen_c_files.process(dpdk_chkinc_headers)
+ 
+diff -up dpdk-21.11/drivers/meson.build.orig2 dpdk-21.11/drivers/meson.build
+--- dpdk-21.11/drivers/meson.build.orig2	2023-04-21 18:37:25.855994675 +0800
++++ dpdk-21.11/drivers/meson.build	2023-04-21 21:25:14.495619407 +0800
+@@ -45,8 +45,12 @@ enable_drivers += always_enable
+ default_cflags = machine_args
+ default_cflags += ['-DALLOW_EXPERIMENTAL_API']
+ default_cflags += ['-DALLOW_INTERNAL_API']
+-default_cflags += ['-fPIE', '-pie', '-fPIC', '-fstack-protector-strong', '-D_FORTIFY_SOURCE=2', '-O2', '-Wall', '-Werror']
+-default_cflags += ['-Wl,-z,relro,-z,now,-z,noexecstack', '-Wtrampolines']
++if meson.get_compiler('c').get_id() == 'clang'
++  default_ldflags = ['-pie', '-Wl,-z,relro,-z,now,-z,noexecstack']
++else
++  default_cflags += ['-fPIE', '-fPIC', '-fstack-protector-strong', '-D_FORTIFY_SOURCE=2', '-O2', '-Wall', '-Werror']
++  default_cflags += ['-Wl,-z,relro,-z,now,-z,noexecstack', '-Wtrampolines']
++endif
+ 
+ if cc.has_argument('-Wno-format-truncation')
+     default_cflags += '-Wno-format-truncation'
+diff -up dpdk-21.11/examples/meson.build.orig2 dpdk-21.11/examples/meson.build
+--- dpdk-21.11/examples/meson.build.orig2	2023-04-21 18:37:25.859994720 +0800
++++ dpdk-21.11/examples/meson.build	2023-04-21 21:25:14.911730388 +0800
+@@ -90,8 +90,12 @@ default_ldflags = dpdk_extra_ldflags
+ if get_option('default_library') == 'static' and not is_windows
+     default_ldflags += ['-Wl,--export-dynamic']
+ endif
+-default_cflags += ['-fPIE', '-pie', '-fPIC', '-fstack-protector-strong', '-D_FORTIFY_SOURCE=2', '-O2', '-Wall', '-Werror']
+-default_cflags += ['-Wl,-z,relro,-z,now,-z,noexecstack', '-Wtrampolines']
++if meson.get_compiler('c').get_id() == 'clang'
++  default_ldflags = ['-pie', '-Wl,-z,relro,-z,now,-z,noexecstack']
++else
++  default_cflags += ['-fPIE', '-fPIC', '-fstack-protector-strong', '-D_FORTIFY_SOURCE=2', '-O2', '-Wall', '-Werror']
++  default_cflags += ['-Wl,-z,relro,-z,now,-z,noexecstack', '-Wtrampolines']
++endif
+ 
+ foreach example: examples
+     name = example.split('/')[-1]
+diff -up dpdk-21.11/lib/meson.build.orig2 dpdk-21.11/lib/meson.build
+--- dpdk-21.11/lib/meson.build.orig2	2023-04-21 18:37:25.863994766 +0800
++++ dpdk-21.11/lib/meson.build	2023-04-21 21:25:15.543898993 +0800
+@@ -94,8 +94,12 @@ endforeach
+ default_cflags = machine_args
+ default_cflags += ['-DALLOW_EXPERIMENTAL_API']
+ default_cflags += ['-DALLOW_INTERNAL_API']
+-default_cflags += ['-fPIE', '-pie', '-fPIC', '-fstack-protector-strong', '-D_FORTIFY_SOURCE=2', '-O2', '-Wall', '-Werror']
+-default_cflags += ['-Wl,-z,relro,-z,now,-z,noexecstack', '-Wtrampolines']
++if meson.get_compiler('c').get_id() == 'clang'
++  default_ldflags = ['-pie', '-Wl,-z,relro,-z,now,-z,noexecstack']
++else
++  default_cflags += ['-fPIE', '-fPIC', '-fstack-protector-strong', '-D_FORTIFY_SOURCE=2', '-O2', '-Wall', '-Werror']
++  default_cflags += ['-Wl,-z,relro,-z,now,-z,noexecstack', '-Wtrampolines']
++endif
+ 
+ if cc.has_argument('-Wno-format-truncation')
+     default_cflags += '-Wno-format-truncation'

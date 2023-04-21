@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 40
+Release: 41
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -281,6 +281,7 @@ Patch9260:    0260-net-virtio-support-private-dump.patch
 Patch9261:    0261-net-vhost-support-private-dump.patch
 Patch9262:    0262-app-testpmd-show-private-info-in-port-info.patch
 Patch9263:    0263-app-testpmd-display-RSS-hash-key-of-flow-rule.patch
+Patch9264:    0264-fix-clang-cflags.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -428,6 +429,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Fri Apr 21 2023 jammyjellyfish <jammyjellyfish255@outlook.com> - 21.11-41
+- fix clang build error
+
 * Tue Apr 11 2023 bigclouds99 <yuelg@chinaunicom.cn> - 21.11-40
 - Create a softlink to dpdk default driver path
 
