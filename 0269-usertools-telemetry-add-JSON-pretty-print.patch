@@ -1,0 +1,87 @@
+From dccf49c20f2be4f9b92a635117dc06c9d17be545 Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Mon, 17 Oct 2022 07:41:02 +0000
+Subject: usertools/telemetry: add JSON pretty print
+
+[ upstream commit 66542840dfd184c06813e6740664b280ef77d4e0 ]
+
+Currently, the dpdk-telemetry.py show JSON in raw format under
+interactive mode, which is not good for human reading.
+
+E.g. The command '/ethdev/xstats,0' will output:
+{"/ethdev/xstats": {"rx_good_packets": 0, "tx_good_packets": 0,
+"rx_good_bytes": 0, "tx_good_bytes": 0, "rx_missed_errors": 0,
+"rx_errors": 0, "tx_errors": 0, "rx_mbuf_allocation_errors": 0,
+"rx_q0_packets": 0,...}}
+
+This patch supports JSON pretty print by adding extra indent=2
+parameter under interactive mode, so the same command will output:
+{
+  "/ethdev/xstats": {
+    "rx_good_packets": 0,
+    "tx_good_packets": 0,
+    "rx_good_bytes": 0,
+    "tx_good_bytes": 0,
+    "rx_missed_errors": 0,
+    "rx_errors": 0,
+    "rx_mbuf_allocation_errors": 0,
+    "rx_q0_packets": 0,
+    ...
+  }
+}
+
+Note: the non-interactive mode is made machine-readable and remains the
+original way (it means don't use indent to pretty print).
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Acked-by: David Marchand <david.marchand@redhat.com>
+Acked-by: Ciara Power <ciara.power@intel.com>
+Tested-by: Bruce Richardson <bruce.richardson@intel.com>
+---
+ usertools/dpdk-telemetry.py | 9 +++++----
+ 1 file changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/usertools/dpdk-telemetry.py b/usertools/dpdk-telemetry.py
+index 5b3bf83356..e36b0af811 100755
+--- a/usertools/dpdk-telemetry.py
++++ b/usertools/dpdk-telemetry.py
+@@ -23,7 +23,7 @@
+ CMDS = []
+ 
+ 
+-def read_socket(sock, buf_len, echo=True):
++def read_socket(sock, buf_len, echo=True, pretty=False):
+     """ Read data from socket and return it in JSON format """
+     reply = sock.recv(buf_len).decode()
+     try:
+@@ -33,7 +33,8 @@ def read_socket(sock, buf_len, echo=True):
+         sock.close()
+         raise
+     if echo:
+-        print(json.dumps(ret))
++        indent = 2 if pretty else None
++        print(json.dumps(ret, indent=indent))
+     return ret
+ 
+ 
+@@ -123,7 +124,7 @@ def handle_socket(args, path):
+         else:
+             list_fp()
+         return
+-    json_reply = read_socket(sock, 1024, prompt)
++    json_reply = read_socket(sock, 1024, prompt, prompt)
+     output_buf_len = json_reply["max_output_len"]
+     app_name = get_app_name(json_reply["pid"])
+     if app_name and prompt:
+@@ -139,7 +140,7 @@ def handle_socket(args, path):
+         while text != "quit":
+             if text.startswith('/'):
+                 sock.send(text.encode())
+-                read_socket(sock, output_buf_len)
++                read_socket(sock, output_buf_len, pretty=prompt)
+             text = input(prompt).strip()
+     except EOFError:
+         pass
+-- 
+2.23.0
+

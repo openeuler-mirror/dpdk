@@ -1,0 +1,74 @@
+From 9da99d5eaf004c1ea202753c4618dcaa48744ba3 Mon Sep 17 00:00:00 2001
+From: Bruce Richardson <bruce.richardson@intel.com>
+Date: Fri, 9 Sep 2022 10:35:21 +0100
+Subject: test/telemetry_data: add test cases for character escaping
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+[ upstream commit d0049f7a2c1654ffe704d7c1803db0402e49a2a7 ]
+
+Add in some basic unit tests to validate the character escaping being
+done on string data values, which tests end-to-end processing of those
+values beyond just the json-encoding steps tested by the
+"telemetry_json_autotest".
+
+Signed-off-by: Bruce Richardson <bruce.richardson@intel.com>
+Acked-by: Ciara Power <ciara.power@intel.com>
+Acked-by: Morten Brørup <mb@smartsharesystems.com>
+Acked-by: Chengwen Feng <fengchengwen@huawei.com>
+---
+ app/test/test_telemetry_data.c | 30 +++++++++++++++++++++++++++++-
+ 1 file changed, 29 insertions(+), 1 deletion(-)
+
+diff --git a/app/test/test_telemetry_data.c b/app/test/test_telemetry_data.c
+index 75aca8791f..79ec48063f 100644
+--- a/app/test/test_telemetry_data.c
++++ b/app/test/test_telemetry_data.c
+@@ -345,6 +345,30 @@ test_array_with_array_u64_values(void)
+ 	return CHECK_OUTPUT("[[0,1,2,3,4],[0,1,2,3,4]]");
+ }
+ 
++static int
++test_string_char_escaping(void)
++{
++	rte_tel_data_string(&response_data, "hello,\nworld\n");
++	return CHECK_OUTPUT("\"hello,\\nworld\\n\"");
++}
++
++static int
++test_array_char_escaping(void)
++{
++	rte_tel_data_start_array(&response_data, RTE_TEL_STRING_VAL);
++	rte_tel_data_add_array_string(&response_data, "\\escape\r");
++	rte_tel_data_add_array_string(&response_data, "characters\n");
++	return CHECK_OUTPUT("[\"\\\\escape\\r\",\"characters\\n\"]");
++}
++
++static int
++test_dict_char_escaping(void)
++{
++	rte_tel_data_start_dict(&response_data);
++	rte_tel_data_add_dict_string(&response_data, "name", "escaped\n\tvalue");
++	return CHECK_OUTPUT("{\"name\":\"escaped\\n\\tvalue\"}");
++}
++
+ static int
+ connect_to_socket(void)
+ {
+@@ -404,7 +428,11 @@ telemetry_data_autotest(void)
+ 			test_dict_with_dict_values,
+ 			test_array_with_array_int_values,
+ 			test_array_with_array_u64_values,
+-			test_array_with_array_string_values };
++			test_array_with_array_string_values,
++			test_string_char_escaping,
++			test_array_char_escaping,
++			test_dict_char_escaping,
++	};
+ 
+ 	rte_telemetry_register_cmd(REQUEST_CMD, telemetry_test_cb, "Test");
+ 	for (i = 0; i < RTE_DIM(test_cases); i++) {
+-- 
+2.23.0
+

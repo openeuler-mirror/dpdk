@@ -1,0 +1,44 @@
+From 08b69766da122d7d3e20cee328a9166a12f320cb Mon Sep 17 00:00:00 2001
+From: David Marchand <david.marchand@redhat.com>
+Date: Thu, 24 Mar 2022 16:28:30 +0100
+Subject: eventdev/eth_rx: fix telemetry Rx stats reset
+
+[ upstream commit b450a990b07e008077377a6dfa45a562b3f9a496 ]
+
+Caught by covscan:
+
+1. dpdk-21.11/lib/eventdev/rte_event_eth_rx_adapter.c:3279:
+logical_vs_bitwise: "~(*__ctype_b_loc()[(int)*params] & 2048 /*
+(unsigned short)_ISdigit */)" is always 1/true regardless of the values
+of its operand. This occurs as the logical second operand of "||".
+2. dpdk-21.11/lib/eventdev/rte_event_eth_rx_adapter.c:3279: remediation:
+Did you intend to use "!" rather than "~"?
+
+While isdigit return value should be compared as an int to 0,
+prefer ! since all of this file uses this convention.
+
+Fixes: 814d01709328 ("eventdev/eth_rx: support telemetry")
+Cc: stable@dpdk.org
+
+Signed-off-by: David Marchand <david.marchand@redhat.com>
+Acked-by: Jay Jayatheerthan <jay.jayatheerthan@intel.com>
+---
+ lib/eventdev/rte_event_eth_rx_adapter.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/eventdev/rte_event_eth_rx_adapter.c b/lib/eventdev/rte_event_eth_rx_adapter.c
+index 3182b52c23..6f160b03c2 100644
+--- a/lib/eventdev/rte_event_eth_rx_adapter.c
++++ b/lib/eventdev/rte_event_eth_rx_adapter.c
+@@ -3276,7 +3276,7 @@ handle_rxa_stats_reset(const char *cmd __rte_unused,
+ {
+ 	uint8_t rx_adapter_id;
+ 
+-	if (params == NULL || strlen(params) == 0 || ~isdigit(*params))
++	if (params == NULL || strlen(params) == 0 || !isdigit(*params))
+ 		return -1;
+ 
+ 	/* Get Rx adapter ID from parameter string */
+-- 
+2.23.0
+

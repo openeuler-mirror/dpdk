@@ -1,0 +1,426 @@
+From cec570b800d47867e900c30761c7b50018184bbf Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Mon, 19 Dec 2022 15:06:46 +0800
+Subject: telemetry: support adding integer as hexadecimal
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+[ upstream commit 82c33481c6abdec2fc58f1199ca6202e7400c08d ]
+
+Sometimes displaying an unsigned integer value as hexadecimal encoded style
+is more expected for human consumption, such as, offload capability and
+device flag. This patch introduces two APIs to add unsigned integer value
+as hexadecimal encoded string to array or dictionary. And user can choose
+whether the stored value is padded to the specified width.
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Acked-by: Morten Brørup <mb@smartsharesystems.com>
+Acked-by: Chengwen Feng <fengchengwen@huawei.com>
+Acked-by: Bruce Richardson <bruce.richardson@intel.com>
+---
+ app/test/test_telemetry_data.c | 150 +++++++++++++++++++++++++++++++++
+ lib/telemetry/rte_telemetry.h  |  47 +++++++++++
+ lib/telemetry/telemetry_data.c |  74 ++++++++++++++++
+ lib/telemetry/version.map      |  10 +++
+ 4 files changed, 281 insertions(+)
+
+diff --git a/app/test/test_telemetry_data.c b/app/test/test_telemetry_data.c
+index 79ec48063f..7d9be376a6 100644
+--- a/app/test/test_telemetry_data.c
++++ b/app/test/test_telemetry_data.c
+@@ -201,6 +201,39 @@ test_case_add_dict_string(void)
+ 	return CHECK_OUTPUT("{\"dict_0\":\"aaaa\",\"dict_1\":\"bbbb\",\"dict_2\":\"cccc\",\"dict_3\":\"dddd\"}");
+ }
+ 
++static int
++test_case_add_dict_uint_hex_padding(void)
++{
++	rte_tel_data_start_dict(&response_data);
++
++	rte_tel_data_add_dict_uint_hex(&response_data, "dict_0",
++				(uint8_t)0x8, 8);
++	rte_tel_data_add_dict_uint_hex(&response_data, "dict_1",
++				(uint16_t)0x88, 16);
++	rte_tel_data_add_dict_uint_hex(&response_data, "dict_2",
++				(uint32_t)0x888, 32);
++	rte_tel_data_add_dict_uint_hex(&response_data, "dict_3",
++				(uint64_t)0x8888, 64);
++
++	return CHECK_OUTPUT("{\"dict_0\":\"0x08\",\"dict_1\":\"0x0088\",\"dict_2\":\"0x00000888\",\"dict_3\":\"0x0000000000008888\"}");
++}
++
++static int
++test_case_add_dict_uint_hex_nopadding(void)
++{
++	rte_tel_data_start_dict(&response_data);
++
++	rte_tel_data_add_dict_uint_hex(&response_data, "dict_0",
++				(uint8_t)0x8, 0);
++	rte_tel_data_add_dict_uint_hex(&response_data, "dict_1",
++				(uint16_t)0x88, 0);
++	rte_tel_data_add_dict_uint_hex(&response_data, "dict_2",
++				(uint32_t)0x888, 0);
++	rte_tel_data_add_dict_uint_hex(&response_data, "dict_3",
++				(uint64_t)0x8888, 0);
++
++	return CHECK_OUTPUT("{\"dict_0\":\"0x8\",\"dict_1\":\"0x88\",\"dict_2\":\"0x888\",\"dict_3\":\"0x8888\"}");
++}
+ 
+ static int
+ test_dict_with_array_string_values(void)
+@@ -224,6 +257,50 @@ test_dict_with_array_string_values(void)
+ 	return CHECK_OUTPUT("{\"dict_0\":[\"aaaa\"],\"dict_1\":[\"bbbb\"]}");
+ }
+ 
++static int
++test_dict_with_array_uint_hex_values_padding(void)
++{
++	struct rte_tel_data *child_data = rte_tel_data_alloc();
++	rte_tel_data_start_array(child_data, RTE_TEL_STRING_VAL);
++
++	struct rte_tel_data *child_data2 = rte_tel_data_alloc();
++	rte_tel_data_start_array(child_data2, RTE_TEL_STRING_VAL);
++
++	rte_tel_data_start_dict(&response_data);
++
++	rte_tel_data_add_array_uint_hex(child_data, (uint32_t)0x888, 32);
++	rte_tel_data_add_array_uint_hex(child_data2, (uint64_t)0x8888, 64);
++
++	rte_tel_data_add_dict_container(&response_data, "dict_0",
++					child_data, 0);
++	rte_tel_data_add_dict_container(&response_data, "dict_1",
++					child_data2, 0);
++
++	return CHECK_OUTPUT("{\"dict_0\":[\"0x00000888\"],\"dict_1\":[\"0x0000000000008888\"]}");
++}
++
++static int
++test_dict_with_array_uint_hex_values_nopadding(void)
++{
++	struct rte_tel_data *child_data = rte_tel_data_alloc();
++	rte_tel_data_start_array(child_data, RTE_TEL_STRING_VAL);
++
++	struct rte_tel_data *child_data2 = rte_tel_data_alloc();
++	rte_tel_data_start_array(child_data2, RTE_TEL_STRING_VAL);
++
++	rte_tel_data_start_dict(&response_data);
++
++	rte_tel_data_add_array_uint_hex(child_data, (uint32_t)0x888, 0);
++	rte_tel_data_add_array_uint_hex(child_data2, (uint64_t)0x8888, 0);
++
++	rte_tel_data_add_dict_container(&response_data, "dict_0",
++					child_data, 0);
++	rte_tel_data_add_dict_container(&response_data, "dict_1",
++					child_data2, 0);
++
++	return CHECK_OUTPUT("{\"dict_0\":[\"0x888\"],\"dict_1\":[\"0x8888\"]}");
++}
++
+ static int
+ test_dict_with_dict_values(void)
+ {
+@@ -270,6 +347,47 @@ test_array_with_array_string_values(void)
+ 	return CHECK_OUTPUT("[[\"aaaa\"],[\"bbbb\"]]");
+ }
+ 
++static int
++test_array_with_array_uint_hex_values_padding(void)
++{
++	struct rte_tel_data *child_data = rte_tel_data_alloc();
++	rte_tel_data_start_array(child_data, RTE_TEL_STRING_VAL);
++
++	struct rte_tel_data *child_data2 = rte_tel_data_alloc();
++	rte_tel_data_start_array(child_data2, RTE_TEL_STRING_VAL);
++
++	rte_tel_data_start_array(&response_data, RTE_TEL_CONTAINER);
++
++	rte_tel_data_add_array_uint_hex(child_data, (uint32_t)0x888, 32);
++	rte_tel_data_add_array_uint_hex(child_data2, (uint64_t)0x8888, 64);
++
++	rte_tel_data_add_array_container(&response_data, child_data, 0);
++	rte_tel_data_add_array_container(&response_data, child_data2, 0);
++
++	return CHECK_OUTPUT("[[\"0x00000888\"],[\"0x0000000000008888\"]]");
++}
++
++
++static int
++test_array_with_array_uint_hex_values_nopadding(void)
++{
++	struct rte_tel_data *child_data = rte_tel_data_alloc();
++	rte_tel_data_start_array(child_data, RTE_TEL_STRING_VAL);
++
++	struct rte_tel_data *child_data2 = rte_tel_data_alloc();
++	rte_tel_data_start_array(child_data2, RTE_TEL_STRING_VAL);
++
++	rte_tel_data_start_array(&response_data, RTE_TEL_CONTAINER);
++
++	rte_tel_data_add_array_uint_hex(child_data, (uint32_t)0x888, 0);
++	rte_tel_data_add_array_uint_hex(child_data2, (uint64_t)0x8888, 0);
++
++	rte_tel_data_add_array_container(&response_data, child_data, 0);
++	rte_tel_data_add_array_container(&response_data, child_data2, 0);
++
++	return CHECK_OUTPUT("[[\"0x888\"],[\"0x8888\"]]");
++}
++
+ static int
+ test_case_array_u64(void)
+ {
+@@ -281,6 +399,30 @@ test_case_array_u64(void)
+ 	return CHECK_OUTPUT("[0,1,2,3,4]");
+ }
+ 
++static int
++test_case_array_uint_hex_padding(void)
++{
++	rte_tel_data_start_array(&response_data, RTE_TEL_STRING_VAL);
++	rte_tel_data_add_array_uint_hex(&response_data, (uint8_t)0x8, 8);
++	rte_tel_data_add_array_uint_hex(&response_data, (uint16_t)0x88, 16);
++	rte_tel_data_add_array_uint_hex(&response_data, (uint32_t)0x888, 32);
++	rte_tel_data_add_array_uint_hex(&response_data, (uint64_t)0x8888, 64);
++
++	return CHECK_OUTPUT("[\"0x08\",\"0x0088\",\"0x00000888\",\"0x0000000000008888\"]");
++}
++
++static int
++test_case_array_uint_hex_nopadding(void)
++{
++	rte_tel_data_start_array(&response_data, RTE_TEL_STRING_VAL);
++	rte_tel_data_add_array_uint_hex(&response_data, (uint8_t)0x8, 0);
++	rte_tel_data_add_array_uint_hex(&response_data, (uint16_t)0x88, 0);
++	rte_tel_data_add_array_uint_hex(&response_data, (uint32_t)0x888, 0);
++	rte_tel_data_add_array_uint_hex(&response_data, (uint64_t)0x8888, 0);
++
++	return CHECK_OUTPUT("[\"0x8\",\"0x88\",\"0x888\",\"0x8888\"]");
++}
++
+ static int
+ test_case_add_dict_u64(void)
+ {
+@@ -420,15 +562,23 @@ telemetry_data_autotest(void)
+ 			test_simple_string,
+ 			test_case_array_string,
+ 			test_case_array_int, test_case_array_u64,
++			test_case_array_uint_hex_padding,
++			test_case_array_uint_hex_nopadding,
+ 			test_case_add_dict_int, test_case_add_dict_u64,
+ 			test_case_add_dict_string,
++			test_case_add_dict_uint_hex_padding,
++			test_case_add_dict_uint_hex_nopadding,
+ 			test_dict_with_array_int_values,
+ 			test_dict_with_array_u64_values,
+ 			test_dict_with_array_string_values,
++			test_dict_with_array_uint_hex_values_padding,
++			test_dict_with_array_uint_hex_values_nopadding,
+ 			test_dict_with_dict_values,
+ 			test_array_with_array_int_values,
+ 			test_array_with_array_u64_values,
+ 			test_array_with_array_string_values,
++			test_array_with_array_uint_hex_values_padding,
++			test_array_with_array_uint_hex_values_nopadding,
+ 			test_string_char_escaping,
+ 			test_array_char_escaping,
+ 			test_dict_char_escaping,
+diff --git a/lib/telemetry/rte_telemetry.h b/lib/telemetry/rte_telemetry.h
+index 08d7f18dff..5d5b75b683 100644
+--- a/lib/telemetry/rte_telemetry.h
++++ b/lib/telemetry/rte_telemetry.h
+@@ -10,6 +10,7 @@ extern "C" {
+ #endif
+ 
+ #include <stdint.h>
++#include <rte_compat.h>
+ 
+ /** Maximum length for string used in object. */
+ #define RTE_TEL_MAX_STRING_LEN 128
+@@ -153,6 +154,28 @@ int
+ rte_tel_data_add_array_container(struct rte_tel_data *d,
+ 		struct rte_tel_data *val, int keep);
+ 
++/**
++ * Convert an unsigned integer to hexadecimal encoded strings
++ * and add this string to an array.
++ * The array must have been started by rte_tel_data_start_array()
++ * with RTE_TEL_STRING_VAL as the type parameter.
++ *
++ * @param d
++ *   The data structure passed to the callback.
++ * @param val
++ *   The number to be returned in the array as a hexadecimal encoded strings.
++ * @param display_bitwidth
++ *   The display bit width of the 'val'. If 'display_bitwidth' is zero, the
++ *   value is stored in the array as no-padding zero hexadecimal encoded string,
++ *   or the value is stored as padding zero to specified hexadecimal width.
++ * @return
++ *   0 on success, negative errno on error.
++ */
++__rte_experimental
++int
++rte_tel_data_add_array_uint_hex(struct rte_tel_data *d, uint64_t val,
++		uint8_t display_bitwidth);
++
+ /**
+  * Add a string value to a dictionary.
+  * The dict must have been started by rte_tel_data_start_dict().
+@@ -231,6 +254,30 @@ int
+ rte_tel_data_add_dict_container(struct rte_tel_data *d, const char *name,
+ 		struct rte_tel_data *val, int keep);
+ 
++/**
++ * Convert an unsigned integer to hexadecimal encoded strings
++ * and add this string to an dictionary.
++ * The dict must have been started by rte_tel_data_start_dict().
++ *
++ * @param d
++ *   The data structure passed to the callback.
++ * @param name
++ *   The name of the value is to be stored in the dict.
++ *   Must contain only alphanumeric characters or the symbols: '_' or '/'.
++ * @param val
++ *   The number to be stored in the dict as a hexadecimal encoded strings.
++ * @param display_bitwidth
++ *   The display bit width of the 'val'. If 'display_bitwidth' is zero, the
++ *   value is stored in the array as no-padding zero hexadecimal encoded string,
++ *   or the value is stored as padding zero to specified hexadecimal width.
++ * @return
++ *   0 on success, negative errno on error.
++ */
++__rte_experimental
++int
++rte_tel_data_add_dict_uint_hex(struct rte_tel_data *d, const char *name,
++		uint64_t val, uint8_t display_bitwidth);
++
+ /**
+  * This telemetry callback is used when registering a telemetry command.
+  * It handles getting and formatting information to be returned to telemetry
+diff --git a/lib/telemetry/telemetry_data.c b/lib/telemetry/telemetry_data.c
+index be46054c29..61d9eeac6a 100644
+--- a/lib/telemetry/telemetry_data.c
++++ b/lib/telemetry/telemetry_data.c
+@@ -2,12 +2,16 @@
+  * Copyright(c) 2020 Intel Corporation
+  */
+ 
++#include <inttypes.h>
++
+ #undef RTE_USE_LIBBSD
+ #include <stdbool.h>
+ #include <rte_string_fns.h>
+ 
+ #include "telemetry_data.h"
+ 
++#define RTE_TEL_UINT_HEX_STR_BUF_LEN 64
++
+ int
+ rte_tel_data_start_array(struct rte_tel_data *d, enum rte_tel_value_type type)
+ {
+@@ -93,6 +97,60 @@ rte_tel_data_add_array_container(struct rte_tel_data *d,
+ 	return 0;
+ }
+ 
++/* To suppress compiler warning about format string. */
++#if defined(RTE_TOOLCHAIN_GCC)
++#pragma GCC diagnostic push
++#pragma GCC diagnostic ignored "-Wformat-nonliteral"
++#elif defined(RTE_TOOLCHAIN_CLANG)
++#pragma clang diagnostic push
++#pragma clang diagnostic ignored "-Wformat-nonliteral"
++#endif
++
++static int
++rte_tel_uint_to_hex_encoded_str(char *buf, size_t buf_len, uint64_t val,
++				uint8_t display_bitwidth)
++{
++#define RTE_TEL_HEX_FORMAT_LEN 16
++
++	uint8_t spec_hex_width = (display_bitwidth + 3) / 4;
++	char format[RTE_TEL_HEX_FORMAT_LEN];
++
++	if (display_bitwidth != 0) {
++		if (snprintf(format, RTE_TEL_HEX_FORMAT_LEN, "0x%%0%u" PRIx64,
++				spec_hex_width) >= RTE_TEL_HEX_FORMAT_LEN)
++			return -EINVAL;
++
++		if (snprintf(buf, buf_len, format, val) >= (int)buf_len)
++			return -EINVAL;
++	} else {
++		if (snprintf(buf, buf_len, "0x%" PRIx64, val) >= (int)buf_len)
++			return -EINVAL;
++	}
++
++	return 0;
++}
++
++#if defined(RTE_TOOLCHAIN_GCC)
++#pragma GCC diagnostic pop
++#elif defined(RTE_TOOLCHAIN_CLANG)
++#pragma clang diagnostic pop
++#endif
++
++int
++rte_tel_data_add_array_uint_hex(struct rte_tel_data *d, uint64_t val,
++				uint8_t display_bitwidth)
++{
++	char hex_str[RTE_TEL_UINT_HEX_STR_BUF_LEN];
++	int ret;
++
++	ret = rte_tel_uint_to_hex_encoded_str(hex_str,
++			RTE_TEL_UINT_HEX_STR_BUF_LEN, val, display_bitwidth);
++	if (ret != 0)
++		return ret;
++
++	return rte_tel_data_add_array_string(d, hex_str);
++}
++
+ static bool
+ valid_name(const char *name)
+ {
+@@ -200,6 +258,22 @@ rte_tel_data_add_dict_container(struct rte_tel_data *d, const char *name,
+ 	return bytes < RTE_TEL_MAX_STRING_LEN ? 0 : E2BIG;
+ }
+ 
++int
++rte_tel_data_add_dict_uint_hex(struct rte_tel_data *d, const char *name,
++			       uint64_t val, uint8_t display_bitwidth)
++{
++	char hex_str[RTE_TEL_UINT_HEX_STR_BUF_LEN];
++	int ret;
++
++	ret = rte_tel_uint_to_hex_encoded_str(hex_str,
++			RTE_TEL_UINT_HEX_STR_BUF_LEN, val, display_bitwidth);
++	if (ret != 0)
++		return ret;
++
++
++	return rte_tel_data_add_dict_string(d, name, hex_str);
++}
++
+ struct rte_tel_data *
+ rte_tel_data_alloc(void)
+ {
+diff --git a/lib/telemetry/version.map b/lib/telemetry/version.map
+index 77528bb1fe..576ac55297 100644
+--- a/lib/telemetry/version.map
++++ b/lib/telemetry/version.map
+@@ -19,6 +19,16 @@ DPDK_22 {
+ 	local: *;
+ };
+ 
++EXPERIMENTAL {
++	global:
++
++	# added in 23.03
++	rte_tel_data_add_array_uint_hex;
++	rte_tel_data_add_dict_uint_hex;
++
++	local: *;
++};
++
+ INTERNAL {
+ 	rte_telemetry_legacy_register;
+ 	rte_telemetry_init;
+-- 
+2.23.0
+
