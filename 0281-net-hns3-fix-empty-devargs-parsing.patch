@@ -1,0 +1,62 @@
+From cd1064bf44f8da3286a48f3f3da7df88ae4fa645 Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Thu, 2 Mar 2023 07:50:09 +0000
+Subject: net/hns3: fix empty devargs parsing
+
+[ upstream commit 8e9bd29995ddb1205d90291a684bcf71599d6623 ]
+
+The rte_kvargs_process() was used to parse KV pairs, it also supports
+to parse 'only keys' (e.g. socket_id) type. And the callback function
+parameter 'value' is NULL when parsed 'only keys'.
+
+This patch fixes segment fault when parse input args with 'only keys'
+(e.g. rx_func_hint).
+
+Fixes: a124f9e9591b ("net/hns3: add runtime config to select IO burst function")
+Fixes: 70791213242e ("net/hns3: support masking device capability")
+Fixes: 2fc3e696a7f1 ("net/hns3: add runtime config for mailbox limit time")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Acked-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_common.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/drivers/net/hns3/hns3_common.c b/drivers/net/hns3/hns3_common.c
+index 3c5e07f1bd..6697ecefe6 100644
+--- a/drivers/net/hns3/hns3_common.c
++++ b/drivers/net/hns3/hns3_common.c
+@@ -161,6 +161,9 @@ hns3_parse_io_hint_func(const char *key, const char *value, void *extra_args)
+ 
+ 	RTE_SET_USED(key);
+ 
++	if (value == NULL || extra_args == NULL)
++		return 0;
++
+ 	if (strcmp(value, "vec") == 0)
+ 		hint = HNS3_IO_FUNC_HINT_VEC;
+ 	else if (strcmp(value, "sve") == 0)
+@@ -201,6 +204,9 @@ hns3_parse_dev_caps_mask(const char *key, const char *value, void *extra_args)
+ 
+ 	RTE_SET_USED(key);
+ 
++	if (value == NULL || extra_args == NULL)
++		return 0;
++
+ 	val = strtoull(value, NULL, HNS3_CONVERT_TO_HEXADECIMAL);
+ 	*(uint64_t *)extra_args = val;
+ 
+@@ -214,6 +220,9 @@ hns3_parse_mbx_time_limit(const char *key, const char *value, void *extra_args)
+ 
+ 	RTE_SET_USED(key);
+ 
++	if (value == NULL || extra_args == NULL)
++		return 0;
++
+ 	val = strtoul(value, NULL, HNS3_CONVERT_TO_DECIMAL);
+ 
+ 	/*
+-- 
+2.23.0
+
