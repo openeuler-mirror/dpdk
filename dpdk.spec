@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 41
+Release: 42
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -294,6 +294,14 @@ Patch9273:    0273-cryptodev-fix-telemetry-data-truncation.patch
 Patch9274:    0274-mem-fix-telemetry-data-truncation.patch
 Patch9275:    0275-telemetry-support-adding-integer-as-hexadecimal.patch
 Patch9276:    0276-ethdev-get-capabilities-from-telemetry-in-hexadecima.patch
+Patch9277:    0277-mem-fix-hugepage-info-mapping.patch
+Patch9278:    0278-raw-ifpga-base-fix-init-with-multi-process.patch
+Patch9279:    0279-compressdev-fix-empty-devargs-parsing.patch
+Patch9280:    0280-cryptodev-fix-empty-devargs-parsing.patch
+Patch9281:    0281-net-hns3-fix-empty-devargs-parsing.patch
+Patch9282:    0282-net-virtio-fix-empty-devargs-parsing.patch
+Patch9283:    0283-dma-skeleton-fix-empty-devargs-parsing.patch
+Patch9284:    0284-raw-skeleton-fix-empty-devargs-parsing.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -441,6 +449,18 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Thu Apr 27 2023 chenjiji <chenjiji09@163.com> - 21.11-42
+- fix empty devargs parsing
+ Sync some patchs from upstreaming and modifies are as
+ follow:
+ 1. The rte_kvargs_process() was used to parse KV pairs, it
+ also supports to parse 'only keys' type. And the callback
+ function parameter 'value' is NULL when parsed 'only keys'.
+ This patch fixes segment fault when parse input args with
+ 'only keys'.
+ 2. The MAP_FAILED should be used to determine whether the
+ mapping is successful but not NULL. This patch fix it.
+
 * Fri Apr 21 2023 chenjiji <chenjiji09@163.com> - 21.11-41
 - Telemetry: support display as hexadecimal
  Sync some patchs from upstreaming for telemetry and modifies
