@@ -1,0 +1,67 @@
+From 307e0a26dd0c00b0e600e97c975f0e9d71b175a3 Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Mon, 22 May 2023 21:17:39 +0800
+Subject: net/hns3: fix Rx multiple firmware reset interrupts
+
+[ upstream commit 312dd216fe75173016a4c5edce60bb1bea988315 ]
+
+In the firmware (also known as IMP) reset scenario, driver interrupt
+processing and firmware watchdog initialization are asynchronous.
+
+If the driver interrupt processing is faster than firmware watchdog
+initialization (that is, the driver clears the firmware reset
+interrupt source before the firmware watchdog is initialized), the
+driver will receive multiple firmware reset interrupts.
+
+In the Kunpeng 920 platform, the above situation does not exist. But
+it does on the newer platforms. So we add 5ms delay before drivers
+clears the IMP reset interrupt source.
+
+As for the impact of 5ms, the number of PFs managed by a firmware is
+limited. Therefore, even if a DPDK process takes over all the PFs
+which managed by the firmware, the delay is controllable.
+
+Fixes: ee930d38ffca ("net/hns3: fix timing of clearing interrupt source")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev.c | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 8a7f6cc7be..c0df8f5d97 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -286,6 +286,19 @@ hns3_handle_mac_tnl(struct hns3_hw *hw)
+ 	}
+ }
+ 
++static void
++hns3_delay_before_clear_event_cause(struct hns3_hw *hw, uint32_t event_type, uint32_t regclr)
++{
++#define IMPRESET_WAIT_MS_TIME	5
++
++	if (event_type == HNS3_VECTOR0_EVENT_RST &&
++	    regclr & BIT(HNS3_VECTOR0_IMPRESET_INT_B) &&
++	    hw->revision >= PCI_REVISION_ID_HIP09_A) {
++		rte_delay_ms(IMPRESET_WAIT_MS_TIME);
++		hns3_dbg(hw, "wait firmware watchdog initialization completed.");
++	}
++}
++
+ static void
+ hns3_interrupt_handler(void *param)
+ {
+@@ -305,6 +318,7 @@ hns3_interrupt_handler(void *param)
+ 	vector0_int = hns3_read_dev(hw, HNS3_VECTOR0_OTHER_INT_STS_REG);
+ 	ras_int = hns3_read_dev(hw, HNS3_RAS_PF_OTHER_INT_STS_REG);
+ 	cmdq_int = hns3_read_dev(hw, HNS3_VECTOR0_CMDQ_SRC_REG);
++	hns3_delay_before_clear_event_cause(hw, event_cause, clearval);
+ 	hns3_clear_event_cause(hw, event_cause, clearval);
+ 	/* vector 0 interrupt is shared with reset and mailbox source events. */
+ 	if (event_cause == HNS3_VECTOR0_EVENT_ERR) {
+-- 
+2.23.0
+

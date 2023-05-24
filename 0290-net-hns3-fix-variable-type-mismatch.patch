@@ -1,0 +1,52 @@
+From cae0ec81453b65080372918ea266b3e571fc6197 Mon Sep 17 00:00:00 2001
+From: Dengdui Huang <huangdengdui@huawei.com>
+Date: Mon, 22 May 2023 21:17:38 +0800
+Subject: net/hns3: fix variable type mismatch
+
+[ upstream commit 84b195b9348810cb9ee2ac71f61ee4331b27d552 ]
+
+Loop conditions are compared with different variable types,
+which may cause overflow risks.
+
+Fixes: 67d010346933 ("net/hns3: adjust data type of some variables")
+Fixes: 6ee07e3cb589 ("net/hns3: fix insecure way to query MAC statistics")
+Cc: stable@dpdk.org
+
+Signed-off-by: Dengdui Huang <huangdengdui@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_regs.c  | 3 ++-
+ drivers/net/hns3/hns3_stats.c | 2 +-
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_regs.c b/drivers/net/hns3/hns3_regs.c
+index 33392fd1f0..5d6f92e4bb 100644
+--- a/drivers/net/hns3/hns3_regs.c
++++ b/drivers/net/hns3/hns3_regs.c
+@@ -294,8 +294,9 @@ hns3_direct_access_regs(struct hns3_hw *hw, uint32_t *data)
+ 	struct hns3_adapter *hns = HNS3_DEV_HW_TO_ADAPTER(hw);
+ 	uint32_t *origin_data_ptr = data;
+ 	uint32_t reg_offset;
+-	uint16_t i, j;
+ 	size_t reg_num;
++	uint16_t j;
++	size_t i;
+ 
+ 	/* fetching per-PF registers values from PF PCIe register space */
+ 	reg_num = sizeof(cmdq_reg_addrs) / sizeof(uint32_t);
+diff --git a/drivers/net/hns3/hns3_stats.c b/drivers/net/hns3/hns3_stats.c
+index bad65fcbed..c2e692a2c5 100644
+--- a/drivers/net/hns3/hns3_stats.c
++++ b/drivers/net/hns3/hns3_stats.c
+@@ -317,7 +317,7 @@ hns3_update_mac_stats(struct hns3_hw *hw)
+ 	uint32_t stats_iterms;
+ 	uint64_t *desc_data;
+ 	uint32_t desc_num;
+-	uint16_t i;
++	uint32_t i;
+ 	int ret;
+ 
+ 	/* The first desc has a 64-bit header, so need to consider it. */
+-- 
+2.23.0
+

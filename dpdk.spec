@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 42
+Release: 43
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -302,6 +302,14 @@ Patch9281:    0281-net-hns3-fix-empty-devargs-parsing.patch
 Patch9282:    0282-net-virtio-fix-empty-devargs-parsing.patch
 Patch9283:    0283-dma-skeleton-fix-empty-devargs-parsing.patch
 Patch9284:    0284-raw-skeleton-fix-empty-devargs-parsing.patch
+Patch9285:    0285-net-hns3-simplify-hardware-checksum-offloading.patch
+Patch9286:    0286-net-hns3-support-dump-media-type.patch
+Patch9287:    0287-ethdev-fix-one-address-occupies-two-entries-in-MAC-a.patch
+Patch9288:    0288-net-hns3-fix-never-set-MAC-flow-control.patch
+Patch9289:    0289-net-hns3-add-flow-control-autoneg-for-fiber-port.patch
+Patch9290:    0290-net-hns3-fix-variable-type-mismatch.patch
+Patch9291:    0291-net-hns3-fix-Rx-multiple-firmware-reset-interrupts.patch
+Patch9292:    0292-net-hns3-add-Tx-Rx-descriptor-logs.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -449,6 +457,16 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Wed May 24 2023 chenjiji <chenjiji09@163.com> - 21.11-43
+ Sync some patchs from upstreaming for hns3 pmd and modifies
+ are as follow:
+ 1. support flow control autoneg for fiber port
+ 2. support simplify hardware checksum offloading
+ 3. support dump media type
+ 4. add Tx Rx descriptor logs
+ 5. fix Rx multiple firmware reset interrupts
+ 6. ethdev: fix one address occupies two entries in MAC addrs
+
 * Thu Apr 27 2023 chenjiji <chenjiji09@163.com> - 21.11-42
 - fix empty devargs parsing
  Sync some patchs from upstreaming and modifies are as

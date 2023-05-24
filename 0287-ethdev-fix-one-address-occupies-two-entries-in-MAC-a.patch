@@ -1,0 +1,116 @@
+From dfa6c33450b990739a282f5acad8e43a5b27437b Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Fri, 19 May 2023 17:31:55 +0800
+Subject: ethdev: fix one address occupies two entries in MAC addrs
+
+[ upstream commit 964ccaf2fe229ef31f57574176f966af7fcefae4 ]
+
+The dev->data->mac_addrs[0] will be changed to a new MAC address when
+applications modify the default MAC address by .mac_addr_set(). However,
+if the new default one has been added as a non-default MAC address by
+.mac_addr_add(), the .mac_addr_set() didn't check this address.
+As a result, this MAC address occupies two entries in the list. Like:
+add(MAC1)
+add(MAC2)
+add(MAC3)
+add(MAC4)
+set_default(MAC3)
+default=MAC3, the rest of the list=MAC1, MAC2, MAC3, MAC4
+Note: MAC3 occupies two entries.
+
+But .mac_addr_set() cannot remove it implicitly in case of MAC address
+shrinking in the list.
+So this patch adds a check on whether the new default address was
+already in the list and if so requires the user to remove it first.
+
+In addition, this patch documents the position of the default MAC
+address and address unique in the list.
+
+Fixes: 854d8ad4ef68 ("ethdev: add default mac address modifier")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Acked-by: Chengwen Feng <fengchengwen@huawei.com>
+Acked-by: Thomas Monjalon <thomas@monjalon.net>
+Reviewed-by: Ferruh Yigit <ferruh.yigit@amd.com>
+---
+ lib/ethdev/ethdev_driver.h |  6 +++++-
+ lib/ethdev/rte_ethdev.c    | 14 +++++++++++++-
+ lib/ethdev/rte_ethdev.h    |  4 ++++
+ 3 files changed, 22 insertions(+), 2 deletions(-)
+
+diff --git a/lib/ethdev/ethdev_driver.h b/lib/ethdev/ethdev_driver.h
+index d3de203d7a..6f539d45c6 100644
+--- a/lib/ethdev/ethdev_driver.h
++++ b/lib/ethdev/ethdev_driver.h
+@@ -111,7 +111,11 @@ struct rte_eth_dev_data {
+ 
+ 	uint64_t rx_mbuf_alloc_failed; /**< Rx ring mbuf allocation failures */
+ 
+-	/** Device Ethernet link address. @see rte_eth_dev_release_port() */
++	/**
++	 * Device Ethernet link addresses.
++	 * All entries are unique.
++	 * The first entry (index zero) is the default address.
++	 */
+ 	struct rte_ether_addr *mac_addrs;
+ 	/** Bitmap associating MAC addresses to pools */
+ 	uint64_t mac_pool_sel[RTE_ETH_NUM_RECEIVE_MAC_ADDR];
+diff --git a/lib/ethdev/rte_ethdev.c b/lib/ethdev/rte_ethdev.c
+index 054715e05a..2f0aa282df 100644
+--- a/lib/ethdev/rte_ethdev.c
++++ b/lib/ethdev/rte_ethdev.c
+@@ -4471,6 +4471,7 @@ int
+ rte_eth_dev_default_mac_addr_set(uint16_t port_id, struct rte_ether_addr *addr)
+ {
+ 	struct rte_eth_dev *dev;
++	int index;
+ 	int ret;
+ 
+ 	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
+@@ -4486,8 +4487,19 @@ rte_eth_dev_default_mac_addr_set(uint16_t port_id, struct rte_ether_addr *addr)
+ 	if (!rte_is_valid_assigned_ether_addr(addr))
+ 		return -EINVAL;
+ 
+-	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->mac_addr_set, -ENOTSUP);
++	if (*dev->dev_ops->mac_addr_set == NULL)
++	return -ENOTSUP;
++
++	/* Keep address unique in dev->data->mac_addrs[]. */
++	index = eth_dev_get_mac_addr_index(port_id, addr);
++	if (index > 0) {
++		RTE_ETHDEV_LOG(ERR,
++			"New default address for port %u was already in the address list. Please remove it first.\n",
++			port_id);
++		return -EEXIST;
++	}
+ 
++ 	ret = (*dev->dev_ops->mac_addr_set)(dev, addr);
+ 	ret = (*dev->dev_ops->mac_addr_set)(dev, addr);
+ 	if (ret < 0)
+ 		return ret;
+diff --git a/lib/ethdev/rte_ethdev.h b/lib/ethdev/rte_ethdev.h
+index b262939a33..9df50c30b4 100644
+--- a/lib/ethdev/rte_ethdev.h
++++ b/lib/ethdev/rte_ethdev.h
+@@ -4167,6 +4167,9 @@ int rte_eth_dev_mac_addr_remove(uint16_t port_id,
+ 
+ /**
+  * Set the default MAC address.
++ * It replaces the address at index 0 of the MAC address list.
++ * If the address was already in the MAC address list,
++ * please remove it first.
+  *
+  * @param port_id
+  *   The port identifier of the Ethernet device.
+@@ -4177,6 +4180,7 @@ int rte_eth_dev_mac_addr_remove(uint16_t port_id,
+  *   - (-ENOTSUP) if hardware doesn't support.
+  *   - (-ENODEV) if *port* invalid.
+  *   - (-EINVAL) if MAC address is invalid.
++ *   - (-EEXIST) if MAC address was already in the address list.
+  */
+ int rte_eth_dev_default_mac_addr_set(uint16_t port_id,
+ 		struct rte_ether_addr *mac_addr);
+-- 
+2.23.0
+
