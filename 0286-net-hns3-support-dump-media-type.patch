@@ -1,0 +1,66 @@
+From 8c4f049f4ed9885886d4f16332472df7d2bd4773 Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Fri, 21 Apr 2023 17:53:22 +0800
+Subject: net/hns3: support dump media type
+
+[ upstream commit 5a4af56b354d412b1be460f65d2977fd56b21ef8 ]
+
+The media type information helps locate faults such as AN or rate
+switching, so add dump media type in eth_dev_priv_dump ops.
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_dump.c   | 2 ++
+ drivers/net/hns3/hns3_ethdev.c | 2 +-
+ drivers/net/hns3/hns3_ethdev.h | 2 ++
+ 3 files changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/net/hns3/hns3_dump.c b/drivers/net/hns3/hns3_dump.c
+index a793ba64ad..7daa54ec87 100644
+--- a/drivers/net/hns3/hns3_dump.c
++++ b/drivers/net/hns3/hns3_dump.c
+@@ -68,12 +68,14 @@ hns3_get_dev_mac_info(FILE *file, struct hns3_adapter *hns)
+ 
+ 	fprintf(file, "  - MAC Info:\n");
+ 	fprintf(file,
++		"\t  -- media_type=%s\n"
+ 		"\t  -- query_type=%u\n"
+ 		"\t  -- supported_speed=0x%x\n"
+ 		"\t  -- advertising=0x%x\n"
+ 		"\t  -- lp_advertising=0x%x\n"
+ 		"\t  -- support_autoneg=%s\n"
+ 		"\t  -- support_fc_autoneg=%s\n",
++		hns3_get_media_type_name(hw->mac.media_type),
+ 		hw->mac.query_type,
+ 		hw->mac.supported_speed,
+ 		hw->mac.advertising,
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 1c67ff2c99..12e7a72c36 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -4891,7 +4891,7 @@ hns3_set_fiber_port_link_speed(struct hns3_hw *hw,
+ 	return hns3_cfg_mac_speed_dup(hw, cfg->speed, cfg->duplex);
+ }
+ 
+-static const char *
++const char *
+ hns3_get_media_type_name(uint8_t media_type)
+ {
+ 	if (media_type == HNS3_MEDIA_TYPE_FIBER)
+diff --git a/drivers/net/hns3/hns3_ethdev.h b/drivers/net/hns3/hns3_ethdev.h
+index ee4dd18d7b..8268dba788 100644
+--- a/drivers/net/hns3/hns3_ethdev.h
++++ b/drivers/net/hns3/hns3_ethdev.h
+@@ -1054,6 +1054,8 @@ int hns3_timesync_write_time(struct rte_eth_dev *dev,
+ 			const struct timespec *ts);
+ int hns3_timesync_adjust_time(struct rte_eth_dev *dev, int64_t delta);
+ 
++const char *hns3_get_media_type_name(uint8_t media_type);
++
+ static inline bool
+ is_reset_pending(struct hns3_adapter *hns)
+ {
+-- 
+2.23.0
+
