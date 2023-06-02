@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 44
+Release: 45
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -310,6 +310,13 @@ Patch9289:    0289-net-hns3-add-flow-control-autoneg-for-fiber-port.patch
 Patch9290:    0290-net-hns3-fix-variable-type-mismatch.patch
 Patch9291:    0291-net-hns3-fix-Rx-multiple-firmware-reset-interrupts.patch
 Patch9292:    0292-net-hns3-add-Tx-Rx-descriptor-logs.patch
+Patch9293:    0293-net-hns3-fix-FEC-mode-for-200G-ports.patch
+Patch9294:    0294-net-hns3-fix-FEC-mode-check-error.patch
+Patch9295:    0295-net-hns3-fix-missing-FEC-capability.patch
+Patch9296:    0296-ethdev-introduce-low-latency-RS-FEC.patch
+Patch9297:    0297-app-testpmd-add-setting-and-querying-of-LLRS-FEC-mod.patch
+Patch9298:    0298-net-hns3-add-LLRS-FEC-mode-support-for-200G-ports.patch
+Patch9299:    0299-net-hns3-get-current-FEC-capability-from-firmware.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -454,6 +461,17 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Fri Jun 02 2023 chenjiji <chenjiji09@163.com> - 21.11-45
+ Sync some patchs from upstreaming about FEC feature. Patchs
+ are as follow:
+ - net/hns3: fix FEC mode for 200G ports
+ - net/hns3: fix FEC mode check error
+ - net/hns3: fix missing FEC capability
+ - ethdev: introduce low latency RS FEC
+ - app/testpmd: add setting and querying of LLRS FEC mode
+ - net/hns3: add LLRS FEC mode support for 200G ports
+ - net/hns3: get current FEC capability from firmware
+
 * Sat May 27 2023 jiangheng <jiangheng14@huawei.com> - 21.11-44
 - examples use static libraries to avoid unlinked dynamic libraries
 

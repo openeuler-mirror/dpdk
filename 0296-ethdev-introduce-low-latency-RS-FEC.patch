@@ -1,0 +1,33 @@
+From 7b36a2f27f2dbe8cd518885461473349a2c04314 Mon Sep 17 00:00:00 2001
+From: Jie Hai <haijie1@huawei.com>
+Date: Sat, 8 Apr 2023 10:27:36 +0800
+Subject: ethdev: introduce low latency RS FEC
+
+[ upstream commit 371c8ec7498f9ea41c84d5d1fe0ab7d44e1325b9 ]
+
+This patch introduces LLRS (low latency Reed Solomon FEC).
+LLRS supports for 25 Gbps, 50 Gbps, 100 Gbps, 200 Gbps and
+400 Gbps Ethernet networks.
+
+Signed-off-by: Jie Hai <haijie1@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+Acked-by: Ferruh Yigit <ferruh.yigit@amd.com>
+---
+ lib/ethdev/rte_ethdev.h | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/lib/ethdev/rte_ethdev.h b/lib/ethdev/rte_ethdev.h
+index 9df50c30b4..2064d439c8 100644
+--- a/lib/ethdev/rte_ethdev.h
++++ b/lib/ethdev/rte_ethdev.h
+@@ -1973,6 +1973,7 @@ enum rte_eth_fec_mode {
+ 	RTE_ETH_FEC_AUTO,	    /**< FEC autonegotiation modes */
+ 	RTE_ETH_FEC_BASER,          /**< FEC using common algorithm */
+ 	RTE_ETH_FEC_RS,             /**< FEC using RS algorithm */
++	RTE_ETH_FEC_LLRS,           /**< FEC using LLRS algorithm */
+ };
+ 
+ /* Translate from FEC mode to FEC capa */
+-- 
+2.23.0
+

@@ -1,0 +1,122 @@
+From 02fad185915874c196d03966947a5b705b9bdff4 Mon Sep 17 00:00:00 2001
+From: Jie Hai <haijie1@huawei.com>
+Date: Sat, 8 Apr 2023 10:27:39 +0800
+Subject: net/hns3: get current FEC capability from firmware
+
+[ upstream commit 7a475771aeb1d4f74a6bfd03a68462eb85151738 ]
+
+Obtain the supported FEC capability from the firmware to
+enhance code compatibility.
+
+Cc: stable@dpdk.org
+
+Signed-off-by: Jie Hai <haijie1@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_cmd.h    |  9 ++++++++-
+ drivers/net/hns3/hns3_ethdev.c | 29 +++++++++++++++++++++++++++++
+ drivers/net/hns3/hns3_ethdev.h |  2 ++
+ 3 files changed, 39 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/net/hns3/hns3_cmd.h b/drivers/net/hns3/hns3_cmd.h
+index 929278521f..3f2bb4fd29 100644
+--- a/drivers/net/hns3/hns3_cmd.h
++++ b/drivers/net/hns3/hns3_cmd.h
+@@ -795,6 +795,12 @@ struct hns3_sfp_type {
+ #define HNS3_FIBER_LINK_SPEED_10M_BIT		BIT(7)
+ #define HNS3_FIBER_LINK_SPEED_200G_BIT		BIT(8)
+ 
++#define HNS3_FIBER_FEC_AUTO_BIT		BIT(0)
++#define HNS3_FIBER_FEC_BASER_BIT	BIT(1)
++#define HNS3_FIBER_FEC_RS_BIT		BIT(2)
++#define HNS3_FIBER_FEC_LLRS_BIT		BIT(3)
++#define HNS3_FIBER_FEC_NOFEC_BIT	BIT(4)
++
+ /* Flags for pause status field */
+ #define HNS3_FIBER_LOCAL_PAUSE_BIT	BIT(0)
+ #define HNS3_FIBER_LOCAL_ASYM_PAUSE_BIT	BIT(1)
+@@ -815,7 +821,8 @@ struct hns3_sfp_info_cmd {
+ 	uint8_t autoneg_ability;
+ 	uint32_t supported_speed; /* speed supported by current media */
+ 	uint32_t module_type;
+-	uint8_t rsv[2];
++	uint8_t fec_ability; /* supported fec modes, see HNS3_FIBER_FEC_XXX_BIT */
++	uint8_t rsv0;
+ 	uint8_t pause_status;
+ 	uint8_t rsv1[5];
+ };
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 2ca5e4ced5..d6214415b7 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -4028,6 +4028,7 @@ hns3_get_sfp_info(struct hns3_hw *hw, struct hns3_mac *mac_info)
+ 		mac_info->support_autoneg = resp->autoneg_ability;
+ 		mac_info->link_autoneg = (resp->autoneg == 0) ? RTE_ETH_LINK_FIXED
+ 					: RTE_ETH_LINK_AUTONEG;
++		mac_info->fec_capa = resp->fec_ability;
+ 		local_pause = resp->pause_status & HNS3_FIBER_LOCAL_PAUSE_MASK;
+ 		lp_pause = (resp->pause_status & HNS3_FIBER_LP_PAUSE_MASK) >>
+ 						HNS3_FIBER_LP_PAUSE_S;
+@@ -4117,6 +4118,7 @@ hns3_update_fiber_link_info(struct hns3_hw *hw)
+ 		mac->supported_speed = mac_info.supported_speed;
+ 		mac->support_autoneg = mac_info.support_autoneg;
+ 		mac->link_autoneg = mac_info.link_autoneg;
++		mac->fec_capa = mac_info.fec_capa;
+ 		mac->advertising = mac_info.advertising;
+ 		mac->lp_advertising = mac_info.lp_advertising;
+ 
+@@ -6097,11 +6099,38 @@ hns3_set_fec_hw(struct hns3_hw *hw, uint32_t mode)
+ 	return ret;
+ }
+ 
++static uint32_t
++hns3_parse_hw_fec_capa(uint8_t hw_fec_capa)
++{
++	const struct {
++		uint32_t hw_fec_capa;
++		uint32_t fec_capa;
++	} fec_capa_map[] = {
++		{ HNS3_FIBER_FEC_AUTO_BIT, RTE_ETH_FEC_MODE_CAPA_MASK(AUTO) },
++		{ HNS3_FIBER_FEC_BASER_BIT, RTE_ETH_FEC_MODE_CAPA_MASK(BASER) },
++		{ HNS3_FIBER_FEC_RS_BIT, RTE_ETH_FEC_MODE_CAPA_MASK(RS) },
++		{ HNS3_FIBER_FEC_LLRS_BIT, RTE_ETH_FEC_MODE_CAPA_MASK(LLRS) },
++		{ HNS3_FIBER_FEC_NOFEC_BIT, RTE_ETH_FEC_MODE_CAPA_MASK(NOFEC) },
++	};
++	uint32_t capa = 0;
++	uint32_t i;
++
++	for (i = 0; i < RTE_DIM(fec_capa_map); i++) {
++		if ((hw_fec_capa & fec_capa_map[i].hw_fec_capa) != 0)
++			capa |= fec_capa_map[i].fec_capa;
++	}
++
++	return capa;
++}
++
+ static uint32_t
+ hns3_get_current_speed_fec_cap(struct hns3_mac *mac)
+ {
+ 	uint32_t i;
+ 
++	if (mac->fec_capa != 0)
++		return hns3_parse_hw_fec_capa(mac->fec_capa);
++
+ 	for (i = 0; i < RTE_DIM(speed_fec_capa_tbl); i++) {
+ 		if (mac->link_speed == speed_fec_capa_tbl[i].speed)
+ 			return speed_fec_capa_tbl[i].capa;
+diff --git a/drivers/net/hns3/hns3_ethdev.h b/drivers/net/hns3/hns3_ethdev.h
+index 88146f5054..c04edf622f 100644
+--- a/drivers/net/hns3/hns3_ethdev.h
++++ b/drivers/net/hns3/hns3_ethdev.h
+@@ -214,6 +214,8 @@ struct hns3_mac {
+ 	uint32_t advertising;     /* advertised capability in the local part */
+ 	uint32_t lp_advertising; /* advertised capability in the link partner */
+ 	uint8_t support_autoneg;
++	/* current supported fec modes. see HNS3_FIBER_FEC_XXX_BIT */
++	uint32_t fec_capa;
+ };
+ 
+ struct hns3_fake_queue_data {
+-- 
+2.23.0
+
