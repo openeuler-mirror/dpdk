@@ -1,0 +1,168 @@
+From aeddfec842cdd80c6c295045b80a420e3a07170a Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Fri, 2 Jun 2023 19:41:58 +0800
+Subject: net/hns3: extract PTP to its own header file
+
+[ upstream commit 8977e7539f40ac716138dd49456dc26bfbf439c5 ]
+
+This patch extracts a PTP header file to contain PTP registers
+and external API in order to make PTP code structure more clear.
+
+Fixes: 38b539d96eb6 ("net/hns3: support IEEE 1588 PTP")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev.c |  1 +
+ drivers/net/hns3/hns3_ethdev.h | 17 ------------
+ drivers/net/hns3/hns3_ptp.c    |  2 +-
+ drivers/net/hns3/hns3_ptp.h    | 48 ++++++++++++++++++++++++++++++++++
+ drivers/net/hns3/hns3_regs.h   | 23 ----------------
+ 5 files changed, 50 insertions(+), 41 deletions(-)
+ create mode 100644 drivers/net/hns3/hns3_ptp.h
+
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 2e3aaf191d..d7443e197c 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -15,6 +15,7 @@
+ #include "hns3_dcb.h"
+ #include "hns3_mp.h"
+ #include "hns3_flow.h"
++#include "hns3_ptp.h"
+ #include "hns3_ethdev.h"
+ 
+ #define HNS3_SERVICE_INTERVAL		1000000 /* us */
+diff --git a/drivers/net/hns3/hns3_ethdev.h b/drivers/net/hns3/hns3_ethdev.h
+index 9456204422..c58094d87b 100644
+--- a/drivers/net/hns3/hns3_ethdev.h
++++ b/drivers/net/hns3/hns3_ethdev.h
+@@ -1041,23 +1041,6 @@ void hns3vf_update_link_status(struct hns3_hw *hw, uint8_t link_status,
+ 			  uint32_t link_speed, uint8_t link_duplex);
+ void hns3vf_update_push_lsc_cap(struct hns3_hw *hw, bool supported);
+ 
+-int hns3_restore_ptp(struct hns3_adapter *hns);
+-int hns3_mbuf_dyn_rx_timestamp_register(struct rte_eth_dev *dev,
+-				    struct rte_eth_conf *conf);
+-int hns3_ptp_init(struct hns3_hw *hw);
+-void hns3_ptp_uninit(struct hns3_hw *hw);
+-int hns3_timesync_enable(struct rte_eth_dev *dev);
+-int hns3_timesync_disable(struct rte_eth_dev *dev);
+-int hns3_timesync_read_rx_timestamp(struct rte_eth_dev *dev,
+-				struct timespec *timestamp,
+-				uint32_t flags __rte_unused);
+-int hns3_timesync_read_tx_timestamp(struct rte_eth_dev *dev,
+-				struct timespec *timestamp);
+-int hns3_timesync_read_time(struct rte_eth_dev *dev, struct timespec *ts);
+-int hns3_timesync_write_time(struct rte_eth_dev *dev,
+-			const struct timespec *ts);
+-int hns3_timesync_adjust_time(struct rte_eth_dev *dev, int64_t delta);
+-
+ const char *hns3_get_media_type_name(uint8_t media_type);
+ 
+ static inline bool
+diff --git a/drivers/net/hns3/hns3_ptp.c b/drivers/net/hns3/hns3_ptp.c
+index 0e17a17034..894ac6dd71 100644
+--- a/drivers/net/hns3/hns3_ptp.c
++++ b/drivers/net/hns3/hns3_ptp.c
+@@ -7,7 +7,7 @@
+ #include <rte_time.h>
+ 
+ #include "hns3_ethdev.h"
+-#include "hns3_regs.h"
++#include "hns3_ptp.h"
+ #include "hns3_logs.h"
+ 
+ uint64_t hns3_timestamp_rx_dynflag;
+diff --git a/drivers/net/hns3/hns3_ptp.h b/drivers/net/hns3/hns3_ptp.h
+new file mode 100644
+index 0000000000..2b8717fa3c
+--- /dev/null
++++ b/drivers/net/hns3/hns3_ptp.h
+@@ -0,0 +1,48 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2023 HiSilicon Limited.
++ */
++
++#ifndef HNS3_PTP_H
++#define HNS3_PTP_H
++
++/* Register bit for 1588 event */
++#define HNS3_VECTOR0_1588_INT_B			0
++
++#define HNS3_PTP_BASE_ADDRESS			0x29000
++
++#define HNS3_TX_1588_SEQID_BACK			(HNS3_PTP_BASE_ADDRESS + 0x0)
++#define HNS3_TX_1588_TSP_BACK_0			(HNS3_PTP_BASE_ADDRESS + 0x4)
++#define HNS3_TX_1588_TSP_BACK_1			(HNS3_PTP_BASE_ADDRESS + 0x8)
++#define HNS3_TX_1588_TSP_BACK_2			(HNS3_PTP_BASE_ADDRESS + 0xc)
++
++#define HNS3_TX_1588_BACK_TSP_CNT		(HNS3_PTP_BASE_ADDRESS + 0x30)
++
++#define HNS3_CFG_TIME_SYNC_H			(HNS3_PTP_BASE_ADDRESS + 0x50)
++#define HNS3_CFG_TIME_SYNC_M			(HNS3_PTP_BASE_ADDRESS + 0x54)
++#define HNS3_CFG_TIME_SYNC_L			(HNS3_PTP_BASE_ADDRESS + 0x58)
++#define HNS3_CFG_TIME_SYNC_RDY			(HNS3_PTP_BASE_ADDRESS + 0x5c)
++
++#define HNS3_CFG_TIME_CYC_EN			(HNS3_PTP_BASE_ADDRESS + 0x70)
++
++#define HNS3_CURR_TIME_OUT_H			(HNS3_PTP_BASE_ADDRESS + 0x74)
++#define HNS3_CURR_TIME_OUT_L			(HNS3_PTP_BASE_ADDRESS + 0x78)
++#define HNS3_CURR_TIME_OUT_NS			(HNS3_PTP_BASE_ADDRESS + 0x7c)
++
++int hns3_restore_ptp(struct hns3_adapter *hns);
++int hns3_mbuf_dyn_rx_timestamp_register(struct rte_eth_dev *dev,
++				    struct rte_eth_conf *conf);
++int hns3_ptp_init(struct hns3_hw *hw);
++void hns3_ptp_uninit(struct hns3_hw *hw);
++int hns3_timesync_enable(struct rte_eth_dev *dev);
++int hns3_timesync_disable(struct rte_eth_dev *dev);
++int hns3_timesync_read_rx_timestamp(struct rte_eth_dev *dev,
++				struct timespec *timestamp,
++				uint32_t flags __rte_unused);
++int hns3_timesync_read_tx_timestamp(struct rte_eth_dev *dev,
++				struct timespec *timestamp);
++int hns3_timesync_read_time(struct rte_eth_dev *dev, struct timespec *ts);
++int hns3_timesync_write_time(struct rte_eth_dev *dev,
++			const struct timespec *ts);
++int hns3_timesync_adjust_time(struct rte_eth_dev *dev, int64_t delta);
++
++#endif /* HNS3_PTP_H */
+diff --git a/drivers/net/hns3/hns3_regs.h b/drivers/net/hns3/hns3_regs.h
+index 459bbaf773..6b037f81c1 100644
+--- a/drivers/net/hns3/hns3_regs.h
++++ b/drivers/net/hns3/hns3_regs.h
+@@ -124,29 +124,6 @@
+ #define HNS3_TQP_INTR_RL_DEFAULT		0
+ #define HNS3_TQP_INTR_QL_DEFAULT		0
+ 
+-/* Register bit for 1588 event */
+-#define HNS3_VECTOR0_1588_INT_B	                0
+-
+-#define HNS3_PTP_BASE_ADDRESS			0x29000
+-
+-#define HNS3_TX_1588_SEQID_BACK			(HNS3_PTP_BASE_ADDRESS + 0x0)
+-#define HNS3_TX_1588_TSP_BACK_0			(HNS3_PTP_BASE_ADDRESS + 0x4)
+-#define HNS3_TX_1588_TSP_BACK_1			(HNS3_PTP_BASE_ADDRESS + 0x8)
+-#define HNS3_TX_1588_TSP_BACK_2			(HNS3_PTP_BASE_ADDRESS + 0xc)
+-
+-#define HNS3_TX_1588_BACK_TSP_CNT		(HNS3_PTP_BASE_ADDRESS + 0x30)
+-
+-#define HNS3_CFG_TIME_SYNC_H			(HNS3_PTP_BASE_ADDRESS + 0x50)
+-#define HNS3_CFG_TIME_SYNC_M			(HNS3_PTP_BASE_ADDRESS + 0x54)
+-#define HNS3_CFG_TIME_SYNC_L			(HNS3_PTP_BASE_ADDRESS + 0x58)
+-#define HNS3_CFG_TIME_SYNC_RDY			(HNS3_PTP_BASE_ADDRESS + 0x5c)
+-
+-#define HNS3_CFG_TIME_CYC_EN			(HNS3_PTP_BASE_ADDRESS + 0x70)
+-
+-#define HNS3_CURR_TIME_OUT_H			(HNS3_PTP_BASE_ADDRESS + 0x74)
+-#define HNS3_CURR_TIME_OUT_L			(HNS3_PTP_BASE_ADDRESS + 0x78)
+-#define HNS3_CURR_TIME_OUT_NS			(HNS3_PTP_BASE_ADDRESS + 0x7c)
+-
+ /* gl_usec convert to hardware count, as writing each 1 represents 2us */
+ #define HNS3_GL_USEC_TO_REG(gl_usec)		((gl_usec) >> 1)
+ /* rl_usec convert to hardware count, as writing each 1 represents 4us */
+-- 
+2.23.0
+

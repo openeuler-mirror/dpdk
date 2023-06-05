@@ -1,0 +1,82 @@
+From 27ac02da0401a657ea0a6bf3c048be6af13aeace Mon Sep 17 00:00:00 2001
+From: Dengdui Huang <huangdengdui@huawei.com>
+Date: Fri, 2 Jun 2023 19:42:03 +0800
+Subject: net/hns3: refactor code
+
+[ upstream commit 00dcbfac5f2354de6e769f00159eba942a2c908a ]
+
+This patch modify the code that violates the coding standards.
+
+Signed-off-by: Dengdui Huang <huangdengdui@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_regs.c |  3 +--
+ drivers/net/hns3/hns3_rxtx.c | 10 +++-------
+ 2 files changed, 4 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_regs.c b/drivers/net/hns3/hns3_regs.c
+index 5d6f92e4bb..be1be6a89c 100644
+--- a/drivers/net/hns3/hns3_regs.c
++++ b/drivers/net/hns3/hns3_regs.c
+@@ -385,10 +385,9 @@ hns3_dfx_reg_cmd_send(struct hns3_hw *hw, struct hns3_cmd_desc *desc,
+ 	hns3_cmd_setup_basic_desc(&desc[i], opcode, true);
+ 
+ 	ret = hns3_cmd_send(hw, desc, bd_num);
+-	if (ret) {
++	if (ret)
+ 		hns3_err(hw, "fail to query dfx registers, opcode = 0x%04X, "
+ 			 "ret = %d.\n", opcode, ret);
+-	}
+ 
+ 	return ret;
+ }
+diff --git a/drivers/net/hns3/hns3_rxtx.c b/drivers/net/hns3/hns3_rxtx.c
+index 767ce82cc4..13b0ad24b5 100644
+--- a/drivers/net/hns3/hns3_rxtx.c
++++ b/drivers/net/hns3/hns3_rxtx.c
+@@ -751,7 +751,7 @@ hns3pf_reset_all_tqps(struct hns3_hw *hw)
+ 		for (i = 0; i < hw->cfg_max_queues; i++) {
+ 			ret = hns3pf_reset_tqp(hw, i);
+ 			if (ret) {
+-				hns3_err(hw, "fail to reset tqp, queue_id = %d, ret = %d.",
++				hns3_err(hw, "fail to reset tqp, queue_id = %u, ret = %d.",
+ 					 i, ret);
+ 				return ret;
+ 			}
+@@ -829,15 +829,13 @@ hns3_send_reset_queue_cmd(struct hns3_hw *hw, uint16_t queue_id,
+ {
+ 	struct hns3_reset_tqp_queue_cmd *req;
+ 	struct hns3_cmd_desc desc;
+-	int queue_direction;
+ 	int ret;
+ 
+ 	hns3_cmd_setup_basic_desc(&desc, HNS3_OPC_RESET_TQP_QUEUE_INDEP, false);
+ 
+ 	req = (struct hns3_reset_tqp_queue_cmd *)desc.data;
+ 	req->tqp_id = rte_cpu_to_le_16(queue_id);
+-	queue_direction = queue_type == HNS3_RING_TYPE_TX ? 0 : 1;
+-	req->queue_direction = rte_cpu_to_le_16(queue_direction);
++	req->queue_direction = queue_type == HNS3_RING_TYPE_TX ? 0 : 1;
+ 	hns3_set_bit(req->reset_req, HNS3_TQP_RESET_B, enable ? 1 : 0);
+ 
+ 	ret = hns3_cmd_send(hw, &desc, 1);
+@@ -855,15 +853,13 @@ hns3_get_queue_reset_status(struct hns3_hw *hw, uint16_t queue_id,
+ {
+ 	struct hns3_reset_tqp_queue_cmd *req;
+ 	struct hns3_cmd_desc desc;
+-	int queue_direction;
+ 	int ret;
+ 
+ 	hns3_cmd_setup_basic_desc(&desc, HNS3_OPC_RESET_TQP_QUEUE_INDEP, true);
+ 
+ 	req = (struct hns3_reset_tqp_queue_cmd *)desc.data;
+ 	req->tqp_id = rte_cpu_to_le_16(queue_id);
+-	queue_direction = queue_type == HNS3_RING_TYPE_TX ? 0 : 1;
+-	req->queue_direction = rte_cpu_to_le_16(queue_direction);
++	req->queue_direction = queue_type == HNS3_RING_TYPE_TX ? 0 : 1;
+ 
+ 	ret = hns3_cmd_send(hw, &desc, 1);
+ 	if (ret) {
+-- 
+2.23.0
+

@@ -1,0 +1,59 @@
+From 5f5edfc2aae49af8dee267565ea36852cab4f292 Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Fri, 2 Jun 2023 19:42:00 +0800
+Subject: net/hns3: fix mbuf leakage when RxQ started after reset
+
+[ upstream commit 4ec0409b3f3801fa01f45f9dfddfab6a343436af ]
+
+In the reset restore-conf phase, the reset process will allocate for
+the Rx ring mbufs unconditionlly.
+
+And the rte_eth_dev_rx_queue_start() will also allocate for the Rx ring
+mbufs unconditionlly.
+
+So if the rte_eth_dev_rx_queue_start() is invoked after restore-conf
+phase, then the mbufs allocated in restore-conf phase will leak.
+
+So fix it by conditional release Rx ring mbufs in
+rte_eth_dev_rx_queue_start(): if the Rx ring mbufs were allocated then
+release them first.
+
+This patch also set all sw-ring[]'s mbuf is NULL when release Rx ring
+mbufs so that we can determine whether the Rx ring mbufs were allocated
+based only on the first sw-ring[0]'s mbuf.
+
+Fixes: fa29fe45a7b4 ("net/hns3: support queue start and stop")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_rxtx.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/drivers/net/hns3/hns3_rxtx.c b/drivers/net/hns3/hns3_rxtx.c
+index f766c47072..767ce82cc4 100644
+--- a/drivers/net/hns3/hns3_rxtx.c
++++ b/drivers/net/hns3/hns3_rxtx.c
+@@ -50,6 +50,8 @@ hns3_rx_queue_release_mbufs(struct hns3_rx_queue *rxq)
+ 				rxq->sw_ring[i].mbuf = NULL;
+ 			}
+ 		}
++		for (i = 0; i < rxq->rx_rearm_nb; i++)
++			rxq->sw_ring[rxq->rx_rearm_start + i].mbuf = NULL;
+ 	}
+ 
+ 	for (i = 0; i < rxq->bulk_mbuf_num; i++)
+@@ -4538,6 +4540,9 @@ hns3_dev_rx_queue_start(struct rte_eth_dev *dev, uint16_t rx_queue_id)
+ 		return ret;
+ 	}
+ 
++	if (rxq->sw_ring[0].mbuf != NULL)
++		hns3_rx_queue_release_mbufs(rxq);
++
+ 	ret = hns3_init_rxq(hns, rx_queue_id);
+ 	if (ret) {
+ 		hns3_err(hw, "fail to init Rx queue %u, ret = %d.",
+-- 
+2.23.0
+

@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 45
+Release: 46
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -317,6 +317,18 @@ Patch9296:    0296-ethdev-introduce-low-latency-RS-FEC.patch
 Patch9297:    0297-app-testpmd-add-setting-and-querying-of-LLRS-FEC-mod.patch
 Patch9298:    0298-net-hns3-add-LLRS-FEC-mode-support-for-200G-ports.patch
 Patch9299:    0299-net-hns3-get-current-FEC-capability-from-firmware.patch
+Patch9300:    0300-net-hns3-fix-RTC-time-on-initialization.patch
+Patch9301:    0301-net-hns3-fix-RTC-time-after-reset.patch
+Patch9302:    0302-net-hns3-uninitialize-PTP.patch
+Patch9303:    0303-net-hns3-extract-PTP-to-its-own-header-file.patch
+Patch9304:    0304-net-hns3-fix-mbuf-leakage-when-RxQ-started-during-re.patch
+Patch9305:    0305-net-hns3-fix-mbuf-leakage-when-RxQ-started-after-res.patch
+Patch9306:    0306-net-hns3-fix-device-start-return-value.patch
+Patch9307:    0307-net-hns3-fix-uninitialized-variable.patch
+Patch9308:    0308-net-hns3-refactor-code.patch
+Patch9309:    0309-net-hns3-fix-inaccurate-log.patch
+Patch9310:    0310-net-hns3-fix-redundant-line-break-in-log.patch
+
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -461,6 +473,14 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Mon Jun 05 2023 chenjiji <chenjiji09@163.com> - 21.11-46
+ Sync some patchs from upstreaming for hns3 pmd and modifications
+ are as follow:
+ 1. fix RTC time after reset
+ 2. fix Rx ring mbuf leakage at reset process
+ 3. fix an uninitialized variable
+ 4. modify the code that violates the coding standards
+
 * Fri Jun 02 2023 chenjiji <chenjiji09@163.com> - 21.11-45
  Sync some patchs from upstreaming about FEC feature. Patchs
  are as follow:
