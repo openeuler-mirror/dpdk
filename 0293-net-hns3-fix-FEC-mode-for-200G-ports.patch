@@ -1,0 +1,36 @@
+From 6c8780bfc15e2a039dca70e615a3568032ebcf21 Mon Sep 17 00:00:00 2001
+From: Jie Hai <haijie1@huawei.com>
+Date: Sat, 8 Apr 2023 10:27:33 +0800
+Subject: net/hns3: fix FEC mode for 200G ports
+
+[ upstream commit 0ed9d6d08faf83dcaef02dc22edff2ee0f18c41a ]
+
+The hardware does not support NOFEC for 200G ports. So delete this
+bit.
+
+Fixes: 9bf2ea8dbc65 ("net/hns3: support FEC")
+Cc: stable@dpdk.org
+
+Signed-off-by: Jie Hai <haijie1@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 2fb9e68039..06d4752ab1 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -83,8 +83,7 @@ static const struct rte_eth_fec_capa speed_fec_capa_tbl[] = {
+ 			      RTE_ETH_FEC_MODE_CAPA_MASK(AUTO) |
+ 			      RTE_ETH_FEC_MODE_CAPA_MASK(RS) },
+ 
+-	{ RTE_ETH_SPEED_NUM_200G, RTE_ETH_FEC_MODE_CAPA_MASK(NOFEC) |
+-			      RTE_ETH_FEC_MODE_CAPA_MASK(AUTO) |
++	{ RTE_ETH_SPEED_NUM_200G, RTE_ETH_FEC_MODE_CAPA_MASK(AUTO) |
+ 			      RTE_ETH_FEC_MODE_CAPA_MASK(RS) }
+ };
+ 
+-- 
+2.23.0
+

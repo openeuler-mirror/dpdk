@@ -1,0 +1,111 @@
+From 85597c087e93576197c6e11d41caab7d8f43dbeb Mon Sep 17 00:00:00 2001
+From: Jie Hai <haijie1@huawei.com>
+Date: Sat, 8 Apr 2023 10:27:38 +0800
+Subject: net/hns3: add LLRS FEC mode support for 200G ports
+
+[ upstream commit cddeaee10f974bda1202e82e36a3d8f09450e80a ]
+
+This patch supports the query and configuration of LLRS FEC mode.
+
+Signed-off-by: Jie Hai <haijie1@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_cmd.c    |  1 +
+ drivers/net/hns3/hns3_cmd.h    |  2 ++
+ drivers/net/hns3/hns3_ethdev.c | 21 ++++++++++++---------
+ 3 files changed, 15 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_cmd.c b/drivers/net/hns3/hns3_cmd.c
+index d0a3853656..ca1d3f1b8c 100644
+--- a/drivers/net/hns3/hns3_cmd.c
++++ b/drivers/net/hns3/hns3_cmd.c
+@@ -666,6 +666,7 @@ hns3_firmware_compat_config(struct hns3_hw *hw, bool is_init)
+ 	if (is_init) {
+ 		hns3_set_bit(compat, HNS3_LINK_EVENT_REPORT_EN_B, 1);
+ 		hns3_set_bit(compat, HNS3_NCSI_ERROR_REPORT_EN_B, 0);
++		hns3_set_bit(compat, HNS3_LLRS_FEC_EN_B, 1);
+ 		if (hns3_dev_get_support(hw, COPPER))
+ 			hns3_set_bit(compat, HNS3_FIRMWARE_PHY_DRIVER_EN_B, 1);
+ 		if (hns3_dev_get_support(hw, FC_AUTO))
+diff --git a/drivers/net/hns3/hns3_cmd.h b/drivers/net/hns3/hns3_cmd.h
+index d78c1b401e..929278521f 100644
+--- a/drivers/net/hns3/hns3_cmd.h
++++ b/drivers/net/hns3/hns3_cmd.h
+@@ -668,6 +668,7 @@ enum hns3_promisc_type {
+ #define HNS3_NCSI_ERROR_REPORT_EN_B	1
+ #define HNS3_FIRMWARE_PHY_DRIVER_EN_B	2
+ 
++#define HNS3_LLRS_FEC_EN_B		5
+ #define HNS3_MAC_FC_AUTONEG_EN_B	6
+ 
+ struct hns3_firmware_compat_cmd {
+@@ -825,6 +826,7 @@ struct hns3_sfp_info_cmd {
+ #define HNS3_MAC_FEC_OFF		0
+ #define HNS3_MAC_FEC_BASER		1
+ #define HNS3_MAC_FEC_RS			2
++#define HNS3_MAC_FEC_LLRS		3
+ 
+ /* Configure FEC mode, opcode:0x031A */
+ struct hns3_config_fec_cmd {
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 05d489a12b..2ca5e4ced5 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -47,11 +47,6 @@
+ #define HNS3_RESET_WAIT_MS	100
+ #define HNS3_RESET_WAIT_CNT	200
+ 
+-/* FEC mode order defined in HNS3 hardware */
+-#define HNS3_HW_FEC_MODE_NOFEC  0
+-#define HNS3_HW_FEC_MODE_BASER  1
+-#define HNS3_HW_FEC_MODE_RS     2
+-
+ enum hns3_evt_cause {
+ 	HNS3_VECTOR0_EVENT_RST,
+ 	HNS3_VECTOR0_EVENT_MBX,
+@@ -91,7 +86,8 @@ static const struct rte_eth_fec_capa speed_fec_capa_tbl[] = {
+ 			      RTE_ETH_FEC_MODE_CAPA_MASK(RS) },
+ 
+ 	{ RTE_ETH_SPEED_NUM_200G, RTE_ETH_FEC_MODE_CAPA_MASK(AUTO) |
+-			      RTE_ETH_FEC_MODE_CAPA_MASK(RS) }
++			      RTE_ETH_FEC_MODE_CAPA_MASK(RS) |
++			      RTE_ETH_FEC_MODE_CAPA_MASK(LLRS) }
+ };
+ 
+ static enum hns3_reset_level hns3_get_reset_level(struct hns3_adapter *hns,
+@@ -6032,15 +6028,18 @@ hns3_fec_get_internal(struct hns3_hw *hw, uint32_t *fec_capa)
+ 	 * to be converted.
+ 	 */
+ 	switch (resp->active_fec) {
+-	case HNS3_HW_FEC_MODE_NOFEC:
++	case HNS3_MAC_FEC_OFF:
+ 		tmp_fec_capa = RTE_ETH_FEC_MODE_CAPA_MASK(NOFEC);
+ 		break;
+-	case HNS3_HW_FEC_MODE_BASER:
++	case HNS3_MAC_FEC_BASER:
+ 		tmp_fec_capa = RTE_ETH_FEC_MODE_CAPA_MASK(BASER);
+ 		break;
+-	case HNS3_HW_FEC_MODE_RS:
++	case HNS3_MAC_FEC_RS:
+ 		tmp_fec_capa = RTE_ETH_FEC_MODE_CAPA_MASK(RS);
+ 		break;
++	case HNS3_MAC_FEC_LLRS:
++		tmp_fec_capa = RTE_ETH_FEC_MODE_CAPA_MASK(LLRS);
++		break;
+ 	default:
+ 		tmp_fec_capa = RTE_ETH_FEC_MODE_CAPA_MASK(NOFEC);
+ 		break;
+@@ -6081,6 +6080,10 @@ hns3_set_fec_hw(struct hns3_hw *hw, uint32_t mode)
+ 		hns3_set_field(req->fec_mode, HNS3_MAC_CFG_FEC_MODE_M,
+ 				HNS3_MAC_CFG_FEC_MODE_S, HNS3_MAC_FEC_RS);
+ 		break;
++	case RTE_ETH_FEC_MODE_CAPA_MASK(LLRS):
++		hns3_set_field(req->fec_mode, HNS3_MAC_CFG_FEC_MODE_M,
++				HNS3_MAC_CFG_FEC_MODE_S, HNS3_MAC_FEC_LLRS);
++		break;
+ 	case RTE_ETH_FEC_MODE_CAPA_MASK(AUTO):
+ 		hns3_set_bit(req->fec_mode, HNS3_MAC_CFG_FEC_AUTO_EN_B, 1);
+ 		break;
+-- 
+2.23.0
+
