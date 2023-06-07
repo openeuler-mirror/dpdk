@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 46
+Release: 47
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -328,7 +328,9 @@ Patch9307:    0307-net-hns3-fix-uninitialized-variable.patch
 Patch9308:    0308-net-hns3-refactor-code.patch
 Patch9309:    0309-net-hns3-fix-inaccurate-log.patch
 Patch9310:    0310-net-hns3-fix-redundant-line-break-in-log.patch
-
+Patch9311:    0311-ethdev-add-API-to-check-if-queue-is-valid.patch
+Patch9312:    0312-app-testpmd-fix-segment-fault-with-invalid-queue-ID.patch
+Patch9313:    0313-net-hns3-fix-IMP-reset-trigger.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -473,6 +475,14 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Wed Jun 07 2023 chenjiji <chenjiji09@163.com> - 21.11-47
+ Sync some patchs from upstreaming about a segment fault for
+ testpmd app and a IMP reset trigger for hns3 pmd. Patchs are
+ as follow:
+ - ethdev: add API to check if queue is valid
+ - app/testpmd: fix segment fault with invalid queue ID
+ - net/hns3: fix IMP reset trigger
+
 * Mon Jun 05 2023 chenjiji <chenjiji09@163.com> - 21.11-46
  Sync some patchs from upstreaming for hns3 pmd and modifications
  are as follow:
