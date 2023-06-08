@@ -1,0 +1,32 @@
+From c02e48b92050856389403518be8bb70a4fdda551 Mon Sep 17 00:00:00 2001
+From: jiangheng12 <jiangheng14@huawei.com>
+Date: Thu, 8 Jun 2023 20:59:15 +0800
+Subject: [PATCH] pdump: fix pcap_dump coredump caused by incorrect pkt_len
+
+---
+ drivers/net/pcap/pcap_ethdev.c | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/pcap/pcap_ethdev.c b/drivers/net/pcap/pcap_ethdev.c
+index ec29fd6..40ad166 100644
+--- a/drivers/net/pcap/pcap_ethdev.c
++++ b/drivers/net/pcap/pcap_ethdev.c
+@@ -408,8 +408,13 @@ eth_pcap_tx_dumper(void *queue, struct rte_mbuf **bufs, uint16_t nb_pkts)
+ 		 * in the mbuf (when the mbuf is contiguous) or, otherwise,
+ 		 * a pointer to temp_data after copying into it.
+ 		 */
+-		pcap_dump((u_char *)dumper, &header,
+-			rte_pktmbuf_read(mbuf, 0, caplen, temp_data));
++		const void *sp = rte_pktmbuf_read(mbuf, 0, caplen, temp_data);
++		if (sp == NULL) {
++			rte_pktmbuf_free(mbuf);
++			continue;
++		} else {
++			pcap_dump((u_char *)dumper, &header, sp);
++		}
+ 
+ 		num_tx++;
+ 		tx_bytes += caplen;
+-- 
+2.23.0
+
