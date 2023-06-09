@@ -1,0 +1,38 @@
+From 080088d0626c9b437f41fc0717360c89d294dfdf Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Fri, 2 Jun 2023 19:42:01 +0800
+Subject: net/hns3: fix device start return value
+
+[ upstream commit 3c6143436cc6d328bb41f0474040a6e1d0a9ae4c ]
+
+If hns3_init_queues() return failed, the hns3vf_do_start() should
+return errcode. This patch fixes it.
+
+Fixes: 43d8adf3891c ("net/hns3: fix RSS flow rule restore")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev_vf.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/net/hns3/hns3_ethdev_vf.c b/drivers/net/hns3/hns3_ethdev_vf.c
+index 3a93987409..6898a77407 100644
+--- a/drivers/net/hns3/hns3_ethdev_vf.c
++++ b/drivers/net/hns3/hns3_ethdev_vf.c
+@@ -1674,8 +1674,10 @@ hns3vf_do_start(struct hns3_adapter *hns, bool reset_queue)
+ 	hns3_enable_rxd_adv_layout(hw);
+ 
+ 	ret = hns3_init_queues(hns, reset_queue);
+-	if (ret)
++	if (ret) {
+ 		hns3_err(hw, "failed to init queues, ret = %d.", ret);
++		return ret;
++	}
+ 
+ 	return hns3_restore_filter(hns);
+ }
+-- 
+2.23.0
+

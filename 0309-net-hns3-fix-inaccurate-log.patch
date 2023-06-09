@@ -1,0 +1,44 @@
+From 599089c15b21493879e6509cda350284e0af4eb3 Mon Sep 17 00:00:00 2001
+From: Dengdui Huang <huangdengdui@huawei.com>
+Date: Fri, 2 Jun 2023 19:42:04 +0800
+Subject: net/hns3: fix inaccurate log
+
+[ upstream commit 9ff64664c1a1b1fa636ee4d11c7ef4eb54ab0691 ]
+
+This patch fix inaccurate log
+
+Fixes: bba636698316 ("net/hns3: support Rx/Tx and related operations")
+Fixes: a951c1ed3ab5 ("net/hns3: support different numbers of Rx and Tx queues")
+Cc: stable@dpdk.org
+
+Signed-off-by: Dengdui Huang <huangdengdui@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_rxtx.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_rxtx.c b/drivers/net/hns3/hns3_rxtx.c
+index 13b0ad24b5..4c79163e3f 100644
+--- a/drivers/net/hns3/hns3_rxtx.c
++++ b/drivers/net/hns3/hns3_rxtx.c
+@@ -586,7 +586,7 @@ hns3_tqp_enable(struct hns3_hw *hw, uint16_t queue_id, bool enable)
+ 
+ 	ret = hns3_cmd_send(hw, &desc, 1);
+ 	if (ret)
+-		hns3_err(hw, "TQP enable fail, ret = %d", ret);
++		hns3_err(hw, "TQP %s fail, ret = %d", enable ? "enable" : "disable", ret);
+ 
+ 	return ret;
+ }
+@@ -1635,7 +1635,7 @@ hns3_set_fake_rx_or_tx_queues(struct rte_eth_dev *dev, uint16_t nb_rx_q,
+ 
+ 	ret = hns3_fake_tx_queue_config(hw, tx_need_add_nb_q);
+ 	if (ret) {
+-		hns3_err(hw, "Fail to configure fake rx queues: %d", ret);
++		hns3_err(hw, "Fail to configure fake tx queues: %d", ret);
+ 		goto cfg_fake_tx_q_fail;
+ 	}
+ 
+-- 
+2.23.0
+

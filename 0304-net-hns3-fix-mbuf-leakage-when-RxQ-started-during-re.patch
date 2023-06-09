@@ -1,0 +1,96 @@
+From e29ec4c79236c53c61a5ca955fee16993b63fe08 Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Fri, 2 Jun 2023 19:41:59 +0800
+Subject: net/hns3: fix mbuf leakage when RxQ started during reset
+
+[ upstream commit e2199b1897da9e26bbc700df3a00cd9c3c85eede ]
+
+In the reset restore-conf phase, the reset process will allocate for
+the Rx ring mbufs unconditionlly.
+
+And the rte_eth_dev_rx_queue_start() will also allocate for the Rx ring
+mbufs unconditionlly.
+
+So if the rte_eth_dev_rx_queue_start() is invoked before restore-conf
+phase, then the mbufs allocated by rte_eth_dev_rx_queue_start() will
+leak.
+
+Because the hw->reset.resetting was always true during the phases from
+stop-service to restore-conf, so fix it by returning an error if the
+hw->reset.resetting is set.
+
+This patch adds the above logic in both rx_queue_start/rx_queue_stop/
+tx_queue_start/tx_queue_stop ops.
+
+Fixes: fa29fe45a7b4 ("net/hns3: support queue start and stop")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_rxtx.c | 28 ++++++++++++++++++++++++++++
+ 1 file changed, 28 insertions(+)
+
+diff --git a/drivers/net/hns3/hns3_rxtx.c b/drivers/net/hns3/hns3_rxtx.c
+index e055b5415d..f766c47072 100644
+--- a/drivers/net/hns3/hns3_rxtx.c
++++ b/drivers/net/hns3/hns3_rxtx.c
+@@ -4523,6 +4523,13 @@ hns3_dev_rx_queue_start(struct rte_eth_dev *dev, uint16_t rx_queue_id)
+ 		return -ENOTSUP;
+ 
+ 	rte_spinlock_lock(&hw->lock);
++
++	if (__atomic_load_n(&hw->reset.resetting, __ATOMIC_RELAXED)) {
++		hns3_err(hw, "fail to start Rx queue during resetting.");
++		rte_spinlock_unlock(&hw->lock);
++		return -EIO;
++	}
++
+ 	ret = hns3_reset_queue(hw, rx_queue_id, HNS3_RING_TYPE_RX);
+ 	if (ret) {
+ 		hns3_err(hw, "fail to reset Rx queue %u, ret = %d.",
+@@ -4569,6 +4576,13 @@ hns3_dev_rx_queue_stop(struct rte_eth_dev *dev, uint16_t rx_queue_id)
+ 		return -ENOTSUP;
+ 
+ 	rte_spinlock_lock(&hw->lock);
++
++	if (__atomic_load_n(&hw->reset.resetting, __ATOMIC_RELAXED)) {
++		hns3_err(hw, "fail to stop Rx queue during resetting.");
++		rte_spinlock_unlock(&hw->lock);
++		return -EIO;
++	}
++
+ 	hns3_enable_rxq(rxq, false);
+ 
+ 	hns3_rx_queue_release_mbufs(rxq);
+@@ -4591,6 +4605,13 @@ hns3_dev_tx_queue_start(struct rte_eth_dev *dev, uint16_t tx_queue_id)
+ 		return -ENOTSUP;
+ 
+ 	rte_spinlock_lock(&hw->lock);
++
++	if (__atomic_load_n(&hw->reset.resetting, __ATOMIC_RELAXED)) {
++		hns3_err(hw, "fail to start Tx queue during resetting.");
++		rte_spinlock_unlock(&hw->lock);
++		return -EIO;
++	}
++
+ 	ret = hns3_reset_queue(hw, tx_queue_id, HNS3_RING_TYPE_TX);
+ 	if (ret) {
+ 		hns3_err(hw, "fail to reset Tx queue %u, ret = %d.",
+@@ -4617,6 +4638,13 @@ hns3_dev_tx_queue_stop(struct rte_eth_dev *dev, uint16_t tx_queue_id)
+ 		return -ENOTSUP;
+ 
+ 	rte_spinlock_lock(&hw->lock);
++
++	if (__atomic_load_n(&hw->reset.resetting, __ATOMIC_RELAXED)) {
++		hns3_err(hw, "fail to stop Tx queue during resetting.");
++		rte_spinlock_unlock(&hw->lock);
++		return -EIO;
++	}
++
+ 	hns3_enable_txq(txq, false);
+ 	hns3_tx_queue_release_mbufs(txq);
+ 	/*
+-- 
+2.23.0
+
