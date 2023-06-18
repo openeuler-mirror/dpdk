@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 49
+Release: 50
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -336,6 +336,7 @@ Patch6312:    0312-app-testpmd-fix-segment-fault-with-invalid-queue-ID.patch
 Patch6313:    0313-net-hns3-fix-IMP-reset-trigger.patch
 
 Patch9020:    0020-pdump-fix-pcap_dump-coredump-caused-by-incorrect-pkt_len.patch
+Patch9021:    0021-gro-fix-gro-with-tcp-push-flag.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -480,6 +481,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Mon Jun 19 2023 jiangheng <jiangheng14@huawei.com> - 21.11-50
+- gro: fix gro with tcp push flag
+
 * Tue Jun 13 2023 jiangheng <jiangheng14@huawei.com> - 21.11-49
 - pdump: fix pcap_dump coredump caused by incorrect pkt_len
 
