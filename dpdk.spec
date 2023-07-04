@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 50
+Release: 51
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -389,15 +389,13 @@ export CFLAGS="%{optflags}"
 meson build -Dplatform=generic -Dexamples=l3fwd-power,ethtool,l3fwd,kni,dma,ptpclient
 ninja -C build -v
 
-#build gazelle-pdump/gazell-proc-info
+#build gazelle-pdump
 cd build/app/dpdk-pdump.p
 export GAZELLE_FLAGS="-lm -lpthread -lrt -lnuma"
 export GAZELLE_LIBS="-lrte_pci -lrte_bus_pci -lrte_cmdline -lrte_hash -lrte_mempool -lrte_mempool_ring -lrte_timer -lrte_eal -lrte_gro -lrte_ring -lrte_mbuf -lrte_telemetry -lrte_kni -lrte_net_ixgbe -lrte_kvargs -lrte_net_hinic -lrte_net_i40e -lrte_net_virtio -lrte_bus_vdev -lrte_net -lrte_rcu -lrte_ethdev -lrte_pdump -lrte_bpf -lrte_security -lrte_cryptodev -lrte_net_pcap -lrte_metrics"
 export SECURE_OPTIONS="-fstack-protector-strong -D_FORTIFY_SOURCE=2 -O2 -Wall -Wl,-z,relro,-z,now,-z,noexecstack -Wtrampolines -fPIE -pie -fPIC -g"
 gcc -o gazelle-pdump ${GAZELLE_FLAGS} ${SOCURE_OPTIONS} -L../../drivers -L../../lib ${GAZELLE_LIBS} pdump_main.c.o
 cd -
-cd build/app/dpdk-proc-info.p
-gcc -o gazelle-proc-info ${GAZELLE_FLAGS} ${SOCURE_OPTIONS} -L../../drivers -L../../lib ${GAZELLE_LIBS} proc-info_main.c.o
 
 %install
 DESTDIR=$RPM_BUILD_ROOT/ ninja install -C build
@@ -409,7 +407,6 @@ chrpath -d ./build/examples/dpdk-kni
 chrpath -d ./build/examples/dpdk-dma
 chrpath -d ./build/examples/dpdk-ptpclient
 chrpath -d ./build/app/dpdk-pdump.p/gazelle-pdump
-chrpath -d ./build/app/dpdk-proc-info.p/gazelle-proc-info
 
 cp ./build/examples/dpdk-l3fwd $RPM_BUILD_ROOT/usr/local/bin
 cp ./build/examples/dpdk-l3fwd-power $RPM_BUILD_ROOT/usr/local/bin
@@ -418,7 +415,6 @@ cp ./build/examples/dpdk-kni $RPM_BUILD_ROOT/usr/local/bin
 cp ./build/examples/dpdk-dma $RPM_BUILD_ROOT/usr/local/bin
 cp ./build/examples/dpdk-ptpclient $RPM_BUILD_ROOT/usr/local/bin
 cp ./build/app/dpdk-pdump.p/gazelle-pdump $RPM_BUILD_ROOT/usr/local/bin
-cp ./build/app/dpdk-proc-info.p/gazelle-proc-info $RPM_BUILD_ROOT/usr/local/bin
 
 mkdir -p $RPM_BUILD_ROOT/usr/lib64
 mv $RPM_BUILD_ROOT/usr/local/lib64/* $RPM_BUILD_ROOT/usr/lib64/
@@ -470,7 +466,6 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/local/bin/dpdk-dma
 /usr/local/bin/dpdk-ptpclient
 /usr/local/bin/gazelle-pdump
-/usr/local/bin/gazelle-proc-info
 
 %post
 /sbin/ldconfig
@@ -481,6 +476,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Fri Jun 30 2023 jiangheng <jiangheng14@huawei.com> - 21.11-51
+- remove gazelle-proc-info, it function the same as gazellectl -x
+
 * Mon Jun 19 2023 jiangheng <jiangheng14@huawei.com> - 21.11-50
 - gro: fix gro with tcp push flag
 
