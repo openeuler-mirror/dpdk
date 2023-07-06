@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 51
+Release: 52
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -334,15 +334,17 @@ Patch6310:    0310-net-hns3-fix-redundant-line-break-in-log.patch
 Patch6311:    0311-ethdev-add-API-to-check-if-queue-is-valid.patch
 Patch6312:    0312-app-testpmd-fix-segment-fault-with-invalid-queue-ID.patch
 Patch6313:    0313-net-hns3-fix-IMP-reset-trigger.patch
+Patch6314:    0314-net-ixgbe-add-proper-memory-barriers-in-Rx.patch
 
 Patch9020:    0020-pdump-fix-pcap_dump-coredump-caused-by-incorrect-pkt_len.patch
 Patch9021:    0021-gro-fix-gro-with-tcp-push-flag.patch
+Patch9022:    0022-eal-loongarch-support-LoongArch-architecture.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
 License: BSD and LGPLv2 and GPLv2
 
-ExclusiveArch: i686 x86_64 aarch64
+ExclusiveArch: i686 x86_64 aarch64 loongarch64
 
 BuildRequires: meson ninja-build gcc diffutils python3-pyelftools
 BuildRequires: kernel-devel numactl-devel
@@ -353,6 +355,7 @@ BuildRequires: chrpath
 BuildRequires: groff-base
 
 %define kern_devel_ver %(uname -r)
+%define arch_type %(uname -m)
 
 %description
 DPDK core includes kernel modules, core libraries and tools.
@@ -392,7 +395,12 @@ ninja -C build -v
 #build gazelle-pdump
 cd build/app/dpdk-pdump.p
 export GAZELLE_FLAGS="-lm -lpthread -lrt -lnuma"
+# Remove linking to i40e driver for LoongArch because it was not supported in this version
+%if "%{arch_type}" == "loongarch64"
+export GAZELLE_LIBS="-lrte_pci -lrte_bus_pci -lrte_cmdline -lrte_hash -lrte_mempool -lrte_mempool_ring -lrte_timer -lrte_eal -lrte_gro -lrte_ring -lrte_mbuf -lrte_telemetry -lrte_kni -lrte_net_ixgbe -lrte_kvargs -lrte_net_hinic -lrte_net_virtio -lrte_bus_vdev -lrte_net -lrte_rcu -lrte_ethdev -lrte_pdump -lrte_bpf -lrte_security -lrte_cryptodev -lrte_net_pcap -lrte_metrics"
+%else
 export GAZELLE_LIBS="-lrte_pci -lrte_bus_pci -lrte_cmdline -lrte_hash -lrte_mempool -lrte_mempool_ring -lrte_timer -lrte_eal -lrte_gro -lrte_ring -lrte_mbuf -lrte_telemetry -lrte_kni -lrte_net_ixgbe -lrte_kvargs -lrte_net_hinic -lrte_net_i40e -lrte_net_virtio -lrte_bus_vdev -lrte_net -lrte_rcu -lrte_ethdev -lrte_pdump -lrte_bpf -lrte_security -lrte_cryptodev -lrte_net_pcap -lrte_metrics"
+%endif
 export SECURE_OPTIONS="-fstack-protector-strong -D_FORTIFY_SOURCE=2 -O2 -Wall -Wl,-z,relro,-z,now,-z,noexecstack -Wtrampolines -fPIE -pie -fPIC -g"
 gcc -o gazelle-pdump ${GAZELLE_FLAGS} ${SOCURE_OPTIONS} -L../../drivers -L../../lib ${GAZELLE_LIBS} pdump_main.c.o
 cd -
@@ -476,6 +484,12 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Tue Jul 4 2023 zhoumin <zhoumin@loongson.cn> - 21.11-52
+- EAL: support LoongArch architecture
+- Backport bugfixes for ixgbe driver needed by LoongArch
+- Remove linking to i40e driver for LoongArch because it was
+  not supported in this version
+
 * Fri Jun 30 2023 jiangheng <jiangheng14@huawei.com> - 21.11-51
 - remove gazelle-proc-info, it function the same as gazellectl -x
 
@@ -485,7 +499,7 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 * Tue Jun 13 2023 jiangheng <jiangheng14@huawei.com> - 21.11-49
 - pdump: fix pcap_dump coredump caused by incorrect pkt_len
 
-* Fir Jun 09 2023 jiangheng <jiangheng14@huawei.com> - 21.11-48
+* Fri Jun 09 2023 jiangheng <jiangheng14@huawei.com> - 21.11-48
 - distinguish self and upstream patches number
 
 * Wed Jun 07 2023 chenjiji <chenjiji09@163.com> - 21.11-47
