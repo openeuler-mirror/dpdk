@@ -1,0 +1,1630 @@
+From 4dae75f4278caf8477ddf0e3140f86153f51a2e5 Mon Sep 17 00:00:00 2001
+From: Min Zhou <zhoumin@loongson.cn>
+Date: Thu, 29 Jun 2023 20:35:55 +0800
+Subject: [PATCH 1/1] eal/loongarch: support LoongArch architecture
+
+Add all necessary elements for DPDK to compile and run EAL on
+LoongArch64 Soc.
+
+This includes:
+
+- EAL library implementation for LoongArch ISA.
+- meson build structure for 'loongarch' architecture.
+  RTE_ARCH_LOONGARCH define is added for architecture identification.
+- xmm_t structure operation stubs as there is no vector support in
+the current version for LoongArch.
+
+Compilation was tested on Debian and CentOS using loongarch64
+cross-compile toolchain from x86 build hosts. Functions were tested
+on Loongnix and Kylin which are two Linux distributions supported
+LoongArch host based on Linux 4.19 maintained by Loongson
+Corporation.
+
+We also tested DPDK on LoongArch with some external applications,
+including: Pktgen-DPDK, OVS, VPP.
+
+The platform is currently marked as linux-only because there is no
+other OS than Linux support LoongArch host currently.
+
+The i40e PMD driver is disabled on LoongArch because of the absence
+of vector support in the current version.
+
+Signed-off-by: Min Zhou <zhoumin@loongson.cn>
+---
+ app/test/test_cpuflags.c                      |  41 ++++
+ app/test/test_xmmt_ops.h                      |  12 +
+ .../loongarch/loongarch_loongarch64_linux_gcc |  16 ++
+ config/loongarch/meson.build                  |  43 ++++
+ drivers/net/i40e/meson.build                  |   6 +
+ drivers/net/ixgbe/ixgbe_rxtx.c                |   4 +-
+ drivers/net/memif/rte_eth_memif.h             |   2 +
+ drivers/net/tap/tap_bpf.h                     |   2 +
+ examples/l3fwd/l3fwd_em.c                     |   8 +
+ examples/l3fwd/l3fwd_fib.c                    |   2 +
+ examples/l3fwd/l3fwd_lpm.c                    |   5 +-
+ examples/l3fwd/l3fwd_lpm_lsx.h                |  30 +++
+ lib/eal/linux/eal_memory.c                    |   4 +
+ lib/eal/loongarch/include/meson.build         |  21 ++
+ lib/eal/loongarch/include/rte_atomic.h        |  47 ++++
+ lib/eal/loongarch/include/rte_byteorder.h     |  40 ++++
+ lib/eal/loongarch/include/rte_cpuflags.h      |  39 ++++
+ lib/eal/loongarch/include/rte_cycles.h        |  47 ++++
+ lib/eal/loongarch/include/rte_io.h            |  18 ++
+ lib/eal/loongarch/include/rte_mcslock.h       |  18 ++
+ lib/eal/loongarch/include/rte_memcpy.h        |  61 +++++
+ lib/eal/loongarch/include/rte_pause.h         |  24 ++
+ lib/eal/loongarch/include/rte_pflock.h        |  18 ++
+ .../loongarch/include/rte_power_intrinsics.h  |  20 ++
+ lib/eal/loongarch/include/rte_prefetch.h      |  48 ++++
+ lib/eal/loongarch/include/rte_rwlock.h        |  42 ++++
+ lib/eal/loongarch/include/rte_spinlock.h      |  64 ++++++
+ lib/eal/loongarch/include/rte_ticketlock.h    | 214 ++++++++++++++++++
+ lib/eal/loongarch/include/rte_vect.h          |  65 ++++++
+ lib/eal/loongarch/meson.build                 |  11 +
+ lib/eal/loongarch/rte_cpuflags.c              |  93 ++++++++
+ lib/eal/loongarch/rte_cycles.c                |  45 ++++
+ lib/eal/loongarch/rte_hypervisor.c            |  11 +
+ lib/eal/loongarch/rte_power_intrinsics.c      |  53 +++++
+ lib/lpm/meson.build                           |   1 +
+ lib/lpm/rte_lpm.h                             |   6 +-
+ lib/lpm/rte_lpm_scalar.h                      |  38 ++++
+ meson.build                                   |   2 +
+ 38 files changed, 1216 insertions(+), 5 deletions(-)
+ create mode 100644 config/loongarch/loongarch_loongarch64_linux_gcc
+ create mode 100644 config/loongarch/meson.build
+ create mode 100644 examples/l3fwd/l3fwd_lpm_lsx.h
+ create mode 100644 lib/eal/loongarch/include/meson.build
+ create mode 100644 lib/eal/loongarch/include/rte_atomic.h
+ create mode 100644 lib/eal/loongarch/include/rte_byteorder.h
+ create mode 100644 lib/eal/loongarch/include/rte_cpuflags.h
+ create mode 100644 lib/eal/loongarch/include/rte_cycles.h
+ create mode 100644 lib/eal/loongarch/include/rte_io.h
+ create mode 100644 lib/eal/loongarch/include/rte_mcslock.h
+ create mode 100644 lib/eal/loongarch/include/rte_memcpy.h
+ create mode 100644 lib/eal/loongarch/include/rte_pause.h
+ create mode 100644 lib/eal/loongarch/include/rte_pflock.h
+ create mode 100644 lib/eal/loongarch/include/rte_power_intrinsics.h
+ create mode 100644 lib/eal/loongarch/include/rte_prefetch.h
+ create mode 100644 lib/eal/loongarch/include/rte_rwlock.h
+ create mode 100644 lib/eal/loongarch/include/rte_spinlock.h
+ create mode 100644 lib/eal/loongarch/include/rte_ticketlock.h
+ create mode 100644 lib/eal/loongarch/include/rte_vect.h
+ create mode 100644 lib/eal/loongarch/meson.build
+ create mode 100644 lib/eal/loongarch/rte_cpuflags.c
+ create mode 100644 lib/eal/loongarch/rte_cycles.c
+ create mode 100644 lib/eal/loongarch/rte_hypervisor.c
+ create mode 100644 lib/eal/loongarch/rte_power_intrinsics.c
+ create mode 100644 lib/lpm/rte_lpm_scalar.h
+
+diff --git a/app/test/test_cpuflags.c b/app/test/test_cpuflags.c
+index 40f6ac7..17c9986 100644
+--- a/app/test/test_cpuflags.c
++++ b/app/test/test_cpuflags.c
+@@ -200,6 +200,47 @@ test_cpuflags(void)
+	CHECK_FOR_FLAG(RTE_CPUFLAG_INVTSC);
+ #endif
+
++#if defined(RTE_ARCH_LOONGARCH)
++	printf("Check for CPUCFG:\t");
++	CHECK_FOR_FLAG(RTE_CPUFLAG_CPUCFG);
++
++	printf("Check for LAM:\t\t");
++	CHECK_FOR_FLAG(RTE_CPUFLAG_LAM);
++
++	printf("Check for UAL:\t\t");
++	CHECK_FOR_FLAG(RTE_CPUFLAG_UAL);
++
++	printf("Check for FPU:\t\t");
++	CHECK_FOR_FLAG(RTE_CPUFLAG_FPU);
++
++	printf("Check for LSX:\t\t");
++	CHECK_FOR_FLAG(RTE_CPUFLAG_LSX);
++
++	printf("Check for LASX:\t\t");
++	CHECK_FOR_FLAG(RTE_CPUFLAG_LASX);
++
++	printf("Check for CRC32:\t");
++	CHECK_FOR_FLAG(RTE_CPUFLAG_CRC32);
++
++	printf("Check for COMPLEX:\t");
++	CHECK_FOR_FLAG(RTE_CPUFLAG_COMPLEX);
++
++	printf("Check for CRYPTO:\t");
++	CHECK_FOR_FLAG(RTE_CPUFLAG_CRYPTO);
++
++	printf("Check for LVZ:\t\t");
++	CHECK_FOR_FLAG(RTE_CPUFLAG_LVZ);
++
++	printf("Check for LBT_X86:\t");
++	CHECK_FOR_FLAG(RTE_CPUFLAG_LBT_X86);
++
++	printf("Check for LBT_ARM:\t");
++	CHECK_FOR_FLAG(RTE_CPUFLAG_LBT_ARM);
++
++	printf("Check for LBT_MIPS:\t");
++	CHECK_FOR_FLAG(RTE_CPUFLAG_LBT_MIPS);
++#endif
++
+	/*
+	 * Check if invalid data is handled properly
+	 */
+diff --git a/app/test/test_xmmt_ops.h b/app/test/test_xmmt_ops.h
+index 3a82d5e..21490e7 100644
+--- a/app/test/test_xmmt_ops.h
++++ b/app/test/test_xmmt_ops.h
+@@ -49,6 +49,18 @@ vect_set_epi32(int i3, int i2, int i1, int i0)
+	return data;
+ }
+
++#elif defined(RTE_ARCH_LOONGARCH)
++
++#define vect_loadu_sil128(p) vect_load_128(p)
++
++/* sets the 4 signed 32-bit integer values and returns the xmm_t variable */
++static __rte_always_inline xmm_t
++vect_set_epi32(int i3, int i2, int i1, int i0)
++{
++	xmm_t data = (xmm_t){.u32 = {i0, i1, i2, i3}};
++
++	return data;
++}
+ #endif
+
+ #endif /* _TEST_XMMT_OPS_H_ */
+diff --git a/config/loongarch/loongarch_loongarch64_linux_gcc b/config/loongarch/loongarch_loongarch64_linux_gcc
+new file mode 100644
+index 0000000..c933022
+--- /dev/null
++++ b/config/loongarch/loongarch_loongarch64_linux_gcc
+@@ -0,0 +1,16 @@
++[binaries]
++c = ['ccache', 'loongarch64-unknown-linux-gnu-gcc']
++cpp = ['ccache', 'loongarch64-unknown-linux-gnu-g++']
++ar = 'loongarch64-unknown-linux-gnu-gcc-ar'
++strip = 'loongarch64-unknown-linux-gnu-strip'
++pcap-config = ''
++
++[host_machine]
++system = 'linux'
++cpu_family = 'loongarch64'
++cpu = '3a5000'
++endian = 'little'
++
++[properties]
++implementor_id = 'generic'
++implementor_pn = 'default'
+diff --git a/config/loongarch/meson.build b/config/loongarch/meson.build
+new file mode 100644
+index 0000000..99dabef
+--- /dev/null
++++ b/config/loongarch/meson.build
+@@ -0,0 +1,43 @@
++# SPDX-License-Identifier: BSD-3-Clause
++# Copyright(c) 2022 Loongson Technology Corporation Limited
++
++if not dpdk_conf.get('RTE_ARCH_64')
++    error('Only 64-bit compiles are supported for this platform type')
++endif
++dpdk_conf.set('RTE_ARCH', 'loongarch')
++dpdk_conf.set('RTE_ARCH_LOONGARCH', 1)
++dpdk_conf.set('RTE_FORCE_INTRINSICS', 1)
++
++machine_args_generic = [
++    ['default', ['-march=loongarch64']],
++]
++
++flags_generic = [
++    ['RTE_MACHINE', '"loongarch64"'],
++    ['RTE_MAX_LCORE', 64],
++    ['RTE_MAX_NUMA_NODES', 16],
++    ['RTE_CACHE_LINE_SIZE', 64]]
++
++impl_generic = ['Generic loongarch', flags_generic, machine_args_generic]
++
++machine = []
++machine_args = []
++
++machine = impl_generic
++impl_pn = 'default'
++
++message('Implementer : ' + machine[0])
++foreach flag: machine[1]
++    if flag.length() > 0
++        dpdk_conf.set(flag[0], flag[1])
++    endif
++endforeach
++
++foreach marg: machine[2]
++    if marg[0] == impl_pn
++        foreach f: marg[1]
++           machine_args += f
++        endforeach
++    endif
++endforeach
++message(machine_args)
+diff --git a/drivers/net/i40e/meson.build b/drivers/net/i40e/meson.build
+index efc5f93..19ddd50 100644
+--- a/drivers/net/i40e/meson.build
++++ b/drivers/net/i40e/meson.build
+@@ -1,6 +1,12 @@
+ # SPDX-License-Identifier: BSD-3-Clause
+ # Copyright(c) 2017 Intel Corporation
+
++if arch_subdir == 'loongarch'
++    build = false
++    reason = 'not supported on LoongArch'
++    subdir_done()
++endif
++
+ cflags += ['-DPF_DRIVER',
+     '-DVF_DRIVER',
+     '-DINTEGRATED_VF',
+diff --git a/drivers/net/ixgbe/ixgbe_rxtx.c b/drivers/net/ixgbe/ixgbe_rxtx.c
+index d7c80d4..e19e832 100644
+--- a/drivers/net/ixgbe/ixgbe_rxtx.c
++++ b/drivers/net/ixgbe/ixgbe_rxtx.c
+@@ -5958,8 +5958,8 @@ ixgbe_config_rss_filter(struct rte_eth_dev *dev,
+	return 0;
+ }
+
+-/* Stubs needed for linkage when RTE_ARCH_PPC_64 is set */
+-#if defined(RTE_ARCH_PPC_64)
++/* Stubs needed for linkage when RTE_ARCH_PPC_64 or RTE_ARCH_LOONGARCH is set */
++#if defined(RTE_ARCH_PPC_64) || defined(RTE_ARCH_LOONGARCH)
+ int
+ ixgbe_rx_vec_dev_conf_condition_check(struct rte_eth_dev __rte_unused *dev)
+ {
+diff --git a/drivers/net/memif/rte_eth_memif.h b/drivers/net/memif/rte_eth_memif.h
+index a5ee23d..864a498 100644
+--- a/drivers/net/memif/rte_eth_memif.h
++++ b/drivers/net/memif/rte_eth_memif.h
+@@ -180,6 +180,8 @@ const char *memif_version(void);
+ #define __NR_memfd_create 360
+ #elif defined __i386__
+ #define __NR_memfd_create 356
++#elif defined __loongarch__
++#define __NR_memfd_create 279
+ #else
+ #error "__NR_memfd_create unknown for this architecture"
+ #endif
+diff --git a/drivers/net/tap/tap_bpf.h b/drivers/net/tap/tap_bpf.h
+index f0b9fc7..de7ab91 100644
+--- a/drivers/net/tap/tap_bpf.h
++++ b/drivers/net/tap/tap_bpf.h
+@@ -101,6 +101,8 @@ union bpf_attr {
+ #  define __NR_bpf 351
+ # elif defined(__powerpc__)
+ #  define __NR_bpf 361
++# elif defined(__loongarch__)
++#  define __NR_bpf 280
+ # else
+ #  error __NR_bpf not defined
+ # endif
+diff --git a/examples/l3fwd/l3fwd_em.c b/examples/l3fwd/l3fwd_em.c
+index 5cc4a4d..67e042f 100644
+--- a/examples/l3fwd/l3fwd_em.c
++++ b/examples/l3fwd/l3fwd_em.c
+@@ -270,6 +270,14 @@ em_mask_key(void *key, xmm_t mask)
+
+	return vec_and(data, mask);
+ }
++#elif defined(RTE_ARCH_LOONGARCH)
++static inline xmm_t
++em_mask_key(void *key, xmm_t mask)
++{
++	xmm_t data = vect_load_128(key);
++
++	return vect_and(data, mask);
++}
+ #else
+ #error No vector engine (SSE, NEON, ALTIVEC) available, check your toolchain
+ #endif
+diff --git a/examples/l3fwd/l3fwd_fib.c b/examples/l3fwd/l3fwd_fib.c
+index 2110459..4aa2fa5 100644
+--- a/examples/l3fwd/l3fwd_fib.c
++++ b/examples/l3fwd/l3fwd_fib.c
+@@ -18,6 +18,8 @@
+ #include "l3fwd_neon.h"
+ #elif defined RTE_ARCH_PPC_64
+ #include "l3fwd_altivec.h"
++#else
++#include "l3fwd_common.h"
+ #endif
+ #include "l3fwd_event.h"
+ #include "l3fwd_route.h"
+diff --git a/examples/l3fwd/l3fwd_lpm.c b/examples/l3fwd/l3fwd_lpm.c
+index a5b476c..160a7c6 100644
+--- a/examples/l3fwd/l3fwd_lpm.c
++++ b/examples/l3fwd/l3fwd_lpm.c
+@@ -135,6 +135,9 @@ lpm_get_dst_port_with_ipv4(const struct lcore_conf *qconf, struct rte_mbuf *pkt,
+ #include "l3fwd_lpm_neon.h"
+ #elif defined(RTE_ARCH_PPC_64)
+ #include "l3fwd_lpm_altivec.h"
++#elif defined(RTE_ARCH_LOONGARCH)
++#include "l3fwd_lpm_lsx.h"
++#include "l3fwd_lpm.h"
+ #else
+ #include "l3fwd_lpm.h"
+ #endif
+@@ -231,7 +234,7 @@ lpm_process_event_pkt(const struct lcore_conf *lconf, struct rte_mbuf *mbuf)
+	mbuf->port = lpm_get_dst_port(lconf, mbuf, mbuf->port);
+
+ #if defined RTE_ARCH_X86 || defined __ARM_NEON \
+-	|| defined RTE_ARCH_PPC_64
++	|| defined RTE_ARCH_PPC_64 || defined RTE_ARCH_LOONGARCH
+	process_packet(mbuf, &mbuf->port);
+ #else
+
+diff --git a/examples/l3fwd/l3fwd_lpm_lsx.h b/examples/l3fwd/l3fwd_lpm_lsx.h
+new file mode 100644
+index 0000000..a4d7449
+--- /dev/null
++++ b/examples/l3fwd/l3fwd_lpm_lsx.h
+@@ -0,0 +1,30 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2022 Loongson Technology Corporation Limited
++ */
++
++#ifndef __L3FWD_LPM_LSX_H__
++#define __L3FWD_LPM_LSX_H__
++
++#include "l3fwd_common.h"
++
++static inline void
++process_packet(struct rte_mbuf *pkt, uint16_t *hop)
++{
++        struct rte_ether_hdr *eth_hdr;
++
++        /* Run rfc1812 if packet is ipv4 and checks enabled. */
++#if defined DO_RFC_1812_CHECKS
++        rfc1812_process(
++                (struct rte_ipv4_hdr *)(rte_pktmbuf_mtod(
++                                                pkt, struct rte_ether_hdr *) +
++                                        1),
++                hop, pkt->packet_type);
++#endif
++
++        /* Set MAC addresses. */
++        eth_hdr = rte_pktmbuf_mtod(pkt, struct rte_ether_hdr *);
++        *(uint64_t *)&eth_hdr->dst_addr = dest_eth_addr[*hop];
++        rte_ether_addr_copy(&ports_eth_addr[*hop], &eth_hdr->src_addr);
++}
++
++#endif /* __L3FWD_LPM_LSX_H__ */
+diff --git a/lib/eal/linux/eal_memory.c b/lib/eal/linux/eal_memory.c
+index 03a4f2d..d97f1e4 100644
+--- a/lib/eal/linux/eal_memory.c
++++ b/lib/eal/linux/eal_memory.c
+@@ -86,7 +86,11 @@ uint64_t eal_get_baseaddr(void)
+	 * rte_mem_check_dma_mask for ensuring all memory is within supported
+	 * range.
+	 */
++#if defined(RTE_ARCH_LOONGARCH)
++	return 0x7000000000ULL;
++#else
+	return 0x100000000ULL;
++#endif
+ }
+
+ /*
+diff --git a/lib/eal/loongarch/include/meson.build b/lib/eal/loongarch/include/meson.build
+new file mode 100644
+index 0000000..1fa96e4
+--- /dev/null
++++ b/lib/eal/loongarch/include/meson.build
+@@ -0,0 +1,21 @@
++# SPDX-License-Identifier: BSD-3-Clause
++# Copyright(c) 2022 Loongson Technology Corporation Limited
++
++arch_headers = files(
++        'rte_atomic.h',
++        'rte_byteorder.h',
++        'rte_cpuflags.h',
++        'rte_cycles.h',
++        'rte_io.h',
++        'rte_mcslock.h',
++        'rte_memcpy.h',
++        'rte_pause.h',
++        'rte_pflock.h',
++        'rte_power_intrinsics.h',
++        'rte_prefetch.h',
++        'rte_rwlock.h',
++        'rte_spinlock.h',
++        'rte_ticketlock.h',
++        'rte_vect.h',
++)
++install_headers(arch_headers, subdir: get_option('include_subdir_arch'))
+diff --git a/lib/eal/loongarch/include/rte_atomic.h b/lib/eal/loongarch/include/rte_atomic.h
+new file mode 100644
+index 0000000..3c82845
+--- /dev/null
++++ b/lib/eal/loongarch/include/rte_atomic.h
+@@ -0,0 +1,47 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2022 Loongson Technology Corporation Limited
++ */
++
++#ifndef RTE_ATOMIC_LOONGARCH_H
++#define RTE_ATOMIC_LOONGARCH_H
++
++#ifndef RTE_FORCE_INTRINSICS
++#  error Platform must be built with RTE_FORCE_INTRINSICS
++#endif
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#include <rte_common.h>
++#include "generic/rte_atomic.h"
++
++#define rte_mb()	do { asm volatile("dbar 0":::"memory"); } while (0)
++
++#define rte_wmb()	rte_mb()
++
++#define rte_rmb()	rte_mb()
++
++#define rte_smp_mb()	rte_mb()
++
++#define rte_smp_wmb()	rte_mb()
++
++#define rte_smp_rmb()	rte_mb()
++
++#define rte_io_mb()	rte_mb()
++
++#define rte_io_wmb()	rte_mb()
++
++#define rte_io_rmb()	rte_mb()
++
++static __rte_always_inline void
++rte_atomic_thread_fence(int memorder)
++{
++	__atomic_thread_fence(memorder);
++}
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* RTE_ATOMIC_LOONGARCH_H */
+diff --git a/lib/eal/loongarch/include/rte_byteorder.h b/lib/eal/loongarch/include/rte_byteorder.h
+new file mode 100644
+index 0000000..0da6097
+--- /dev/null
++++ b/lib/eal/loongarch/include/rte_byteorder.h
+@@ -0,0 +1,40 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2022 Loongson Technology Corporation Limited
++ */
++
++#ifndef RTE_BYTEORDER_LOONGARCH_H
++#define RTE_BYTEORDER_LOONGARCH_H
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#include "generic/rte_byteorder.h"
++
++#if RTE_BYTE_ORDER == RTE_LITTLE_ENDIAN
++
++#define rte_cpu_to_le_16(x) (x)
++#define rte_cpu_to_le_32(x) (x)
++#define rte_cpu_to_le_64(x) (x)
++
++#define rte_cpu_to_be_16(x) rte_bswap16(x)
++#define rte_cpu_to_be_32(x) rte_bswap32(x)
++#define rte_cpu_to_be_64(x) rte_bswap64(x)
++
++#define rte_le_to_cpu_16(x) (x)
++#define rte_le_to_cpu_32(x) (x)
++#define rte_le_to_cpu_64(x) (x)
++
++#define rte_be_to_cpu_16(x) rte_bswap16(x)
++#define rte_be_to_cpu_32(x) rte_bswap32(x)
++#define rte_be_to_cpu_64(x) rte_bswap64(x)
++
++#else /* RTE_BIG_ENDIAN */
++#error "LoongArch not support big endian!"
++#endif
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* RTE_BYTEORDER_LOONGARCH_H */
+diff --git a/lib/eal/loongarch/include/rte_cpuflags.h b/lib/eal/loongarch/include/rte_cpuflags.h
+new file mode 100644
+index 0000000..1c80779
+--- /dev/null
++++ b/lib/eal/loongarch/include/rte_cpuflags.h
+@@ -0,0 +1,39 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2022 Loongson Technology Corporation Limited
++ */
++
++#ifndef RTE_CPUFLAGS_LOONGARCH_H
++#define RTE_CPUFLAGS_LOONGARCH_H
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/**
++ * Enumeration of all CPU features supported
++ */
++enum rte_cpu_flag_t {
++	RTE_CPUFLAG_CPUCFG = 0,
++	RTE_CPUFLAG_LAM,
++	RTE_CPUFLAG_UAL,
++	RTE_CPUFLAG_FPU,
++	RTE_CPUFLAG_LSX,
++	RTE_CPUFLAG_LASX,
++	RTE_CPUFLAG_CRC32,
++	RTE_CPUFLAG_COMPLEX,
++	RTE_CPUFLAG_CRYPTO,
++	RTE_CPUFLAG_LVZ,
++	RTE_CPUFLAG_LBT_X86,
++	RTE_CPUFLAG_LBT_ARM,
++	RTE_CPUFLAG_LBT_MIPS,
++	/* The last item */
++	RTE_CPUFLAG_NUMFLAGS /**< This should always be the last! */
++};
++
++#include "generic/rte_cpuflags.h"
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* RTE_CPUFLAGS_LOONGARCH_H */
+diff --git a/lib/eal/loongarch/include/rte_cycles.h b/lib/eal/loongarch/include/rte_cycles.h
+new file mode 100644
+index 0000000..f612d1a
+--- /dev/null
++++ b/lib/eal/loongarch/include/rte_cycles.h
+@@ -0,0 +1,47 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2022 Loongson Technology Corporation Limited
++ */
++
++#ifndef RTE_CYCLES_LOONGARCH_H
++#define RTE_CYCLES_LOONGARCH_H
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#include "generic/rte_cycles.h"
++
++/**
++ * Read the time base register.
++ *
++ * @return
++ *   The time base for this lcore.
++ */
++static inline uint64_t
++rte_rdtsc(void)
++{
++	uint64_t count;
++
++	__asm__ __volatile__ (
++		"rdtime.d %[cycles], $zero\n"
++		: [cycles] "=r" (count)
++		::
++		);
++	return count;
++}
++
++static inline uint64_t
++rte_rdtsc_precise(void)
++{
++	rte_mb();
++	return rte_rdtsc();
++}
++
++static inline uint64_t
++rte_get_tsc_cycles(void) { return rte_rdtsc(); }
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* RTE_CYCLES_LOONGARCH_H */
+diff --git a/lib/eal/loongarch/include/rte_io.h b/lib/eal/loongarch/include/rte_io.h
+new file mode 100644
+index 0000000..40e40ef
+--- /dev/null
++++ b/lib/eal/loongarch/include/rte_io.h
+@@ -0,0 +1,18 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2022 Loongson Technology Corporation Limited
++ */
++
++#ifndef RTE_IO_LOONGARCH_H
++#define RTE_IO_LOONGARCH_H
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#include "generic/rte_io.h"
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* RTE_IO_LOONGARCH_H */
+diff --git a/lib/eal/loongarch/include/rte_mcslock.h b/lib/eal/loongarch/include/rte_mcslock.h
+new file mode 100644
+index 0000000..c4484b6
+--- /dev/null
++++ b/lib/eal/loongarch/include/rte_mcslock.h
+@@ -0,0 +1,18 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2022 Loongson Technology Corporation Limited
++ */
++
++#ifndef _RTE_MCSLOCK_LOONGARCH_H_
++#define _RTE_MCSLOCK_LOONGARCH_H_
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#include "generic/rte_mcslock.h"
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* _RTE_MCSLOCK_LOONGARCH_H_ */
+diff --git a/lib/eal/loongarch/include/rte_memcpy.h b/lib/eal/loongarch/include/rte_memcpy.h
+new file mode 100644
+index 0000000..22578d4
+--- /dev/null
++++ b/lib/eal/loongarch/include/rte_memcpy.h
+@@ -0,0 +1,61 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2022 Loongson Technology Corporation Limited
++ */
++
++#ifndef RTE_MEMCPY_LOONGARCH_H
++#define RTE_MEMCPY_LOONGARCH_H
++
++#include <stdint.h>
++#include <string.h>
++
++#include "rte_common.h"
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#include "generic/rte_memcpy.h"
++
++static inline void
++rte_mov16(uint8_t *dst, const uint8_t *src)
++{
++	memcpy(dst, src, 16);
++}
++
++static inline void
++rte_mov32(uint8_t *dst, const uint8_t *src)
++{
++	memcpy(dst, src, 32);
++}
++
++static inline void
++rte_mov48(uint8_t *dst, const uint8_t *src)
++{
++	memcpy(dst, src, 48);
++}
++
++static inline void
++rte_mov64(uint8_t *dst, const uint8_t *src)
++{
++	memcpy(dst, src, 64);
++}
++
++static inline void
++rte_mov128(uint8_t *dst, const uint8_t *src)
++{
++	memcpy(dst, src, 128);
++}
++
++static inline void
++rte_mov256(uint8_t *dst, const uint8_t *src)
++{
++	memcpy(dst, src, 256);
++}
++
++#define rte_memcpy(d, s, n)	memcpy((d), (s), (n))
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* RTE_MEMCPY_LOONGARCH_H */
+diff --git a/lib/eal/loongarch/include/rte_pause.h b/lib/eal/loongarch/include/rte_pause.h
+new file mode 100644
+index 0000000..4302e1b
+--- /dev/null
++++ b/lib/eal/loongarch/include/rte_pause.h
+@@ -0,0 +1,24 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2022 Loongson Technology Corporation Limited
++ */
++
++#ifndef RTE_PAUSE_LOONGARCH_H
++#define RTE_PAUSE_LOONGARCH_H
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#include "rte_atomic.h"
++
++#include "generic/rte_pause.h"
++
++static inline void rte_pause(void)
++{
++}
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* RTE_PAUSE_LOONGARCH_H */
+diff --git a/lib/eal/loongarch/include/rte_pflock.h b/lib/eal/loongarch/include/rte_pflock.h
+new file mode 100644
+index 0000000..d3e5824
+--- /dev/null
++++ b/lib/eal/loongarch/include/rte_pflock.h
+@@ -0,0 +1,18 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2021 Microsoft Corporation
++ */
++
++#ifndef _RTE_PFLOCK_LOONGARCH_H_
++#define _RTE_PFLOCK_LOONGARCH_H_
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#include "generic/rte_pflock.h"
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* _RTE_PFLOCK_LOONGARCH_H_ */
+diff --git a/lib/eal/loongarch/include/rte_power_intrinsics.h b/lib/eal/loongarch/include/rte_power_intrinsics.h
+new file mode 100644
+index 0000000..d5dbd94
+--- /dev/null
++++ b/lib/eal/loongarch/include/rte_power_intrinsics.h
+@@ -0,0 +1,20 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2022 Loongson Technology Corporation Limited
++ */
++
++#ifndef RTE_POWER_INTRINSIC_LOONGARCH_H
++#define RTE_POWER_INTRINSIC_LOONGARCH_H
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#include <rte_common.h>
++
++#include "generic/rte_power_intrinsics.h"
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* RTE_POWER_INTRINSIC_LOONGARCH_H */
+diff --git a/lib/eal/loongarch/include/rte_prefetch.h b/lib/eal/loongarch/include/rte_prefetch.h
+new file mode 100644
+index 0000000..64b1fd2
+--- /dev/null
++++ b/lib/eal/loongarch/include/rte_prefetch.h
+@@ -0,0 +1,48 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2022 Loongson Technology Corporation Limited
++ */
++
++#ifndef RTE_PREFETCH_LOONGARCH_H
++#define RTE_PREFETCH_LOONGARCH_H
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#include <rte_compat.h>
++#include <rte_common.h>
++#include "generic/rte_prefetch.h"
++
++static inline void rte_prefetch0(const volatile void *p)
++{
++	__builtin_prefetch((const void *)(uintptr_t)p, 0, 3);
++}
++
++static inline void rte_prefetch1(const volatile void *p)
++{
++	__builtin_prefetch((const void *)(uintptr_t)p, 0, 2);
++}
++
++static inline void rte_prefetch2(const volatile void *p)
++{
++	__builtin_prefetch((const void *)(uintptr_t)p, 0, 1);
++}
++
++static inline void rte_prefetch_non_temporal(const volatile void *p)
++{
++	/* non-temporal version not available, fallback to rte_prefetch0 */
++	rte_prefetch0(p);
++}
++
++__rte_experimental
++static inline void
++rte_cldemote(const volatile void *p)
++{
++	RTE_SET_USED(p);
++}
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* RTE_PREFETCH_LOONGARCH_H */
+diff --git a/lib/eal/loongarch/include/rte_rwlock.h b/lib/eal/loongarch/include/rte_rwlock.h
+new file mode 100644
+index 0000000..aedc6f3
+--- /dev/null
++++ b/lib/eal/loongarch/include/rte_rwlock.h
+@@ -0,0 +1,42 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2022 Loongson Technology Corporation Limited
++ */
++
++#ifndef RTE_RWLOCK_LOONGARCH_H
++#define RTE_RWLOCK_LOONGARCH_H
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#include "generic/rte_rwlock.h"
++
++static inline void
++rte_rwlock_read_lock_tm(rte_rwlock_t *rwl)
++{
++	rte_rwlock_read_lock(rwl);
++}
++
++static inline void
++rte_rwlock_read_unlock_tm(rte_rwlock_t *rwl)
++{
++	rte_rwlock_read_unlock(rwl);
++}
++
++static inline void
++rte_rwlock_write_lock_tm(rte_rwlock_t *rwl)
++{
++	rte_rwlock_write_lock(rwl);
++}
++
++static inline void
++rte_rwlock_write_unlock_tm(rte_rwlock_t *rwl)
++{
++	rte_rwlock_write_unlock(rwl);
++}
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* RTE_RWLOCK_LOONGARCH_H */
+diff --git a/lib/eal/loongarch/include/rte_spinlock.h b/lib/eal/loongarch/include/rte_spinlock.h
+new file mode 100644
+index 0000000..e8d34e9
+--- /dev/null
++++ b/lib/eal/loongarch/include/rte_spinlock.h
+@@ -0,0 +1,64 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2022 Loongson Technology Corporation Limited
++ */
++
++#ifndef RTE_SPINLOCK_LOONGARCH_H
++#define RTE_SPINLOCK_LOONGARCH_H
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#include <rte_common.h>
++#include "generic/rte_spinlock.h"
++
++#ifndef RTE_FORCE_INTRINSICS
++#  error Platform must be built with RTE_FORCE_INTRINSICS
++#endif
++
++static inline int rte_tm_supported(void)
++{
++	return 0;
++}
++
++static inline void
++rte_spinlock_lock_tm(rte_spinlock_t *sl)
++{
++	rte_spinlock_lock(sl); /* fall-back */
++}
++
++static inline int
++rte_spinlock_trylock_tm(rte_spinlock_t *sl)
++{
++	return rte_spinlock_trylock(sl);
++}
++
++static inline void
++rte_spinlock_unlock_tm(rte_spinlock_t *sl)
++{
++	rte_spinlock_unlock(sl);
++}
++
++static inline void
++rte_spinlock_recursive_lock_tm(rte_spinlock_recursive_t *slr)
++{
++	rte_spinlock_recursive_lock(slr); /* fall-back */
++}
++
++static inline void
++rte_spinlock_recursive_unlock_tm(rte_spinlock_recursive_t *slr)
++{
++	rte_spinlock_recursive_unlock(slr);
++}
++
++static inline int
++rte_spinlock_recursive_trylock_tm(rte_spinlock_recursive_t *slr)
++{
++	return rte_spinlock_recursive_trylock(slr);
++}
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* RTE_SPINLOCK_LOONGARCH_H */
+diff --git a/lib/eal/loongarch/include/rte_ticketlock.h b/lib/eal/loongarch/include/rte_ticketlock.h
+new file mode 100644
+index 0000000..48494cb
+--- /dev/null
++++ b/lib/eal/loongarch/include/rte_ticketlock.h
+@@ -0,0 +1,214 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2022 Loongson Technology Corporation Limited
++ */
++
++#ifndef _RTE_TICKETLOCK_H_
++#define _RTE_TICKETLOCK_H_
++
++/**
++ * @file
++ *
++ * RTE ticket locks
++ *
++ * This file defines an API for ticket locks, which give each waiting
++ * thread a ticket and take the lock one by one, first come, first
++ * serviced.
++ *
++ * All locks must be initialised before use, and only initialised once.
++ *
++ */
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#include <rte_common.h>
++#include <rte_lcore.h>
++#include <rte_pause.h>
++
++/**
++ * The rte_ticketlock_t type.
++ */
++typedef union {
++	uint32_t tickets;
++	struct {
++		uint16_t current;
++		uint16_t next;
++	} s;
++} rte_ticketlock_t;
++
++/**
++ * A static ticketlock initializer.
++ */
++#define RTE_TICKETLOCK_INITIALIZER { 0 }
++
++/**
++ * Initialize the ticketlock to an unlocked state.
++ *
++ * @param tl
++ *   A pointer to the ticketlock.
++ */
++static inline void
++rte_ticketlock_init(rte_ticketlock_t *tl)
++{
++	__atomic_store_n(&tl->tickets, 0, __ATOMIC_RELAXED);
++}
++
++/**
++ * Take the ticketlock.
++ *
++ * @param tl
++ *   A pointer to the ticketlock.
++ */
++static inline void
++rte_ticketlock_lock(rte_ticketlock_t *tl)
++{
++	uint16_t me = __atomic_fetch_add(&tl->s.next, 1, __ATOMIC_RELAXED);
++	rte_wait_until_equal_16(&tl->s.current, me, __ATOMIC_ACQUIRE);
++}
++
++/**
++ * Release the ticketlock.
++ *
++ * @param tl
++ *   A pointer to the ticketlock.
++ */
++static inline void
++rte_ticketlock_unlock(rte_ticketlock_t *tl)
++{
++	uint16_t i = __atomic_load_n(&tl->s.current, __ATOMIC_RELAXED);
++	__atomic_store_n(&tl->s.current, i + 1, __ATOMIC_RELEASE);
++}
++
++/**
++ * Try to take the lock.
++ *
++ * @param tl
++ *   A pointer to the ticketlock.
++ * @return
++ *   1 if the lock is successfully taken; 0 otherwise.
++ */
++static inline int
++rte_ticketlock_trylock(rte_ticketlock_t *tl)
++{
++	rte_ticketlock_t old, new;
++	old.tickets = __atomic_load_n(&tl->tickets, __ATOMIC_RELAXED);
++	new.tickets = old.tickets;
++	new.s.next++;
++	if (old.s.next == old.s.current) {
++		if (__atomic_compare_exchange_n(&tl->tickets, &old.tickets,
++		    new.tickets, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))
++			return 1;
++	}
++
++	return 0;
++}
++
++/**
++ * Test if the lock is taken.
++ *
++ * @param tl
++ *   A pointer to the ticketlock.
++ * @return
++ *   1 if the lock is currently taken; 0 otherwise.
++ */
++static inline int
++rte_ticketlock_is_locked(rte_ticketlock_t *tl)
++{
++	rte_ticketlock_t tic;
++	tic.tickets = __atomic_load_n(&tl->tickets, __ATOMIC_ACQUIRE);
++	return (tic.s.current != tic.s.next);
++}
++
++/**
++ * The rte_ticketlock_recursive_t type.
++ */
++#define TICKET_LOCK_INVALID_ID -1
++
++typedef struct {
++	rte_ticketlock_t tl; /**< the actual ticketlock */
++	int user; /**< core id using lock, TICKET_LOCK_INVALID_ID for unused */
++	unsigned int count; /**< count of time this lock has been called */
++} rte_ticketlock_recursive_t;
++
++/**
++ * A static recursive ticketlock initializer.
++ */
++#define RTE_TICKETLOCK_RECURSIVE_INITIALIZER {RTE_TICKETLOCK_INITIALIZER, \
++					      TICKET_LOCK_INVALID_ID, 0}
++
++/**
++ * Initialize the recursive ticketlock to an unlocked state.
++ *
++ * @param tlr
++ *   A pointer to the recursive ticketlock.
++ */
++static inline void
++rte_ticketlock_recursive_init(rte_ticketlock_recursive_t *tlr)
++{
++	rte_ticketlock_init(&tlr->tl);
++	__atomic_store_n(&tlr->user, TICKET_LOCK_INVALID_ID, __ATOMIC_RELAXED);
++	tlr->count = 0;
++}
++
++/**
++ * Take the recursive ticketlock.
++ *
++ * @param tlr
++ *   A pointer to the recursive ticketlock.
++ */
++static inline void
++rte_ticketlock_recursive_lock(rte_ticketlock_recursive_t *tlr)
++{
++	int id = rte_gettid();
++
++	if (__atomic_load_n(&tlr->user, __ATOMIC_RELAXED) != id) {
++		rte_ticketlock_lock(&tlr->tl);
++		__atomic_store_n(&tlr->user, id, __ATOMIC_RELAXED);
++	}
++	tlr->count++;
++}
++
++/**
++ * Release the recursive ticketlock.
++ *
++ * @param tlr
++ *   A pointer to the recursive ticketlock.
++ */
++static inline void
++rte_ticketlock_recursive_unlock(rte_ticketlock_recursive_t *tlr)
++{
++	if (--(tlr->count) == 0) {
++		__atomic_store_n(&tlr->user, TICKET_LOCK_INVALID_ID,
++				 __ATOMIC_RELAXED);
++		rte_ticketlock_unlock(&tlr->tl);
++	}
++}
++
++/**
++ * Try to take the recursive lock.
++ *
++ * @param tlr
++ *   A pointer to the recursive ticketlock.
++ * @return
++ *   1 if the lock is successfully taken; 0 otherwise.
++ */
++static inline int
++rte_ticketlock_recursive_trylock(rte_ticketlock_recursive_t *tlr)
++{
++	int id = rte_gettid();
++
++	if (__atomic_load_n(&tlr->user, __ATOMIC_RELAXED) != id) {
++		if (rte_ticketlock_trylock(&tlr->tl) == 0)
++			return 0;
++		__atomic_store_n(&tlr->user, id, __ATOMIC_RELAXED);
++	}
++	tlr->count++;
++	return 1;
++}
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* _RTE_TICKETLOCK_H_ */
+diff --git a/lib/eal/loongarch/include/rte_vect.h b/lib/eal/loongarch/include/rte_vect.h
+new file mode 100644
+index 0000000..1546515
+--- /dev/null
++++ b/lib/eal/loongarch/include/rte_vect.h
+@@ -0,0 +1,65 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2022 Loongson Technology Corporation Limited
++ */
++
++#ifndef RTE_VECT_LOONGARCH_H
++#define RTE_VECT_LOONGARCH_H
++
++#include <stdint.h>
++#include "generic/rte_vect.h"
++#include "rte_common.h"
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#define RTE_VECT_DEFAULT_SIMD_BITWIDTH RTE_VECT_SIMD_DISABLED
++
++typedef union xmm {
++	int8_t   i8[16];
++	int16_t  i16[8];
++	int32_t  i32[4];
++	int64_t  i64[2];
++	uint8_t  u8[16];
++	uint16_t u16[8];
++	uint32_t u32[4];
++	uint64_t u64[2];
++	double   pd[2];
++} __rte_aligned(16) xmm_t;
++
++#define XMM_SIZE        (sizeof(xmm_t))
++#define XMM_MASK        (XMM_SIZE - 1)
++
++typedef union rte_xmm {
++	xmm_t	 x;
++	uint8_t	 u8[XMM_SIZE / sizeof(uint8_t)];
++	uint16_t u16[XMM_SIZE / sizeof(uint16_t)];
++	uint32_t u32[XMM_SIZE / sizeof(uint32_t)];
++	uint64_t u64[XMM_SIZE / sizeof(uint64_t)];
++	double   pd[XMM_SIZE / sizeof(double)];
++} __rte_aligned(16) rte_xmm_t;
++
++static inline xmm_t
++vect_load_128(void *p)
++{
++	xmm_t ret = *((xmm_t *)p);
++
++	return ret;
++}
++
++static inline xmm_t
++vect_and(xmm_t data, xmm_t mask)
++{
++	rte_xmm_t ret = {.x = data };
++	rte_xmm_t m = {.x = mask };
++	ret.u64[0] &= m.u64[0];
++	ret.u64[1] &= m.u64[1];
++
++	return ret.x;
++}
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* RTE_VECT_LOONGARCH_H */
+diff --git a/lib/eal/loongarch/meson.build b/lib/eal/loongarch/meson.build
+new file mode 100644
+index 0000000..4dcc27b
+--- /dev/null
++++ b/lib/eal/loongarch/meson.build
+@@ -0,0 +1,11 @@
++# SPDX-License-Identifier: BSD-3-Clause
++# Copyright(c) 2022 Loongson Technology Corporation Limited
++
++subdir('include')
++
++sources += files(
++        'rte_cpuflags.c',
++        'rte_cycles.c',
++        'rte_hypervisor.c',
++        'rte_power_intrinsics.c',
++)
+diff --git a/lib/eal/loongarch/rte_cpuflags.c b/lib/eal/loongarch/rte_cpuflags.c
+new file mode 100644
+index 0000000..0a75ca5
+--- /dev/null
++++ b/lib/eal/loongarch/rte_cpuflags.c
+@@ -0,0 +1,93 @@
++/*
++ * SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2022 Loongson Technology Corporation Limited
++ */
++
++#include "rte_cpuflags.h"
++
++#include <elf.h>
++#include <fcntl.h>
++#include <assert.h>
++#include <unistd.h>
++#include <string.h>
++
++/* Symbolic values for the entries in the auxiliary table */
++#define AT_HWCAP  16
++
++/* software based registers */
++enum cpu_register_t {
++	REG_NONE = 0,
++	REG_HWCAP,
++	REG_MAX
++};
++
++typedef uint32_t hwcap_registers_t[REG_MAX];
++
++struct feature_entry {
++	uint32_t reg;
++	uint32_t bit;
++#define CPU_FLAG_NAME_MAX_LEN 64
++	char name[CPU_FLAG_NAME_MAX_LEN];
++};
++
++#define FEAT_DEF(name, reg, bit) \
++	[RTE_CPUFLAG_##name] = {reg, bit, #name},
++
++const struct feature_entry rte_cpu_feature_table[] = {
++	FEAT_DEF(CPUCFG,             REG_HWCAP,   0)
++	FEAT_DEF(LAM,                REG_HWCAP,   1)
++	FEAT_DEF(UAL,                REG_HWCAP,   2)
++	FEAT_DEF(FPU,                REG_HWCAP,   3)
++	FEAT_DEF(LSX,                REG_HWCAP,   4)
++	FEAT_DEF(LASX,               REG_HWCAP,   5)
++	FEAT_DEF(CRC32,              REG_HWCAP,   6)
++	FEAT_DEF(COMPLEX,            REG_HWCAP,   7)
++	FEAT_DEF(CRYPTO,             REG_HWCAP,   8)
++	FEAT_DEF(LVZ,                REG_HWCAP,   9)
++	FEAT_DEF(LBT_X86,            REG_HWCAP,  10)
++	FEAT_DEF(LBT_ARM,            REG_HWCAP,  11)
++	FEAT_DEF(LBT_MIPS,           REG_HWCAP,  12)
++};
++
++/*
++ * Read AUXV software register and get cpu features for LoongArch
++ */
++static void
++rte_cpu_get_features(hwcap_registers_t out)
++{
++	out[REG_HWCAP] = rte_cpu_getauxval(AT_HWCAP);
++}
++
++/*
++ * Checks if a particular flag is available on current machine.
++ */
++int
++rte_cpu_get_flag_enabled(enum rte_cpu_flag_t feature)
++{
++	const struct feature_entry *feat;
++	hwcap_registers_t regs = {0};
++
++	if (feature >= RTE_CPUFLAG_NUMFLAGS)
++		return -ENOENT;
++
++	feat = &rte_cpu_feature_table[feature];
++	if (feat->reg == REG_NONE)
++		return -EFAULT;
++
++	rte_cpu_get_features(regs);
++	return (regs[feat->reg] >> feat->bit) & 1;
++}
++
++const char *
++rte_cpu_get_flag_name(enum rte_cpu_flag_t feature)
++{
++	if (feature >= RTE_CPUFLAG_NUMFLAGS)
++		return NULL;
++	return rte_cpu_feature_table[feature].name;
++}
++
++void
++rte_cpu_get_intrinsics_support(struct rte_cpu_intrinsics *intrinsics)
++{
++	memset(intrinsics, 0, sizeof(*intrinsics));
++}
+diff --git a/lib/eal/loongarch/rte_cycles.c b/lib/eal/loongarch/rte_cycles.c
+new file mode 100644
+index 0000000..582601d
+--- /dev/null
++++ b/lib/eal/loongarch/rte_cycles.c
+@@ -0,0 +1,45 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2022 Loongson Technology Corporation Limited
++ */
++
++#include "eal_private.h"
++
++#define LOONGARCH_CPUCFG4	0x4
++#define CPUCFG4_CCFREQ_MASK	0xFFFFFFFF
++#define CPUCFG4_CCFREQ_SHIFT	0
++
++#define LOONGARCH_CPUCFG5	0x5
++#define CPUCFG5_CCMUL_MASK	0xFFFF
++#define CPUCFG5_CCMUL_SHIFT	0
++
++#define CPUCFG5_CCDIV_MASK	0xFFFF0000
++#define CPUCFG5_CCDIV_SHIFT	16
++
++static __rte_noinline uint32_t
++read_cpucfg(int arg)
++{
++	int ret = 0;
++
++	__asm__ __volatile__ (
++		"cpucfg %[var], %[index]\n"
++		: [var]"=r"(ret)
++		: [index]"r"(arg)
++		:
++		);
++
++	return ret;
++}
++
++uint64_t
++get_tsc_freq_arch(void)
++{
++	uint32_t base_freq, mul_factor, div_factor;
++
++	base_freq = read_cpucfg(LOONGARCH_CPUCFG4);
++	mul_factor = (read_cpucfg(LOONGARCH_CPUCFG5) & CPUCFG5_CCMUL_MASK) >>
++		CPUCFG5_CCMUL_SHIFT;
++	div_factor = (read_cpucfg(LOONGARCH_CPUCFG5) & CPUCFG5_CCDIV_MASK) >>
++		CPUCFG5_CCDIV_SHIFT;
++
++	return base_freq * mul_factor / div_factor;
++}
+diff --git a/lib/eal/loongarch/rte_hypervisor.c b/lib/eal/loongarch/rte_hypervisor.c
+new file mode 100644
+index 0000000..d044906
+--- /dev/null
++++ b/lib/eal/loongarch/rte_hypervisor.c
+@@ -0,0 +1,11 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2022 Loongson Technology Corporation Limited
++ */
++
++#include "rte_hypervisor.h"
++
++enum rte_hypervisor
++rte_hypervisor_get(void)
++{
++	return RTE_HYPERVISOR_UNKNOWN;
++}
+diff --git a/lib/eal/loongarch/rte_power_intrinsics.c b/lib/eal/loongarch/rte_power_intrinsics.c
+new file mode 100644
+index 0000000..a8969c2
+--- /dev/null
++++ b/lib/eal/loongarch/rte_power_intrinsics.c
+@@ -0,0 +1,53 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2022 Loongson Technology Corporation Limited
++ */
++
++#include <errno.h>
++
++#include "rte_power_intrinsics.h"
++
++/**
++ * This function is not supported on LOONGARCH.
++ */
++int
++rte_power_monitor(const struct rte_power_monitor_cond *pmc,
++		const uint64_t tsc_timestamp)
++{
++	RTE_SET_USED(pmc);
++	RTE_SET_USED(tsc_timestamp);
++
++	return -ENOTSUP;
++}
++
++/**
++ * This function is not supported on LOONGARCH.
++ */
++int
++rte_power_pause(const uint64_t tsc_timestamp)
++{
++	RTE_SET_USED(tsc_timestamp);
++
++	return -ENOTSUP;
++}
++
++/**
++ * This function is not supported on LOONGARCH.
++ */
++int
++rte_power_monitor_wakeup(const unsigned int lcore_id)
++{
++	RTE_SET_USED(lcore_id);
++
++	return -ENOTSUP;
++}
++
++int
++rte_power_monitor_multi(const struct rte_power_monitor_cond pmc[],
++		const uint32_t num, const uint64_t tsc_timestamp)
++{
++	RTE_SET_USED(pmc);
++	RTE_SET_USED(num);
++	RTE_SET_USED(tsc_timestamp);
++
++	return -ENOTSUP;
++}
+diff --git a/lib/lpm/meson.build b/lib/lpm/meson.build
+index 78d91d3..6b47361 100644
+--- a/lib/lpm/meson.build
++++ b/lib/lpm/meson.build
+@@ -14,6 +14,7 @@ headers = files('rte_lpm.h', 'rte_lpm6.h')
+ indirect_headers += files(
+         'rte_lpm_altivec.h',
+         'rte_lpm_neon.h',
++        'rte_lpm_scalar.h',
+         'rte_lpm_sse.h',
+         'rte_lpm_sve.h',
+ )
+diff --git a/lib/lpm/rte_lpm.h b/lib/lpm/rte_lpm.h
+index 5eb14c1..49cfa5b 100644
+--- a/lib/lpm/rte_lpm.h
++++ b/lib/lpm/rte_lpm.h
+@@ -283,7 +283,7 @@ rte_lpm_delete_all(struct rte_lpm *lpm);
+  *   -EINVAL for incorrect arguments, -ENOENT on lookup miss, 0 on lookup hit
+  */
+ static inline int
+-rte_lpm_lookup(struct rte_lpm *lpm, uint32_t ip, uint32_t *next_hop)
++rte_lpm_lookup(const struct rte_lpm *lpm, uint32_t ip, uint32_t *next_hop)
+ {
+	unsigned tbl24_index = (ip >> 8);
+	uint32_t tbl_entry;
+@@ -409,8 +409,10 @@ rte_lpm_lookupx4(const struct rte_lpm *lpm, xmm_t ip, uint32_t hop[4],
+ #endif
+ #elif defined(RTE_ARCH_PPC_64)
+ #include "rte_lpm_altivec.h"
+-#else
++#elif defined(RTE_ARCH_X86)
+ #include "rte_lpm_sse.h"
++#else
++#include "rte_lpm_scalar.h"
+ #endif
+
+ #ifdef __cplusplus
+diff --git a/lib/lpm/rte_lpm_scalar.h b/lib/lpm/rte_lpm_scalar.h
+new file mode 100644
+index 0000000..df4f83f
+--- /dev/null
++++ b/lib/lpm/rte_lpm_scalar.h
+@@ -0,0 +1,38 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2022 StarFive
++ * Copyright(c) 2022 SiFive
++ * Copyright(c) 2022 Semihalf
++ */
++
++#ifndef _RTE_LPM_SCALAR_H_
++#define _RTE_LPM_SCALAR_H_
++
++#include <rte_vect.h>
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++static inline void
++rte_lpm_lookupx4(const struct rte_lpm *lpm, xmm_t ip, uint32_t hop[4],
++		uint32_t defv)
++{
++	rte_xmm_t xip = { .x = ip };
++	uint32_t nh;
++	int ret;
++
++	ret = rte_lpm_lookup(lpm, xip.u32[0], &nh);
++	hop[0] = (ret == 0) ? nh : defv;
++	ret = rte_lpm_lookup(lpm, xip.u32[1], &nh);
++	hop[1] = (ret == 0) ? nh : defv;
++	ret = rte_lpm_lookup(lpm, xip.u32[2], &nh);
++	hop[2] = (ret == 0) ? nh : defv;
++	ret = rte_lpm_lookup(lpm, xip.u32[3], &nh);
++	hop[3] = (ret == 0) ? nh : defv;
++}
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* _RTE_LPM_SCALAR_H_ */
+diff --git a/meson.build b/meson.build
+index 12cb6e0..1052fba 100644
+--- a/meson.build
++++ b/meson.build
+@@ -42,6 +42,8 @@ if host_machine.cpu_family().startswith('x86')
+     arch_subdir = 'x86'
+ elif host_machine.cpu_family().startswith('arm') or host_machine.cpu_family().startswith('aarch')
+     arch_subdir = 'arm'
++elif host_machine.cpu_family().startswith('loongarch')
++    arch_subdir = 'loongarch'
+ elif host_machine.cpu_family().startswith('ppc')
+     arch_subdir = 'ppc'
+ endif
+--
+2.33.0
