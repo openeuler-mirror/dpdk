@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 38
+Release: 41
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -275,6 +275,13 @@ Patch9254:    0254-net-hns3-add-verification-of-RSS-types.patch
 Patch9255:    0255-test-mbuf-fix-mbuf-reset-test.patch
 Patch9256:    0256-examples-l3fwd-power-support-CPPC-cpufreq.patch
 Patch9257:    0257-hinic-free-mbuf-use-rte_pktmbuf_free_seg.patch
+Patch9258:    0258-net-bonding-support-private-dump-operation.patch
+Patch9259:    0259-net-bonding-add-LACP-info-dump.patch
+Patch9260:    0260-net-virtio-support-private-dump.patch
+Patch9261:    0261-net-vhost-support-private-dump.patch
+Patch9262:    0262-app-testpmd-show-private-info-in-port-info.patch
+Patch9263:    0263-app-testpmd-display-RSS-hash-key-of-flow-rule.patch
+Patch9264:    0264-fix-clang-cflags.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -371,6 +378,8 @@ cd -
 cd $RPM_BUILD_ROOT/usr/lib64/dpdk/pmds-22.0/lib
 ln -fs ../../../*.so .
 cd -
+mkdir -p $RPM_BUILD_ROOT/usr/local/lib64/dpdk
+ln -fs /usr/lib64/dpdk/pmds-22.0 $RPM_BUILD_ROOT/usr/local/lib64/dpdk/pmds-22.0
 
 strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/rte_kni.ko
 strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
@@ -384,6 +393,7 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /lib/modules/%{kern_devel_ver}/extra/dpdk/*.ko
 /usr/lib64/*.so*
 /usr/lib64/dpdk/*
+/usr/local/lib64/dpdk/*
 %exclude /usr/lib64/dpdk/pmds-22.0/include/*.h
 
 %files devel
@@ -419,6 +429,19 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Fri Apr 21 2023 jammyjellyfish <jammyjellyfish255@outlook.com> - 21.11-41
+- fix clang build error
+
+* Tue Apr 11 2023 bigclouds99 <yuelg@chinaunicom.cn> - 21.11-40
+- Create a softlink to dpdk default driver path
+
+* Tue Apr 04 2023 chenjiji <chenjiji09@163.com> - 21.11-39
+ Sync some patchs from upstreaming branch and modifies
+ are as follow:
+ 1. Add private dump for bonding, virtio and vhost.
+ 2. Support LACP info dump for bonding.
+ 3. Display RSS hash key of flow rule in testpmd.
+
 * Sat Apr 01 2023 jiangheng <jiangheng14@huawei.com> - 21.11-38
 - build as shared libraries to reduce the size of debug packet
 
