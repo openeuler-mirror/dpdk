@@ -1,0 +1,329 @@
+From 699c30f8534c136926df9b6fb5b97ed06c1f34a0 Mon Sep 17 00:00:00 2001
+From: Rahul Lakkireddy <rahul.lakkireddy@chelsio.com>
+Date: Thu, 20 Jan 2022 03:26:40 +0530
+Subject: [PATCH] net/cxgbe: fix dangling pointer by mailbox access rework
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+[ upstream commit 19cafed99ac573662045424e559cee444c175b63 ]
+
+Rework mailbox access serialization to dynamically allocate and
+free mbox entry. Also remove unnecessary temp memory and macros.
+
+Observed with: gcc-12.0 (GCC) 12.0.1 20220118 (experimental)
+
+In file included from ../lib/eal/linux/include/rte_os.h:14,
+                 from ../lib/eal/include/rte_common.h:28,
+                 from ../lib/eal/include/rte_log.h:25,
+                 from ../lib/ethdev/rte_ethdev.h:164,
+                 from ../lib/ethdev/ethdev_driver.h:18,
+                 from ../drivers/net/cxgbe/base/t4vf_hw.c:6:
+In function ‘t4_os_atomic_add_tail’,
+    inlined from ‘t4vf_wr_mbox_core’ at
+	../drivers/net/cxgbe/base/t4vf_hw.c:115:2:
+../drivers/net/cxgbe/base/adapter.h:742:9:
+      warning: storing the address of local variable ‘entry’ in
+      ‘((struct mbox_list *)adapter)[96].tqh_last’ [-Wdangling-pointer=]
+  742 |         TAILQ_INSERT_TAIL(head, entry, next);
+      |         ^~~~~~~~~~~~~~~~~
+../drivers/net/cxgbe/base/t4vf_hw.c: In function ‘t4vf_wr_mbox_core’:
+../drivers/net/cxgbe/base/t4vf_hw.c:86:27: note: ‘entry’ declared here
+   86 |         struct mbox_entry entry;
+      |                           ^~~~~
+../drivers/net/cxgbe/base/t4vf_hw.c:86:27: note: ‘adapter’ declared here
+
+Fixes: 3bd122eef2cc ("cxgbe/base: add hardware API for Chelsio T5 series adapters")
+
+Reported-by: Ferruh Yigit <ferruh.yigit@intel.com>
+Signed-off-by: Rahul Lakkireddy <rahul.lakkireddy@chelsio.com>
+---
+ drivers/net/cxgbe/base/adapter.h |  2 -
+ drivers/net/cxgbe/base/t4_hw.c   | 83 ++++++++++++--------------------
+ drivers/net/cxgbe/base/t4vf_hw.c | 28 +++++++----
+ 3 files changed, 49 insertions(+), 64 deletions(-)
+
+diff --git a/drivers/net/cxgbe/base/adapter.h b/drivers/net/cxgbe/base/adapter.h
+index 1c7c8afe16..97963422bf 100644
+--- a/drivers/net/cxgbe/base/adapter.h
++++ b/drivers/net/cxgbe/base/adapter.h
+@@ -291,8 +291,6 @@ struct sge {
+ 	u32 fl_starve_thres;        /* Free List starvation threshold */
+ };
+ 
+-#define T4_OS_NEEDS_MBOX_LOCKING 1
+-
+ /*
+  * OS Lock/List primitives for those interfaces in the Common Code which
+  * need this.
+diff --git a/drivers/net/cxgbe/base/t4_hw.c b/drivers/net/cxgbe/base/t4_hw.c
+index cdcd7e5510..645833765a 100644
+--- a/drivers/net/cxgbe/base/t4_hw.c
++++ b/drivers/net/cxgbe/base/t4_hw.c
+@@ -263,17 +263,6 @@ static void fw_asrt(struct adapter *adap, u32 mbox_addr)
+ 
+ #define X_CIM_PF_NOACCESS 0xeeeeeeee
+ 
+-/*
+- * If the Host OS Driver needs locking arround accesses to the mailbox, this
+- * can be turned on via the T4_OS_NEEDS_MBOX_LOCKING CPP define ...
+- */
+-/* makes single-statement usage a bit cleaner ... */
+-#ifdef T4_OS_NEEDS_MBOX_LOCKING
+-#define T4_OS_MBOX_LOCKING(x) x
+-#else
+-#define T4_OS_MBOX_LOCKING(x) do {} while (0)
+-#endif
+-
+ /**
+  * t4_wr_mbox_meat_timeout - send a command to FW through the given mailbox
+  * @adap: the adapter
+@@ -314,28 +303,17 @@ int t4_wr_mbox_meat_timeout(struct adapter *adap, int mbox,
+ 		1, 1, 3, 5, 10, 10, 20, 50, 100
+ 	};
+ 
+-	u32 v;
+-	u64 res;
+-	int i, ms;
+-	unsigned int delay_idx;
+-	__be64 *temp = (__be64 *)malloc(size * sizeof(char));
+-	__be64 *p = temp;
+ 	u32 data_reg = PF_REG(mbox, A_CIM_PF_MAILBOX_DATA);
+ 	u32 ctl_reg = PF_REG(mbox, A_CIM_PF_MAILBOX_CTRL);
+-	u32 ctl;
+-	struct mbox_entry entry;
+-	u32 pcie_fw = 0;
+-
+-	if (!temp)
+-		return -ENOMEM;
++	struct mbox_entry *entry;
++	u32 v, ctl, pcie_fw = 0;
++	unsigned int delay_idx;
++	const __be64 *p;
++	int i, ms, ret;
++	u64 res;
+ 
+-	if ((size & 15) || size > MBOX_LEN) {
+-		free(temp);
++	if ((size & 15) != 0 || size > MBOX_LEN)
+ 		return -EINVAL;
+-	}
+-
+-	memset(p, 0, size);
+-	memcpy(p, (const __be64 *)cmd, size);
+ 
+ 	/*
+ 	 * If we have a negative timeout, that implies that we can't sleep.
+@@ -345,14 +323,17 @@ int t4_wr_mbox_meat_timeout(struct adapter *adap, int mbox,
+ 		timeout = -timeout;
+ 	}
+ 
+-#ifdef T4_OS_NEEDS_MBOX_LOCKING
++	entry = t4_os_alloc(sizeof(*entry));
++	if (entry == NULL)
++		return -ENOMEM;
++
+ 	/*
+ 	 * Queue ourselves onto the mailbox access list.  When our entry is at
+ 	 * the front of the list, we have rights to access the mailbox.  So we
+ 	 * wait [for a while] till we're at the front [or bail out with an
+ 	 * EBUSY] ...
+ 	 */
+-	t4_os_atomic_add_tail(&entry, &adap->mbox_list, &adap->mbox_lock);
++	t4_os_atomic_add_tail(entry, &adap->mbox_list, &adap->mbox_lock);
+ 
+ 	delay_idx = 0;
+ 	ms = delay[0];
+@@ -367,18 +348,18 @@ int t4_wr_mbox_meat_timeout(struct adapter *adap, int mbox,
+ 		 */
+ 		pcie_fw = t4_read_reg(adap, A_PCIE_FW);
+ 		if (i > 4 * timeout || (pcie_fw & F_PCIE_FW_ERR)) {
+-			t4_os_atomic_list_del(&entry, &adap->mbox_list,
++			t4_os_atomic_list_del(entry, &adap->mbox_list,
+ 					      &adap->mbox_lock);
+ 			t4_report_fw_error(adap);
+-			free(temp);
+-			return (pcie_fw & F_PCIE_FW_ERR) ? -ENXIO : -EBUSY;
++			ret = ((pcie_fw & F_PCIE_FW_ERR) != 0) ? -ENXIO : -EBUSY;
++			goto out_free;
+ 		}
+ 
+ 		/*
+ 		 * If we're at the head, break out and start the mailbox
+ 		 * protocol.
+ 		 */
+-		if (t4_os_list_first_entry(&adap->mbox_list) == &entry)
++		if (t4_os_list_first_entry(&adap->mbox_list) == entry)
+ 			break;
+ 
+ 		/*
+@@ -393,7 +374,6 @@ int t4_wr_mbox_meat_timeout(struct adapter *adap, int mbox,
+ 			rte_delay_ms(ms);
+ 		}
+ 	}
+-#endif /* T4_OS_NEEDS_MBOX_LOCKING */
+ 
+ 	/*
+ 	 * Attempt to gain access to the mailbox.
+@@ -410,12 +390,11 @@ int t4_wr_mbox_meat_timeout(struct adapter *adap, int mbox,
+ 	 * mailbox atomic access list and report the error to our caller.
+ 	 */
+ 	if (v != X_MBOWNER_PL) {
+-		T4_OS_MBOX_LOCKING(t4_os_atomic_list_del(&entry,
+-							 &adap->mbox_list,
+-							 &adap->mbox_lock));
++		t4_os_atomic_list_del(entry, &adap->mbox_list,
++				      &adap->mbox_lock);
+ 		t4_report_fw_error(adap);
+-		free(temp);
+-		return (v == X_MBOWNER_FW ? -EBUSY : -ETIMEDOUT);
++		ret = (v == X_MBOWNER_FW) ? -EBUSY : -ETIMEDOUT;
++		goto out_free;
+ 	}
+ 
+ 	/*
+@@ -441,7 +420,7 @@ int t4_wr_mbox_meat_timeout(struct adapter *adap, int mbox,
+ 	/*
+ 	 * Copy in the new mailbox command and send it on its way ...
+ 	 */
+-	for (i = 0; i < size; i += 8, p++)
++	for (i = 0, p = cmd; i < size; i += 8, p++)
+ 		t4_write_reg64(adap, data_reg + i, be64_to_cpu(*p));
+ 
+ 	CXGBE_DEBUG_MBOX(adap, "%s: mbox %u: %016llx %016llx %016llx %016llx "
+@@ -512,11 +491,10 @@ int t4_wr_mbox_meat_timeout(struct adapter *adap, int mbox,
+ 				get_mbox_rpl(adap, rpl, size / 8, data_reg);
+ 			}
+ 			t4_write_reg(adap, ctl_reg, V_MBOWNER(X_MBOWNER_NONE));
+-			T4_OS_MBOX_LOCKING(
+-				t4_os_atomic_list_del(&entry, &adap->mbox_list,
+-						      &adap->mbox_lock));
+-			free(temp);
+-			return -G_FW_CMD_RETVAL((int)res);
++			t4_os_atomic_list_del(entry, &adap->mbox_list,
++					      &adap->mbox_lock);
++			ret = -G_FW_CMD_RETVAL((int)res);
++			goto out_free;
+ 		}
+ 	}
+ 
+@@ -527,12 +505,13 @@ int t4_wr_mbox_meat_timeout(struct adapter *adap, int mbox,
+ 	 */
+ 	dev_err(adap, "command %#x in mailbox %d timed out\n",
+ 		*(const u8 *)cmd, mbox);
+-	T4_OS_MBOX_LOCKING(t4_os_atomic_list_del(&entry,
+-						 &adap->mbox_list,
+-						 &adap->mbox_lock));
++	t4_os_atomic_list_del(entry, &adap->mbox_list, &adap->mbox_lock);
+ 	t4_report_fw_error(adap);
+-	free(temp);
+-	return (pcie_fw & F_PCIE_FW_ERR) ? -ENXIO : -ETIMEDOUT;
++	ret = ((pcie_fw & F_PCIE_FW_ERR) != 0) ? -ENXIO : -ETIMEDOUT;
++
++out_free:
++	t4_os_free(entry);
++	return ret;
+ }
+ 
+ int t4_wr_mbox_meat(struct adapter *adap, int mbox, const void *cmd, int size,
+diff --git a/drivers/net/cxgbe/base/t4vf_hw.c b/drivers/net/cxgbe/base/t4vf_hw.c
+index 561d759dbc..7dbd4deb79 100644
+--- a/drivers/net/cxgbe/base/t4vf_hw.c
++++ b/drivers/net/cxgbe/base/t4vf_hw.c
+@@ -83,7 +83,7 @@ int t4vf_wr_mbox_core(struct adapter *adapter,
+ 
+ 	u32 mbox_ctl = T4VF_CIM_BASE_ADDR + A_CIM_VF_EXT_MAILBOX_CTRL;
+ 	__be64 cmd_rpl[MBOX_LEN / 8];
+-	struct mbox_entry entry;
++	struct mbox_entry *entry;
+ 	unsigned int delay_idx;
+ 	u32 v, mbox_data;
+ 	const __be64 *p;
+@@ -106,13 +106,17 @@ int t4vf_wr_mbox_core(struct adapter *adapter,
+ 			size > NUM_CIM_VF_MAILBOX_DATA_INSTANCES * 4)
+ 		return -EINVAL;
+ 
++	entry = t4_os_alloc(sizeof(*entry));
++	if (entry == NULL)
++		return -ENOMEM;
++
+ 	/*
+ 	 * Queue ourselves onto the mailbox access list.  When our entry is at
+ 	 * the front of the list, we have rights to access the mailbox.  So we
+ 	 * wait [for a while] till we're at the front [or bail out with an
+ 	 * EBUSY] ...
+ 	 */
+-	t4_os_atomic_add_tail(&entry, &adapter->mbox_list, &adapter->mbox_lock);
++	t4_os_atomic_add_tail(entry, &adapter->mbox_list, &adapter->mbox_lock);
+ 
+ 	delay_idx = 0;
+ 	ms = delay[0];
+@@ -125,17 +129,17 @@ int t4vf_wr_mbox_core(struct adapter *adapter,
+ 		 * contend on access to the mailbox ...
+ 		 */
+ 		if (i > (2 * FW_CMD_MAX_TIMEOUT)) {
+-			t4_os_atomic_list_del(&entry, &adapter->mbox_list,
++			t4_os_atomic_list_del(entry, &adapter->mbox_list,
+ 					      &adapter->mbox_lock);
+ 			ret = -EBUSY;
+-			return ret;
++			goto out_free;
+ 		}
+ 
+ 		/*
+ 		 * If we're at the head, break out and start the mailbox
+ 		 * protocol.
+ 		 */
+-		if (t4_os_list_first_entry(&adapter->mbox_list) == &entry)
++		if (t4_os_list_first_entry(&adapter->mbox_list) == entry)
+ 			break;
+ 
+ 		/*
+@@ -160,10 +164,10 @@ int t4vf_wr_mbox_core(struct adapter *adapter,
+ 		v = G_MBOWNER(t4_read_reg(adapter, mbox_ctl));
+ 
+ 	if (v != X_MBOWNER_PL) {
+-		t4_os_atomic_list_del(&entry, &adapter->mbox_list,
++		t4_os_atomic_list_del(entry, &adapter->mbox_list,
+ 				      &adapter->mbox_lock);
+ 		ret = (v == X_MBOWNER_FW) ? -EBUSY : -ETIMEDOUT;
+-		return ret;
++		goto out_free;
+ 	}
+ 
+ 	/*
+@@ -224,7 +228,7 @@ int t4vf_wr_mbox_core(struct adapter *adapter,
+ 			get_mbox_rpl(adapter, cmd_rpl, size / 8, mbox_data);
+ 			t4_write_reg(adapter, mbox_ctl,
+ 				     V_MBOWNER(X_MBOWNER_NONE));
+-			t4_os_atomic_list_del(&entry, &adapter->mbox_list,
++			t4_os_atomic_list_del(entry, &adapter->mbox_list,
+ 					      &adapter->mbox_lock);
+ 
+ 			/* return value in high-order host-endian word */
+@@ -236,7 +240,8 @@ int t4vf_wr_mbox_core(struct adapter *adapter,
+ 					 & F_FW_CMD_REQUEST) == 0);
+ 				memcpy(rpl, cmd_rpl, size);
+ 			}
+-			return -((int)G_FW_CMD_RETVAL(v));
++			ret = -((int)G_FW_CMD_RETVAL(v));
++			goto out_free;
+ 		}
+ 	}
+ 
+@@ -246,8 +251,11 @@ int t4vf_wr_mbox_core(struct adapter *adapter,
+ 	dev_err(adapter, "command %#x timed out\n",
+ 		*(const u8 *)cmd);
+ 	dev_err(adapter, "    Control = %#x\n", t4_read_reg(adapter, mbox_ctl));
+-	t4_os_atomic_list_del(&entry, &adapter->mbox_list, &adapter->mbox_lock);
++	t4_os_atomic_list_del(entry, &adapter->mbox_list, &adapter->mbox_lock);
+ 	ret = -ETIMEDOUT;
++
++out_free:
++	t4_os_free(entry);
+ 	return ret;
+ }
+ 
+-- 
+2.23.0
+

@@ -1,0 +1,108 @@
+From b8bfbcd1a04b143151da9688eaefc9f7b72ccc12 Mon Sep 17 00:00:00 2001
+From: Rakesh Kudurumalla <rkudurumalla@marvell.com>
+Date: Wed, 23 Feb 2022 15:25:40 +0530
+Subject: [PATCH] net/cnxk: fix build with GCC 12
+
+[ upstream commit b526599020ef06811dd08c4f15c0cdf049d7f9f2 ]
+
+Resolve following compilation error with gcc 12 version.
+error: storing the address of local variable message in *error.message
+
+Fixes: 26b034f78ca7 ("net/cnxk: support to validate meter policy")
+
+Reported-by: Ferruh Yigit <ferruh.yigit@intel.com>
+Signed-off-by: Rakesh Kudurumalla <rkudurumalla@marvell.com>
+Acked-by: Jerin Jacob <jerinj@marvell.com>
+---
+ drivers/net/cnxk/cnxk_ethdev_mtr.c | 59 ++++++++++++++++++++++--------
+ 1 file changed, 44 insertions(+), 15 deletions(-)
+
+diff --git a/drivers/net/cnxk/cnxk_ethdev_mtr.c b/drivers/net/cnxk/cnxk_ethdev_mtr.c
+index 39d8563826..6d14c88e7d 100644
+--- a/drivers/net/cnxk/cnxk_ethdev_mtr.c
++++ b/drivers/net/cnxk/cnxk_ethdev_mtr.c
+@@ -277,15 +277,54 @@ cnxk_nix_mtr_profile_delete(struct rte_eth_dev *eth_dev, uint32_t profile_id,
+ 	return 0;
+ }
+ 
++static int
++update_mtr_err(uint32_t act_color, struct rte_mtr_error *error, bool action)
++{
++	const char *str;
++	switch (act_color) {
++	case RTE_COLOR_GREEN:
++		if (action) {
++			str = "Green action is not valid";
++			goto notsup;
++		} else {
++			str = "Green action is null";
++			goto notvalid;
++		}
++		break;
++	case RTE_COLOR_YELLOW:
++		if (action) {
++			str = "Yellow action is not valid";
++			goto notsup;
++		} else {
++			str = "Yellow action is null";
++			goto notvalid;
++		}
++		break;
++	case RTE_COLOR_RED:
++		if (action) {
++			str = "Red action is not valid";
++			goto notsup;
++		} else {
++			str = "Red action is null";
++			goto notvalid;
++		}
++		break;
++	}
++notsup:
++	return -rte_mtr_error_set(error, ENOTSUP,
++				  RTE_MTR_ERROR_TYPE_METER_POLICY, NULL, str);
++notvalid:
++	return -rte_mtr_error_set(error, EINVAL,
++				  RTE_MTR_ERROR_TYPE_METER_POLICY, NULL, str);
++}
++
+ static int
+ cnxk_nix_mtr_policy_validate(struct rte_eth_dev *dev,
+ 			     struct rte_mtr_meter_policy_params *policy,
+ 			     struct rte_mtr_error *error)
+ {
+-	static const char *const action_color[] = {"Green", "Yellow", "Red"};
+ 	bool supported[RTE_COLORS] = {false, false, false};
+ 	const struct rte_flow_action *action;
+-	char message[1024];
+ 	uint32_t i;
+ 
+ 	RTE_SET_USED(dev);
+@@ -304,21 +343,11 @@ cnxk_nix_mtr_policy_validate(struct rte_eth_dev *dev,
+ 				if (action->type == RTE_FLOW_ACTION_TYPE_DROP)
+ 					supported[i] = true;
+ 
+-				if (!supported[i]) {
+-					sprintf(message,
+-						"%s action is not valid",
+-						action_color[i]);
+-					return -rte_mtr_error_set(error,
+-					  ENOTSUP,
+-					  RTE_MTR_ERROR_TYPE_METER_POLICY, NULL,
+-					  message);
+-				}
++				if (!supported[i])
++					return update_mtr_err(i, error, true);
+ 			}
+ 		} else {
+-			sprintf(message, "%s action is null", action_color[i]);
+-			return -rte_mtr_error_set(error, EINVAL,
+-				RTE_MTR_ERROR_TYPE_METER_POLICY, NULL,
+-				message);
++			return update_mtr_err(i, error, false);
+ 		}
+ 	}
+ 
+-- 
+2.23.0
+

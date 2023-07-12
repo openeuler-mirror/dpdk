@@ -1,0 +1,41 @@
+From 6d030554f1a6a0f2d82bb3371ebb1c5458a49491 Mon Sep 17 00:00:00 2001
+From: Amit Prakash Shukla <amitprakashs@marvell.com>
+Date: Thu, 1 Sep 2022 14:01:18 +0530
+Subject: [PATCH] net/mvneta: fix build with GCC 12
+
+[ upstream commit d7b080f1e72d833d668a66199fe99ccda6c81a36 ]
+
+./drivers/net/mvneta/mvneta_rxtx.c:89:42:
+	error: 'mbufs' may be used uninitialized [-Werror=maybe-uninitialized]
+   89 |         MVNETA_SET_COOKIE_HIGH_ADDR(mbufs[0]);
+      |                                          ^
+../drivers/net/mvneta/mvneta_rxtx.c:77:26: note: 'mbufs' declared here
+   77 |      struct rte_mbuf *mbufs[MRVL_NETA_BUF_RELEASE_BURST_SIZE_MAX];
+      |                       ^~~~~
+
+Fixes: ce7ea764597e ("net/mvneta: support Rx/Tx")
+
+Signed-off-by: Amit Prakash Shukla <amitprakashs@marvell.com>
+Acked-by: Liron Himi <lironh@marvell.com>
+---
+ drivers/net/mvneta/mvneta_rxtx.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/drivers/net/mvneta/mvneta_rxtx.c b/drivers/net/mvneta/mvneta_rxtx.c
+index 6e4a7896b4..952e982275 100644
+--- a/drivers/net/mvneta/mvneta_rxtx.c
++++ b/drivers/net/mvneta/mvneta_rxtx.c
+@@ -79,6 +79,10 @@ mvneta_buffs_refill(struct mvneta_priv *priv, struct mvneta_rxq *rxq, u16 *num)
+ 	int i, ret;
+ 	uint16_t nb_desc = *num;
+ 
++	/* To prevent GCC-12 warning. */
++	if (unlikely(nb_desc == 0))
++		return -1;
++
+ 	ret = rte_pktmbuf_alloc_bulk(rxq->mp, mbufs, nb_desc);
+ 	if (ret) {
+ 		MVNETA_LOG(ERR, "Failed to allocate %u mbufs.", nb_desc);
+-- 
+2.23.0
+

@@ -1,0 +1,53 @@
+From 661f5540c3785104258dc1b9f169ccd6dd770472 Mon Sep 17 00:00:00 2001
+From: Bruce Richardson <bruce.richardson@intel.com>
+Date: Wed, 18 Jan 2023 16:11:11 +0000
+Subject: [PATCH] examples/cmdline: fix build with GCC 12
+
+[ upstream commit 2ba8d0adb06f92ef73bc8e3953ca45b7d322c823 ]
+
+When building the example without libbsd and using the DPDK-provided
+strlcpy function, a compiler warning is emitted by GCC 12 about the copy
+of the parsed string into the resulting object. This is because the
+source from cmdline library is 128 bytes and the destination buffer is
+64-bytes.
+
+commands.c: In function 'cmd_obj_add_parsed':
+rte_string_fns.h:61:24: warning: '%s' directive output may be truncated
+writing up to 127 bytes into a region of size 64 [-Wformat-truncation=]
+   61 |         return (size_t)snprintf(dst, size, "%s", src);
+      |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /usr/include/stdio.h:894,
+                 from commands.c:7:
+/usr/include/x86_64-linux-gnu/bits/stdio2.h:71:10: note:
+'__builtin_snprintf' output between 1 and 128 bytes into a destination of size 64
+
+Multiple options are possible to fix this, but the one taken in this
+patch is to ensure truncation never occurs by setting the destination
+buffer size to be the same as that used by the cmdline library.
+
+Fixes: af75078fece3 ("first public release")
+
+Signed-off-by: Bruce Richardson <bruce.richardson@intel.com>
+Acked-by: Olivier Matz <olivier.matz@6wind.com>
+---
+ examples/cmdline/parse_obj_list.h | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/examples/cmdline/parse_obj_list.h b/examples/cmdline/parse_obj_list.h
+index 6516d3e2c2..1223ac1e8b 100644
+--- a/examples/cmdline/parse_obj_list.h
++++ b/examples/cmdline/parse_obj_list.h
+@@ -12,8 +12,9 @@
+ 
+ #include <sys/queue.h>
+ #include <cmdline_parse.h>
++#include <cmdline_parse_string.h>
+ 
+-#define OBJ_NAME_LEN_MAX 64
++#define OBJ_NAME_LEN_MAX sizeof(cmdline_fixed_string_t)
+ 
+ struct object {
+ 	SLIST_ENTRY(object) next;
+-- 
+2.23.0
+

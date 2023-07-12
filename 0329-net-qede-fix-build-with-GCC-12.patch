@@ -1,0 +1,155 @@
+From e4939398dfe939e8f1c91c04734ea83f335a8d37 Mon Sep 17 00:00:00 2001
+From: Stephen Hemminger <stephen@networkplumber.org>
+Date: Tue, 7 Jun 2022 10:17:40 -0700
+Subject: [PATCH] net/qede: fix build with GCC 12
+
+[ upstream commit 4200c4d62586985d70ad69ed7bee526a282b8777 ]
+
+The x86 version of rte_memcpy can cause warnings. The driver does
+not need to use rte_memcpy for everything. Standard memcpy is
+just as fast and safer; the compiler and static analysis tools
+treat memcpy specially.
+
+Signed-off-by: Stephen Hemminger <stephen@networkplumber.org>
+---
+ drivers/net/qede/base/bcm_osal.h |  3 +--
+ drivers/net/qede/qede_ethdev.c   |  2 +-
+ drivers/net/qede/qede_filter.c   | 16 ++++++----------
+ drivers/net/qede/qede_main.c     | 13 ++++++-------
+ drivers/net/qede/qede_sriov.c    |  6 +++---
+ 5 files changed, 17 insertions(+), 23 deletions(-)
+
+diff --git a/drivers/net/qede/base/bcm_osal.h b/drivers/net/qede/base/bcm_osal.h
+index c5b5399282..9ea579bfc8 100644
+--- a/drivers/net/qede/base/bcm_osal.h
++++ b/drivers/net/qede/base/bcm_osal.h
+@@ -14,7 +14,6 @@
+ #include <rte_spinlock.h>
+ #include <rte_malloc.h>
+ #include <rte_atomic.h>
+-#include <rte_memcpy.h>
+ #include <rte_log.h>
+ #include <rte_cycles.h>
+ #include <rte_debug.h>
+@@ -99,7 +98,7 @@ typedef intptr_t osal_int_ptr_t;
+ 	} while (0)
+ #define OSAL_VFREE(dev, memory) OSAL_FREE(dev, memory)
+ #define OSAL_MEM_ZERO(mem, size) bzero(mem, size)
+-#define OSAL_MEMCPY(dst, src, size) rte_memcpy(dst, src, size)
++#define OSAL_MEMCPY(dst, src, size) memcpy(dst, src, size)
+ #define OSAL_MEMCMP(s1, s2, size) memcmp(s1, s2, size)
+ #define OSAL_MEMSET(dst, val, length) \
+ 	memset(dst, val, length)
+diff --git a/drivers/net/qede/qede_ethdev.c b/drivers/net/qede/qede_ethdev.c
+index a1122a297e..2a3123f0c8 100644
+--- a/drivers/net/qede/qede_ethdev.c
++++ b/drivers/net/qede/qede_ethdev.c
+@@ -358,7 +358,7 @@ qede_assign_rxtx_handlers(struct rte_eth_dev *dev, bool is_dummy)
+ static void
+ qede_alloc_etherdev(struct qede_dev *qdev, struct qed_dev_eth_info *info)
+ {
+-	rte_memcpy(&qdev->dev_info, info, sizeof(*info));
++	qdev->dev_info = *info;
+ 	qdev->ops = qed_ops;
+ }
+ 
+diff --git a/drivers/net/qede/qede_filter.c b/drivers/net/qede/qede_filter.c
+index 440440423a..ca3165d972 100644
+--- a/drivers/net/qede/qede_filter.c
++++ b/drivers/net/qede/qede_filter.c
+@@ -388,10 +388,8 @@ qede_arfs_construct_pkt(struct rte_eth_dev *eth_dev,
+ 		ip6->vtc_flow =
+ 			rte_cpu_to_be_32(QEDE_FDIR_IPV6_DEFAULT_VTC_FLOW);
+ 
+-		rte_memcpy(&ip6->src_addr, arfs->tuple.src_ipv6,
+-			   IPV6_ADDR_LEN);
+-		rte_memcpy(&ip6->dst_addr, arfs->tuple.dst_ipv6,
+-			   IPV6_ADDR_LEN);
++		memcpy(&ip6->src_addr, arfs->tuple.src_ipv6, IPV6_ADDR_LEN);
++		memcpy(&ip6->dst_addr, arfs->tuple.dst_ipv6, IPV6_ADDR_LEN);
+ 		len += sizeof(struct rte_ipv6_hdr);
+ 		params->ipv6 = true;
+ 
+@@ -821,12 +819,10 @@ qede_flow_parse_pattern(__rte_unused struct rte_eth_dev *dev,
+ 				const struct rte_flow_item_ipv6 *spec;
+ 
+ 				spec = pattern->spec;
+-				rte_memcpy(flow->entry.tuple.src_ipv6,
+-					   spec->hdr.src_addr,
+-					   IPV6_ADDR_LEN);
+-				rte_memcpy(flow->entry.tuple.dst_ipv6,
+-					   spec->hdr.dst_addr,
+-					   IPV6_ADDR_LEN);
++				memcpy(flow->entry.tuple.src_ipv6,
++				       spec->hdr.src_addr, IPV6_ADDR_LEN);
++				memcpy(flow->entry.tuple.dst_ipv6,
++				       spec->hdr.dst_addr, IPV6_ADDR_LEN);
+ 				flow->entry.tuple.eth_proto =
+ 					RTE_ETHER_TYPE_IPV6;
+ 			}
+diff --git a/drivers/net/qede/qede_main.c b/drivers/net/qede/qede_main.c
+index 2d1f70693a..c5afdb00d5 100644
+--- a/drivers/net/qede/qede_main.c
++++ b/drivers/net/qede/qede_main.c
+@@ -373,7 +373,7 @@ qed_fill_dev_info(struct ecore_dev *edev, struct qed_dev_info *dev_info)
+ 	dev_info->mtu = ECORE_LEADING_HWFN(edev)->hw_info.mtu;
+ 	dev_info->dev_type = edev->type;
+ 
+-	rte_memcpy(&dev_info->hw_mac, &edev->hwfns[0].hw_info.hw_mac_addr,
++	memcpy(&dev_info->hw_mac, &edev->hwfns[0].hw_info.hw_mac_addr,
+ 	       RTE_ETHER_ADDR_LEN);
+ 
+ 	dev_info->fw_major = FW_MAJOR_VERSION;
+@@ -441,7 +441,7 @@ qed_fill_eth_dev_info(struct ecore_dev *edev, struct qed_dev_eth_info *info)
+ 		info->num_vlan_filters = RESC_NUM(&edev->hwfns[0], ECORE_VLAN) -
+ 					 max_vf_vlan_filters;
+ 
+-		rte_memcpy(&info->port_mac, &edev->hwfns[0].hw_info.hw_mac_addr,
++		memcpy(&info->port_mac, &edev->hwfns[0].hw_info.hw_mac_addr,
+ 			   RTE_ETHER_ADDR_LEN);
+ 	} else {
+ 		ecore_vf_get_num_rxqs(ECORE_LEADING_HWFN(edev),
+@@ -472,7 +472,7 @@ static void qed_set_name(struct ecore_dev *edev, char name[NAME_SIZE])
+ {
+ 	int i;
+ 
+-	rte_memcpy(edev->name, name, NAME_SIZE);
++	memcpy(edev->name, name, NAME_SIZE);
+ 	for_each_hwfn(edev, i) {
+ 		snprintf(edev->hwfns[i].name, NAME_SIZE, "%s-%d", name, i);
+ 	}
+@@ -514,10 +514,9 @@ static void qed_fill_link(struct ecore_hwfn *hwfn,
+ 
+ 	/* Prepare source inputs */
+ 	if (IS_PF(hwfn->p_dev)) {
+-		rte_memcpy(&params, ecore_mcp_get_link_params(hwfn),
+-		       sizeof(params));
+-		rte_memcpy(&link, ecore_mcp_get_link_state(hwfn), sizeof(link));
+-		rte_memcpy(&link_caps, ecore_mcp_get_link_capabilities(hwfn),
++		memcpy(&params, ecore_mcp_get_link_params(hwfn), sizeof(params));
++		memcpy(&link, ecore_mcp_get_link_state(hwfn), sizeof(link));
++		memcpy(&link_caps, ecore_mcp_get_link_capabilities(hwfn),
+ 		       sizeof(link_caps));
+ 	} else {
+ 		ecore_vf_read_bulletin(hwfn, &change);
+diff --git a/drivers/net/qede/qede_sriov.c b/drivers/net/qede/qede_sriov.c
+index 0b99a8d6fe..937d339fb8 100644
+--- a/drivers/net/qede/qede_sriov.c
++++ b/drivers/net/qede/qede_sriov.c
+@@ -203,10 +203,10 @@ void qed_inform_vf_link_state(struct ecore_hwfn *hwfn)
+ 	if (!hwfn->pf_iov_info)
+ 		return;
+ 
+-	rte_memcpy(&params, ecore_mcp_get_link_params(lead_hwfn),
++	memcpy(&params, ecore_mcp_get_link_params(lead_hwfn),
+ 		   sizeof(params));
+-	rte_memcpy(&link, ecore_mcp_get_link_state(lead_hwfn), sizeof(link));
+-	rte_memcpy(&caps, ecore_mcp_get_link_capabilities(lead_hwfn),
++	memcpy(&link, ecore_mcp_get_link_state(lead_hwfn), sizeof(link));
++	memcpy(&caps, ecore_mcp_get_link_capabilities(lead_hwfn),
+ 		   sizeof(caps));
+ 
+ 	/* Update bulletin of all future possible VFs with link configuration */
+-- 
+2.23.0
+

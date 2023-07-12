@@ -1,0 +1,70 @@
+From 29b6bd601428a25e37b282f09e4b4a2244e111d9 Mon Sep 17 00:00:00 2001
+From: Amit Prakash Shukla <amitprakashs@marvell.com>
+Date: Thu, 4 Aug 2022 19:10:55 +0530
+Subject: [PATCH] crypto/qat: fix build with GCC 12
+
+[ upstream commit 04361fe2aca8998ea06fb4823dceb965698e147c ]
+
+GCC 12 raises the following warning:
+
+In function '_mm_storeu_si128',
+    inlined from 'rte_mov16' at
+	../lib/eal/x86/include/rte_memcpy.h:508:2,
+    inlined from 'rte_mov128' at
+	../lib/eal/x86/include/rte_memcpy.h:542:2,
+    inlined from 'rte_memcpy_generic' at
+	../lib/eal/x86/include/rte_memcpy.h:732:4,
+    inlined from 'rte_memcpy' at
+	../lib/eal/x86/include/rte_memcpy.h:882:10,
+    inlined from 'qat_sym_do_precomputes.constprop' at
+	../drivers/crypto/qat/qat_sym_session.c:1434:2:
+/usr/lib/gcc/x86_64-pc-linux-gnu/12.1.1/include/emmintrin.h:739:8: error:
+	array subscript 8 is outside array bounds of 'unsigned char[128]'
+	[-Werror=array-bounds]
+  739 |   *__P = __B;
+      |   ~~~~~^~~~~
+
+../drivers/crypto/qat/qat_sym_session.c:
+	In function 'qat_sym_do_precomputes.constprop':
+../drivers/crypto/qat/qat_sym_session.c:1305:17: note:
+	at offset 192 into object 'opad.750' of size 128
+ 1305 | uint8_t
+	  opad[qat_hash_get_block_size(ICP_QAT_HW_AUTH_ALGO_DELIMITER)];
+      |           ^~~~
+
+../drivers/crypto/qat/qat_sym_session.c:
+	In function 'qat_sym_do_precomputes.constprop':
+../drivers/crypto/qat/qat_sym_session.c:1304:17: note:
+	at offset 128 into object 'ipad.749' of size 128
+ 1304 | uint8_t
+	  ipad[qat_hash_get_block_size(ICP_QAT_HW_AUTH_ALGO_DELIMITER)];
+      |           ^~~~
+
+Added a check to prevent compiler warnings.
+
+Fixes: 1703e94ac5ce ("qat: add driver for QuickAssist devices")
+
+Signed-off-by: Amit Prakash Shukla <amitprakashs@marvell.com>
+Acked-by: Fan Zhang <roy.fan.zhang@intel.com>
+---
+ drivers/crypto/qat/qat_sym_session.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/drivers/crypto/qat/qat_sym_session.c b/drivers/crypto/qat/qat_sym_session.c
+index 80d6fbfa46..3697a038e5 100644
+--- a/drivers/crypto/qat/qat_sym_session.c
++++ b/drivers/crypto/qat/qat_sym_session.c
+@@ -1435,6 +1435,10 @@ static int qat_sym_do_precomputes(enum icp_qat_hw_auth_algo hash_alg,
+ 		QAT_LOG(ERR, "invalid keylen %u", auth_keylen);
+ 		return -EFAULT;
+ 	}
++
++	RTE_VERIFY(auth_keylen <= sizeof(ipad));
++	RTE_VERIFY(auth_keylen <= sizeof(opad));
++
+ 	rte_memcpy(ipad, auth_key, auth_keylen);
+ 	rte_memcpy(opad, auth_key, auth_keylen);
+ 
+-- 
+2.23.0
+
