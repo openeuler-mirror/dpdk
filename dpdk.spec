@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 52
+Release: 53
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -339,6 +339,36 @@ Patch6314:    0314-net-ixgbe-add-proper-memory-barriers-in-Rx.patch
 Patch9020:    0020-pdump-fix-pcap_dump-coredump-caused-by-incorrect-pkt_len.patch
 Patch9021:    0021-gro-fix-gro-with-tcp-push-flag.patch
 Patch9022:    0022-eal-loongarch-support-LoongArch-architecture.patch
+Patch9023:    0023-example-l3fwd-masking-wrong-warning-array-subscript-.patch
+
+Patch6315:    0315-net-cnxk-fix-build-with-GCC-12.patch
+Patch6316:    0316-net-cnxk-fix-build-with-optimization.patch
+Patch6317:    0317-crypto-ipsec_mb-fix-build-with-GCC-12.patch
+Patch6318:    0318-net-ena-fix-build-with-GCC-12.patch
+Patch6319:    0319-net-enetfec-fix-build-with-GCC-12.patch
+Patch6320:    0320-net-ice-fix-build-with-GCC-12.patch
+Patch6321:    0321-vdpa-ifc-fix-build-with-GCC-12.patch
+Patch6322:    0322-app-flow-perf-fix-build-with-GCC-12.patch
+Patch6323:    0323-common-cpt-fix-build-with-GCC-12.patch
+Patch6324:    0324-crypto-cnxk-fix-build-with-GCC-12.patch
+Patch6325:    0325-test-ipsec-fix-build-with-GCC-12.patch
+Patch6326:    0326-vhost-crypto-fix-build-with-GCC-12.patch
+Patch6327:    0327-vhost-crypto-fix-descriptor-processing.patch
+Patch6328:    0328-net-ice-base-fix-build-with-GCC-12.patch
+Patch6329:    0329-net-qede-fix-build-with-GCC-12.patch
+Patch6330:    0330-examples-performance-thread-fix-build-with-GCC-12.patch
+Patch6331:    0331-net-mvneta-fix-build-with-GCC-12.patch
+Patch6332:    0332-test-ipsec-fix-build-with-GCC-12.patch
+Patch6333:    0333-ipsec-fix-build-with-GCC-12.patch
+Patch6334:    0334-crypto-qat-fix-build-with-GCC-12.patch
+Patch6335:    0335-vhost-fix-build-with-GCC-12.patch
+Patch6336:    0336-net-i40e-fix-build-with-MinGW-GCC-12.patch
+Patch6337:    0337-net-qede-base-fix-32-bit-build-with-GCC-12.patch
+Patch6338:    0338-hash-fix-GFNI-implementation-build-with-GCC-12.patch
+Patch6339:    0339-examples-cmdline-fix-build-with-GCC-12.patch
+Patch6340:    0340-net-mlx5-fix-build-with-GCC-12-and-ASan.patch
+Patch6341:    0341-pdump-fix-build-with-GCC-12.patch
+Patch6342:    0342-net-cxgbe-fix-dangling-pointer-by-mailbox-access-rew.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -484,6 +514,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Wed Jul 12 2023 jiangheng <jiangheng14@huawei.com> - 21.11-53
+- fix build with GCC 12
+
 * Tue Jul 4 2023 zhoumin <zhoumin@loongson.cn> - 21.11-52
 - EAL: support LoongArch architecture
 - Backport bugfixes for ixgbe driver needed by LoongArch

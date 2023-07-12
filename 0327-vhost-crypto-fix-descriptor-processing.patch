@@ -1,0 +1,40 @@
+From d6e4e0f46e27a5eae66ce436b522c7602accf346 Mon Sep 17 00:00:00 2001
+From: David Marchand <david.marchand@redhat.com>
+Date: Wed, 22 Jun 2022 17:30:20 +0200
+Subject: [PATCH] vhost/crypto: fix descriptor processing
+
+[ upstream commit 2fbada91545c004f04449500af0c6276900317ab ]
+
+copy_data was returning a pointer to an increased (off by one) descriptor.
+Subsequent calls to copy_data in the library were then failing.
+Fix this by incrementing the descriptor only if there is some left data
+to copy.
+
+Fixes: 4414bb67010d ("vhost/crypto: fix build with GCC 12")
+
+Reported-by: Jakub Poczatek <jakub.poczatek@intel.com>
+Signed-off-by: David Marchand <david.marchand@redhat.com>
+Reviewed-by: Maxime Coquelin <maxime.coquelin@redhat.com>
+Tested-by: Jakub Poczatek <jakub.poczatek@intel.com>
+Acked-by: Fan Zhang <roy.fan.zhang@intel.com>
+---
+ lib/vhost/vhost_crypto.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/lib/vhost/vhost_crypto.c b/lib/vhost/vhost_crypto.c
+index 293960d350..7d1d6a1861 100644
+--- a/lib/vhost/vhost_crypto.c
++++ b/lib/vhost/vhost_crypto.c
+@@ -610,8 +610,7 @@ copy_data(void *data, struct vhost_crypto_data_req *vc_req,
+ 			return -1;
+ 		left -= copied;
+ 		data = RTE_PTR_ADD(data, copied);
+-		desc++;
+-	} while (desc < head + max_n_descs && left != 0);
++	} while (left != 0 && ++desc < head + max_n_descs);
+ 
+ 	if (unlikely(left != 0))
+ 		return -1;
+-- 
+2.23.0
+

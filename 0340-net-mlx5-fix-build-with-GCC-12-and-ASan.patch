@@ -1,0 +1,70 @@
+From c3a4fd09f9a348e9b7394b2a9d498c815f1efaac Mon Sep 17 00:00:00 2001
+From: David Marchand <david.marchand@redhat.com>
+Date: Wed, 22 Mar 2023 18:06:27 +0100
+Subject: [PATCH] net/mlx5: fix build with GCC 12 and ASan
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+[ upstream commit e17840756179410283ef03660578310874432f40 ]
+
+Building with gcc 12 and ASan raises this warning:
+
+../drivers/net/mlx5/mlx5_txpp.c: In function ‘mlx5_txpp_xstats_get_names’:
+../drivers/net/mlx5/mlx5_txpp.c:1066:25: error: ‘strncpy’ specified bound
+	64 equals destination size [-Werror=stringop-truncation]
+ 1066 |                         strncpy(xstats_names[i + n_used].name,
+      |                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 1067 |                                 mlx5_txpp_stat_names[i],
+      |                                 ~~~~~~~~~~~~~~~~~~~~~~~~
+ 1068 |                                 RTE_ETH_XSTATS_NAME_SIZE);
+      |                                 ~~~~~~~~~~~~~~~~~~~~~~~~~
+cc1: all warnings being treated as errors
+
+Prefer strlcpy for xstats.
+
+Fixes: 3b025c0ca425 ("net/mlx5: provide send scheduling error statistics")
+
+Signed-off-by: David Marchand <david.marchand@redhat.com>
+Acked-by: Raslan Darawsheh <rasland@nvidia.com>
+---
+ drivers/net/mlx5/mlx5_stats.c | 3 +--
+ drivers/net/mlx5/mlx5_txpp.c  | 4 +---
+ 2 files changed, 2 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/net/mlx5/mlx5_stats.c b/drivers/net/mlx5/mlx5_stats.c
+index f64fa3587b..615e1d073d 100644
+--- a/drivers/net/mlx5/mlx5_stats.c
++++ b/drivers/net/mlx5/mlx5_stats.c
+@@ -288,10 +288,9 @@ mlx5_xstats_get_names(struct rte_eth_dev *dev,
+ 
+ 	if (n >= mlx5_xstats_n && xstats_names) {
+ 		for (i = 0; i != mlx5_xstats_n; ++i) {
+-			strncpy(xstats_names[i].name,
++			strlcpy(xstats_names[i].name,
+ 				xstats_ctrl->info[i].dpdk_name,
+ 				RTE_ETH_XSTATS_NAME_SIZE);
+-			xstats_names[i].name[RTE_ETH_XSTATS_NAME_SIZE - 1] = 0;
+ 		}
+ 	}
+ 	mlx5_xstats_n = mlx5_txpp_xstats_get_names(dev, xstats_names,
+diff --git a/drivers/net/mlx5/mlx5_txpp.c b/drivers/net/mlx5/mlx5_txpp.c
+index af77e91e4c..83d17997d1 100644
+--- a/drivers/net/mlx5/mlx5_txpp.c
++++ b/drivers/net/mlx5/mlx5_txpp.c
+@@ -1064,11 +1064,9 @@ int mlx5_txpp_xstats_get_names(struct rte_eth_dev *dev __rte_unused,
+ 
+ 	if (n >= n_used + n_txpp && xstats_names) {
+ 		for (i = 0; i < n_txpp; ++i) {
+-			strncpy(xstats_names[i + n_used].name,
++			strlcpy(xstats_names[i + n_used].name,
+ 				mlx5_txpp_stat_names[i],
+ 				RTE_ETH_XSTATS_NAME_SIZE);
+-			xstats_names[i + n_used].name
+-					[RTE_ETH_XSTATS_NAME_SIZE - 1] = 0;
+ 		}
+ 	}
+ 	return n_used + n_txpp;
+-- 
+2.23.0
+

@@ -1,0 +1,62 @@
+From 125a65cb03f845d1b6d5f7078670aa1a49d62513 Mon Sep 17 00:00:00 2001
+From: Kevin Traynor <ktraynor@redhat.com>
+Date: Wed, 24 Aug 2022 10:17:07 +0100
+Subject: [PATCH] examples/performance-thread: fix build with GCC 12
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+[1/2] Compiling C object examples/dpdk-pthrea...
+formance-thread_pthread_shim_pthread_shim.c.o
+../examples/performance-thread/pthread_shim/pthread_shim.c:
+In function ‘pthread_setspecific’:
+../examples/performance-thread/pthread_shim/pthread_shim.c:592:27:
+warning: ‘data’ may be used uninitialized [-Wmaybe-uninitialized]
+592 |    int rv =  lthread_setspecific((unsigned int)key, data);
+    |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+../examples/performance-thread/pthread_shim/pthread_shim.c:589:56:
+note: accessing argument 2 of a function declared with attribute
+‘access (none, 2)’
+589 | int pthread_setspecific(pthread_key_t key, const void *data)
+    |                                            ~~~~~~~~~~~~^~~~
+
+This is a false positive as pthread_setspecific() does not read from
+the (const void *) so we can squash the warning.
+
+performance-thread example is already removed from DPDK main branch.
+
+Signed-off-by: Kevin Traynor <ktraynor@redhat.com>
+---
+ examples/performance-thread/pthread_shim/pthread_shim.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/examples/performance-thread/pthread_shim/pthread_shim.c b/examples/performance-thread/pthread_shim/pthread_shim.c
+index bbc076584b..a44cb8244d 100644
+--- a/examples/performance-thread/pthread_shim/pthread_shim.c
++++ b/examples/performance-thread/pthread_shim/pthread_shim.c
+@@ -586,6 +586,11 @@ pthread_t pthread_self(void)
+ 	return _sys_pthread_funcs.f_pthread_self();
+ }
+ 
++#if defined(RTE_TOOLCHAIN_GCC) && (GCC_VERSION >= 120000)
++#pragma GCC diagnostic push
++#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
++#endif
++
+ int pthread_setspecific(pthread_key_t key, const void *data)
+ {
+ 	if (override) {
+@@ -595,6 +600,10 @@ int pthread_setspecific(pthread_key_t key, const void *data)
+ 	return _sys_pthread_funcs.f_pthread_setspecific(key, data);
+ }
+ 
++#if defined(RTE_TOOLCHAIN_GCC) && (GCC_VERSION >= 120000)
++#pragma GCC diagnostic pop
++#endif
++
+ int pthread_spin_init(pthread_spinlock_t *a, int b)
+ {
+ 	NOT_IMPLEMENTED;
+-- 
+2.23.0
+

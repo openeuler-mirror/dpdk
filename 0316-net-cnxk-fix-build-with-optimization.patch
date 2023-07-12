@@ -1,0 +1,44 @@
+From 213001231857c9af72f8f0288c43773b1ac2d580 Mon Sep 17 00:00:00 2001
+From: Rakesh Kudurumalla <rkudurumalla@marvell.com>
+Date: Fri, 4 Mar 2022 19:53:37 +0530
+Subject: [PATCH] net/cnxk: fix build with optimization
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+[ upstream commit 68f8a52a6b0ad6b77772d4564928aebb21c2ca66 ]
+
+Fix the following build error seen with --optimization=1 and
+GCC 10.3.0.
+
+drivers/net/cnxk/cnxk_ethdev_mtr.c: In function
+‘cnxk_nix_mtr_policy_validate’:
+lib/ethdev/rte_mtr_driver.h:188:10: error: ‘str’ may be used
+uninitialized in this function [-Werror=maybe-uninitialized]
+
+Bugzilla ID: 939
+Bugzilla ID: 992
+Fixes: b526599020ef ("net/cnxk: fix build with GCC 12")
+
+Reported-by: Ferruh Yigit <ferruh.yigit@intel.com>
+Signed-off-by: Rakesh Kudurumalla <rkudurumalla@marvell.com>
+---
+ drivers/net/cnxk/cnxk_ethdev_mtr.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/net/cnxk/cnxk_ethdev_mtr.c b/drivers/net/cnxk/cnxk_ethdev_mtr.c
+index 6d14c88e7d..b6ccccdc39 100644
+--- a/drivers/net/cnxk/cnxk_ethdev_mtr.c
++++ b/drivers/net/cnxk/cnxk_ethdev_mtr.c
+@@ -280,7 +280,7 @@ cnxk_nix_mtr_profile_delete(struct rte_eth_dev *eth_dev, uint32_t profile_id,
+ static int
+ update_mtr_err(uint32_t act_color, struct rte_mtr_error *error, bool action)
+ {
+-	const char *str;
++	const char *str = NULL;
+ 	switch (act_color) {
+ 	case RTE_COLOR_GREEN:
+ 		if (action) {
+-- 
+2.23.0
+

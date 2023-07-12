@@ -1,0 +1,84 @@
+From 606474e9d0143ea0fb2863e64d2267b569e1fb89 Mon Sep 17 00:00:00 2001
+From: Joyce Kong <joyce.kong@arm.com>
+Date: Mon, 27 Mar 2023 07:07:12 +0000
+Subject: [PATCH] pdump: fix build with GCC 12
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+[ upstream commit b182466683a5c76657efb4b6b8d43e7d71979034 ]
+
+The following warning is observed with GCC12 compilation
+with release 20.11:
+
+In function ‘__rte_ring_enqueue_elems_64’,
+    inlined from ‘__rte_ring_enqueue_elems’ at
+            ../lib/librte_ring/rte_ring_elem.h:225:3,
+    inlined from ‘__rte_ring_do_enqueue_elem’ at
+            ../lib/librte_ring/rte_ring_elem.h:424:2,
+    inlined from ‘rte_ring_mp_enqueue_burst_elem’ at
+            ../lib/librte_ring/rte_ring_elem.h:884:9,
+    inlined from ‘rte_ring_enqueue_burst_elem’ at
+            ../lib/librte_ring/rte_ring_elem.h:946:10,
+    inlined from ‘rte_ring_enqueue_burst’ at
+            ../lib/librte_ring/rte_ring.h:721:9,
+    inlined from ‘pdump_copy’ at
+            ../lib/librte_pdump/rte_pdump.c:94:13:
+../lib/librte_ring/rte_ring_elem.h:162:40: warning: ‘*dup_bufs.36_42
++ _89’ may be used uninitialized [-Wmaybe-uninitialized]
+  162 |                         ring[idx] = obj[i];
+      |                                     ~~~^~~
+../lib/librte_ring/rte_ring_elem.h:163:44: warning: ‘*dup_bufs.36_42
++ _98’ may be used uninitialized [-Wmaybe-uninitialized]
+  163 |                         ring[idx + 1] = obj[i + 1];
+      |                                         ~~~^~~~~~~
+../lib/librte_ring/rte_ring_elem.h:164:44: warning: ‘*dup_bufs.36_42
++ _107’ may be used uninitialized [-Wmaybe-uninitialized]
+  164 |                         ring[idx + 2] = obj[i + 2];
+      |                                         ~~~^~~~~~~
+../lib/librte_ring/rte_ring_elem.h:165:44: warning: ‘*dup_bufs.36_42
++ _116’ may be used uninitialized [-Wmaybe-uninitialized]
+  165 |                         ring[idx + 3] = obj[i + 3];
+      |                                         ~~~^~~~~~~
+../lib/librte_ring/rte_ring_elem.h:169:42: warning: ‘*dup_bufs.36_42
++ _129’ may be used uninitialized [-Wmaybe-uninitialized]
+  169 |                         ring[idx++] = obj[i++]; /* fallthrough */
+      |                                       ~~~^~~~~
+../lib/librte_ring/rte_ring_elem.h:171:42: warning: ‘*dup_bufs.36_42
++ _139’ may be used uninitialized [-Wmaybe-uninitialized]
+  171 |                         ring[idx++] = obj[i++]; /* fallthrough */
+      |                                       ~~~^~~~~
+../lib/librte_ring/rte_ring_elem.h:173:42: warning: ‘*dup_bufs.36_42
++ _149’ may be used uninitialized [-Wmaybe-uninitialized]
+  173 |                         ring[idx++] = obj[i++];
+
+Actually, this is an alias warning as -O3 enables strict alias.
+This patch fixes it by replacing 'dup_bufs' with '&dup_bufs[0]'
+as the compiler represents them differently.
+
+Fixes: 278f945402c5 ("pdump: add new library for packet capture")
+
+Signed-off-by: Joyce Kong <joyce.kong@arm.com>
+Reviewed-by: Ruifeng Wang <ruifeng.wang@arm.com>
+Acked-by: Reshma Pattan <reshma.pattan@intel.com>
+Acked-by: Tyler Retzlaff <roretzla@linux.microsoft.com>
+---
+ lib/pdump/rte_pdump.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/pdump/rte_pdump.c b/lib/pdump/rte_pdump.c
+index f0dee81e77..805d12236c 100644
+--- a/lib/pdump/rte_pdump.c
++++ b/lib/pdump/rte_pdump.c
+@@ -133,7 +133,7 @@ pdump_copy(uint16_t port_id, uint16_t queue,
+ 
+ 	__atomic_fetch_add(&stats->accepted, d_pkts, __ATOMIC_RELAXED);
+ 
+-	ring_enq = rte_ring_enqueue_burst(ring, (void *)dup_bufs, d_pkts, NULL);
++	ring_enq = rte_ring_enqueue_burst(ring, (void *)&dup_bufs[0], d_pkts, NULL);
+ 	if (unlikely(ring_enq < d_pkts)) {
+ 		unsigned int drops = d_pkts - ring_enq;
+ 
+-- 
+2.23.0
+
