@@ -1,0 +1,39 @@
+From afbdff81bcfc8c16fffc7431c247684cf3451154 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Thu, 29 Jun 2023 21:21:26 +0800
+Subject: net/hns3: delete duplicate macro definition
+
+[ upstream commit d48709625a2bf0f64692d925e17e254ba0dc2351 ]
+
+This patch delete some duplicate macro definitions.
+
+Fixes: a4c7152d0581 ("net/hns3: extract common code to its own file")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev.h | 7 -------
+ 1 file changed, 7 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_ethdev.h b/drivers/net/hns3/hns3_ethdev.h
+index c58094d87b..c85a6912ad 100644
+--- a/drivers/net/hns3/hns3_ethdev.h
++++ b/drivers/net/hns3/hns3_ethdev.h
+@@ -873,13 +873,6 @@ struct hns3_adapter {
+ 	struct hns3_ptype_table ptype_tbl __rte_cache_aligned;
+ };
+ 
+-#define HNS3_DEVARG_RX_FUNC_HINT	"rx_func_hint"
+-#define HNS3_DEVARG_TX_FUNC_HINT	"tx_func_hint"
+-
+-#define HNS3_DEVARG_DEV_CAPS_MASK	"dev_caps_mask"
+-
+-#define HNS3_DEVARG_MBX_TIME_LIMIT_MS	"mbx_time_limit_ms"
+-
+ enum hns3_dev_cap {
+ 	HNS3_DEV_SUPPORT_DCB_B,
+ 	HNS3_DEV_SUPPORT_COPPER_B,
+-- 
+2.23.0
+

@@ -1,0 +1,201 @@
+From 01285f3f7ccbd4e3604c1cf00b6a9be2a9428502 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Thu, 29 Jun 2023 21:21:27 +0800
+Subject: net/hns3: add FDIR VLAN match mode runtime config
+
+[ upstream commit 5f107c4d7b7bfbc3fcaf98b4ca2963cc3e48fe93 ]
+
+The VLAN number in FDIR meta data is used to enable that hardware
+bases on VLAN number to strictly match the input flow. And it is
+enabled by default.
+
+For the following two rules:
+rule0:
+      pattern: eth type is 0x0806
+      actions: queue index 3
+rule1:
+      pattern: eth type is 0x0806 / vlan vid is 20
+      actions: queue index 4
+If enable VLAN number, only the ARP packets with VLAN 20 are directed
+to queue 4, and the ARP packets with other VLAN ID cannot be directed
+to the specified queue. If app want to all ARP (VLAN or no VLAN)
+packets to be directed to the specified queue, app has to set many
+rules for VLAN packet. In this case, if driver doesn't enable VLAN
+number, app just need to set one rule (rule0).
+
+So this patch adds a "fdir_vlan_match_mode" runtime config which only
+can be 'strict' or 'nostrict'. And driver still uses 'strict' mode as
+the default mode. Please select 'nostrict' mode if you request all same
+ethertype packets with and without VLAN to a specified queue.
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ doc/guides/nics/hns3.rst       | 27 ++++++++++++++++++++++++++
+ drivers/net/hns3/hns3_common.c | 35 ++++++++++++++++++++++++++++++++++
+ drivers/net/hns3/hns3_common.h |  2 ++
+ drivers/net/hns3/hns3_fdir.c   | 10 +++++++---
+ drivers/net/hns3/hns3_fdir.h   |  8 ++++++++
+ 5 files changed, 79 insertions(+), 3 deletions(-)
+
+diff --git a/doc/guides/nics/hns3.rst b/doc/guides/nics/hns3.rst
+index 172fcdb29f..644d520b64 100644
+--- a/doc/guides/nics/hns3.rst
++++ b/doc/guides/nics/hns3.rst
+@@ -144,6 +144,33 @@ Runtime Configuration
+    For example::
+    -a 0000:7d:00.0,mbx_time_limit_ms=600
+ 
++- ``fdir_vlan_match_mode`` (default ``strict``)
++
++  Used to select VLAN match mode. This runtime config can be ``strict``
++  or ``nostrict`` and is only valid for PF devices.
++  If driver works on ``strict`` mode (default mode), hardware does strictly
++  match the input flow base on VLAN number.
++
++  For the following scenarios with two rules:
++
++  .. code-block:: console
++
++    rule0:
++      pattern: eth type is 0x0806
++      actions: queue index 3
++    rule1:
++      pattern: eth type is 0x0806 / vlan vid is 20
++      actions: queue index 4
++
++  If application select ``strict`` mode, only the ARP packets with VLAN
++  20 are directed to queue 4, and the ARP packets with other VLAN ID
++  cannot be directed to the specified queue. If application want to all
++  ARP packets with or without VLAN to be directed to the specified queue,
++  application can select ``nostrict`` mode and just need to set rule0.
++
++  For example::
++
++    -a 0000:7d:00.0,fdir_vlan_match_mode=nostrict
+ 
+ Driver compilation and testing
+ ------------------------------
+diff --git a/drivers/net/hns3/hns3_common.c b/drivers/net/hns3/hns3_common.c
+index 6697ecefe6..a7b576aa60 100644
+--- a/drivers/net/hns3/hns3_common.c
++++ b/drivers/net/hns3/hns3_common.c
+@@ -236,6 +236,34 @@ hns3_parse_mbx_time_limit(const char *key, const char *value, void *extra_args)
+ 	return 0;
+ }
+ 
++static int
++hns3_parse_vlan_match_mode(const char *key, const char *value, void *args)
++{
++	uint8_t mode;
++
++	RTE_SET_USED(key);
++
++	if (value == NULL) {
++		PMD_INIT_LOG(WARNING, "no value for key:\"%s\"", key);
++		return -1;
++	}
++
++	if (strcmp(value, "strict") == 0) {
++		mode = HNS3_FDIR_VLAN_STRICT_MATCH;
++	} else if (strcmp(value, "nostrict") == 0) {
++		mode = HNS3_FDIR_VLAN_NOSTRICT_MATCH;
++	} else {
++		PMD_INIT_LOG(WARNING, "invalid value:\"%s\" for key:\"%s\", "
++			"value must be 'strict' or 'nostrict'",
++			value, key);
++		return -1;
++	}
++
++	*(uint8_t *)args = mode;
++
++	return 0;
++}
++
+ void
+ hns3_parse_devargs(struct rte_eth_dev *dev)
+ {
+@@ -252,6 +280,8 @@ hns3_parse_devargs(struct rte_eth_dev *dev)
+ 	hns->tx_func_hint = HNS3_IO_FUNC_HINT_NONE;
+ 	hns->dev_caps_mask = 0;
+ 	hns->mbx_time_limit_ms = HNS3_MBX_DEF_TIME_LIMIT_MS;
++	if (!hns->is_vf)
++		hns->pf.fdir.vlan_match_mode = HNS3_FDIR_VLAN_STRICT_MATCH;
+ 
+ 	if (dev->device->devargs == NULL)
+ 		return;
+@@ -268,6 +298,11 @@ hns3_parse_devargs(struct rte_eth_dev *dev)
+ 			   &hns3_parse_dev_caps_mask, &dev_caps_mask);
+ 	(void)rte_kvargs_process(kvlist, HNS3_DEVARG_MBX_TIME_LIMIT_MS,
+ 			   &hns3_parse_mbx_time_limit, &mbx_time_limit_ms);
++	if (!hns->is_vf)
++		(void)rte_kvargs_process(kvlist,
++					 HNS3_DEVARG_FDIR_VALN_MATCH_MODE,
++					 &hns3_parse_vlan_match_mode,
++					 &hns->pf.fdir.vlan_match_mode);
+ 
+ 	rte_kvargs_free(kvlist);
+ 
+diff --git a/drivers/net/hns3/hns3_common.h b/drivers/net/hns3/hns3_common.h
+index 8eaeda26e7..cf9593bd0c 100644
+--- a/drivers/net/hns3/hns3_common.h
++++ b/drivers/net/hns3/hns3_common.h
+@@ -27,6 +27,8 @@ enum {
+ 
+ #define HNS3_DEVARG_MBX_TIME_LIMIT_MS	"mbx_time_limit_ms"
+ 
++#define HNS3_DEVARG_FDIR_VALN_MATCH_MODE	"fdir_vlan_match_mode"
++
+ #define MSEC_PER_SEC              1000L
+ #define USEC_PER_MSEC             1000L
+ 
+diff --git a/drivers/net/hns3/hns3_fdir.c b/drivers/net/hns3/hns3_fdir.c
+index 48a91fb517..c80fa59e63 100644
+--- a/drivers/net/hns3/hns3_fdir.c
++++ b/drivers/net/hns3/hns3_fdir.c
+@@ -355,9 +355,13 @@ int hns3_init_fd_config(struct hns3_adapter *hns)
+ 	/* roce_type is used to filter roce frames
+ 	 * dst_vport is used to specify the rule
+ 	 */
+-	key_cfg->meta_data_active = BIT(DST_VPORT) | BIT(TUNNEL_PACKET) |
+-	    BIT(VLAN_NUMBER);
+-	hns3_dbg(hw, "fdir meta data: dst_vport tunnel_packet vlan_number");
++	key_cfg->meta_data_active = BIT(DST_VPORT) | BIT(TUNNEL_PACKET);
++	if (pf->fdir.vlan_match_mode)
++		key_cfg->meta_data_active |= BIT(VLAN_NUMBER);
++
++	hns3_dbg(hw, "fdir meta data: dst_vport tunnel_packet %s",
++		 (pf->fdir.vlan_match_mode == HNS3_FDIR_VLAN_STRICT_MATCH) ?
++		 "vlan_number" : "");
+ 
+ 	ret = hns3_get_fd_allocation(hw,
+ 				     &pf->fdir.fd_cfg.rule_num[HNS3_FD_STAGE_1],
+diff --git a/drivers/net/hns3/hns3_fdir.h b/drivers/net/hns3/hns3_fdir.h
+index ce70a534dc..308cfbe56f 100644
+--- a/drivers/net/hns3/hns3_fdir.h
++++ b/drivers/net/hns3/hns3_fdir.h
+@@ -170,6 +170,13 @@ struct hns3_fdir_rule_ele {
+ 
+ TAILQ_HEAD(hns3_fdir_rule_list, hns3_fdir_rule_ele);
+ 
++/*
++ * On 'strict' mode, hardware bases on VLAN number to exactly match the
++ * input flow.
++ */
++#define HNS3_FDIR_VLAN_STRICT_MATCH	1
++#define HNS3_FDIR_VLAN_NOSTRICT_MATCH	0
++
+ /*
+  *  A structure used to define fields of a FDIR related info.
+  */
+@@ -178,6 +185,7 @@ struct hns3_fdir_info {
+ 	struct hns3_fdir_rule_ele **hash_map;
+ 	struct rte_hash *hash_handle;
+ 	struct hns3_fd_cfg fd_cfg;
++	uint8_t vlan_match_mode;
+ };
+ 
+ struct hns3_adapter;
+-- 
+2.23.0
+
