@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 53
+Release: 54
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -369,6 +369,8 @@ Patch6339:    0339-examples-cmdline-fix-build-with-GCC-12.patch
 Patch6340:    0340-net-mlx5-fix-build-with-GCC-12-and-ASan.patch
 Patch6341:    0341-pdump-fix-build-with-GCC-12.patch
 Patch6342:    0342-net-cxgbe-fix-dangling-pointer-by-mailbox-access-rew.patch
+Patch6343:    0343-kni-fix-build-with-Linux-6.3.patch
+Patch6344:    0344-kni-fix-build-with-Linux-6.5.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -514,6 +516,10 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Sat Jul 15 2023 jiangheng <jiangheng14@huawei.com> - 21.11-54
+- kni: fix build with Linux 6.3/6.5
+- remove unused patch intruduced by "fix build with GCC 12"
+
 * Wed Jul 12 2023 jiangheng <jiangheng14@huawei.com> - 21.11-53
 - fix build with GCC 12
 
