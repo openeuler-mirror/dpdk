@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 54
+Release: 55
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -371,6 +371,12 @@ Patch6341:    0341-pdump-fix-build-with-GCC-12.patch
 Patch6342:    0342-net-cxgbe-fix-dangling-pointer-by-mailbox-access-rew.patch
 Patch6343:    0343-kni-fix-build-with-Linux-6.3.patch
 Patch6344:    0344-kni-fix-build-with-Linux-6.5.patch
+Patch6345:    0345-doc-unify-sections-of-networking-drivers-guide.patch
+Patch6346:    0346-net-hns3-delete-duplicate-macro-definition.patch
+Patch6347:    0347-net-hns3-add-FDIR-VLAN-match-mode-runtime-config.patch
+Patch6348:    0348-doc-fix-kernel-patch-link-in-hns3-guide.patch
+Patch6349:    0349-doc-fix-syntax-in-hns3-guide.patch
+Patch6350:    0350-doc-fix-number-of-leading-spaces-in-hns3-guide.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -516,6 +522,17 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Mon Jul 17 2023 chenjiji <chenjiji09@163.com> - 21.11-55
+ Sync some patchs from upstreaming about add FDIR VLAN match
+ mode runtime config and fix doc format for hns3 pmd. Patchs
+ are as follow:
+ - doc: unify sections of networking drivers guide
+ - net/hns3: delete duplicate macro definition
+ - net/hns3: add FDIR VLAN match mode runtime config
+ - doc: fix kernel patch link in hns3 guide
+ - doc: fix syntax in hns3 guide
+ - doc: fix number of leading spaces in hns3 guide
+
 * Sat Jul 15 2023 jiangheng <jiangheng14@huawei.com> - 21.11-54
 - kni: fix build with Linux 6.3/6.5
 - remove unused patch intruduced by "fix build with GCC 12"

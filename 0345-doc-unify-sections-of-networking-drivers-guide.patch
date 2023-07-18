@@ -1,0 +1,96 @@
+From 2bf5b0a8dfa64f336bd59aa807e5d576612627e6 Mon Sep 17 00:00:00 2001
+From: Ferruh Yigit <ferruh.yigit@amd.com>
+Date: Tue, 21 Mar 2023 23:59:09 +0000
+Subject: doc: unify sections of networking drivers guide
+
+[ upstream commit b583b9a1bb49e86aa0937d55415713282000c536 ]
+
+- Move supported device to the top
+- Move supported features up
+- Move limitations down
+- Rename configuration sections
+- Fix section indentation
+- Remove empty sections
+- Remove contact info as this is duplication of maintainers file
+
+This patch just fix hns3 PMD because others PMDs are very
+conflicting.
+
+Signed-off-by: Ferruh Yigit <ferruh.yigit@amd.com>
+Acked-by: Hyong Youb Kim <hyonkim@cisco.com>
+Acked-by: Chengwen Feng <fengchengwen@huawei.com>
+Acked-by: Dongdong Liu <liudongdong3@huawei.com>
+Acked-by: Qi Zhang <qi.z.zhang@intel.com>
+Acked-by: Simei Su <simei.su@intel.com>
+Reviewed-by: Rosen Xu <rosen.xu@intel.com>
+Acked-by: Cristian Dumitrescu <cristian.dumitrescu@intel.com>
+Reviewed-by: Chenbo Xia <chenbo.xia@intel.com>
+Reviewed-by: Igor Russkikh <irusskikh@marvell.com>
+Acked-by: Liron Himi <lironh@marvell.com>
+Acked-by: Jerin Jacob <jerinj@marvell.com>
+Acked-by: Long Li <longli@microsoft.com>
+Acked-by: Sachin Saxena <sachin.saxena@nxp.com>
+---
+ doc/guides/nics/hns3.rst | 30 +++++++++++++++---------------
+ 1 file changed, 15 insertions(+), 15 deletions(-)
+
+diff --git a/doc/guides/nics/hns3.rst b/doc/guides/nics/hns3.rst
+index 791c9cc2ed..5373ec5a8f 100644
+--- a/doc/guides/nics/hns3.rst
++++ b/doc/guides/nics/hns3.rst
+@@ -47,11 +47,21 @@ Prerequisites
+ - Follow the DPDK :ref:`Getting Started Guide for Linux <linux_gsg>` to
+   setup the basic DPDK environment.
+ 
++Link status event Pre-conditions
++~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 
+-Pre-Installation Configuration
+-------------------------------
++Firmware 1.8.0.0 and later versions support reporting link changes to the PF.
++Therefore, to use the LSC for the PF driver, ensure that the firmware version
++also supports reporting link changes.
++If the VF driver needs to support LSC, special patch must be added:
++`<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/drivers/net/ethernet/hisilicon/hns3?h=next-20210428&id=18b6e31f8bf4ac7af7b057228f38a5a530378e4e>`_.
++Note: The patch has been uploaded to 5.13 of the Linux kernel mainline.
++
++
++Configuration
++-------------
+ 
+-Config File Options
++Compilation Options
+ ~~~~~~~~~~~~~~~~~~~
+ 
+ The following options can be modified in the ``config/rte_config.h`` file.
+@@ -60,8 +70,8 @@ The following options can be modified in the ``config/rte_config.h`` file.
+ 
+   Number of MAX queues reserved for PF.
+ 
+-Runtime Config Options
+-~~~~~~~~~~~~~~~~~~~~~~
++Runtime Configuration
++~~~~~~~~~~~~~~~~~~~~~
+ 
+ - ``rx_func_hint`` (default ``none``)
+ 
+@@ -130,16 +140,6 @@ Runtime Config Options
+    For example::
+    -a 0000:7d:00.0,mbx_time_limit_ms=600
+ 
+-Link status event Pre-conditions
+-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-
+-Firmware 1.8.0.0 and later versions support reporting link changes to the PF.
+-Therefore, to use the LSC for the PF driver, ensure that the firmware version
+-also supports reporting link changes.
+-If the VF driver needs to support LSC, special patch must be added:
+-`<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/drivers/net/ethernet/hisilicon/hns3?h=next-20210428&id=18b6e31f8bf4ac7af7b057228f38a5a530378e4e>`_.
+-Note: The patch has been uploaded to 5.13 of the Linux kernel mainline.
+-
+ 
+ Driver compilation and testing
+ ------------------------------
+-- 
+2.23.0
+
