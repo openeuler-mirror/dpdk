@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 41
+Release: 42
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -289,7 +289,7 @@ License: BSD and LGPLv2 and GPLv2
 
 ExclusiveArch: i686 x86_64 aarch64
 
-BuildRequires: meson ninja-build gcc diffutils python3-pyelftools
+BuildRequires: meson ninja-build gcc diffutils python3-pyelftools lld
 BuildRequires: kernel-devel numactl-devel
 BuildRequires: libpcap libpcap-devel
 BuildRequires: rdma-core-devel
@@ -330,6 +330,9 @@ This package contains the pdump tool for capture the dpdk network packets.
 %autosetup -n %{name}-%{version} -p1
 
 %build
+%if "%toolchain" == "clang"
+export LLVM=1
+%endif
 export CFLAGS="%{optflags}"
 meson build -Dplatform=generic -Dexamples=l3fwd-power,ethtool,l3fwd,kni,dma,ptpclient --default-library=shared
 ninja -C build -v
@@ -429,6 +432,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Tue Jul 25 2023 yoo <sunyuechi@iscas.ac.cn> - 21.11-42
+- fix clang build error by kernel change
+
 * Fri Apr 21 2023 jammyjellyfish <jammyjellyfish255@outlook.com> - 21.11-41
 - fix clang build error
 
