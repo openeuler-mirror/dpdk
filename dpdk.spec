@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 55
+Release: 56
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -522,6 +522,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Mon Aug 21 2023 huangdengdui <huangdengui@huawei.com> - 21.11-56
+ replace patch-287 to solve the duplicate setting for MAC address.
+
 * Mon Jul 17 2023 chenjiji <chenjiji09@163.com> - 21.11-55
  Sync some patchs from upstreaming about add FDIR VLAN match
  mode runtime config and fix doc format for hns3 pmd. Patchs

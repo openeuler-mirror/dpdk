@@ -1,9 +1,9 @@
-From dfa6c33450b990739a282f5acad8e43a5b27437b Mon Sep 17 00:00:00 2001
+From 9b1a4cdf89156605b4b5a5b1a5f5507423964dc9 Mon Sep 17 00:00:00 2001
 From: Huisong Li <lihuisong@huawei.com>
 Date: Fri, 19 May 2023 17:31:55 +0800
-Subject: ethdev: fix one address occupies two entries in MAC addrs
+Subject: [PATCH] ethdev: fix MAC address occupies two entries
 
-[ upstream commit 964ccaf2fe229ef31f57574176f966af7fcefae4 ]
+[ upstream commit 8f02f472a29432650d999969359d6a49ea6aadca ]
 
 The dev->data->mac_addrs[0] will be changed to a new MAC address when
 applications modify the default MAC address by .mac_addr_set(). However,
@@ -35,9 +35,9 @@ Acked-by: Thomas Monjalon <thomas@monjalon.net>
 Reviewed-by: Ferruh Yigit <ferruh.yigit@amd.com>
 ---
  lib/ethdev/ethdev_driver.h |  6 +++++-
- lib/ethdev/rte_ethdev.c    | 14 +++++++++++++-
+ lib/ethdev/rte_ethdev.c    | 10 ++++++++++
  lib/ethdev/rte_ethdev.h    |  4 ++++
- 3 files changed, 22 insertions(+), 2 deletions(-)
+ 3 files changed, 19 insertions(+), 1 deletion(-)
 
 diff --git a/lib/ethdev/ethdev_driver.h b/lib/ethdev/ethdev_driver.h
 index d3de203d7a..6f539d45c6 100644
@@ -57,10 +57,10 @@ index d3de203d7a..6f539d45c6 100644
  	/** Bitmap associating MAC addresses to pools */
  	uint64_t mac_pool_sel[RTE_ETH_NUM_RECEIVE_MAC_ADDR];
 diff --git a/lib/ethdev/rte_ethdev.c b/lib/ethdev/rte_ethdev.c
-index 054715e05a..2f0aa282df 100644
+index 4e5499ad2d..bd5dac284d 100644
 --- a/lib/ethdev/rte_ethdev.c
 +++ b/lib/ethdev/rte_ethdev.c
-@@ -4471,6 +4471,7 @@ int
+@@ -4470,6 +4470,7 @@ int
  rte_eth_dev_default_mac_addr_set(uint16_t port_id, struct rte_ether_addr *addr)
  {
  	struct rte_eth_dev *dev;
@@ -68,14 +68,10 @@ index 054715e05a..2f0aa282df 100644
  	int ret;
  
  	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
-@@ -4486,8 +4487,19 @@ rte_eth_dev_default_mac_addr_set(uint16_t port_id, struct rte_ether_addr *addr)
- 	if (!rte_is_valid_assigned_ether_addr(addr))
- 		return -EINVAL;
+@@ -4487,6 +4488,15 @@ rte_eth_dev_default_mac_addr_set(uint16_t port_id, struct rte_ether_addr *addr)
  
--	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->mac_addr_set, -ENOTSUP);
-+	if (*dev->dev_ops->mac_addr_set == NULL)
-+	return -ENOTSUP;
-+
+ 	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->mac_addr_set, -ENOTSUP);
+ 
 +	/* Keep address unique in dev->data->mac_addrs[]. */
 +	index = eth_dev_get_mac_addr_index(port_id, addr);
 +	if (index > 0) {
@@ -84,8 +80,7 @@ index 054715e05a..2f0aa282df 100644
 +			port_id);
 +		return -EEXIST;
 +	}
- 
-+ 	ret = (*dev->dev_ops->mac_addr_set)(dev, addr);
++
  	ret = (*dev->dev_ops->mac_addr_set)(dev, addr);
  	if (ret < 0)
  		return ret;
