@@ -1,0 +1,250 @@
+From 90273829df4ae4059d1976cbb64989fb9c5d11c8 Mon Sep 17 00:00:00 2001
+From: herengui <herengui@kylinsec.com.cn>
+Date: Wed, 30 Aug 2023 16:44:55 +0800
+Subject: [PATCH 1000/1001] add sw_64 support not upstream modified
+
+Signed-off-by: herengui <herengui@kylinsec.com.cn>
+---
+ app/test/test_xmmt_ops.h          | 16 ++++++++++
+ config/meson.build                |  1 +
+ drivers/net/i40e/i40e_rxtx.c      | 52 +++++++++++++++++++++++++++++++
+ drivers/net/ixgbe/ixgbe_rxtx.c    |  4 +--
+ drivers/net/memif/rte_eth_memif.h |  2 ++
+ drivers/net/tap/tap_bpf.h         |  2 ++
+ examples/l3fwd/l3fwd_em.c         |  8 +++++
+ examples/l3fwd/l3fwd_lpm.c        |  8 +++++
+ lib/lpm/rte_lpm.h                 |  2 ++
+ meson.build                       |  2 ++
+ 10 files changed, 95 insertions(+), 2 deletions(-)
+
+diff --git a/app/test/test_xmmt_ops.h b/app/test/test_xmmt_ops.h
+index 21490e7..b969008 100644
+--- a/app/test/test_xmmt_ops.h
++++ b/app/test/test_xmmt_ops.h
+@@ -61,6 +61,22 @@ vect_set_epi32(int i3, int i2, int i1, int i0)
+ 
+ 	return data;
+ }
++
++#elif defined(RTE_ARCH_SW_64)
++
++#define vect_loadu_sil128(p) (*(xmm_t *)p)
++
++static __rte_always_inline xmm_t
++vect_set_epi32(int i3, int i2, int i1, int i0)
++{
++        uint64_t h = ((uint64_t)i2 & 0xffffffff) | ((uint64_t)i3 << 32);
++        uint64_t l = ((uint64_t)i0 & 0xffffffff) | ((uint64_t)i1 << 32);
++
++        xmm_t data = {l,h};
++
++        return data;
++}
++
+ #endif
+ 
+ #endif /* _TEST_XMMT_OPS_H_ */
+diff --git a/config/meson.build b/config/meson.build
+index 7e44983..d599995 100644
+--- a/config/meson.build
++++ b/config/meson.build
+@@ -134,6 +134,7 @@ machine_args = []
+ if host_machine.cpu_family().startswith('ppc')
+     machine_args += '-mcpu=' + cpu_instruction_set
+     machine_args += '-mtune=' + cpu_instruction_set
++elif host_machine.cpu_family().startswith('sw_64')
+ else
+     machine_args += '-march=' + cpu_instruction_set
+ endif
+diff --git a/drivers/net/i40e/i40e_rxtx.c b/drivers/net/i40e/i40e_rxtx.c
+index 9a00a9b..f4cd2a3 100644
+--- a/drivers/net/i40e/i40e_rxtx.c
++++ b/drivers/net/i40e/i40e_rxtx.c
+@@ -3606,6 +3606,58 @@ i40e_set_default_pctype_table(struct rte_eth_dev *dev)
+ 	}
+ }
+ 
++#ifdef RTE_ARCH_SW_64
++int
++i40e_rx_vec_dev_conf_condition_check(struct rte_eth_dev __rte_unused *dev)
++{
++	return -1;
++}
++
++uint16_t
++i40e_recv_pkts_vec(
++	void __rte_unused *rx_queue,
++	struct rte_mbuf __rte_unused **rx_pkts,
++	uint16_t __rte_unused nb_pkts)
++{
++	return 0;
++}
++
++uint16_t
++i40e_recv_scattered_pkts_vec(
++	void __rte_unused *rx_queue,
++	struct rte_mbuf __rte_unused **rx_pkts,
++	uint16_t __rte_unused nb_pkts)
++{
++	return 0;
++}
++
++int
++i40e_rxq_vec_setup(struct i40e_rx_queue __rte_unused *rxq)
++{
++	return -1;
++}
++
++int
++i40e_txq_vec_setup(struct i40e_tx_queue __rte_unused *txq)
++{
++	return -1;
++}
++
++void
++i40e_rx_queue_release_mbufs_vec(struct i40e_rx_queue __rte_unused*rxq)
++{
++	return;
++}
++
++uint16_t
++i40e_xmit_fixed_burst_vec(void __rte_unused * tx_queue,
++						struct rte_mbuf __rte_unused **tx_pkts,
++						uint16_t __rte_unused nb_pkts)
++{
++	return 0;
++}
++#endif
++
+ #ifndef CC_AVX2_SUPPORT
+ uint16_t
+ i40e_recv_pkts_vec_avx2(void __rte_unused *rx_queue,
+diff --git a/drivers/net/ixgbe/ixgbe_rxtx.c b/drivers/net/ixgbe/ixgbe_rxtx.c
+index 60850f6..535737c 100644
+--- a/drivers/net/ixgbe/ixgbe_rxtx.c
++++ b/drivers/net/ixgbe/ixgbe_rxtx.c
+@@ -5953,8 +5953,8 @@ ixgbe_config_rss_filter(struct rte_eth_dev *dev,
+ 	return 0;
+ }
+ 
+-/* Stubs needed for linkage when RTE_ARCH_PPC_64 or RTE_ARCH_LOONGARCH is set */
+-#if defined(RTE_ARCH_PPC_64) || defined(RTE_ARCH_LOONGARCH)
++/* Stubs needed for linkage when RTE_ARCH_PPC_64, RTE_ARCH_LOONGARCH or RTE_ARCH_SW_64 is set */
++#if defined(RTE_ARCH_PPC_64) || defined(RTE_ARCH_LOONGARCH) || defined(RTE_ARCH_SW_64)
+ int
+ ixgbe_rx_vec_dev_conf_condition_check(struct rte_eth_dev __rte_unused *dev)
+ {
+diff --git a/drivers/net/memif/rte_eth_memif.h b/drivers/net/memif/rte_eth_memif.h
+index 864a498..77ed5cd 100644
+--- a/drivers/net/memif/rte_eth_memif.h
++++ b/drivers/net/memif/rte_eth_memif.h
+@@ -180,6 +180,8 @@ const char *memif_version(void);
+ #define __NR_memfd_create 360
+ #elif defined __i386__
+ #define __NR_memfd_create 356
++#elif defined __sw_64__
++#define __NR_memfd_create 512
+ #elif defined __loongarch__
+ #define __NR_memfd_create 279
+ #else
+diff --git a/drivers/net/tap/tap_bpf.h b/drivers/net/tap/tap_bpf.h
+index de7ab91..21a9006 100644
+--- a/drivers/net/tap/tap_bpf.h
++++ b/drivers/net/tap/tap_bpf.h
+@@ -103,6 +103,8 @@ union bpf_attr {
+ #  define __NR_bpf 361
+ # elif defined(__loongarch__)
+ #  define __NR_bpf 280
++# elif defined(__sw_64__)
++#  define __NR_bpf 170
+ # else
+ #  error __NR_bpf not defined
+ # endif
+diff --git a/examples/l3fwd/l3fwd_em.c b/examples/l3fwd/l3fwd_em.c
+index 67e042f..df5186a 100644
+--- a/examples/l3fwd/l3fwd_em.c
++++ b/examples/l3fwd/l3fwd_em.c
+@@ -278,6 +278,14 @@ em_mask_key(void *key, xmm_t mask)
+ 
+ 	return vect_and(data, mask);
+ }
++#elif defined(RTE_ARCH_SW_64)
++static inline xmm_t
++em_mask_key(void *key, xmm_t mask)
++{
++	xmm_t data = vect_load_128(key);
++
++	return vect_and(data, mask);
++}
+ #else
+ #error No vector engine (SSE, NEON, ALTIVEC) available, check your toolchain
+ #endif
+diff --git a/examples/l3fwd/l3fwd_lpm.c b/examples/l3fwd/l3fwd_lpm.c
+index 160a7c6..9e4258b 100644
+--- a/examples/l3fwd/l3fwd_lpm.c
++++ b/examples/l3fwd/l3fwd_lpm.c
+@@ -28,6 +28,7 @@
+ #include <rte_lpm6.h>
+ 
+ #include "l3fwd.h"
++#include "l3fwd_common.h"
+ #include "l3fwd_event.h"
+ 
+ #include "l3fwd_route.h"
+@@ -240,6 +241,7 @@ lpm_process_event_pkt(const struct lcore_conf *lconf, struct rte_mbuf *mbuf)
+ 
+ 	struct rte_ether_hdr *eth_hdr = rte_pktmbuf_mtod(mbuf,
+ 			struct rte_ether_hdr *);
++#ifndef RTE_ARCH_SW_64
+ #ifdef DO_RFC_1812_CHECKS
+ 	struct rte_ipv4_hdr *ipv4_hdr;
+ 	if (RTE_ETH_IS_IPV4_HDR(mbuf->packet_type)) {
+@@ -257,6 +259,7 @@ lpm_process_event_pkt(const struct lcore_conf *lconf, struct rte_mbuf *mbuf)
+ 		--(ipv4_hdr->time_to_live);
+ 		++(ipv4_hdr->hdr_checksum);
+ 	}
++#endif
+ #endif
+ 	/* dst addr */
+ 	*(uint64_t *)&eth_hdr->dst_addr = dest_eth_addr[mbuf->port];
+@@ -264,6 +267,11 @@ lpm_process_event_pkt(const struct lcore_conf *lconf, struct rte_mbuf *mbuf)
+ 	/* src addr */
+ 	rte_ether_addr_copy(&ports_eth_addr[mbuf->port],
+ 			&eth_hdr->src_addr);
++#ifdef RTE_ARCH_SW_64
++	rfc1812_process(rte_pktmbuf_mtod_offset(mbuf, struct rte_ipv4_hdr *,
++						sizeof(struct rte_ether_hdr)),
++			&mbuf->port, mbuf->packet_type);
++#endif
+ #endif
+ 	return mbuf->port;
+ }
+diff --git a/lib/lpm/rte_lpm.h b/lib/lpm/rte_lpm.h
+index 49cfa5b..de3d3a0 100644
+--- a/lib/lpm/rte_lpm.h
++++ b/lib/lpm/rte_lpm.h
+@@ -411,6 +411,8 @@ rte_lpm_lookupx4(const struct rte_lpm *lpm, xmm_t ip, uint32_t hop[4],
+ #include "rte_lpm_altivec.h"
+ #elif defined(RTE_ARCH_X86)
+ #include "rte_lpm_sse.h"
++#elif defined(RTE_ARCH_SW_64)
++#include "rte_lpm_sw.h"
+ #else
+ #include "rte_lpm_scalar.h"
+ #endif
+diff --git a/meson.build b/meson.build
+index 1052fba..baceafa 100644
+--- a/meson.build
++++ b/meson.build
+@@ -46,6 +46,8 @@ elif host_machine.cpu_family().startswith('loongarch')
+     arch_subdir = 'loongarch'
+ elif host_machine.cpu_family().startswith('ppc')
+     arch_subdir = 'ppc'
++elif host_machine.cpu_family().startswith('sw_64')
++    arch_subdir = 'sw_64'
+ endif
+ 
+ # configure the build, and make sure configs here and in config folder are
+-- 
+2.41.0
+

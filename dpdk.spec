@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 58
+Release: 59
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -422,11 +422,14 @@ Patch6392:    0392-ethdev-add-maximum-Rx-buffer-size.patch
 Patch6393:    0393-net-hns3-report-maximum-buffer-size.patch
 Patch6394:    0394-net-hns3-fix-mailbox-sync.patch
 
+Patch1000:    1000-add-sw_64-support-not-upstream-modified.patch
+Patch1001:    1001-add-sw_64-support-not-upstream-new.patch
+
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
 License: BSD and LGPLv2 and GPLv2
 
-ExclusiveArch: i686 x86_64 aarch64 loongarch64
+ExclusiveArch: i686 x86_64 aarch64 loongarch64 sw_64
 
 BuildRequires: meson ninja-build gcc diffutils python3-pyelftools
 BuildRequires: kernel-devel numactl-devel
@@ -471,7 +474,11 @@ This package contains the pdump tool for capture the dpdk network packets.
 
 %build
 export CFLAGS="%{optflags}"
+%ifarch sw_64
+meson build -Dplatform=generic -Dexamples=l3fwd-power,ethtool,kni,dma,ptpclient
+%else
 meson build -Dplatform=generic -Dexamples=l3fwd-power,ethtool,l3fwd,kni,dma,ptpclient
+%endif
 ninja -C build -v
 
 #build gazelle-pdump
@@ -490,7 +497,9 @@ cd -
 %install
 DESTDIR=$RPM_BUILD_ROOT/ ninja install -C build
 
+%ifnarch sw_64
 chrpath -d ./build/examples/dpdk-l3fwd
+%endif
 chrpath -d ./build/examples/dpdk-l3fwd-power
 chrpath -d ./build/examples/dpdk-ethtool
 chrpath -d ./build/examples/dpdk-kni
@@ -498,7 +507,9 @@ chrpath -d ./build/examples/dpdk-dma
 chrpath -d ./build/examples/dpdk-ptpclient
 chrpath -d ./build/app/dpdk-pdump.p/gazelle-pdump
 
+%ifnarch sw_64
 cp ./build/examples/dpdk-l3fwd $RPM_BUILD_ROOT/usr/local/bin
+%endif
 cp ./build/examples/dpdk-l3fwd-power $RPM_BUILD_ROOT/usr/local/bin
 cp ./build/examples/dpdk-ethtool $RPM_BUILD_ROOT/usr/local/bin
 cp ./build/examples/dpdk-kni $RPM_BUILD_ROOT/usr/local/bin
@@ -506,17 +517,17 @@ cp ./build/examples/dpdk-dma $RPM_BUILD_ROOT/usr/local/bin
 cp ./build/examples/dpdk-ptpclient $RPM_BUILD_ROOT/usr/local/bin
 cp ./build/app/dpdk-pdump.p/gazelle-pdump $RPM_BUILD_ROOT/usr/local/bin
 
-mkdir -p $RPM_BUILD_ROOT/usr/lib64
-mv $RPM_BUILD_ROOT/usr/local/lib64/* $RPM_BUILD_ROOT/usr/lib64/
+mkdir -p $RPM_BUILD_ROOT%{_libdir}
+mv $RPM_BUILD_ROOT/usr/local/%{_lib}/* $RPM_BUILD_ROOT%{_libdir}/
 
 mkdir -p $RPM_BUILD_ROOT/usr/local/bin
 ln -fs /usr/local/bin/dpdk-devbind.py $RPM_BUILD_ROOT/usr/local/bin/dpdk-devbind
-mkdir $RPM_BUILD_ROOT/usr/lib64/dpdk/pmds-22.0/lib
-mkdir $RPM_BUILD_ROOT/usr/lib64/dpdk/pmds-22.0/include
-cd $RPM_BUILD_ROOT/usr/lib64/dpdk/pmds-22.0/include
+mkdir $RPM_BUILD_ROOT%{_libdir}/dpdk/pmds-22.0/lib
+mkdir $RPM_BUILD_ROOT%{_libdir}/dpdk/pmds-22.0/include
+cd $RPM_BUILD_ROOT%{_libdir}/dpdk/pmds-22.0/include
 ln -fs ../../../../local/include/* .
 cd -
-cd $RPM_BUILD_ROOT/usr/lib64/dpdk/pmds-22.0/lib
+cd $RPM_BUILD_ROOT%{_libdir}/dpdk/pmds-22.0/lib
 ln -fs ../../../*.so .
 cd -
 
@@ -530,16 +541,16 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/local/bin/*.py
 /usr/local/bin/dpdk-devbind
 /lib/modules/%{kern_devel_ver}/extra/dpdk/*.ko
-/usr/lib64/*.so*
-/usr/lib64/dpdk/*
-%exclude /usr/lib64/dpdk/pmds-22.0/include/*.h
+%{_libdir}/*.so*
+%{_libdir}/dpdk/*
+%exclude %{_libdir}/dpdk/pmds-22.0/include/*.h
 
 %files devel
 /usr/local/include
-/usr/lib64/*.a
-/usr/lib64/dpdk/pmds-22.0/include/*.h
-/usr/lib64/pkgconfig/libdpdk-libs.pc
-/usr/lib64/pkgconfig/libdpdk.pc
+%{_libdir}/*.a
+%{_libdir}/dpdk/pmds-22.0/include/*.h
+%{_libdir}/pkgconfig/libdpdk-libs.pc
+%{_libdir}/pkgconfig/libdpdk.pc
 
 %files doc
 
@@ -549,7 +560,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/local/bin/dpdk-proc-info
 /usr/local/bin/dpdk-test
 /usr/local/bin/dpdk-testpmd
+%ifnarch sw_64
 /usr/local/bin/dpdk-l3fwd
+%endif
 /usr/local/bin/dpdk-l3fwd-power
 /usr/local/bin/dpdk-ethtool
 /usr/local/bin/dpdk-kni
@@ -566,7 +579,7 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
-* Mon Nov 20 2023 huangdengdui <huangdengui@huawei.com> - 21.11-58
+* Mon Nov 20 2023 huangdengdui <huangdengui@huawei.com> - 21.11-59
  Sync some patchs from upstreaming and modifies are as follow:
  - net/hns3: fix mailbox sync
  - net/hns3: report maximum buffer size
@@ -597,7 +610,7 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
  - net/hns3: fix build warning
  - telemetry: fix repeat display when callback don't init dict
 
-* Fri Oct 27 2023 huangdengdui <huangdengui@huawei.com> - 21.11-57
+* Fri Oct 27 2023 huangdengdui <huangdengui@huawei.com> - 21.11-58
  Sync some patchs from upstreaming and modifies are as follow:
  - maintainers: update for hns3 driver
  - app/testpmd: add command to flush multicast MAC addresses
@@ -615,6 +628,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
  - net/hns3: fix index to look up table in NEON Rx
  - net/hns3: fix non-zero weight for disabled TC
  - config/arm: add HiSilicon HIP10
+
+* Wed Aug 30 2023 herengui <herengui@kylinsec.com.cn> - 21.11-57
+ - Add support for sw_64
 
 * Mon Aug 21 2023 huangdengdui <huangdengui@huawei.com> - 21.11-56
  replace patch-287 to solve the duplicate setting for MAC address.
