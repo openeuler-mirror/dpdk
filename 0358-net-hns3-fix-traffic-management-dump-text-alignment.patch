@@ -1,0 +1,107 @@
+From c813bce4dfa2c99ec1ddc06cce3adff7b5f5fdef Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Sat, 5 Aug 2023 16:36:27 +0800
+Subject: [PATCH 358/366] net/hns3: fix traffic management dump text alignment
+
+[ upstream commit a73065bfea87385aa86d8ec2e7b65f68494c4f06 ]
+
+Currently the dumped TM info is un-align, which are:
+  - TM config info:
+	  -- nb_leaf_nodes_max=64 nb_nodes_max=73
+	  -- nb_shaper_profile=2 nb_tc_node=1 nb_queue_node=1
+	  -- committed=0
+  shaper_profile:
+    id=800 reference_count=1 peak_rate=4000000Bps
+    id=801 reference_count=1 peak_rate=12000000Bps
+  port_node:
+    ...
+
+This patch fix it, the new formatting:
+  - TM config info:
+	  -- nb_leaf_nodes_max=256 nb_nodes_max=265
+	  -- nb_shaper_profile=2 nb_tc_node=1 nb_queue_node=1
+	  -- committed=1
+	  -- shaper_profile:
+	       id=800 reference_count=0 peak_rate=4000000Bps
+	       id=801 reference_count=0 peak_rate=12000000Bps
+	  -- port_node:
+	       ...
+
+Fixes: e4cfe6bb9114 ("net/hns3: dump TM configuration info")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_dump.c | 18 +++++++++---------
+ 1 file changed, 9 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_dump.c b/drivers/net/hns3/hns3_dump.c
+index 2dc44f2..b6e8b62 100644
+--- a/drivers/net/hns3/hns3_dump.c
++++ b/drivers/net/hns3/hns3_dump.c
+@@ -664,10 +664,10 @@ hns3_get_tm_conf_shaper_info(FILE *file, struct hns3_tm_conf *conf)
+ 	if (conf->nb_shaper_profile == 0)
+ 		return;
+ 
+-	fprintf(file, "  shaper_profile:\n");
++	fprintf(file, "\t  -- shaper_profile:\n");
+ 	TAILQ_FOREACH(shaper_profile, shaper_profile_list, node) {
+ 		fprintf(file,
+-			"    id=%u reference_count=%u peak_rate=%" PRIu64 "Bps\n",
++			"\t       id=%u reference_count=%u peak_rate=%" PRIu64 "Bps\n",
+ 			shaper_profile->shaper_profile_id,
+ 			shaper_profile->reference_count,
+ 			shaper_profile->profile.peak.rate);
+@@ -681,8 +681,8 @@ hns3_get_tm_conf_port_node_info(FILE *file, struct hns3_tm_conf *conf)
+ 		return;
+ 
+ 	fprintf(file,
+-		"  port_node:\n"
+-		"    node_id=%u reference_count=%u shaper_profile_id=%d\n",
++		"\t  -- port_node:\n"
++		"\t       node_id=%u reference_count=%u shaper_profile_id=%d\n",
+ 		conf->root->id, conf->root->reference_count,
+ 		conf->root->shaper_profile ?
+ 		(int)conf->root->shaper_profile->shaper_profile_id : -1);
+@@ -699,7 +699,7 @@ hns3_get_tm_conf_tc_node_info(FILE *file, struct hns3_tm_conf *conf)
+ 	if (conf->nb_tc_node == 0)
+ 		return;
+ 
+-	fprintf(file, "  tc_node:\n");
++	fprintf(file, "\t  -- tc_node:\n");
+ 	memset(tc_node, 0, sizeof(tc_node));
+ 	TAILQ_FOREACH(tm_node, tc_list, node) {
+ 		tidx = hns3_tm_calc_node_tc_no(conf, tm_node->id);
+@@ -712,7 +712,7 @@ hns3_get_tm_conf_tc_node_info(FILE *file, struct hns3_tm_conf *conf)
+ 		if (tm_node == NULL)
+ 			continue;
+ 		fprintf(file,
+-			"    id=%u TC%u reference_count=%u parent_id=%d "
++			"\t       id=%u TC%u reference_count=%u parent_id=%d "
+ 			"shaper_profile_id=%d\n",
+ 			tm_node->id, hns3_tm_calc_node_tc_no(conf, tm_node->id),
+ 			tm_node->reference_count,
+@@ -738,7 +738,7 @@ hns3_get_tm_conf_queue_format_info(FILE *file, struct hns3_tm_node **queue_node,
+ 		end_queue_id = (i + 1) * HNS3_PERLINE_QUEUES - 1;
+ 		if (end_queue_id > nb_tx_queues - 1)
+ 			end_queue_id = nb_tx_queues - 1;
+-		fprintf(file, "    %04u - %04u | ", start_queue_id,
++		fprintf(file, "\t       %04u - %04u | ", start_queue_id,
+ 			end_queue_id);
+ 		for (j = start_queue_id; j < nb_tx_queues; j++) {
+ 			if (j >= end_queue_id + 1)
+@@ -767,8 +767,8 @@ hns3_get_tm_conf_queue_node_info(FILE *file, struct hns3_tm_conf *conf,
+ 		return;
+ 
+ 	fprintf(file,
+-		"  queue_node:\n"
+-		"    tx queue id | mapped tc (8 mean node not exist)\n");
++		"\t  -- queue_node:\n"
++		"\t       tx queue id | mapped tc (8 mean node not exist)\n");
+ 
+ 	memset(queue_node, 0, sizeof(queue_node));
+ 	memset(queue_node_tc, 0, sizeof(queue_node_tc));
+-- 
+2.41.0.windows.2
+

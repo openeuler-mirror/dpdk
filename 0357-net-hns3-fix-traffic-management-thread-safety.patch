@@ -1,0 +1,273 @@
+From a5b54a960acbdd2c55f60577f7801af096ee84ba Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Sat, 5 Aug 2023 16:36:26 +0800
+Subject: [PATCH 357/366] net/hns3: fix traffic management thread safety
+
+[ upstream commit 69901040975bff8a38edfc47aee727cadc87d356 ]
+
+The driver-related TM (traffic management) info is implemented through
+the linked list. The following threads are involved in the read and
+write of the TM info:
+
+1. main thread: invokes the rte_tm_xxx() API family to modify or read.
+2. interrupt thread: will read TM info in reset recover process.
+3. telemetry/proc-info thread: invoke rte_eth_dev_priv_dump() API to
+   read TM info.
+
+Currently, thread safety protection of TM info is implemented only in
+the following operations:
+1. some of the rte_tm_xxx() API's implementation.
+2. reset recover process.
+
+Thread safety risks may exist in other scenarios, so fix by:
+1. make sure all the rte_tm_xxx() API's implementations protected by
+   hw.lock.
+2. make sure rte_eth_dev_priv_dump() API's implementation protected
+   by hw.lock.
+
+Fixes: c09c7847d892 ("net/hns3: support traffic management")
+Fixes: e4cfe6bb9114 ("net/hns3: dump TM configuration info")
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_dump.c |   8 +-
+ drivers/net/hns3/hns3_tm.c   | 173 ++++++++++++++++++++++++++++++-----
+ 2 files changed, 157 insertions(+), 24 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_dump.c b/drivers/net/hns3/hns3_dump.c
+index 7ecfca8..2dc44f2 100644
+--- a/drivers/net/hns3/hns3_dump.c
++++ b/drivers/net/hns3/hns3_dump.c
+@@ -918,6 +918,8 @@ hns3_eth_dev_priv_dump(struct rte_eth_dev *dev, FILE *file)
+ 	struct hns3_adapter *hns = dev->data->dev_private;
+ 	struct hns3_hw *hw = &hns->hw;
+ 
++	rte_spinlock_lock(&hw->lock);
++
+ 	hns3_get_device_basic_info(file, dev);
+ 	hns3_get_dev_feature_capability(file, hw);
+ 	hns3_get_rxtx_queue_info(file, dev);
+@@ -927,8 +929,10 @@ hns3_eth_dev_priv_dump(struct rte_eth_dev *dev, FILE *file)
+ 	 * VF only supports dumping basic info, feaure capability and queue
+ 	 * info.
+ 	 */
+-	if (hns->is_vf)
++	if (hns->is_vf) {
++		rte_spinlock_unlock(&hw->lock);
+ 		return 0;
++	}
+ 
+ 	hns3_get_dev_mac_info(file, hns);
+ 	hns3_get_vlan_config_info(file, hw);
+@@ -936,6 +940,8 @@ hns3_eth_dev_priv_dump(struct rte_eth_dev *dev, FILE *file)
+ 	hns3_get_tm_conf_info(file, dev);
+ 	hns3_get_flow_ctrl_info(file, dev);
+ 
++	rte_spinlock_unlock(&hw->lock);
++
+ 	return 0;
+ }
+ 
+diff --git a/drivers/net/hns3/hns3_tm.c b/drivers/net/hns3/hns3_tm.c
+index e1089b6..67402a7 100644
+--- a/drivers/net/hns3/hns3_tm.c
++++ b/drivers/net/hns3/hns3_tm.c
+@@ -1081,21 +1081,6 @@ hns3_tm_hierarchy_commit(struct rte_eth_dev *dev,
+ 	return -EINVAL;
+ }
+ 
+-static int
+-hns3_tm_hierarchy_commit_wrap(struct rte_eth_dev *dev,
+-			      int clear_on_fail,
+-			      struct rte_tm_error *error)
+-{
+-	struct hns3_hw *hw = HNS3_DEV_PRIVATE_TO_HW(dev->data->dev_private);
+-	int ret;
+-
+-	rte_spinlock_lock(&hw->lock);
+-	ret = hns3_tm_hierarchy_commit(dev, clear_on_fail, error);
+-	rte_spinlock_unlock(&hw->lock);
+-
+-	return ret;
+-}
+-
+ static int
+ hns3_tm_node_shaper_do_update(struct hns3_hw *hw,
+ 			      uint32_t node_id,
+@@ -1195,6 +1180,148 @@ hns3_tm_node_shaper_update(struct rte_eth_dev *dev,
+ 	return 0;
+ }
+ 
++static int
++hns3_tm_capabilities_get_wrap(struct rte_eth_dev *dev,
++			      struct rte_tm_capabilities *cap,
++			      struct rte_tm_error *error)
++{
++	struct hns3_hw *hw = HNS3_DEV_PRIVATE_TO_HW(dev->data->dev_private);
++	int ret;
++
++	rte_spinlock_lock(&hw->lock);
++	ret = hns3_tm_capabilities_get(dev, cap, error);
++	rte_spinlock_unlock(&hw->lock);
++
++	return ret;
++}
++
++static int
++hns3_tm_shaper_profile_add_wrap(struct rte_eth_dev *dev,
++				uint32_t shaper_profile_id,
++				struct rte_tm_shaper_params *profile,
++				struct rte_tm_error *error)
++{
++	struct hns3_hw *hw = HNS3_DEV_PRIVATE_TO_HW(dev->data->dev_private);
++	int ret;
++
++	rte_spinlock_lock(&hw->lock);
++	ret = hns3_tm_shaper_profile_add(dev, shaper_profile_id, profile, error);
++	rte_spinlock_unlock(&hw->lock);
++
++	return ret;
++}
++
++static int
++hns3_tm_shaper_profile_del_wrap(struct rte_eth_dev *dev,
++				uint32_t shaper_profile_id,
++				struct rte_tm_error *error)
++{
++	struct hns3_hw *hw = HNS3_DEV_PRIVATE_TO_HW(dev->data->dev_private);
++	int ret;
++
++	rte_spinlock_lock(&hw->lock);
++	ret = hns3_tm_shaper_profile_del(dev, shaper_profile_id, error);
++	rte_spinlock_unlock(&hw->lock);
++
++	return ret;
++}
++
++static int
++hns3_tm_node_add_wrap(struct rte_eth_dev *dev, uint32_t node_id,
++		      uint32_t parent_node_id, uint32_t priority,
++		      uint32_t weight, uint32_t level_id,
++		      struct rte_tm_node_params *params,
++		      struct rte_tm_error *error)
++{
++	struct hns3_hw *hw = HNS3_DEV_PRIVATE_TO_HW(dev->data->dev_private);
++	int ret;
++
++	rte_spinlock_lock(&hw->lock);
++	ret = hns3_tm_node_add(dev, node_id, parent_node_id, priority,
++			       weight, level_id, params, error);
++	rte_spinlock_unlock(&hw->lock);
++
++	return ret;
++}
++
++static int
++hns3_tm_node_delete_wrap(struct rte_eth_dev *dev,
++			 uint32_t node_id,
++			 struct rte_tm_error *error)
++{
++	struct hns3_hw *hw = HNS3_DEV_PRIVATE_TO_HW(dev->data->dev_private);
++	int ret;
++
++	rte_spinlock_lock(&hw->lock);
++	ret = hns3_tm_node_delete(dev, node_id, error);
++	rte_spinlock_unlock(&hw->lock);
++
++	return ret;
++}
++
++static int
++hns3_tm_node_type_get_wrap(struct rte_eth_dev *dev,
++			   uint32_t node_id,
++			   int *is_leaf,
++			   struct rte_tm_error *error)
++{
++	struct hns3_hw *hw = HNS3_DEV_PRIVATE_TO_HW(dev->data->dev_private);
++	int ret;
++
++	rte_spinlock_lock(&hw->lock);
++	ret = hns3_tm_node_type_get(dev, node_id, is_leaf, error);
++	rte_spinlock_unlock(&hw->lock);
++
++	return ret;
++}
++
++static int
++hns3_tm_level_capabilities_get_wrap(struct rte_eth_dev *dev,
++				    uint32_t level_id,
++				    struct rte_tm_level_capabilities *cap,
++				    struct rte_tm_error *error)
++{
++	struct hns3_hw *hw = HNS3_DEV_PRIVATE_TO_HW(dev->data->dev_private);
++	int ret;
++
++	rte_spinlock_lock(&hw->lock);
++	ret = hns3_tm_level_capabilities_get(dev, level_id, cap, error);
++	rte_spinlock_unlock(&hw->lock);
++
++	return ret;
++}
++
++static int
++hns3_tm_node_capabilities_get_wrap(struct rte_eth_dev *dev,
++				   uint32_t node_id,
++				   struct rte_tm_node_capabilities *cap,
++				   struct rte_tm_error *error)
++{
++	struct hns3_hw *hw = HNS3_DEV_PRIVATE_TO_HW(dev->data->dev_private);
++	int ret;
++
++	rte_spinlock_lock(&hw->lock);
++	ret = hns3_tm_node_capabilities_get(dev, node_id, cap, error);
++	rte_spinlock_unlock(&hw->lock);
++
++	return ret;
++}
++
++static int
++hns3_tm_hierarchy_commit_wrap(struct rte_eth_dev *dev,
++			      int clear_on_fail,
++			      struct rte_tm_error *error)
++{
++	struct hns3_hw *hw = HNS3_DEV_PRIVATE_TO_HW(dev->data->dev_private);
++	int ret;
++
++	rte_spinlock_lock(&hw->lock);
++	ret = hns3_tm_hierarchy_commit(dev, clear_on_fail, error);
++	rte_spinlock_unlock(&hw->lock);
++
++	return ret;
++}
++
+ static int
+ hns3_tm_node_shaper_update_wrap(struct rte_eth_dev *dev,
+ 				uint32_t node_id,
+@@ -1213,14 +1340,14 @@ hns3_tm_node_shaper_update_wrap(struct rte_eth_dev *dev,
+ }
+ 
+ static const struct rte_tm_ops hns3_tm_ops = {
+-	.capabilities_get       = hns3_tm_capabilities_get,
+-	.shaper_profile_add     = hns3_tm_shaper_profile_add,
+-	.shaper_profile_delete  = hns3_tm_shaper_profile_del,
+-	.node_add               = hns3_tm_node_add,
+-	.node_delete            = hns3_tm_node_delete,
+-	.node_type_get          = hns3_tm_node_type_get,
+-	.level_capabilities_get = hns3_tm_level_capabilities_get,
+-	.node_capabilities_get  = hns3_tm_node_capabilities_get,
++	.capabilities_get       = hns3_tm_capabilities_get_wrap,
++	.shaper_profile_add     = hns3_tm_shaper_profile_add_wrap,
++	.shaper_profile_delete  = hns3_tm_shaper_profile_del_wrap,
++	.node_add               = hns3_tm_node_add_wrap,
++	.node_delete            = hns3_tm_node_delete_wrap,
++	.node_type_get          = hns3_tm_node_type_get_wrap,
++	.level_capabilities_get = hns3_tm_level_capabilities_get_wrap,
++	.node_capabilities_get  = hns3_tm_node_capabilities_get_wrap,
+ 	.hierarchy_commit       = hns3_tm_hierarchy_commit_wrap,
+ 	.node_shaper_update     = hns3_tm_node_shaper_update_wrap,
+ };
+-- 
+2.41.0.windows.2
+

@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 56
+Release: 57
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -377,6 +377,22 @@ Patch6347:    0347-net-hns3-add-FDIR-VLAN-match-mode-runtime-config.patch
 Patch6348:    0348-doc-fix-kernel-patch-link-in-hns3-guide.patch
 Patch6349:    0349-doc-fix-syntax-in-hns3-guide.patch
 Patch6350:    0350-doc-fix-number-of-leading-spaces-in-hns3-guide.patch
+Patch6351:    0351-config-arm-add-HiSilicon-HIP10.patch
+Patch6352:    0352-net-hns3-fix-non-zero-weight-for-disabled-TC.patch
+Patch6353:    0353-net-hns3-fix-index-to-look-up-table-in-NEON-Rx.patch
+Patch6354:    0354-net-hns3-fix-VF-default-MAC-modified-when-set-failed.patch
+Patch6355:    0355-net-hns3-fix-error-code-for-multicast-resource.patch
+Patch6356:    0356-net-hns3-fix-flushing-multicast-MAC-address.patch
+Patch6357:    0357-net-hns3-fix-traffic-management-thread-safety.patch
+Patch6358:    0358-net-hns3-fix-traffic-management-dump-text-alignment.patch
+Patch6359:    0359-net-hns3-fix-order-in-NEON-Rx.patch
+Patch6360:    0360-net-hns3-optimize-free-mbuf-for-SVE-Tx.patch
+Patch6361:    0361-net-hns3-optimize-rearm-mbuf-for-SVE-Rx.patch
+Patch6362:    0362-net-hns3-optimize-SVE-Rx-performance.patch
+Patch6363:    0363-app-testpmd-fix-multicast-address-pool-leak.patch
+Patch6364:    0364-app-testpmd-fix-help-string.patch
+Patch6365:    0365-app-testpmd-add-command-to-flush-multicast-MAC-addre.patch
+Patch6366:    0366-maintainers-update-for-hns3-driver.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -522,6 +538,25 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Fri Oct 27 2023 huangdengdui <huangdengui@huawei.com> - 21.11-57
+ Sync some patchs from upstreaming and modifies are as follow:
+ - maintainers: update for hns3 driver
+ - app/testpmd: add command to flush multicast MAC addresses
+ - app/testpmd: fix help string
+ - app/testpmd: fix multicast address pool leak
+ - net/hns3: optimize SVE Rx performance
+ - net/hns3: optimize rearm mbuf for SVE Rx
+ - net/hns3: optimize free mbuf for SVE Tx
+ - net/hns3: fix order in NEON Rx
+ - net/hns3: fix traffic management dump text alignment
+ - net/hns3: fix traffic management thread safety
+ - net/hns3: fix flushing multicast MAC address
+ - net/hns3: fix error code for multicast resource
+ - net/hns3: fix VF default MAC modified when set failed
+ - net/hns3: fix index to look up table in NEON Rx
+ - net/hns3: fix non-zero weight for disabled TC
+ - config/arm: add HiSilicon HIP10
+
 * Mon Aug 21 2023 huangdengdui <huangdengui@huawei.com> - 21.11-56
  replace patch-287 to solve the duplicate setting for MAC address.
 

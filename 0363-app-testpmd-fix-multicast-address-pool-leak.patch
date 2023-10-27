@@ -1,0 +1,97 @@
+From 9b13302cec30ec70d2aedcd024bde4db57bc8eaa Mon Sep 17 00:00:00 2001
+From: Ke Zhang <ke1x.zhang@intel.com>
+Date: Fri, 25 Mar 2022 08:35:55 +0000
+Subject: [PATCH 363/366] app/testpmd: fix multicast address pool leak
+
+[ upstream commit 68629be3a622ee53cd5b40c8447ae9b083ff3f6c ]
+
+A multicast address pool is allocated for a port when
+using mcast_addr testpmd commands.
+
+When closing a port or stopping testpmd, this pool was
+not freed, resulting in a leak.
+This issue has been caught using ASan.
+
+Free this pool when closing the port.
+
+Error info as following:
+ERROR: LeakSanitizer: detected memory leaksDirect leak of
+       192 byte(s)
+0 0x7f6a2e0aeffe in __interceptor_realloc
+	(/lib/x86_64-linux-gnu/libasan.so.5+0x10dffe)
+1 0x565361eb340f in mcast_addr_pool_extend
+	../app/test-pmd/config.c:5162
+2 0x565361eb3556 in mcast_addr_pool_append
+	../app/test-pmd/config.c:5180
+3 0x565361eb3aae in mcast_addr_add
+	../app/test-pmd/config.c:5243
+
+Fixes: 8fff667578a7 ("app/testpmd: new command to add/remove multicast MAC addresses")
+Cc: stable@dpdk.org
+
+Signed-off-by: Ke Zhang <ke1x.zhang@intel.com>
+Acked-by: Yuying Zhang <yuying.zhang@intel.com>
+Acked-by: Ferruh Yigit <ferruh.yigit@xilinx.com>
+---
+ app/test-pmd/config.c  | 19 +++++++++++++++++++
+ app/test-pmd/testpmd.c |  1 +
+ app/test-pmd/testpmd.h |  1 +
+ 3 files changed, 21 insertions(+)
+
+diff --git a/app/test-pmd/config.c b/app/test-pmd/config.c
+index 22c63e2..61dc56f 100644
+--- a/app/test-pmd/config.c
++++ b/app/test-pmd/config.c
+@@ -5364,6 +5364,25 @@ mcast_addr_pool_remove(struct rte_port *port, uint32_t addr_idx)
+ 		sizeof(struct rte_ether_addr) * (port->mc_addr_nb - addr_idx));
+ }
+ 
++int
++mcast_addr_pool_destroy(portid_t port_id)
++{
++	struct rte_port *port;
++
++	if (port_id_is_invalid(port_id, ENABLED_WARN) ||
++	    port_id == (portid_t)RTE_PORT_ALL)
++		return -EINVAL;
++	port = &ports[port_id];
++
++	if (port->mc_addr_nb != 0) {
++		/* free the pool of multicast addresses. */
++		free(port->mc_addr_pool);
++		port->mc_addr_pool = NULL;
++		port->mc_addr_nb = 0;
++	}
++	return 0;
++}
++
+ static int
+ eth_port_multicast_addr_list_set(portid_t port_id)
+ {
+diff --git a/app/test-pmd/testpmd.c b/app/test-pmd/testpmd.c
+index 20134c5..6f59bd2 100644
+--- a/app/test-pmd/testpmd.c
++++ b/app/test-pmd/testpmd.c
+@@ -3284,6 +3284,7 @@ close_port(portid_t pid)
+ 		}
+ 
+ 		if (is_proc_primary()) {
++			mcast_addr_pool_destroy(pi);
+ 			port_flow_flush(pi);
+ 			port_flex_item_flush(pi);
+ 			port_action_handle_flush(pi);
+diff --git a/app/test-pmd/testpmd.h b/app/test-pmd/testpmd.h
+index be7454a..54d3112 100644
+--- a/app/test-pmd/testpmd.h
++++ b/app/test-pmd/testpmd.h
+@@ -906,6 +906,7 @@ int port_flow_create(portid_t port_id,
+ int port_action_handle_query(portid_t port_id, uint32_t id);
+ void update_age_action_context(const struct rte_flow_action *actions,
+ 		     struct port_flow *pf);
++int mcast_addr_pool_destroy(portid_t port_id);
+ int port_flow_destroy(portid_t port_id, uint32_t n, const uint32_t *rule);
+ int port_flow_flush(portid_t port_id);
+ int port_flow_dump(portid_t port_id, bool dump_all,
+-- 
+2.41.0.windows.2
+
