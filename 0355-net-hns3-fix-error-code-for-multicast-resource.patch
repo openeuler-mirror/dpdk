@@ -1,0 +1,35 @@
+From 81f221e0c7e43eb37eda6e4ea8765a159fae9b08 Mon Sep 17 00:00:00 2001
+From: Dengdui Huang <huangdengdui@huawei.com>
+Date: Sat, 5 Aug 2023 16:36:24 +0800
+Subject: [PATCH 355/366] net/hns3: fix error code for multicast resource
+
+[ upstream commit c8cd885352d58bcfcc514770cb6068dd689d0dc3 ]
+
+Return ENOSPC instead of EINVAL when the hardware
+has not enough multicast filtering resources.
+
+Fixes: 7d7f9f80bbfb ("net/hns3: support MAC address related operations")
+Cc: stable@dpdk.org
+
+Signed-off-by: Dengdui Huang <huangdengdui@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_common.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/net/hns3/hns3_common.c b/drivers/net/hns3/hns3_common.c
+index a7b576a..51a1c68 100644
+--- a/drivers/net/hns3/hns3_common.c
++++ b/drivers/net/hns3/hns3_common.c
+@@ -384,7 +384,7 @@ hns3_set_mc_addr_chk_param(struct hns3_hw *hw,
+ 		hns3_err(hw, "failed to set mc mac addr, nb_mc_addr(%u) "
+ 			 "invalid. valid range: 0~%d",
+ 			 nb_mc_addr, HNS3_MC_MACADDR_NUM);
+-		return -EINVAL;
++		return -ENOSPC;
+ 	}
+ 
+ 	/* Check if input mac addresses are valid */
+-- 
+2.41.0.windows.2
+

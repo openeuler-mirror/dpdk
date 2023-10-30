@@ -1,0 +1,33 @@
+From d743e25356ecfda7dcfc029c4e6a5d46fd80bce1 Mon Sep 17 00:00:00 2001
+From: Jie Hai <haijie1@huawei.com>
+Date: Tue, 26 Sep 2023 18:04:05 +0800
+Subject: [PATCH] maintainers: update for hns3 driver
+
+[ upstream commit 5e4b7cad5119956df1ca9f0d22d1429399a5c818 ]
+
+Dongdong Liu currently do not work for the hns3 PMD.
+I will do the work, so update the hns3 maintainers.
+
+Signed-off-by: Jie Hai <haijie1@huawei.com>
+---
+ MAINTAINERS | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/MAINTAINERS b/MAINTAINERS
+index 7a28fec..7db6d4e 100644
+--- a/MAINTAINERS
++++ b/MAINTAINERS
+@@ -695,9 +695,8 @@ F: doc/guides/nics/enic.rst
+ F: doc/guides/nics/features/enic.ini
+ 
+ Hisilicon hns3
+-M: Min Hu (Connor) <humin29@huawei.com>
++M: Jie Hai <haijie1@huawei.com>
+ M: Yisen Zhuang <yisen.zhuang@huawei.com>
+-M: Lijun Ou <oulijun@huawei.com>
+ F: drivers/net/hns3/
+ F: doc/guides/nics/hns3.rst
+ F: doc/guides/nics/features/hns3.ini
+-- 
+2.41.0.windows.2
+

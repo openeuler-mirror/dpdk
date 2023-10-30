@@ -1,0 +1,40 @@
+From c7f8daafe6ec2cfde7af46e446c227f15b0eec7f Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Tue, 11 Jul 2023 18:24:44 +0800
+Subject: [PATCH 353/366] net/hns3: fix index to look up table in NEON Rx
+
+[ upstream commit 6bec7c50be7a38c114680481f285976142df40d0 ]
+
+In hns3_recv_burst_vec(), the index to get packet length and data
+size are reversed. Fortunately, this doesn't affect functionality
+because the NEON Rx only supports single BD in which the packet
+length is equal to the date size. Now this patch fixes it to get
+back to the truth.
+
+Fixes: a3d4f4d291d7 ("net/hns3: support NEON Rx")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_rxtx_vec_neon.h | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_rxtx_vec_neon.h b/drivers/net/hns3/hns3_rxtx_vec_neon.h
+index 55d9bf8..a20a6b6 100644
+--- a/drivers/net/hns3/hns3_rxtx_vec_neon.h
++++ b/drivers/net/hns3/hns3_rxtx_vec_neon.h
+@@ -142,8 +142,8 @@ hns3_recv_burst_vec(struct hns3_rx_queue *__restrict rxq,
+ 	/* mask to shuffle from desc to mbuf's rx_descriptor_fields1 */
+ 	uint8x16_t shuf_desc_fields_msk = {
+ 		0xff, 0xff, 0xff, 0xff,  /* packet type init zero */
+-		22, 23, 0xff, 0xff,      /* rx.pkt_len to rte_mbuf.pkt_len */
+-		20, 21,	                 /* size to rte_mbuf.data_len */
++		20, 21, 0xff, 0xff,      /* rx.pkt_len to rte_mbuf.pkt_len */
++		22, 23,	                 /* size to rte_mbuf.data_len */
+ 		0xff, 0xff,	         /* rte_mbuf.vlan_tci init zero */
+ 		8, 9, 10, 11,	         /* rx.rss_hash to rte_mbuf.hash.rss */
+ 	};
+-- 
+2.41.0.windows.2
+
