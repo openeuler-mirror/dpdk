@@ -1,0 +1,348 @@
+From fecdbdc4f7b3b0abace40e5070ab9803c8de850d Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Mon, 23 Oct 2023 02:29:39 +0000
+Subject: [PATCH 377/394] app/testpmd: ease configuring all offloads
+
+[ upstream commit 8f6c2a1209c31b401d0a8fc74e4b98b1f2d599dc ]
+
+Extend supports all offload configuration in following commands:
+1. port config 0 rx_offload all on/off
+2. port config 0 tx_offload all on/off
+3. port 0 rxq 0 rx_offload all on/off
+4. port 0 txq 0 tx_offload all on/off
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Acked-by: Huisong Li <lihuisong@huawei.com>
+Reviewed-by: Ferruh Yigit <ferruh.yigit@amd.com>
+---
+ app/test-pmd/cmdline.c                      | 112 +++++++++++---------
+ doc/guides/testpmd_app_ug/testpmd_funcs.rst |   8 +-
+ 2 files changed, 68 insertions(+), 52 deletions(-)
+
+diff --git a/app/test-pmd/cmdline.c b/app/test-pmd/cmdline.c
+index 8facca3c51..49152ec348 100644
+--- a/app/test-pmd/cmdline.c
++++ b/app/test-pmd/cmdline.c
+@@ -867,7 +867,7 @@ static void cmd_help_long_parsed(void *parsed_result,
+ 			"port config (port_id) udp_tunnel_port add|rm vxlan|geneve|ecpri (udp_port)\n\n"
+ 			"    Add/remove UDP tunnel port for tunneling offload\n\n"
+ 
+-			"port config <port_id> rx_offload vlan_strip|"
++			"port config <port_id> rx_offload all|vlan_strip|"
+ 			"ipv4_cksum|udp_cksum|tcp_cksum|tcp_lro|qinq_strip|"
+ 			"outer_ipv4_cksum|macsec_strip|header_split|"
+ 			"vlan_filter|vlan_extend|scatter|"
+@@ -875,7 +875,7 @@ static void cmd_help_long_parsed(void *parsed_result,
+ 			"     Enable or disable a per port Rx offloading"
+ 			" on all Rx queues of a port\n\n"
+ 
+-			"port (port_id) rxq (queue_id) rx_offload vlan_strip|"
++			"port (port_id) rxq (queue_id) rx_offload all|vlan_strip|"
+ 			"ipv4_cksum|udp_cksum|tcp_cksum|tcp_lro|qinq_strip|"
+ 			"outer_ipv4_cksum|macsec_strip|header_split|"
+ 			"vlan_filter|vlan_extend|scatter|"
+@@ -883,7 +883,7 @@ static void cmd_help_long_parsed(void *parsed_result,
+ 			"    Enable or disable a per queue Rx offloading"
+ 			" only on a specific Rx queue\n\n"
+ 
+-			"port config (port_id) tx_offload vlan_insert|"
++			"port config (port_id) tx_offload all|vlan_insert|"
+ 			"ipv4_cksum|udp_cksum|tcp_cksum|sctp_cksum|tcp_tso|"
+ 			"udp_tso|outer_ipv4_cksum|qinq_insert|vxlan_tnl_tso|"
+ 			"gre_tnl_tso|ipip_tnl_tso|geneve_tnl_tso|"
+@@ -892,7 +892,7 @@ static void cmd_help_long_parsed(void *parsed_result,
+ 			"    Enable or disable a per port Tx offloading"
+ 			" on all Tx queues of a port\n\n"
+ 
+-			"port (port_id) txq (queue_id) tx_offload vlan_insert|"
++			"port (port_id) txq (queue_id) tx_offload all|vlan_insert|"
+ 			"ipv4_cksum|udp_cksum|tcp_cksum|sctp_cksum|tcp_tso|"
+ 			"udp_tso|outer_ipv4_cksum|qinq_insert|vxlan_tnl_tso|"
+ 			"gre_tnl_tso|ipip_tnl_tso|geneve_tnl_tso|macsec_insert"
+@@ -16175,7 +16175,7 @@ cmdline_parse_token_string_t cmd_config_per_port_rx_offload_result_rx_offload =
+ cmdline_parse_token_string_t cmd_config_per_port_rx_offload_result_offload =
+ 	TOKEN_STRING_INITIALIZER
+ 		(struct cmd_config_per_port_rx_offload_result,
+-		 offload, "vlan_strip#ipv4_cksum#udp_cksum#tcp_cksum#tcp_lro#"
++		 offload, "all#vlan_strip#ipv4_cksum#udp_cksum#tcp_cksum#tcp_lro#"
+ 			   "qinq_strip#outer_ipv4_cksum#macsec_strip#"
+ 			   "header_split#vlan_filter#vlan_extend#"
+ 			   "scatter#buffer_split#timestamp#security#"
+@@ -16218,8 +16218,8 @@ cmd_config_per_port_rx_offload_parsed(void *parsed_result,
+ 	portid_t port_id = res->port_id;
+ 	struct rte_eth_dev_info dev_info;
+ 	struct rte_port *port = &ports[port_id];
+-	uint64_t single_offload;
+ 	uint16_t nb_rx_queues;
++	uint64_t offload;
+ 	int q;
+ 	int ret;
+ 
+@@ -16230,25 +16230,29 @@ cmd_config_per_port_rx_offload_parsed(void *parsed_result,
+ 		return;
+ 	}
+ 
+-	single_offload = search_rx_offload(res->offload);
+-	if (single_offload == 0) {
+-		fprintf(stderr, "Unknown offload name: %s\n", res->offload);
+-		return;
+-	}
+-
+ 	ret = eth_dev_info_get_print_err(port_id, &dev_info);
+ 	if (ret != 0)
+ 		return;
+ 
++	if (!strcmp(res->offload, "all")) {
++		offload = dev_info.rx_offload_capa;
++	} else {
++		offload = search_rx_offload(res->offload);
++		if (offload == 0) {
++			fprintf(stderr, "Unknown offload name: %s\n", res->offload);
++			return;
++		}
++	}
++
+ 	nb_rx_queues = dev_info.nb_rx_queues;
+ 	if (!strcmp(res->on_off, "on")) {
+-		port->dev_conf.rxmode.offloads |= single_offload;
++		port->dev_conf.rxmode.offloads |= offload;
+ 		for (q = 0; q < nb_rx_queues; q++)
+-			port->rx_conf[q].offloads |= single_offload;
++			port->rx_conf[q].offloads |= offload;
+ 	} else {
+-		port->dev_conf.rxmode.offloads &= ~single_offload;
++		port->dev_conf.rxmode.offloads &= ~offload;
+ 		for (q = 0; q < nb_rx_queues; q++)
+-			port->rx_conf[q].offloads &= ~single_offload;
++			port->rx_conf[q].offloads &= ~offload;
+ 	}
+ 
+ 	cmd_reconfig_device_queue(port_id, 1, 1);
+@@ -16257,7 +16261,7 @@ cmd_config_per_port_rx_offload_parsed(void *parsed_result,
+ cmdline_parse_inst_t cmd_config_per_port_rx_offload = {
+ 	.f = cmd_config_per_port_rx_offload_parsed,
+ 	.data = NULL,
+-	.help_str = "port config <port_id> rx_offload vlan_strip|ipv4_cksum|"
++	.help_str = "port config <port_id> rx_offload all|vlan_strip|ipv4_cksum|"
+ 		    "udp_cksum|tcp_cksum|tcp_lro|qinq_strip|outer_ipv4_cksum|"
+ 		    "macsec_strip|header_split|vlan_filter|vlan_extend|"
+ 		    "scatter|buffer_split|timestamp|security|"
+@@ -16307,7 +16311,7 @@ cmdline_parse_token_string_t cmd_config_per_queue_rx_offload_result_rxoffload =
+ cmdline_parse_token_string_t cmd_config_per_queue_rx_offload_result_offload =
+ 	TOKEN_STRING_INITIALIZER
+ 		(struct cmd_config_per_queue_rx_offload_result,
+-		 offload, "vlan_strip#ipv4_cksum#udp_cksum#tcp_cksum#tcp_lro#"
++		 offload, "all#vlan_strip#ipv4_cksum#udp_cksum#tcp_cksum#tcp_lro#"
+ 			   "qinq_strip#outer_ipv4_cksum#macsec_strip#"
+ 			   "header_split#vlan_filter#vlan_extend#"
+ 			   "scatter#buffer_split#timestamp#security#keep_crc");
+@@ -16326,7 +16330,7 @@ cmd_config_per_queue_rx_offload_parsed(void *parsed_result,
+ 	portid_t port_id = res->port_id;
+ 	uint16_t queue_id = res->queue_id;
+ 	struct rte_port *port = &ports[port_id];
+-	uint64_t single_offload;
++	uint64_t offload;
+ 	int ret;
+ 
+ 	if (port->port_status != RTE_PORT_STOPPED) {
+@@ -16347,16 +16351,20 @@ cmd_config_per_queue_rx_offload_parsed(void *parsed_result,
+ 		return;
+ 	}
+ 
+-	single_offload = search_rx_offload(res->offload);
+-	if (single_offload == 0) {
+-		fprintf(stderr, "Unknown offload name: %s\n", res->offload);
+-		return;
++	if (!strcmp(res->offload, "all")) {
++		offload = dev_info.rx_queue_offload_capa;
++	} else {
++		offload = search_rx_offload(res->offload);
++		if (offload == 0) {
++			fprintf(stderr, "Unknown offload name: %s\n", res->offload);
++			return;
++		}
+ 	}
+ 
+ 	if (!strcmp(res->on_off, "on"))
+-		port->rx_conf[queue_id].offloads |= single_offload;
++		port->rx_conf[queue_id].offloads |= offload;
+ 	else
+-		port->rx_conf[queue_id].offloads &= ~single_offload;
++		port->rx_conf[queue_id].offloads &= ~offload;
+ 
+ 	cmd_reconfig_device_queue(port_id, 1, 1);
+ }
+@@ -16365,7 +16373,7 @@ cmdline_parse_inst_t cmd_config_per_queue_rx_offload = {
+ 	.f = cmd_config_per_queue_rx_offload_parsed,
+ 	.data = NULL,
+ 	.help_str = "port <port_id> rxq <queue_id> rx_offload "
+-		    "vlan_strip|ipv4_cksum|"
++		    "all|vlan_strip|ipv4_cksum|"
+ 		    "udp_cksum|tcp_cksum|tcp_lro|qinq_strip|outer_ipv4_cksum|"
+ 		    "macsec_strip|header_split|vlan_filter|vlan_extend|"
+ 		    "scatter|buffer_split|timestamp|security|"
+@@ -16594,7 +16602,7 @@ cmdline_parse_token_string_t cmd_config_per_port_tx_offload_result_tx_offload =
+ cmdline_parse_token_string_t cmd_config_per_port_tx_offload_result_offload =
+ 	TOKEN_STRING_INITIALIZER
+ 		(struct cmd_config_per_port_tx_offload_result,
+-		 offload, "vlan_insert#ipv4_cksum#udp_cksum#tcp_cksum#"
++		 offload, "all#vlan_insert#ipv4_cksum#udp_cksum#tcp_cksum#"
+ 			  "sctp_cksum#tcp_tso#udp_tso#outer_ipv4_cksum#"
+ 			  "qinq_insert#vxlan_tnl_tso#gre_tnl_tso#"
+ 			  "ipip_tnl_tso#geneve_tnl_tso#macsec_insert#"
+@@ -16641,8 +16649,8 @@ cmd_config_per_port_tx_offload_parsed(void *parsed_result,
+ 	portid_t port_id = res->port_id;
+ 	struct rte_eth_dev_info dev_info;
+ 	struct rte_port *port = &ports[port_id];
+-	uint64_t single_offload;
+ 	uint16_t nb_tx_queues;
++	uint64_t offload;
+ 	int q;
+ 	int ret;
+ 
+@@ -16653,25 +16661,29 @@ cmd_config_per_port_tx_offload_parsed(void *parsed_result,
+ 		return;
+ 	}
+ 
+-	single_offload = search_tx_offload(res->offload);
+-	if (single_offload == 0) {
+-		fprintf(stderr, "Unknown offload name: %s\n", res->offload);
+-		return;
+-	}
+-
+ 	ret = eth_dev_info_get_print_err(port_id, &dev_info);
+ 	if (ret != 0)
+ 		return;
+ 
++	if (!strcmp(res->offload, "all")) {
++		offload = dev_info.tx_offload_capa;
++	} else {
++		offload = search_tx_offload(res->offload);
++		if (offload == 0) {
++			fprintf(stderr, "Unknown offload name: %s\n", res->offload);
++			return;
++		}
++	}
++
+ 	nb_tx_queues = dev_info.nb_tx_queues;
+ 	if (!strcmp(res->on_off, "on")) {
+-		port->dev_conf.txmode.offloads |= single_offload;
++		port->dev_conf.txmode.offloads |= offload;
+ 		for (q = 0; q < nb_tx_queues; q++)
+-			port->tx_conf[q].offloads |= single_offload;
++			port->tx_conf[q].offloads |= offload;
+ 	} else {
+-		port->dev_conf.txmode.offloads &= ~single_offload;
++		port->dev_conf.txmode.offloads &= ~offload;
+ 		for (q = 0; q < nb_tx_queues; q++)
+-			port->tx_conf[q].offloads &= ~single_offload;
++			port->tx_conf[q].offloads &= ~offload;
+ 	}
+ 
+ 	cmd_reconfig_device_queue(port_id, 1, 1);
+@@ -16681,7 +16693,7 @@ cmdline_parse_inst_t cmd_config_per_port_tx_offload = {
+ 	.f = cmd_config_per_port_tx_offload_parsed,
+ 	.data = NULL,
+ 	.help_str = "port config <port_id> tx_offload "
+-		    "vlan_insert|ipv4_cksum|udp_cksum|tcp_cksum|"
++		    "all|vlan_insert|ipv4_cksum|udp_cksum|tcp_cksum|"
+ 		    "sctp_cksum|tcp_tso|udp_tso|outer_ipv4_cksum|"
+ 		    "qinq_insert|vxlan_tnl_tso|gre_tnl_tso|"
+ 		    "ipip_tnl_tso|geneve_tnl_tso|macsec_insert|"
+@@ -16732,7 +16744,7 @@ cmdline_parse_token_string_t cmd_config_per_queue_tx_offload_result_txoffload =
+ cmdline_parse_token_string_t cmd_config_per_queue_tx_offload_result_offload =
+ 	TOKEN_STRING_INITIALIZER
+ 		(struct cmd_config_per_queue_tx_offload_result,
+-		 offload, "vlan_insert#ipv4_cksum#udp_cksum#tcp_cksum#"
++		 offload, "all#vlan_insert#ipv4_cksum#udp_cksum#tcp_cksum#"
+ 			  "sctp_cksum#tcp_tso#udp_tso#outer_ipv4_cksum#"
+ 			  "qinq_insert#vxlan_tnl_tso#gre_tnl_tso#"
+ 			  "ipip_tnl_tso#geneve_tnl_tso#macsec_insert#"
+@@ -16752,7 +16764,7 @@ cmd_config_per_queue_tx_offload_parsed(void *parsed_result,
+ 	portid_t port_id = res->port_id;
+ 	uint16_t queue_id = res->queue_id;
+ 	struct rte_port *port = &ports[port_id];
+-	uint64_t single_offload;
++	uint64_t offload;
+ 	int ret;
+ 
+ 	if (port->port_status != RTE_PORT_STOPPED) {
+@@ -16773,16 +16785,20 @@ cmd_config_per_queue_tx_offload_parsed(void *parsed_result,
+ 		return;
+ 	}
+ 
+-	single_offload = search_tx_offload(res->offload);
+-	if (single_offload == 0) {
+-		fprintf(stderr, "Unknown offload name: %s\n", res->offload);
+-		return;
++	if (!strcmp(res->offload, "all")) {
++		offload = dev_info.tx_queue_offload_capa;
++	} else {
++		offload = search_tx_offload(res->offload);
++		if (offload == 0) {
++			fprintf(stderr, "Unknown offload name: %s\n", res->offload);
++			return;
++		}
+ 	}
+ 
+ 	if (!strcmp(res->on_off, "on"))
+-		port->tx_conf[queue_id].offloads |= single_offload;
++		port->tx_conf[queue_id].offloads |= offload;
+ 	else
+-		port->tx_conf[queue_id].offloads &= ~single_offload;
++		port->tx_conf[queue_id].offloads &= ~offload;
+ 
+ 	cmd_reconfig_device_queue(port_id, 1, 1);
+ }
+@@ -16791,7 +16807,7 @@ cmdline_parse_inst_t cmd_config_per_queue_tx_offload = {
+ 	.f = cmd_config_per_queue_tx_offload_parsed,
+ 	.data = NULL,
+ 	.help_str = "port <port_id> txq <queue_id> tx_offload "
+-		    "vlan_insert|ipv4_cksum|udp_cksum|tcp_cksum|"
++		    "all|vlan_insert|ipv4_cksum|udp_cksum|tcp_cksum|"
+ 		    "sctp_cksum|tcp_tso|udp_tso|outer_ipv4_cksum|"
+ 		    "qinq_insert|vxlan_tnl_tso|gre_tnl_tso|"
+ 		    "ipip_tnl_tso|geneve_tnl_tso|macsec_insert|"
+diff --git a/doc/guides/testpmd_app_ug/testpmd_funcs.rst b/doc/guides/testpmd_app_ug/testpmd_funcs.rst
+index c33c8456bf..50c45db6f7 100644
+--- a/doc/guides/testpmd_app_ug/testpmd_funcs.rst
++++ b/doc/guides/testpmd_app_ug/testpmd_funcs.rst
+@@ -1772,7 +1772,7 @@ Enable or disable a per port Rx offloading on all Rx queues of a port::
+    testpmd> port config (port_id) rx_offload (offloading) on|off
+ 
+ * ``offloading``: can be any of these offloading capability:
+-                  vlan_strip, ipv4_cksum, udp_cksum, tcp_cksum, tcp_lro,
++                  all, vlan_strip, ipv4_cksum, udp_cksum, tcp_cksum, tcp_lro,
+                   qinq_strip, outer_ipv4_cksum, macsec_strip,
+                   header_split, vlan_filter, vlan_extend, scatter, timestamp, security,
+                   keep_crc, rss_hash
+@@ -1787,7 +1787,7 @@ Enable or disable a per queue Rx offloading only on a specific Rx queue::
+    testpmd> port (port_id) rxq (queue_id) rx_offload (offloading) on|off
+ 
+ * ``offloading``: can be any of these offloading capability:
+-                  vlan_strip, ipv4_cksum, udp_cksum, tcp_cksum, tcp_lro,
++                  all, vlan_strip, ipv4_cksum, udp_cksum, tcp_cksum, tcp_lro,
+                   qinq_strip, outer_ipv4_cksum, macsec_strip,
+                   header_split, vlan_filter, vlan_extend, scatter, timestamp, security,
+                   keep_crc
+@@ -1802,7 +1802,7 @@ Enable or disable a per port Tx offloading on all Tx queues of a port::
+    testpmd> port config (port_id) tx_offload (offloading) on|off
+ 
+ * ``offloading``: can be any of these offloading capability:
+-                  vlan_insert, ipv4_cksum, udp_cksum, tcp_cksum,
++                  all, vlan_insert, ipv4_cksum, udp_cksum, tcp_cksum,
+                   sctp_cksum, tcp_tso, udp_tso, outer_ipv4_cksum,
+                   qinq_insert, vxlan_tnl_tso, gre_tnl_tso,
+                   ipip_tnl_tso, geneve_tnl_tso, macsec_insert,
+@@ -1818,7 +1818,7 @@ Enable or disable a per queue Tx offloading only on a specific Tx queue::
+    testpmd> port (port_id) txq (queue_id) tx_offload (offloading) on|off
+ 
+ * ``offloading``: can be any of these offloading capability:
+-                  vlan_insert, ipv4_cksum, udp_cksum, tcp_cksum,
++                  all, vlan_insert, ipv4_cksum, udp_cksum, tcp_cksum,
+                   sctp_cksum, tcp_tso, udp_tso, outer_ipv4_cksum,
+                   qinq_insert, vxlan_tnl_tso, gre_tnl_tso,
+                   ipip_tnl_tso, geneve_tnl_tso, macsec_insert,
+-- 
+2.23.0
+

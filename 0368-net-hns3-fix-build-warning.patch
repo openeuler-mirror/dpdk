@@ -1,0 +1,50 @@
+From 86aadc9fdf971e0f261572d01fe5fa7cbcfda385 Mon Sep 17 00:00:00 2001
+From: Jerin Jacob <jerinj@marvell.com>
+Date: Tue, 4 Apr 2023 12:25:25 +0530
+Subject: [PATCH 368/394] net/hns3: fix build warning
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+[ upstream commit 60fe5c3cfc3c28952448d2163c4eb1d22d86ccac ]
+
+aarch64 gcc 12.2.0 build complain with below warning[1].
+Move the new_link initialization upwards to fix the warning.
+
+[1]
+drivers/net/hns3/hns3_ethdev.c: In function ‘hns3_dev_link_update’:
+drivers/net/hns3/hns3_ethdev.c:2249:1:
+  warning: ‘new_link’ may be used uninitialized [-Wmaybe-uninitialized]
+
+Fixes: 64308555d5bf ("net/hns3: fix link status when port is stopped")
+Cc: stable@dpdk.org
+
+Signed-off-by: Jerin Jacob <jerinj@marvell.com>
+Acked-by: Dongdong Liu <liudongdong3@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 6c3ae75c4d..ad595478a7 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -2275,6 +2275,7 @@ hns3_dev_link_update(struct rte_eth_dev *eth_dev, int wait_to_complete)
+ 	struct rte_eth_link new_link;
+ 	int ret;
+ 
++	memset(&new_link, 0, sizeof(new_link));
+ 	/* When port is stopped, report link down. */
+ 	if (eth_dev->data->dev_started == 0) {
+ 		new_link.link_autoneg = mac->link_autoneg;
+@@ -2298,7 +2299,6 @@ hns3_dev_link_update(struct rte_eth_dev *eth_dev, int wait_to_complete)
+ 		rte_delay_ms(HNS3_LINK_CHECK_INTERVAL);
+ 	} while (retry_cnt--);
+ 
+-	memset(&new_link, 0, sizeof(new_link));
+ 	hns3_setup_linkstatus(eth_dev, &new_link);
+ 
+ out:
+-- 
+2.23.0
+

@@ -1,0 +1,36 @@
+From fdf0043acae2d1df5aff874133c92ff224ad3de1 Mon Sep 17 00:00:00 2001
+From: Jie Hai <haijie1@huawei.com>
+Date: Thu, 2 Nov 2023 16:20:19 +0800
+Subject: [PATCH 391/394] app/procinfo: show RSS hash algorithm
+
+[ upstream commit 130c5a4ba0ca06c921f8a5b52b43e469250a3ea8 ]
+
+Display RSS hash algorithm with command show-port as below.
+  - RSS info
+	  -- hash algorithm : toeplitz
+
+Signed-off-by: Jie Hai <haijie1@huawei.com>
+Signed-off-by: Dongdong Liu <liudongdong3@huawei.com>
+Acked-by: Reshma Pattan <reshma.pattan@intel.com>
+Acked-by: Huisong Li <lihuisong@huawei.com>
+Acked-by: Chengwen Feng <fengchengwen@huawei.com>
+---
+ app/proc-info/main.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/app/proc-info/main.c b/app/proc-info/main.c
+index 55bfbcaa9c..d2f78278d5 100644
+--- a/app/proc-info/main.c
++++ b/app/proc-info/main.c
+@@ -996,6 +996,8 @@ show_port(void)
+ 				printf("%02x", rss_conf.rss_key[k]);
+ 			printf("\n\t  -- hash function : 0x%"PRIx64"\n",
+ 					rss_conf.rss_hf);
++			printf("\t  -- hash algorithm : %s\n",
++				rte_eth_dev_rss_algo_name(rss_conf.algorithm));
+ 		}
+ 
+ #ifdef RTE_LIB_SECURITY
+-- 
+2.23.0
+

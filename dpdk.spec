@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 57
+Release: 58
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -393,6 +393,34 @@ Patch6363:    0363-app-testpmd-fix-multicast-address-pool-leak.patch
 Patch6364:    0364-app-testpmd-fix-help-string.patch
 Patch6365:    0365-app-testpmd-add-command-to-flush-multicast-MAC-addre.patch
 Patch6366:    0366-maintainers-update-for-hns3-driver.patch
+Patch6367:    0367-telemetry-fix-repeat-display-when-callback-don-t-init-dict.patch
+Patch6368:    0368-net-hns3-fix-build-warning.patch
+Patch6369:    0369-net-hns3-fix-typo-in-function-name.patch
+Patch6370:    0370-net-hns3-fix-unchecked-Rx-free-threshold.patch
+Patch6371:    0371-net-hns3-fix-crash-for-NEON-and-SVE.patch
+Patch6372:    0372-net-hns3-fix-double-stats-for-IMP-and-global-reset.patch
+Patch6373:    0373-net-hns3-remove-reset-log-in-secondary.patch
+Patch6374:    0374-net-hns3-fix-multiple-reset-detected-log.patch
+Patch6375:    0375-net-hns3-fix-IMP-or-global-reset.patch
+Patch6376:    0376-net-hns3-refactor-interrupt-state-query.patch
+Patch6377:    0377-app-testpmd-ease-configuring-all-offloads.patch
+Patch6378:    0378-net-hns3-fix-setting-DCB-capability.patch
+Patch6379:    0379-net-hns3-fix-LRO-offload-to-report.patch
+Patch6380:    0380-net-hns3-fix-some-return-values.patch
+Patch6381:    0381-net-hns3-fix-some-error-logs.patch
+Patch6382:    0382-net-hns3-keep-set-get-algo-key-functions-local.patch
+Patch6383:    0383-net-hns3-fix-uninitialized-hash-algo-value.patch
+Patch6384:    0384-ethdev-clarify-RSS-related-fields-usage.patch
+Patch6385:    0385-ethdev-set-and-query-RSS-hash-algorithm.patch
+Patch6386:    0386-net-hns3-report-RSS-hash-algorithms-capability.patch
+Patch6387:    0387-net-hns3-support-setting-and-querying-RSS-hash-function.patch
+Patch6388:    0388-app-procinfo-fix-RSS-info.patch
+Patch6389:    0389-app-procinfo-adjust-format-of-RSS-info.patch
+Patch6390:    0390-ethdev-get-RSS-algorithm-names.patch
+Patch6391:    0391-app-procinfo-show-RSS-hash-algorithm.patch
+Patch6392:    0392-ethdev-add-maximum-Rx-buffer-size.patch
+Patch6393:    0393-net-hns3-report-maximum-buffer-size.patch
+Patch6394:    0394-net-hns3-fix-mailbox-sync.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -538,6 +566,37 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Mon Nov 20 2023 huangdengdui <huangdengui@huawei.com> - 21.11-58
+ Sync some patchs from upstreaming and modifies are as follow:
+ - net/hns3: fix mailbox sync
+ - net/hns3: report maximum buffer size
+ - ethdev: add maximum Rx buffer size
+ - app/procinfo: show RSS hash algorithm
+ - ethdev: get RSS algorithm names
+ - app/procinfo: adjust format of RSS info
+ - app/procinfo: fix RSS info
+ - net/hns3: support setting and querying RSS hash function
+ - net/hns3: report RSS hash algorithms capability
+ - ethdev: set and query RSS hash algorithm
+ - ethdev: clarify RSS related fields usage
+ - net/hns3: fix uninitialized hash algo value
+ - net/hns3: keep set/get algo key functions local
+ - net/hns3: fix some error logs
+ - net/hns3: fix some return values
+ - net/hns3: fix LRO offload to report
+ - net/hns3: fix setting DCB capability
+ - app/testpmd: ease configuring all offloads
+ - net/hns3: refactor interrupt state query
+ - net/hns3: fix IMP or global reset
+ - net/hns3: fix multiple reset detected log
+ - net/hns3: remove reset log in secondary
+ - net/hns3: fix double stats for IMP and global reset
+ - net/hns3: fix crash for NEON and SVE
+ - net/hns3: fix unchecked Rx free threshold
+ - net/hns3: fix typo in function name
+ - net/hns3: fix build warning
+ - telemetry: fix repeat display when callback don't init dict
+
 * Fri Oct 27 2023 huangdengdui <huangdengui@huawei.com> - 21.11-57
  Sync some patchs from upstreaming and modifies are as follow:
  - maintainers: update for hns3 driver

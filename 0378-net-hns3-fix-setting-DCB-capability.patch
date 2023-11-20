@@ -1,0 +1,95 @@
+From 98fc655dcb21ac85c24a5f7f454a361ef37e2b07 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Tue, 31 Oct 2023 20:23:54 +0800
+Subject: [PATCH 378/394] net/hns3: fix setting DCB capability
+
+[ upstream commit ac61c444e647298dded80a2ab52966a2dbe22b68 ]
+
+The "hw->capability" is set after querying firmware and version.
+But the DCB capability of PF is set in other place.
+So this patch moves setting DCB capability to the place where
+all capabilities are set.
+
+Fixes: ab2e2e344163 ("net/hns3: get device capability in primary process")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Signed-off-by: Jie Hai <haijie1@huawei.com>
+---
+ drivers/net/hns3/hns3_cmd.c    | 25 +++++++++++++++++++++++++
+ drivers/net/hns3/hns3_ethdev.c | 13 -------------
+ 2 files changed, 25 insertions(+), 13 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_cmd.c b/drivers/net/hns3/hns3_cmd.c
+index ca1d3f1b8c..62c55f347f 100644
+--- a/drivers/net/hns3/hns3_cmd.c
++++ b/drivers/net/hns3/hns3_cmd.c
+@@ -525,6 +525,28 @@ hns3_build_api_caps(void)
+ 	return rte_cpu_to_le_32(api_caps);
+ }
+ 
++static void
++hns3_set_dcb_capability(struct hns3_hw *hw)
++{
++	struct hns3_adapter *hns = HNS3_DEV_HW_TO_ADAPTER(hw);
++	struct rte_pci_device *pci_dev;
++	struct rte_eth_dev *eth_dev;
++	uint16_t device_id;
++
++	if (hns->is_vf)
++		return;
++
++	eth_dev = &rte_eth_devices[hw->data->port_id];
++	pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
++	device_id = pci_dev->id.device_id;
++
++	if (device_id == HNS3_DEV_ID_25GE_RDMA ||
++	    device_id == HNS3_DEV_ID_50GE_RDMA ||
++	    device_id == HNS3_DEV_ID_100G_RDMA_MACSEC ||
++	    device_id == HNS3_DEV_ID_200G_RDMA)
++		hns3_set_bit(hw->capability, HNS3_DEV_SUPPORT_DCB_B, 1);
++}
++
+ static int
+ hns3_cmd_query_firmware_version_and_capability(struct hns3_hw *hw)
+ {
+@@ -542,6 +564,9 @@ hns3_cmd_query_firmware_version_and_capability(struct hns3_hw *hw)
+ 		return ret;
+ 
+ 	hw->fw_version = rte_le_to_cpu_32(resp->firmware);
++
++	hns3_set_dcb_capability(hw);
++
+ 	/*
+ 	 * Make sure mask the capability before parse capability because it
+ 	 * may overwrite resp's data.
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index 9966748835..022696d204 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -2719,22 +2719,9 @@ static int
+ hns3_get_capability(struct hns3_hw *hw)
+ {
+ 	struct hns3_adapter *hns = HNS3_DEV_HW_TO_ADAPTER(hw);
+-	struct rte_pci_device *pci_dev;
+ 	struct hns3_pf *pf = &hns->pf;
+-	struct rte_eth_dev *eth_dev;
+-	uint16_t device_id;
+ 	int ret;
+ 
+-	eth_dev = &rte_eth_devices[hw->data->port_id];
+-	pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
+-	device_id = pci_dev->id.device_id;
+-
+-	if (device_id == HNS3_DEV_ID_25GE_RDMA ||
+-	    device_id == HNS3_DEV_ID_50GE_RDMA ||
+-	    device_id == HNS3_DEV_ID_100G_RDMA_MACSEC ||
+-	    device_id == HNS3_DEV_ID_200G_RDMA)
+-		hns3_set_bit(hw->capability, HNS3_DEV_SUPPORT_DCB_B, 1);
+-
+ 	ret = hns3_get_pci_revision_id(hw, &hw->revision);
+ 	if (ret)
+ 		return ret;
+-- 
+2.23.0
+

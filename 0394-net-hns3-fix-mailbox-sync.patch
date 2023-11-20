@@ -1,0 +1,250 @@
+From fc4a8dfe7b91702f2930957840a51796ffb12c2d Mon Sep 17 00:00:00 2001
+From: Dengdui Huang <huangdengdui@huawei.com>
+Date: Sat, 11 Nov 2023 09:59:14 +0800
+Subject: [PATCH 394/394] net/hns3: fix mailbox sync
+
+[ upstream commit be3590f54d0e415c23d4ed6ea55d967139c3ad10 ]
+
+Currently, hns3 VF driver uses the following points to match
+the response and request message for the mailbox synchronous
+message between VF and PF.
+1. req_msg_data which is consist of message code and subcode,
+   is used to match request and response.
+2. head means the number of send success for VF.
+3. tail means the number of receive success for VF.
+4. lost means the number of send timeout for VF.
+And 'head', 'tail' and 'lost' are dynamically updated during
+the communication.
+
+Now there is a issue that all sync mailbox message will
+send failure forever at the flollowing case:
+1. VF sends the message A
+    then head=UINT32_MAX-1, tail=UINT32_MAX-3, lost=2.
+2. VF sends the message B
+    then head=UINT32_MAX, tail=UINT32_MAX-2, lost=2.
+3. VF sends the message C, the message will be timeout because
+   it can't get the response within 500ms.
+   then head=0, tail=0, lost=2
+   note: tail is assigned to head if tail > head according to
+   current code logic. From now on, all subsequent sync milbox
+   messages fail to be sent.
+
+It's very complicated to use the fields 'lost','tail','head'.
+The code and subcode of the request sync mailbox are used as the
+matching code of the message, which is used to match the response
+message for receiving the synchronization response.
+
+This patch drops these fields and uses the following solution
+to solve this issue:
+In the handling response message process, using the req_msg_data
+of the request and response message to judge whether the sync
+mailbox message has been received.
+
+Fixes: 463e748964f5 ("net/hns3: support mailbox")
+Cc: stable@dpdk.org
+
+Signed-off-by: Dengdui Huang <huangdengdui@huawei.com>
+Signed-off-by: Jie Hai <haijie1@huawei.com>
+Acked-by: Huisong Li <lihuisong@huawei.com>
+---
+ drivers/net/hns3/hns3_cmd.c |  3 --
+ drivers/net/hns3/hns3_mbx.c | 81 ++++++-------------------------------
+ drivers/net/hns3/hns3_mbx.h | 10 -----
+ 3 files changed, 13 insertions(+), 81 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_cmd.c b/drivers/net/hns3/hns3_cmd.c
+index a5c4c11dc8..2c1664485b 100644
+--- a/drivers/net/hns3/hns3_cmd.c
++++ b/drivers/net/hns3/hns3_cmd.c
+@@ -731,9 +731,6 @@ hns3_cmd_init(struct hns3_hw *hw)
+ 	hw->cmq.csq.next_to_use = 0;
+ 	hw->cmq.crq.next_to_clean = 0;
+ 	hw->cmq.crq.next_to_use = 0;
+-	hw->mbx_resp.head = 0;
+-	hw->mbx_resp.tail = 0;
+-	hw->mbx_resp.lost = 0;
+ 	hns3_cmd_init_regs(hw);
+ 
+ 	rte_spinlock_unlock(&hw->cmq.crq.lock);
+diff --git a/drivers/net/hns3/hns3_mbx.c b/drivers/net/hns3/hns3_mbx.c
+index 8e0a58aa02..f1743c195e 100644
+--- a/drivers/net/hns3/hns3_mbx.c
++++ b/drivers/net/hns3/hns3_mbx.c
+@@ -40,23 +40,6 @@ hns3_resp_to_errno(uint16_t resp_code)
+ 	return -EIO;
+ }
+ 
+-static void
+-hns3_mbx_proc_timeout(struct hns3_hw *hw, uint16_t code, uint16_t subcode)
+-{
+-	if (hw->mbx_resp.matching_scheme ==
+-	    HNS3_MBX_RESP_MATCHING_SCHEME_OF_ORIGINAL) {
+-		hw->mbx_resp.lost++;
+-		hns3_err(hw,
+-			 "VF could not get mbx(%u,%u) head(%u) tail(%u) "
+-			 "lost(%u) from PF",
+-			 code, subcode, hw->mbx_resp.head, hw->mbx_resp.tail,
+-			 hw->mbx_resp.lost);
+-		return;
+-	}
+-
+-	hns3_err(hw, "VF could not get mbx(%u,%u) from PF", code, subcode);
+-}
+-
+ static int
+ hns3_get_mbx_resp(struct hns3_hw *hw, uint16_t code, uint16_t subcode,
+ 		  uint8_t *resp_data, uint16_t resp_len)
+@@ -67,7 +50,6 @@ hns3_get_mbx_resp(struct hns3_hw *hw, uint16_t code, uint16_t subcode,
+ 	struct hns3_adapter *hns = HNS3_DEV_HW_TO_ADAPTER(hw);
+ 	struct hns3_mbx_resp_status *mbx_resp;
+ 	uint32_t wait_time = 0;
+-	bool received;
+ 
+ 	if (resp_len > HNS3_MBX_MAX_RESP_DATA_SIZE) {
+ 		hns3_err(hw, "VF mbx response len(=%u) exceeds maximum(=%d)",
+@@ -93,20 +75,14 @@ hns3_get_mbx_resp(struct hns3_hw *hw, uint16_t code, uint16_t subcode,
+ 		hns3_dev_handle_mbx_msg(hw);
+ 		rte_delay_us(HNS3_WAIT_RESP_US);
+ 
+-		if (hw->mbx_resp.matching_scheme ==
+-		    HNS3_MBX_RESP_MATCHING_SCHEME_OF_ORIGINAL)
+-			received = (hw->mbx_resp.head ==
+-				    hw->mbx_resp.tail + hw->mbx_resp.lost);
+-		else
+-			received = hw->mbx_resp.received_match_resp;
+-		if (received)
++		if (hw->mbx_resp.received_match_resp)
+ 			break;
+ 
+ 		wait_time += HNS3_WAIT_RESP_US;
+ 	}
+ 	hw->mbx_resp.req_msg_data = 0;
+ 	if (wait_time >= mbx_time_limit) {
+-		hns3_mbx_proc_timeout(hw, code, subcode);
++		hns3_err(hw, "VF could not get mbx(%u,%u) from PF", code, subcode);
+ 		return -ETIME;
+ 	}
+ 	rte_io_rmb();
+@@ -132,7 +108,6 @@ hns3_mbx_prepare_resp(struct hns3_hw *hw, uint16_t code, uint16_t subcode)
+ 	 * we get the exact scheme which is used.
+ 	 */
+ 	hw->mbx_resp.req_msg_data = (uint32_t)code << 16 | subcode;
+-	hw->mbx_resp.head++;
+ 
+ 	/* Update match_id and ensure the value of match_id is not zero */
+ 	hw->mbx_resp.match_id++;
+@@ -185,7 +160,6 @@ hns3_send_mbx_msg(struct hns3_hw *hw, uint16_t code, uint16_t subcode,
+ 		req->match_id = hw->mbx_resp.match_id;
+ 		ret = hns3_cmd_send(hw, &desc, 1);
+ 		if (ret) {
+-			hw->mbx_resp.head--;
+ 			rte_spinlock_unlock(&hw->mbx_resp.lock);
+ 			hns3_err(hw, "VF failed(=%d) to send mbx message to PF",
+ 				 ret);
+@@ -254,41 +228,10 @@ hns3_handle_asserting_reset(struct hns3_hw *hw,
+ 	hns3_schedule_reset(HNS3_DEV_HW_TO_ADAPTER(hw));
+ }
+ 
+-/*
+- * Case1: receive response after timeout, req_msg_data
+- *        is 0, not equal resp_msg, do lost--
+- * Case2: receive last response during new send_mbx_msg,
+- *	  req_msg_data is different with resp_msg, let
+- *	  lost--, continue to wait for response.
+- */
+-static void
+-hns3_update_resp_position(struct hns3_hw *hw, uint32_t resp_msg)
+-{
+-	struct hns3_mbx_resp_status *resp = &hw->mbx_resp;
+-	uint32_t tail = resp->tail + 1;
+-
+-	if (tail > resp->head)
+-		tail = resp->head;
+-	if (resp->req_msg_data != resp_msg) {
+-		if (resp->lost)
+-			resp->lost--;
+-		hns3_warn(hw, "Received a mismatched response req_msg(%x) "
+-			  "resp_msg(%x) head(%u) tail(%u) lost(%u)",
+-			  resp->req_msg_data, resp_msg, resp->head, tail,
+-			  resp->lost);
+-	} else if (tail + resp->lost > resp->head) {
+-		resp->lost--;
+-		hns3_warn(hw, "Received a new response again resp_msg(%x) "
+-			  "head(%u) tail(%u) lost(%u)", resp_msg,
+-			  resp->head, tail, resp->lost);
+-	}
+-	rte_io_wmb();
+-	resp->tail = tail;
+-}
+-
+ static void
+ hns3_handle_mbx_response(struct hns3_hw *hw, struct hns3_mbx_pf_to_vf_cmd *req)
+ {
++#define HNS3_MBX_RESP_CODE_OFFSET 16
+ 	struct hns3_mbx_resp_status *resp = &hw->mbx_resp;
+ 	uint32_t msg_data;
+ 
+@@ -298,12 +241,6 @@ hns3_handle_mbx_response(struct hns3_hw *hw, struct hns3_mbx_pf_to_vf_cmd *req)
+ 		 * match_id to its response. So VF could use the match_id
+ 		 * to match the request.
+ 		 */
+-		if (resp->matching_scheme !=
+-		    HNS3_MBX_RESP_MATCHING_SCHEME_OF_MATCH_ID) {
+-			resp->matching_scheme =
+-				HNS3_MBX_RESP_MATCHING_SCHEME_OF_MATCH_ID;
+-			hns3_info(hw, "detect mailbox support match id!");
+-		}
+ 		if (req->match_id == resp->match_id) {
+ 			resp->resp_status = hns3_resp_to_errno(req->msg[3]);
+ 			memcpy(resp->additional_info, &req->msg[4],
+@@ -319,11 +256,19 @@ hns3_handle_mbx_response(struct hns3_hw *hw, struct hns3_mbx_pf_to_vf_cmd *req)
+ 	 * support copy request's match_id to its response. So VF follows the
+ 	 * original scheme to process.
+ 	 */
++	msg_data = (uint32_t)req->msg[1] << HNS3_MBX_RESP_CODE_OFFSET | req->msg[2];
++	if (resp->req_msg_data != msg_data) {
++		hns3_warn(hw,
++			"received response tag (%u) is mismatched with requested tag (%u)",
++			msg_data, resp->req_msg_data);
++		return;
++	}
++
+ 	resp->resp_status = hns3_resp_to_errno(req->msg[3]);
+ 	memcpy(resp->additional_info, &req->msg[4],
+ 	       HNS3_MBX_MAX_RESP_DATA_SIZE);
+-	msg_data = (uint32_t)req->msg[1] << 16 | req->msg[2];
+-	hns3_update_resp_position(hw, msg_data);
++	rte_io_wmb();
++	resp->received_match_resp = true;
+ }
+ 
+ static void
+diff --git a/drivers/net/hns3/hns3_mbx.h b/drivers/net/hns3/hns3_mbx.h
+index c378783c6c..4a328802b9 100644
+--- a/drivers/net/hns3/hns3_mbx.h
++++ b/drivers/net/hns3/hns3_mbx.h
+@@ -93,21 +93,11 @@ enum hns3_mbx_link_fail_subcode {
+ #define HNS3_MBX_MAX_RESP_DATA_SIZE	8
+ #define HNS3_MBX_DEF_TIME_LIMIT_MS	500
+ 
+-enum {
+-	HNS3_MBX_RESP_MATCHING_SCHEME_OF_ORIGINAL = 0,
+-	HNS3_MBX_RESP_MATCHING_SCHEME_OF_MATCH_ID
+-};
+-
+ struct hns3_mbx_resp_status {
+ 	rte_spinlock_t lock; /* protects against contending sync cmd resp */
+ 
+-	uint8_t matching_scheme;
+-
+ 	/* The following fields used in the matching scheme for original */
+ 	uint32_t req_msg_data;
+-	uint32_t head;
+-	uint32_t tail;
+-	uint32_t lost;
+ 
+ 	/* The following fields used in the matching scheme for match_id */
+ 	uint16_t match_id;
+-- 
+2.23.0
+
