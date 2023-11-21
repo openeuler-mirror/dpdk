@@ -1,0 +1,36 @@
+From 5c2aa37412339dac879a2c945262b840cbc627a2 Mon Sep 17 00:00:00 2001
+From: Jie Hai <haijie1@huawei.com>
+Date: Thu, 2 Nov 2023 16:20:14 +0800
+Subject: [PATCH 386/394] net/hns3: report RSS hash algorithms capability
+
+[ upstream commit 36b0b4fdeb64e92ffa8df617e8fdd3ed52923510 ]
+
+The hns3 driver should reports RSS hash algorithm capability
+to support updating RSS hash algorithm by
+rte_eth_dev_rss_hash_update() or rte_eth_dev_configure().
+
+Signed-off-by: Jie Hai <haijie1@huawei.com>
+Acked-by: Huisong Li <lihuisong@huawei.com>
+Acked-by: Chengwen Feng <fengchengwen@huawei.com>
+---
+ drivers/net/hns3/hns3_common.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/drivers/net/hns3/hns3_common.c b/drivers/net/hns3/hns3_common.c
+index 6b1aeaa41b..7a49f0d11d 100644
+--- a/drivers/net/hns3/hns3_common.c
++++ b/drivers/net/hns3/hns3_common.c
+@@ -133,6 +133,10 @@ hns3_dev_infos_get(struct rte_eth_dev *eth_dev, struct rte_eth_dev_info *info)
+ 	info->reta_size = hw->rss_ind_tbl_size;
+ 	info->hash_key_size = hw->rss_key_size;
+ 	info->flow_type_rss_offloads = HNS3_ETH_RSS_SUPPORT;
++	info->rss_algo_capa = RTE_ETH_HASH_ALGO_CAPA_MASK(DEFAULT) |
++			      RTE_ETH_HASH_ALGO_CAPA_MASK(TOEPLITZ) |
++			      RTE_ETH_HASH_ALGO_CAPA_MASK(SIMPLE_XOR) |
++			      RTE_ETH_HASH_ALGO_CAPA_MASK(SYMMETRIC_TOEPLITZ);
+ 
+ 	info->default_rxportconf.burst_size = HNS3_DEFAULT_PORT_CONF_BURST_SIZE;
+ 	info->default_txportconf.burst_size = HNS3_DEFAULT_PORT_CONF_BURST_SIZE;
+-- 
+2.23.0
+

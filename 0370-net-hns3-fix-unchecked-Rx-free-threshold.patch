@@ -1,0 +1,44 @@
+From e21bdbf93b0ec692c86d9457a23acb3e3209243b Mon Sep 17 00:00:00 2001
+From: Dengdui Huang <huangdengdui@huawei.com>
+Date: Fri, 27 Oct 2023 14:09:40 +0800
+Subject: [PATCH 370/394] net/hns3: fix unchecked Rx free threshold
+
+[ upstream commit c1f0cd3a4c834c2e550370b6d31b6bcd456a15f9 ]
+
+To reduce the frequency of updating the head pointer of Rx queue,
+driver just updates this pointer when the number of processed
+descriptors is greater than the Rx free threshold. If the Rx free
+threshold is set to a value greater than or equal to the number of
+descriptors in Rx queue, the driver does not update this pointer.
+As a result, the hardware cannot receive more packets.
+
+This patch fix it by adding Rx free threshold check.
+
+Fixes: bba636698316 ("net/hns3: support Rx/Tx and related operations")
+Cc: stable@dpdk.org
+
+Signed-off-by: Dengdui Huang <huangdengdui@huawei.com>
+---
+ drivers/net/hns3/hns3_rxtx.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/drivers/net/hns3/hns3_rxtx.c b/drivers/net/hns3/hns3_rxtx.c
+index 4c79163e3f..208c725cd5 100644
+--- a/drivers/net/hns3/hns3_rxtx.c
++++ b/drivers/net/hns3/hns3_rxtx.c
+@@ -1785,6 +1785,12 @@ hns3_rx_queue_conf_check(struct hns3_hw *hw, const struct rte_eth_rxconf *conf,
+ 		return -EINVAL;
+ 	}
+ 
++	if (conf->rx_free_thresh >= nb_desc) {
++		hns3_err(hw, "rx_free_thresh (%u) must be less than %u",
++			 conf->rx_free_thresh, nb_desc);
++		return -EINVAL;
++	}
++
+ 	if (conf->rx_drop_en == 0)
+ 		hns3_warn(hw, "if no descriptors available, packets are always "
+ 			  "dropped and rx_drop_en (1) is fixed on");
+-- 
+2.23.0
+

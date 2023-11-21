@@ -1,0 +1,159 @@
+From e9c4dc9a6488e7dfccba0e24c9e8606beea7e91b Mon Sep 17 00:00:00 2001
+From: Jie Hai <haijie1@huawei.com>
+Date: Thu, 2 Nov 2023 16:20:12 +0800
+Subject: [PATCH 384/394] ethdev: clarify RSS related fields usage
+
+[ upstream commit bae3cfa520a7205d63752c506d51e832d4944180 ]
+
+In rte_eth_dev_rss_hash_conf_get(), the "rss_key_len" should be
+greater than or equal to the "hash_key_size" which get from
+rte_eth_dev_info_get() API. And the "rss_key" should contain at
+least "hash_key_size" bytes. If these requirements are not met,
+the query unreliable.
+
+In rte_eth_dev_rss_hash_update() or rte_eth_dev_configure(), the
+"rss_key_len" indicates the length of the "rss_key" in bytes of
+the array pointed by "rss_key", it should be equal to the
+"hash_key_size" if "rss_key" is not NULL.
+
+This patch overwrites the comments of fields of "rte_eth_rss_conf"
+and "RTE_ETH_HASH_FUNCTION_DEFAULT", checks "rss_key_len" in
+ethdev level, and documents these changes.
+
+Signed-off-by: Jie Hai <haijie1@huawei.com>
+Acked-by: Huisong Li <lihuisong@huawei.com>
+Acked-by: Chengwen Feng <fengchengwen@huawei.com>
+Reviewed-by: Ferruh Yigit <ferruh.yigit@amd.com>
+---
+ lib/ethdev/rte_ethdev.c | 32 ++++++++++++++++++++++++++++++++
+ lib/ethdev/rte_ethdev.h | 33 ++++++++++++++++++---------------
+ lib/ethdev/rte_flow.h   |  1 +
+ 3 files changed, 51 insertions(+), 15 deletions(-)
+
+diff --git a/lib/ethdev/rte_ethdev.c b/lib/ethdev/rte_ethdev.c
+index 132e3d8dc7..f8f111ba6d 100644
+--- a/lib/ethdev/rte_ethdev.c
++++ b/lib/ethdev/rte_ethdev.c
+@@ -1620,6 +1620,16 @@ rte_eth_dev_configure(uint16_t port_id, uint16_t nb_rx_q, uint16_t nb_tx_q,
+ 		goto rollback;
+ 	}
+ 
++	if (dev_conf->rx_adv_conf.rss_conf.rss_key != NULL &&
++	    dev_conf->rx_adv_conf.rss_conf.rss_key_len != dev_info.hash_key_size) {
++		RTE_ETHDEV_LOG(ERR,
++			"Ethdev port_id=%u invalid RSS key len: %u, valid value: %u\n",
++			port_id, dev_conf->rx_adv_conf.rss_conf.rss_key_len,
++			dev_info.hash_key_size);
++		ret = -EINVAL;
++		goto rollback;
++	}
++
+ 	/*
+ 	 * Setup new number of Rx/Tx queues and reconfigure device.
+ 	 */
+@@ -4205,6 +4215,14 @@ rte_eth_dev_rss_hash_update(uint16_t port_id,
+ 		return -ENOTSUP;
+ 	}
+ 
++	if (rss_conf->rss_key != NULL &&
++	    rss_conf->rss_key_len != dev_info.hash_key_size) {
++		RTE_ETHDEV_LOG(ERR,
++			"Ethdev port_id=%u invalid RSS key len: %u, valid value: %u\n",
++			port_id, rss_conf->rss_key_len, dev_info.hash_key_size);
++		return -EINVAL;
++	}
++
+ 	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->rss_hash_update, -ENOTSUP);
+ 	return eth_err(port_id, (*dev->dev_ops->rss_hash_update)(dev,
+ 								 rss_conf));
+@@ -4214,7 +4232,9 @@ int
+ rte_eth_dev_rss_hash_conf_get(uint16_t port_id,
+ 			      struct rte_eth_rss_conf *rss_conf)
+ {
++	struct rte_eth_dev_info dev_info = { 0 };
+ 	struct rte_eth_dev *dev;
++	int ret;
+ 
+ 	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
+ 	dev = &rte_eth_devices[port_id];
+@@ -4226,6 +4246,18 @@ rte_eth_dev_rss_hash_conf_get(uint16_t port_id,
+ 		return -EINVAL;
+ 	}
+ 
++	ret = rte_eth_dev_info_get(port_id, &dev_info);
++	if (ret != 0)
++		return ret;
++
++	if (rss_conf->rss_key != NULL &&
++	    rss_conf->rss_key_len < dev_info.hash_key_size) {
++		RTE_ETHDEV_LOG(ERR,
++			"Ethdev port_id=%u invalid RSS key len: %u, should not be less than: %u\n",
++			port_id, rss_conf->rss_key_len, dev_info.hash_key_size);
++		return -EINVAL;
++	}
++
+ 	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->rss_hash_conf_get, -ENOTSUP);
+ 	return eth_err(port_id, (*dev->dev_ops->rss_hash_conf_get)(dev,
+ 								   rss_conf));
+diff --git a/lib/ethdev/rte_ethdev.h b/lib/ethdev/rte_ethdev.h
+index c555ecb840..03799bafa9 100644
+--- a/lib/ethdev/rte_ethdev.h
++++ b/lib/ethdev/rte_ethdev.h
+@@ -506,24 +506,27 @@ struct rte_vlan_filter_conf {
+ /**
+  * A structure used to configure the Receive Side Scaling (RSS) feature
+  * of an Ethernet port.
+- * If not NULL, the *rss_key* pointer of the *rss_conf* structure points
+- * to an array holding the RSS key to use for hashing specific header
+- * fields of received packets. The length of this array should be indicated
+- * by *rss_key_len* below. Otherwise, a default random hash key is used by
+- * the device driver.
+- *
+- * The *rss_key_len* field of the *rss_conf* structure indicates the length
+- * in bytes of the array pointed by *rss_key*. To be compatible, this length
+- * will be checked in i40e only. Others assume 40 bytes to be used as before.
+- *
+- * The *rss_hf* field of the *rss_conf* structure indicates the different
+- * types of IPv4/IPv6 packets to which the RSS hashing must be applied.
+- * Supplying an *rss_hf* equal to zero disables the RSS feature.
+  */
+ struct rte_eth_rss_conf {
+-	uint8_t *rss_key;    /**< If not NULL, 40-byte hash key. */
++	/**
++	 * In rte_eth_dev_rss_hash_conf_get(), the *rss_key_len* should be
++	 * greater than or equal to the *hash_key_size* which get from
++	 * rte_eth_dev_info_get() API. And the *rss_key* should contain at least
++	 * *hash_key_size* bytes. If not meet these requirements, the query
++	 * result is unreliable even if the operation returns success.
++	 *
++	 * In rte_eth_dev_rss_hash_update() or rte_eth_dev_configure(), if
++	 * *rss_key* is not NULL, the *rss_key_len* indicates the length of the
++	 * *rss_key* in bytes and it should be equal to *hash_key_size*.
++	 * If *rss_key* is NULL, drivers are free to use a random or a default key.
++	 */
++	uint8_t *rss_key;
+ 	uint8_t rss_key_len; /**< hash key length in bytes. */
+-	uint64_t rss_hf;     /**< Hash functions to apply - see below. */
++	/**
++	 * Indicates the type of packets or the specific part of packets to
++	 * which RSS hashing is to be applied.
++	 */
++	uint64_t rss_hf;
+ };
+ 
+ /*
+diff --git a/lib/ethdev/rte_flow.h b/lib/ethdev/rte_flow.h
+index 1031fb246b..039d09e0a9 100644
+--- a/lib/ethdev/rte_flow.h
++++ b/lib/ethdev/rte_flow.h
+@@ -2974,6 +2974,7 @@ struct rte_flow_query_count {
+  * Hash function types.
+  */
+ enum rte_eth_hash_function {
++	/** DEFAULT means driver decides which hash algorithm to pick. */
+ 	RTE_ETH_HASH_FUNCTION_DEFAULT = 0,
+ 	RTE_ETH_HASH_FUNCTION_TOEPLITZ, /**< Toeplitz */
+ 	RTE_ETH_HASH_FUNCTION_SIMPLE_XOR, /**< Simple XOR */
+-- 
+2.23.0
+
