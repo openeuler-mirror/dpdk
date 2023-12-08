@@ -1,0 +1,93 @@
+From 8f2d27fad53653546a97da1f691575ed153bd12f Mon Sep 17 00:00:00 2001
+From: Jie Hai <haijie1@huawei.com>
+Date: Fri, 1 Dec 2023 16:52:53 +0800
+Subject: [PATCH 409/410] ethdev: add new API to get RSS hash algorithm by name
+
+[ upstream commit c4b01b7cc50e1eb991310549455cc53bac6d47ad ]
+
+This patch supports conversion from names to hash algorithm
+(see RTE_ETH_HASH_FUNCTION_XXX).
+
+Signed-off-by: Jie Hai <haijie1@huawei.com>
+Reviewed-by: Huisong Li <lihuisong@huawei.com>
+Reviewed-by: Ferruh Yigit <ferruh.yigit@amd.com>
+---
+ lib/ethdev/rte_ethdev.c | 15 +++++++++++++++
+ lib/ethdev/rte_ethdev.h | 20 ++++++++++++++++++++
+ lib/ethdev/version.map  |  3 +++
+ 3 files changed, 38 insertions(+)
+
+diff --git a/lib/ethdev/rte_ethdev.c b/lib/ethdev/rte_ethdev.c
+index 310b39775d..10312b3e13 100644
+--- a/lib/ethdev/rte_ethdev.c
++++ b/lib/ethdev/rte_ethdev.c
+@@ -4321,6 +4321,21 @@ rte_eth_dev_rss_algo_name(enum rte_eth_hash_function rss_algo)
+ 	return name;
+ }
+ 
++int
++rte_eth_find_rss_algo(const char *name, uint32_t *algo)
++{
++	unsigned int i;
++
++	for (i = 0; i < RTE_DIM(rte_eth_dev_rss_algo_names); i++) {
++		if (strcmp(name, rte_eth_dev_rss_algo_names[i].name) == 0) {
++			*algo = rte_eth_dev_rss_algo_names[i].algo;
++			return 0;
++		}
++	}
++
++	return -EINVAL;
++}
++
+ int
+ rte_eth_dev_udp_tunnel_port_add(uint16_t port_id,
+ 				struct rte_eth_udp_tunnel *udp_tunnel)
+diff --git a/lib/ethdev/rte_ethdev.h b/lib/ethdev/rte_ethdev.h
+index 2880a55890..e0c132cebc 100644
+--- a/lib/ethdev/rte_ethdev.h
++++ b/lib/ethdev/rte_ethdev.h
+@@ -4420,6 +4420,26 @@ __rte_experimental
+ const char *
+ rte_eth_dev_rss_algo_name(enum rte_eth_hash_function rss_algo);
+ 
++/**
++ * @warning
++ * @b EXPERIMENTAL: this API may change, or be removed, without prior notice.
++ *
++ *  Get RSS hash algorithm by its name.
++ *
++ * @param name
++ *   RSS hash algorithm.
++ *
++ * @param algo
++ *   return the RSS hash algorithm found, @see rte_eth_hash_function.
++ *
++ * @return
++ *   - (0) if successful.
++ *   - (-EINVAL) if not found.
++ */
++__rte_experimental
++int
++rte_eth_find_rss_algo(const char *name, uint32_t *algo);
++
+ /**
+  * Add UDP tunneling port for a type of tunnel.
+  *
+diff --git a/lib/ethdev/version.map b/lib/ethdev/version.map
+index 1867016054..44cbe04e9b 100644
+--- a/lib/ethdev/version.map
++++ b/lib/ethdev/version.map
+@@ -268,6 +268,9 @@ EXPERIMENTAL {
+ 
+ 	# added in 23.11
+ 	rte_eth_dev_rss_algo_name;
++
++	# added in 24.03
++	rte_eth_find_rss_algo;
+ };
+ 
+ INTERNAL {
+-- 
+2.33.0
+

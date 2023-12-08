@@ -1,0 +1,37 @@
+From ca98a6df1479ed5b04f1df45cd76b87f61f4be28 Mon Sep 17 00:00:00 2001
+From: Ferruh Yigit <ferruh.yigit@amd.com>
+Date: Thu, 16 Nov 2023 17:21:55 +0000
+Subject: [PATCH 403/410] app/testpmd: fix Tx offload command
+
+In command to set Tx offload:
+"port config <port_id> tx_offload <offload> on|off",
+
+there is a defect in "on|off" comparison, so command does opposite of
+what is intended. Fixed comparison.
+
+Bugzilla ID: 1326
+Fixes: 6280fe565b44 ("app/testpmd: allow offload config for all ports")
+
+Signed-off-by: Ferruh Yigit <ferruh.yigit@amd.com>
+Reviewed-by: Chengwen Feng <fengchengwen@huawei.com>
+Acked-by: Huisong Li <lihuisong@huawei.com>
+---
+ app/test-pmd/cmdline.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/app/test-pmd/cmdline.c b/app/test-pmd/cmdline.c
+index f380d35eec..b412452948 100644
+--- a/app/test-pmd/cmdline.c
++++ b/app/test-pmd/cmdline.c
+@@ -16774,7 +16774,7 @@ cmd_config_per_port_tx_offload_parsed(void *parsed_result,
+ 	struct cmd_config_per_port_tx_offload_result *res = parsed_result;
+ 	bool on;
+ 
+-	on = strcmp(res->on_off, "on");
++	on = strcmp(res->on_off, "on") == 0;
+ 	config_port_tx_offload(res->port_id, res->offload, on);
+ }
+ 
+-- 
+2.33.0
+
