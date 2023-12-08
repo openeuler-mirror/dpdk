@@ -1,0 +1,49 @@
+From f799040a5fe871e9e11101e66ccbdecea8d84b56 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Tue, 7 Nov 2023 12:11:16 +0800
+Subject: [PATCH 398/410] app/testpmd: remove useless check in TSO command
+
+[ upstream commit 773397f6f4b5e325e786835343bacbc454d1e5f0 ]
+
+Testpmd has added the check of TSO offload capability of port, please see
+the commit 3926dd2b6668 ("app/testpmd: enforce offload capabilities check")
+
+So the code following the check code memtioned above to display warning
+when port doesn't support TSO offload doesn't access to forever.
+
+Fixes: 3926dd2b6668 ("app/testpmd: enforce offload capabilities check")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Acked-by: Ferruh Yigit <ferruh.yigit@amd.com>
+---
+ app/test-pmd/cmdline.c | 13 -------------
+ 1 file changed, 13 deletions(-)
+
+diff --git a/app/test-pmd/cmdline.c b/app/test-pmd/cmdline.c
+index cdf943162b..88fd296bbc 100644
+--- a/app/test-pmd/cmdline.c
++++ b/app/test-pmd/cmdline.c
+@@ -4961,19 +4961,6 @@ cmd_tso_set_parsed(void *parsed_result,
+ 			ports[res->port_id].tso_segsz);
+ 	}
+ 	cmd_config_queue_tx_offloads(&ports[res->port_id]);
+-
+-	/* display warnings if configuration is not supported by the NIC */
+-	ret = eth_dev_info_get_print_err(res->port_id, &dev_info);
+-	if (ret != 0)
+-		return;
+-
+-	if ((ports[res->port_id].tso_segsz != 0) &&
+-		(dev_info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_TCP_TSO) == 0) {
+-		fprintf(stderr,
+-			"Warning: TSO enabled but not supported by port %d\n",
+-			res->port_id);
+-	}
+-
+ 	cmd_reconfig_device_queue(res->port_id, 1, 1);
+ }
+ 
+-- 
+2.33.0
+

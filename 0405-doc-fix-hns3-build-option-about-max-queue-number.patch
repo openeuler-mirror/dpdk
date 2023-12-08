@@ -1,0 +1,38 @@
+From 98d550e1521aaf9057161ada27911d79774a7e89 Mon Sep 17 00:00:00 2001
+From: Huisong Li <lihuisong@huawei.com>
+Date: Mon, 20 Nov 2023 19:14:02 +0800
+Subject: [PATCH 405/410] doc: fix hns3 build option about max queue number
+
+[ upstream commit f64a879dbb1f8b508d9cf25dd4a252597f72864c ]
+
+This patch fixes the description of compilation option about setting max
+queue number. The maximum queue number of HIP09 and HIP10 is determined
+by the RTE_LIBRTE_HNS3_MAX_TQP_NUM_PER_PF and the value the firmware
+report.
+
+Fixes: 21938cf4e43e ("doc: add build config option in hns3 guide")
+Cc: stable@dpdk.org
+
+Signed-off-by: Huisong Li <lihuisong@huawei.com>
+Acked-by: Jie Hai <haijie1@huawei.com>
+---
+ doc/guides/nics/hns3.rst | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/doc/guides/nics/hns3.rst b/doc/guides/nics/hns3.rst
+index 8705845d8e..e3e6d3fbd8 100644
+--- a/doc/guides/nics/hns3.rst
++++ b/doc/guides/nics/hns3.rst
+@@ -69,7 +69,8 @@ The following options can be modified in the ``config/rte_config.h`` file.
+ 
+ - ``RTE_LIBRTE_HNS3_MAX_TQP_NUM_PER_PF`` (default ``256``)
+ 
+-  Number of MAX queues reserved for PF.
++  Number of MAX queues reserved for PF on HIP09 and HIP10.
++  The MAX queue number is also determined by the value the firmware report.
+ 
+ Runtime Configuration
+ ~~~~~~~~~~~~~~~~~~~~~
+-- 
+2.33.0
+

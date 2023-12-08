@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 60
+Release: 61
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -428,6 +428,19 @@ Patch1001:    1001-add-sw_64-support-not-upstream-new.patch
 Patch6395:    0395-net-hns3-fix-ignored-reset-event.patch
 Patch6396:    0396-net-hns3-fix-reset-event-status.patch
 Patch6397:    0397-net-hns3-fix-VF-reset-handler-interruption.patch
+Patch6398:    0398-app-testpmd-remove-useless-check-in-TSO-command.patch
+Patch6399:    0399-app-testpmd-fix-tunnel-TSO-capability-check.patch
+Patch6400:    0400-app-testpmd-add-explicit-check-for-tunnel-TSO.patch
+Patch6401:    0401-app-testpmd-fix-tunnel-TSO-configuration.patch
+Patch6402:    0402-app-testpmd-allow-offload-config-for-all-ports.patch
+Patch6403:    0403-app-testpmd-fix-Tx-offload-command.patch
+Patch6404:    0404-app-testpmd-check-port-and-queue-Rx-Tx-offloads.patch
+Patch6405:    0405-doc-fix-hns3-build-option-about-max-queue-number.patch
+Patch6406:    0406-doc-update-features-in-hns3-guide.patch
+Patch6407:    0407-doc-fix-RSS-flow-description-in-hns3-guide.patch
+Patch6408:    0408-doc-fix-description-of-RSS-features.patch
+Patch6409:    0409-ethdev-add-new-API-to-get-RSS-hash-algorithm-by-name.patch
+Patch6410:    0410-app-testpmd-support-set-RSS-hash-algorithm.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -583,6 +596,23 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Fri Dec 8 2023 huangdengdui <huangdengui@huawei.com> - 21.11-61
+ Sync some bugfix from upstreaming about testpmd and doc, modifies
+ are as follow:
+ - support set RSS hash algorithm
+ - ethdev: add new API to get RSS hash algorithm by name
+ - doc: fix description of RSS features
+ - doc: fix RSS flow description in hns3 guide
+ - doc: update features in hns3 guide
+ - doc: fix hns3 build option about max queue number
+ - app/testpmd: check port and queue Rx/Tx offloads
+ - app/testpmd: fix Tx offload command
+ - app/testpmd: allow offload config for all ports
+ - app/testpmd: fix tunnel TSO configuration
+ - app/testpmd: add explicit check for tunnel TSO
+ - app/testpmd: fix tunnel TSO capability check
+ - app/testpmd: remove useless check in TSO command
+
 * Fri Dec 8 2023 huangdengdui <huangdengui@huawei.com> - 21.11-60
  Sync some bugfix from upstreaming about hns3 reset and modifies
  are as follow:
