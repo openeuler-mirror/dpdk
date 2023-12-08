@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 59
+Release: 60
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -425,6 +425,10 @@ Patch6394:    0394-net-hns3-fix-mailbox-sync.patch
 Patch1000:    1000-add-sw_64-support-not-upstream-modified.patch
 Patch1001:    1001-add-sw_64-support-not-upstream-new.patch
 
+Patch6395:    0395-net-hns3-fix-ignored-reset-event.patch
+Patch6396:    0396-net-hns3-fix-reset-event-status.patch
+Patch6397:    0397-net-hns3-fix-VF-reset-handler-interruption.patch
+
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
 License: BSD and LGPLv2 and GPLv2
@@ -579,6 +583,13 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Fri Dec 8 2023 huangdengdui <huangdengui@huawei.com> - 21.11-60
+ Sync some bugfix from upstreaming about hns3 reset and modifies
+ are as follow:
+ - net/hns3: fix VF reset handler interruption
+ - net/hns3: fix reset event status
+ - net/hns3: fix ignored reset event
+
 * Mon Nov 20 2023 huangdengdui <huangdengui@huawei.com> - 21.11-59
  Sync some patchs from upstreaming and modifies are as follow:
  - net/hns3: fix mailbox sync
