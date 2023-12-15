@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 61
+Release: 62
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -441,6 +441,13 @@ Patch6407:    0407-doc-fix-RSS-flow-description-in-hns3-guide.patch
 Patch6408:    0408-doc-fix-description-of-RSS-features.patch
 Patch6409:    0409-ethdev-add-new-API-to-get-RSS-hash-algorithm-by-name.patch
 Patch6410:    0410-app-testpmd-support-set-RSS-hash-algorithm.patch
+Patch6411:    0411-net-hns3-refactor-VF-mailbox-message-struct.patch
+Patch6412:    0412-net-hns3-refactor-PF-mailbox-message-struct.patch
+Patch6413:    0413-net-hns3-refactor-send-mailbox-function.patch
+Patch6414:    0414-net-hns3-refactor-handle-mailbox-function.patch
+Patch6415:    0415-net-hns3-fix-VF-multiple-count-on-one-reset.patch
+Patch6416:    0416-net-hns3-fix-disable-command-with-firmware.patch
+Patch6417:    0417-net-hns3-fix-reset-level-comparison.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -596,6 +603,17 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Fri Dec 15 2023 huangdengdui <huangdengui@huawei.com> - 21.11-62
+ Sync some patches for hns3 about refactor mailbox and bugfix, modifies
+ are as follow:
+ - net/hns3: fix reset level comparison
+ - net/hns3: fix disable command with firmware
+ - net/hns3: fix VF multiple count on one reset
+ - net/hns3: refactor handle mailbox function
+ - net/hns3: refactor send mailbox function
+ - net/hns3: refactor PF mailbox message struct
+ - net/hns3: refactor VF mailbox message struct
+
 * Fri Dec 8 2023 huangdengdui <huangdengui@huawei.com> - 21.11-61
  Sync some bugfix from upstreaming about testpmd and doc, modifies
  are as follow:
