@@ -1,0 +1,279 @@
+From 10811666ad563ba191fcb3b219ab3586caaae239 Mon Sep 17 00:00:00 2001
+From: Dengdui Huang <huangdengdui@huawei.com>
+Date: Fri, 8 Dec 2023 14:55:05 +0800
+Subject: [PATCH 411/418] net/hns3: refactor VF mailbox message struct
+
+[ upstream commit 93b77446190f0034c4996cfc84771d0b1c08b9ae ]
+
+The data region in VF to PF mbx memssage command is
+used to communicate with PF driver. And this data
+region exists as an array. As a result, some complicated
+feature commands, like setting promisc mode, map/unmap
+ring vector and setting VLAN id, have to use magic number
+to set them. This isn't good for maintenance of driver.
+So this patch refactors these messages by extracting an
+hns3_vf_to_pf_msg structure.
+
+In addition, the PF link change event message is reported
+by the firmware and is reported in hns3_mbx_vf_to_pf_cmd
+format, it also needs to be modified.
+
+Fixes: 463e748964f5 ("net/hns3: support mailbox")
+Cc: stable@dpdk.org
+
+Signed-off-by: Dengdui Huang <huangdengdui@huawei.com>
+Signed-off-by: Jie Hai <haijie1@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev_vf.c | 54 ++++++++++++++---------------
+ drivers/net/hns3/hns3_mbx.c       | 24 ++++++-------
+ drivers/net/hns3/hns3_mbx.h       | 56 ++++++++++++++++++++++---------
+ 3 files changed, 76 insertions(+), 58 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_ethdev_vf.c b/drivers/net/hns3/hns3_ethdev_vf.c
+index db1a30aff0..83dacbaec7 100644
+--- a/drivers/net/hns3/hns3_ethdev_vf.c
++++ b/drivers/net/hns3/hns3_ethdev_vf.c
+@@ -335,11 +335,12 @@ hns3vf_set_promisc_mode(struct hns3_hw *hw, bool en_bc_pmc,
+ 	 *    the packets with vlan tag in promiscuous mode.
+ 	 */
+ 	hns3_cmd_setup_basic_desc(&desc, HNS3_OPC_MBX_VF_TO_PF, false);
+-	req->msg[0] = HNS3_MBX_SET_PROMISC_MODE;
+-	req->msg[1] = en_bc_pmc ? 1 : 0;
+-	req->msg[2] = en_uc_pmc ? 1 : 0;
+-	req->msg[3] = en_mc_pmc ? 1 : 0;
+-	req->msg[4] = hw->promisc_mode == HNS3_LIMIT_PROMISC_MODE ? 1 : 0;
++	req->msg.code = HNS3_MBX_SET_PROMISC_MODE;
++	req->msg.en_bc = en_bc_pmc ? 1 : 0;
++	req->msg.en_uc = en_uc_pmc ? 1 : 0;
++	req->msg.en_mc = en_mc_pmc ? 1 : 0;
++	req->msg.en_limit_promisc =
++		hw->promisc_mode == HNS3_LIMIT_PROMISC_MODE ? 1 : 0;
+ 
+ 	ret = hns3_cmd_send(hw, &desc, 1);
+ 	if (ret)
+@@ -428,30 +429,28 @@ hns3vf_bind_ring_with_vector(struct hns3_hw *hw, uint16_t vector_id,
+ 			     bool mmap, enum hns3_ring_type queue_type,
+ 			     uint16_t queue_id)
+ {
+-	struct hns3_vf_bind_vector_msg bind_msg;
++#define HNS3_RING_VERCTOR_DATA_SIZE	14
++	struct hns3_vf_to_pf_msg req = {0};
+ 	const char *op_str;
+-	uint16_t code;
+ 	int ret;
+ 
+-	memset(&bind_msg, 0, sizeof(bind_msg));
+-	code = mmap ? HNS3_MBX_MAP_RING_TO_VECTOR :
++	req.code = mmap ? HNS3_MBX_MAP_RING_TO_VECTOR :
+ 		HNS3_MBX_UNMAP_RING_TO_VECTOR;
+-	bind_msg.vector_id = (uint8_t)vector_id;
++	req.vector_id = (uint8_t)vector_id;
++	req.ring_num = 1;
+ 
+ 	if (queue_type == HNS3_RING_TYPE_RX)
+-		bind_msg.param[0].int_gl_index = HNS3_RING_GL_RX;
++		req.ring_param[0].int_gl_index = HNS3_RING_GL_RX;
+ 	else
+-		bind_msg.param[0].int_gl_index = HNS3_RING_GL_TX;
+-
+-	bind_msg.param[0].ring_type = queue_type;
+-	bind_msg.ring_num = 1;
+-	bind_msg.param[0].tqp_index = queue_id;
++		req.ring_param[0].int_gl_index = HNS3_RING_GL_TX;
++	req.ring_param[0].ring_type = queue_type;
++	req.ring_param[0].tqp_index = queue_id;
+ 	op_str = mmap ? "Map" : "Unmap";
+-	ret = hns3_send_mbx_msg(hw, code, 0, (uint8_t *)&bind_msg,
+-				sizeof(bind_msg), false, NULL, 0);
++	ret = hns3_send_mbx_msg(hw, req.code, 0, (uint8_t *)&req.vector_id,
++				HNS3_RING_VERCTOR_DATA_SIZE, false, NULL, 0);
+ 	if (ret)
+-		hns3_err(hw, "%s TQP %u fail, vector_id is %u, ret is %d.",
+-			 op_str, queue_id, bind_msg.vector_id, ret);
++		hns3_err(hw, "%s TQP %u fail, vector_id is %u, ret = %d.",
++			 op_str, queue_id, req.vector_id, ret);
+ 
+ 	return ret;
+ }
+@@ -1031,19 +1030,16 @@ hns3vf_update_link_status(struct hns3_hw *hw, uint8_t link_status,
+ static int
+ hns3vf_vlan_filter_configure(struct hns3_adapter *hns, uint16_t vlan_id, int on)
+ {
+-#define HNS3VF_VLAN_MBX_MSG_LEN 5
++	struct hns3_mbx_vlan_filter vlan_filter = {0};
+ 	struct hns3_hw *hw = &hns->hw;
+-	uint8_t msg_data[HNS3VF_VLAN_MBX_MSG_LEN];
+-	uint16_t proto = htons(RTE_ETHER_TYPE_VLAN);
+-	uint8_t is_kill = on ? 0 : 1;
+ 
+-	msg_data[0] = is_kill;
+-	memcpy(&msg_data[1], &vlan_id, sizeof(vlan_id));
+-	memcpy(&msg_data[3], &proto, sizeof(proto));
++	vlan_filter.is_kill = on ? 0 : 1;
++	vlan_filter.proto = rte_cpu_to_le_16(RTE_ETHER_TYPE_VLAN);
++	vlan_filter.vlan_id =  rte_cpu_to_le_16(vlan_id);
+ 
+ 	return hns3_send_mbx_msg(hw, HNS3_MBX_SET_VLAN, HNS3_MBX_VLAN_FILTER,
+-				 msg_data, HNS3VF_VLAN_MBX_MSG_LEN, true, NULL,
+-				 0);
++				(uint8_t *)&vlan_filter, sizeof(vlan_filter),
++				 true, NULL, 0);
+ }
+ 
+ static int
+diff --git a/drivers/net/hns3/hns3_mbx.c b/drivers/net/hns3/hns3_mbx.c
+index f1743c195e..ad5ec555b3 100644
+--- a/drivers/net/hns3/hns3_mbx.c
++++ b/drivers/net/hns3/hns3_mbx.c
+@@ -11,8 +11,6 @@
+ #include "hns3_intr.h"
+ #include "hns3_rxtx.h"
+ 
+-#define HNS3_CMD_CODE_OFFSET		2
+-
+ static const struct errno_respcode_map err_code_map[] = {
+ 	{0, 0},
+ 	{1, -EPERM},
+@@ -127,29 +125,30 @@ hns3_send_mbx_msg(struct hns3_hw *hw, uint16_t code, uint16_t subcode,
+ 	struct hns3_mbx_vf_to_pf_cmd *req;
+ 	struct hns3_cmd_desc desc;
+ 	bool is_ring_vector_msg;
+-	int offset;
+ 	int ret;
+ 
+ 	req = (struct hns3_mbx_vf_to_pf_cmd *)desc.data;
+ 
+ 	/* first two bytes are reserved for code & subcode */
+-	if (msg_len > (HNS3_MBX_MAX_MSG_SIZE - HNS3_CMD_CODE_OFFSET)) {
++	if (msg_len > HNS3_MBX_MSG_MAX_DATA_SIZE) {
+ 		hns3_err(hw,
+ 			 "VF send mbx msg fail, msg len %u exceeds max payload len %d",
+-			 msg_len, HNS3_MBX_MAX_MSG_SIZE - HNS3_CMD_CODE_OFFSET);
++			 msg_len, HNS3_MBX_MSG_MAX_DATA_SIZE);
+ 		return -EINVAL;
+ 	}
+ 
+ 	hns3_cmd_setup_basic_desc(&desc, HNS3_OPC_MBX_VF_TO_PF, false);
+-	req->msg[0] = code;
++	req->msg.code = code;
+ 	is_ring_vector_msg = (code == HNS3_MBX_MAP_RING_TO_VECTOR) ||
+ 			     (code == HNS3_MBX_UNMAP_RING_TO_VECTOR) ||
+ 			     (code == HNS3_MBX_GET_RING_VECTOR_MAP);
+ 	if (!is_ring_vector_msg)
+-		req->msg[1] = subcode;
++		req->msg.subcode = subcode;
+ 	if (msg_data) {
+-		offset = is_ring_vector_msg ? 1 : HNS3_CMD_CODE_OFFSET;
+-		memcpy(&req->msg[offset], msg_data, msg_len);
++		if (is_ring_vector_msg)
++			memcpy(&req->msg.vector_id, msg_data, msg_len);
++		else
++			memcpy(&req->msg.data, msg_data, msg_len);
+ 	}
+ 
+ 	/* synchronous send */
+@@ -296,11 +295,8 @@ static void
+ hns3pf_handle_link_change_event(struct hns3_hw *hw,
+ 				struct hns3_mbx_vf_to_pf_cmd *req)
+ {
+-#define LINK_STATUS_OFFSET     1
+-#define LINK_FAIL_CODE_OFFSET  2
+-
+-	if (!req->msg[LINK_STATUS_OFFSET])
+-		hns3_link_fail_parse(hw, req->msg[LINK_FAIL_CODE_OFFSET]);
++	if (!req->msg.link_status)
++		hns3_link_fail_parse(hw, req->msg.link_fail_code);
+ 
+ 	hns3_update_linkstatus_and_event(hw, true);
+ }
+diff --git a/drivers/net/hns3/hns3_mbx.h b/drivers/net/hns3/hns3_mbx.h
+index 4a328802b9..59fb73abcc 100644
+--- a/drivers/net/hns3/hns3_mbx.h
++++ b/drivers/net/hns3/hns3_mbx.h
+@@ -89,7 +89,6 @@ enum hns3_mbx_link_fail_subcode {
+ 	HNS3_MBX_LF_XSFP_ABSENT,
+ };
+ 
+-#define HNS3_MBX_MAX_MSG_SIZE	16
+ #define HNS3_MBX_MAX_RESP_DATA_SIZE	8
+ #define HNS3_MBX_DEF_TIME_LIMIT_MS	500
+ 
+@@ -107,6 +106,46 @@ struct hns3_mbx_resp_status {
+ 	uint8_t additional_info[HNS3_MBX_MAX_RESP_DATA_SIZE];
+ };
+ 
++struct hns3_ring_chain_param {
++	uint8_t ring_type;
++	uint8_t tqp_index;
++	uint8_t int_gl_index;
++};
++
++struct hns3_mbx_vlan_filter {
++	uint8_t is_kill;
++	uint16_t vlan_id;
++	uint16_t proto;
++} __rte_packed;
++
++#define HNS3_MBX_MSG_MAX_DATA_SIZE	14
++#define HNS3_MBX_MAX_RING_CHAIN_PARAM_NUM	4
++struct hns3_vf_to_pf_msg {
++	uint8_t code;
++	union {
++		struct {
++			uint8_t subcode;
++			uint8_t data[HNS3_MBX_MSG_MAX_DATA_SIZE];
++		};
++		struct {
++			uint8_t en_bc;
++			uint8_t en_uc;
++			uint8_t en_mc;
++			uint8_t en_limit_promisc;
++		};
++		struct {
++			uint8_t vector_id;
++			uint8_t ring_num;
++			struct hns3_ring_chain_param
++				ring_param[HNS3_MBX_MAX_RING_CHAIN_PARAM_NUM];
++		};
++		struct {
++			uint8_t link_status;
++			uint8_t link_fail_code;
++		};
++	};
++};
++
+ struct errno_respcode_map {
+ 	uint16_t resp_code;
+ 	int err_no;
+@@ -122,7 +161,7 @@ struct hns3_mbx_vf_to_pf_cmd {
+ 	uint8_t msg_len;
+ 	uint8_t rsv2;
+ 	uint16_t match_id;
+-	uint8_t msg[HNS3_MBX_MAX_MSG_SIZE];
++	struct hns3_vf_to_pf_msg msg;
+ };
+ 
+ struct hns3_mbx_pf_to_vf_cmd {
+@@ -134,19 +173,6 @@ struct hns3_mbx_pf_to_vf_cmd {
+ 	uint16_t msg[8];
+ };
+ 
+-struct hns3_ring_chain_param {
+-	uint8_t ring_type;
+-	uint8_t tqp_index;
+-	uint8_t int_gl_index;
+-};
+-
+-#define HNS3_MBX_MAX_RING_CHAIN_PARAM_NUM	4
+-struct hns3_vf_bind_vector_msg {
+-	uint8_t vector_id;
+-	uint8_t ring_num;
+-	struct hns3_ring_chain_param param[HNS3_MBX_MAX_RING_CHAIN_PARAM_NUM];
+-};
+-
+ struct hns3_pf_rst_done_cmd {
+ 	uint8_t pf_rst_done;
+ 	uint8_t rsv[23];
+-- 
+2.41.0.windows.2
+

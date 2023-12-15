@@ -1,0 +1,114 @@
+From 345f6630543215a309ded095232d10391cdcdd33 Mon Sep 17 00:00:00 2001
+From: Dengdui Huang <huangdengdui@huawei.com>
+Date: Fri, 8 Dec 2023 15:44:14 +0800
+Subject: [PATCH 415/418] net/hns3: fix VF multiple count on one reset
+
+[ upstream commit 8ea1c20299ed74c6c5b527e961141cc429e17992 ]
+
+There are two ways for the hns3 VF driver to know reset event, namely,
+interrupt task and periodic detection task. For the latter, the real
+reset process will delay several microseconds to execute. Both tasks
+cause the count to increase by 1.
+
+However, the periodic detection task also detects a reset event A
+after interrupt task receive a reset event A. As a result, the reset
+count will be double.
+
+So this patch adds the comparison of reset level for VF in case of the
+multiple reset count.
+
+Fixes: a5475d61fa34 ("net/hns3: support VF")
+Cc: stable@dpdk.org
+
+Signed-off-by: Dengdui Huang <huangdengdui@huawei.com>
+Signed-off-by: Jie Hai <haijie1@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev_vf.c | 44 ++++++++++++++++++++-----------
+ 1 file changed, 29 insertions(+), 15 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_ethdev_vf.c b/drivers/net/hns3/hns3_ethdev_vf.c
+index 71c93e0221..7be5a6706d 100644
+--- a/drivers/net/hns3/hns3_ethdev_vf.c
++++ b/drivers/net/hns3/hns3_ethdev_vf.c
+@@ -637,13 +637,8 @@ hns3vf_check_event_cause(struct hns3_adapter *hns, uint32_t *clearval)
+ 		val = hns3_read_dev(hw, HNS3_VF_RST_ING);
+ 		hns3_write_dev(hw, HNS3_VF_RST_ING, val | HNS3_VF_RST_ING_BIT);
+ 		val = cmdq_stat_reg & ~BIT(HNS3_VECTOR0_RST_INT_B);
+-		if (clearval) {
+-			hw->reset.stats.global_cnt++;
+-			hns3_warn(hw, "Global reset detected, clear reset status");
+-		} else {
+-			hns3_schedule_delayed_reset(hns);
+-			hns3_warn(hw, "Global reset detected, don't clear reset status");
+-		}
++		hw->reset.stats.global_cnt++;
++		hns3_warn(hw, "Global reset detected, clear reset status");
+ 
+ 		ret = HNS3VF_VECTOR0_EVENT_RST;
+ 		goto out;
+@@ -658,9 +653,9 @@ hns3vf_check_event_cause(struct hns3_adapter *hns, uint32_t *clearval)
+ 
+ 	val = 0;
+ 	ret = HNS3VF_VECTOR0_EVENT_OTHER;
++
+ out:
+-	if (clearval)
+-		*clearval = val;
++	*clearval = val;
+ 	return ret;
+ }
+ 
+@@ -1797,11 +1792,25 @@ is_vf_reset_done(struct hns3_hw *hw)
+ 	return true;
+ }
+ 
++static enum hns3_reset_level
++hns3vf_detect_reset_event(struct hns3_hw *hw)
++{
++	enum hns3_reset_level reset = HNS3_NONE_RESET;
++	uint32_t cmdq_stat_reg;
++
++	cmdq_stat_reg = hns3_read_dev(hw, HNS3_VECTOR0_CMDQ_STAT_REG);
++	if (BIT(HNS3_VECTOR0_RST_INT_B) & cmdq_stat_reg)
++		reset = HNS3_VF_RESET;
++
++	return reset;
++}
++
+ bool
+ hns3vf_is_reset_pending(struct hns3_adapter *hns)
+ {
++	enum hns3_reset_level last_req;
+ 	struct hns3_hw *hw = &hns->hw;
+-	enum hns3_reset_level reset;
++	enum hns3_reset_level new_req;
+ 
+ 	/*
+ 	 * According to the protocol of PCIe, FLR to a PF device resets the PF
+@@ -1824,13 +1833,18 @@ hns3vf_is_reset_pending(struct hns3_adapter *hns)
+ 	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
+ 		return false;
+ 
+-	hns3vf_check_event_cause(hns, NULL);
+-	reset = hns3vf_get_reset_level(hw, &hw->reset.pending);
+-	if (hw->reset.level != HNS3_NONE_RESET && reset != HNS3_NONE_RESET &&
+-	    hw->reset.level < reset) {
+-		hns3_warn(hw, "High level reset %d is pending", reset);
++	new_req = hns3vf_detect_reset_event(hw);
++	if (new_req == HNS3_NONE_RESET)
++		return false;
++
++	last_req = hns3vf_get_reset_level(hw, &hw->reset.pending);
++	if (last_req == HNS3_NONE_RESET || last_req < new_req) {
++		__atomic_store_n(&hw->reset.disable_cmd, 1, __ATOMIC_RELAXED);
++		hns3_schedule_delayed_reset(hns);
++		hns3_warn(hw, "High level reset detected, delay do reset");
+ 		return true;
+ 	}
++
+ 	return false;
+ }
+ 
+-- 
+2.41.0.windows.2
+
