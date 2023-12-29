@@ -1,6 +1,6 @@
 Name: dpdk
 Version: 21.11
-Release: 62
+Release: 63
 Packager: packaging@6wind.com
 URL: http://dpdk.org
 %global source_version  21.11
@@ -448,6 +448,7 @@ Patch6414:    0414-net-hns3-refactor-handle-mailbox-function.patch
 Patch6415:    0415-net-hns3-fix-VF-multiple-count-on-one-reset.patch
 Patch6416:    0416-net-hns3-fix-disable-command-with-firmware.patch
 Patch6417:    0417-net-hns3-fix-reset-level-comparison.patch
+Patch6418:    0418-net-hns3-don-t-support-QinQ-insert-for-VF.patch
 
 Summary: Data Plane Development Kit core
 Group: System Environment/Libraries
@@ -462,6 +463,7 @@ BuildRequires: rdma-core-devel
 BuildRequires: uname-build-checks
 BuildRequires: chrpath
 BuildRequires: groff-base
+BuildRequires: libibverbs
 
 %define kern_devel_ver %(uname -r)
 %define arch_type %(uname -m)
@@ -603,6 +605,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 /usr/sbin/depmod
 
 %changelog
+* Fri Dec 29 2023 huangdengdui <huangdengui@huawei.com> - 21.11-63
+ The hns3 driver don't support QinQ insert for VF
+
 * Fri Dec 15 2023 huangdengdui <huangdengui@huawei.com> - 21.11-62
  Sync some patches for hns3 about refactor mailbox and bugfix, modifies
  are as follow:
