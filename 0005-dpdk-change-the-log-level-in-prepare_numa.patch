@@ -1,0 +1,25 @@
+From 89eeedc121c4ea470100ecae9f9489840775a524 Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng14@huawei.com>
+Date: Thu, 11 Jan 2024 16:17:48 +0800
+Subject: [PATCH] 0005-dpdk-change-the-log-level-in-prepare_numa.patch
+
+---
+ lib/eal/linux/eal_memalloc.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/eal/linux/eal_memalloc.c b/lib/eal/linux/eal_memalloc.c
+index 9853ec7..21c5729 100644
+--- a/lib/eal/linux/eal_memalloc.c
++++ b/lib/eal/linux/eal_memalloc.c
+@@ -159,7 +159,7 @@ prepare_numa(int *oldpolicy, struct bitmask *oldmask, int socket_id)
+ 	RTE_LOG(DEBUG, EAL, "Trying to obtain current memory policy.\n");
+ 	if (get_mempolicy(oldpolicy, oldmask->maskp,
+ 			  oldmask->size + 1, 0, 0) < 0) {
+-		RTE_LOG(ERR, EAL,
++		RTE_LOG(DEBUG, EAL,
+ 			"Failed to get current mempolicy: %s. "
+ 			"Assuming MPOL_DEFAULT.\n", strerror(errno));
+ 		*oldpolicy = MPOL_DEFAULT;
+-- 
+2.33.0
+

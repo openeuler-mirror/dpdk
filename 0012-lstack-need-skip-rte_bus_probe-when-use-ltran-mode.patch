@@ -1,0 +1,37 @@
+From 0e4ac40f7d72a669d509731b3d1b1c3e62a95487 Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng14@huawei.com>
+Date: Fri, 12 Jan 2024 10:05:30 +0800
+Subject: lstack need skip rte_bus_probe when use ltran mode
+
+---
+ lib/eal/linux/eal.c | 14 +++++++++-----
+ 1 file changed, 9 insertions(+), 5 deletions(-)
+
+diff --git a/lib/eal/linux/eal.c b/lib/eal/linux/eal.c
+index fd66fc4..39ac949 100644
+--- a/lib/eal/linux/eal.c
++++ b/lib/eal/linux/eal.c
+@@ -1372,11 +1372,15 @@ rte_eal_init(int argc, char **argv)
+ 		return -1;
+ 	}
+ 
+-	/* Probe all the buses and devices/drivers on them */
+-	if (rte_bus_probe()) {
+-		rte_eal_init_alert("Cannot probe devices");
+-		rte_errno = ENOTSUP;
+-		return -1;
++	if (internal_conf->map_perfect && internal_conf->base_virtaddr) {
++		RTE_LOG(WARNING, EAL, "Skip rte_bus_probe\n");
++	} else {
++		/* Probe all the buses and devices/drivers on them */
++		if (rte_bus_probe()) {
++			rte_eal_init_alert("Cannot probe devices");
++			rte_errno = ENOTSUP;
++			return -1;
++		}
+ 	}
+ 
+ #ifdef VFIO_PRESENT
+-- 
+2.33.0
+

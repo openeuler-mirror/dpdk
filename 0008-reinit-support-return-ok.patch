@@ -1,0 +1,40 @@
+From 4eab54da18159310d6cfdc490bd212dba1416043 Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng14@huawei.com>
+Date: Thu, 11 Jan 2024 19:38:36 +0800
+Subject: [PATCH] 0008-reinit-support-return-ok.patch
+
+---
+ lib/eal/linux/eal.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/lib/eal/linux/eal.c b/lib/eal/linux/eal.c
+index 769c6d0..bc0ca2b 100644
+--- a/lib/eal/linux/eal.c
++++ b/lib/eal/linux/eal.c
+@@ -968,6 +968,7 @@ rte_eal_init(int argc, char **argv)
+ {
+ 	int i, fctret, ret;
+ 	static RTE_ATOMIC(uint32_t) run_once;
++	static uint32_t reinit_ok = 0;
+ 	uint32_t has_run = 0;
+ 	char cpuset[RTE_CPU_AFFINITY_STR_LEN];
+ 	char thread_name[RTE_THREAD_NAME_SIZE];
+@@ -983,8 +984,15 @@ rte_eal_init(int argc, char **argv)
+ 		return -1;
+ 	}
+ 
++	if (argc > 1 && !strncmp(argv[1], "reinit-ok", strlen("reinit-ok"))) {
++		reinit_ok = 1;
++	}
++
+ 	if (!rte_atomic_compare_exchange_strong_explicit(&run_once, &has_run, 1,
+ 					rte_memory_order_relaxed, rte_memory_order_relaxed)) {
++		if (reinit_ok) {
++			return 0;
++		}
+ 		rte_eal_init_alert("already called initialization.");
+ 		rte_errno = EALREADY;
+ 		return -1;
+-- 
+2.33.0
+

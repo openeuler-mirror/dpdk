@@ -1,0 +1,27 @@
+From 1ec3f2020f652b39e3ad1e39bed71cc4855ec636 Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng14@huawei.com>
+Date: Thu, 11 Jan 2024 16:28:06 +0800
+Subject: [PATCH] 0007-dpdk-fix-cpu-flag-error-in-Intel-R-Xeon-R-CPU-E5-262
+
+---
+ config/meson.build | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/config/meson.build b/config/meson.build
+index a9ccd56..6ae32ec 100644
+--- a/config/meson.build
++++ b/config/meson.build
+@@ -154,6 +154,10 @@ if cpu_instruction_set == 'generic'
+     elif host_machine.cpu_family().startswith('riscv')
+         cpu_instruction_set = 'rv64gc'
+     endif
++elif host_machine.cpu_family().startswith('x86')
++    if cc.get_define('__SSE4_2__', args:'-march=native') == ''
++        cpu_instruction_set = 'corei7'
++    endif
+ endif
+ 
+ dpdk_conf.set('RTE_MACHINE', cpu_instruction_set)
+-- 
+2.33.0
+
