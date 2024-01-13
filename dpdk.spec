@@ -10,11 +10,24 @@
 
 Name: dpdk
 Version: 23.11
-Release: 1
+Release: 2
 URL: http://dpdk.org
 Source: https://fast.dpdk.org/rel/dpdk-%{version}.tar.xz
 
+# upstream patch number start from 6000
+# self developed patch number start from 9000
 Patch9001: 0001-add-igb_uio.patch
+Patch9002: 0002-dpdk-add-secure-compile-option-and-fPIC-option.patch
+Patch9003: 0003-dpdk-bugfix-the-deadlock-in-rte_eal_init.patch
+Patch9004: 0004-dpdk-master-core-donot-set-affinity-in-libstorage.patch
+Patch9005: 0005-dpdk-change-the-log-level-in-prepare_numa.patch
+Patch9006: 0006-dpdk-fix-dpdk-coredump-problem.patch
+Patch9007: 0007-dpdk-fix-cpu-flag-error-in-Intel-R-Xeon-R-CPU-E5-262.patch
+Patch9008: 0008-reinit-support-return-ok.patch
+Patch9009: 0009-gro-fix-gro-with-tcp-push-flag.patch
+Patch9010: 0010-example-l3fwd-masking-wrong-warning-array-subscript-.patch
+Patch9011: 0011-dpdk-add-support-for-gazellle.patch
+Patch9012: 0012-lstack-need-skip-rte_bus_probe-when-use-ltran-mode.patch
 
 BuildRequires: meson
 BuildRequires: python3-pyelftools
@@ -182,6 +195,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 %endif
 
 %changelog
+* Tue Jan 12 2024 jiangheng <jiangheng14@huawei.com> - 23.11-2
+ add self-developed patches
+
 * Tue Jan 09 2024 jiangheng <jiangheng14@huawei.com> - 23.11-1
  upgrade dpdk to 23.11
 

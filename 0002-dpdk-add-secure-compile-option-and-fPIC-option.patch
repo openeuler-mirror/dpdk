@@ -1,0 +1,81 @@
+From a235fee1e21ff103b1fbb24f23f23035c793bab0 Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng14@huawei.com>
+Date: Thu, 11 Jan 2024 16:10:57 +0800
+Subject: [PATCH] add securec compile option and fPIC option
+
+---
+ app/meson.build                | 2 ++
+ buildtools/chkincs/meson.build | 2 ++
+ drivers/meson.build            | 2 ++
+ examples/meson.build           | 2 ++
+ lib/meson.build                | 2 ++
+ 5 files changed, 10 insertions(+)
+
+diff --git a/app/meson.build b/app/meson.build
+index 8aaed59..e22bbb2 100644
+--- a/app/meson.build
++++ b/app/meson.build
+@@ -43,6 +43,8 @@ if get_option('tests')
+ endif
+ 
+ default_cflags = machine_args + ['-DALLOW_EXPERIMENTAL_API']
++default_cflags += ['-fPIE', '-pie', '-fPIC', '-fstack-protector-strong', '-D_FORTIFY_SOURCE=2', '-O2', '-Wall']
++default_cflags += ['-Wl,-z,relro,-z,now,-z,noexecstack', '-Wtrampolines']
+ default_ldflags = []
+ if get_option('default_library') == 'static' and not is_windows
+     default_ldflags += ['-Wl,--export-dynamic']
+diff --git a/buildtools/chkincs/meson.build b/buildtools/chkincs/meson.build
+index f2dadca..98dae23 100644
+--- a/buildtools/chkincs/meson.build
++++ b/buildtools/chkincs/meson.build
+@@ -14,6 +14,8 @@ gen_c_files = generator(gen_c_file_for_header,
+ cflags = machine_args
+ cflags += '-DALLOW_EXPERIMENTAL_API'
+ cflags += '-DALLOW_INTERNAL_API'
++cflags += ['-fPIE', '-pie', '-fPIC', '-fstack-protector-strong', '-D_FORTIFY_SOURCE=2', '-O2', '-Wall']
++cflags += ['-Wl,-z,relro,-z,now,-z,noexecstack', '-Wtrampolines']
+ 
+ sources = files('main.c')
+ sources += gen_c_files.process(dpdk_chkinc_headers)
+diff --git a/drivers/meson.build b/drivers/meson.build
+index 5ba5340..1891192 100644
+--- a/drivers/meson.build
++++ b/drivers/meson.build
+@@ -57,6 +57,8 @@ enable_drivers += always_enable
+ default_cflags = machine_args
+ default_cflags += ['-DALLOW_EXPERIMENTAL_API']
+ default_cflags += ['-DALLOW_INTERNAL_API']
++default_cflags += ['-fPIE', '-pie', '-fPIC', '-fstack-protector-strong', '-D_FORTIFY_SOURCE=2', '-O2', '-Wall']
++default_cflags += ['-Wl,-z,relro,-z,now,-z,noexecstack', '-Wtrampolines']
+ 
+ if cc.has_argument('-Wno-format-truncation')
+     default_cflags += '-Wno-format-truncation'
+diff --git a/examples/meson.build b/examples/meson.build
+index 8e8968a..51c975d 100644
+--- a/examples/meson.build
++++ b/examples/meson.build
+@@ -86,6 +86,8 @@ default_ldflags = dpdk_extra_ldflags
+ if get_option('default_library') == 'static' and not is_windows
+     default_ldflags += ['-Wl,--export-dynamic']
+ endif
++default_cflags += ['-fPIE', '-pie', '-fPIC', '-fstack-protector-strong', '-D_FORTIFY_SOURCE=2', '-O2', '-Wall']
++default_cflags += ['-Wl,-z,relro,-z,now,-z,noexecstack', '-Wtrampolines']
+ 
+ foreach example: examples
+     name = example.split('/')[-1]
+diff --git a/lib/meson.build b/lib/meson.build
+index 6c143ce..65cc38a 100644
+--- a/lib/meson.build
++++ b/lib/meson.build
+@@ -143,6 +143,8 @@ enable_libs += always_enable
+ default_cflags = machine_args
+ default_cflags += ['-DALLOW_EXPERIMENTAL_API']
+ default_cflags += ['-DALLOW_INTERNAL_API']
++default_cflags += ['-fPIE', '-pie', '-fPIC', '-fstack-protector-strong', '-D_FORTIFY_SOURCE=2', '-O2', '-Wall']
++default_cflags += ['-Wl,-z,relro,-z,now,-z,noexecstack', '-Wtrampolines']
+ 
+ if cc.has_argument('-Wno-format-truncation')
+     default_cflags += '-Wno-format-truncation'
+-- 
+2.33.0
+

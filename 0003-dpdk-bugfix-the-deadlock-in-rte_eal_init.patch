@@ -1,0 +1,72 @@
+From cf3c7fd3f5898d515899841eadfe86a154c0268b Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng14@huawei.com>
+Date: Thu, 11 Jan 2024 16:14:16 +0800
+Subject: [PATCH] dpdk-bugfix-the-deadlock-in-rte_eal_init
+
+---
+ lib/eal/linux/eal.c | 14 +++++++++-----
+ 1 file changed, 9 insertions(+), 5 deletions(-)
+
+diff --git a/lib/eal/linux/eal.c b/lib/eal/linux/eal.c
+index 57da058..28226fc 100644
+--- a/lib/eal/linux/eal.c
++++ b/lib/eal/linux/eal.c
+@@ -1126,7 +1126,7 @@ rte_eal_init(int argc, char **argv)
+ 			rte_eal_init_alert("Cannot get hugepage information.");
+ 			rte_errno = EACCES;
+ 			rte_atomic_store_explicit(&run_once, 0, rte_memory_order_relaxed);
+-			return -1;
++			goto out;
+ 		}
+ 	}
+ 
+@@ -1151,7 +1151,7 @@ rte_eal_init(int argc, char **argv)
+ 		rte_eal_init_alert("Cannot init logging.");
+ 		rte_errno = ENOMEM;
+ 		rte_atomic_store_explicit(&run_once, 0, rte_memory_order_relaxed);
+-		return -1;
++		goto out;
+ 	}
+ 
+ #ifdef VFIO_PRESENT
+@@ -1159,7 +1159,7 @@ rte_eal_init(int argc, char **argv)
+ 		rte_eal_init_alert("Cannot init VFIO");
+ 		rte_errno = EAGAIN;
+ 		rte_atomic_store_explicit(&run_once, 0, rte_memory_order_relaxed);
+-		return -1;
++		goto out;
+ 	}
+ #endif
+ 	/* in secondary processes, memory init may allocate additional fbarrays
+@@ -1169,7 +1169,7 @@ rte_eal_init(int argc, char **argv)
+ 	if (rte_eal_memzone_init() < 0) {
+ 		rte_eal_init_alert("Cannot init memzone");
+ 		rte_errno = ENODEV;
+-		return -1;
++		goto out;
+ 	}
+ 
+ 	rte_mcfg_mem_read_lock();
+@@ -1178,7 +1178,7 @@ rte_eal_init(int argc, char **argv)
+ 		rte_mcfg_mem_read_unlock();
+ 		rte_eal_init_alert("Cannot init memory");
+ 		rte_errno = ENOMEM;
+-		return -1;
++		goto out;
+ 	}
+ 
+ 	/* the directories are locked during eal_hugepage_info_init */
+@@ -1323,6 +1323,10 @@ rte_eal_init(int argc, char **argv)
+ 	eal_mcfg_complete();
+ 
+ 	return fctret;
++
++out:
++	eal_hugedirs_unlock();
++	return -1;
+ }
+ 
+ static int
+-- 
+2.33.0
+

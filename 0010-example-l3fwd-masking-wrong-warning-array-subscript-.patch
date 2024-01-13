@@ -1,0 +1,25 @@
+From d0bdd88e02a4b84883f601acb6d414c42dee53b8 Mon Sep 17 00:00:00 2001
+From: jiangheng <jiangheng14@huawei.com>
+Date: Thu, 11 Jan 2024 19:44:51 +0800
+Subject: [PATCH] 
+ 0010-example-l3fwd-masking-wrong-warning-array-subscript-.patch
+
+---
+ examples/l3fwd/meson.build | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/examples/l3fwd/meson.build b/examples/l3fwd/meson.build
+index c25de77..ac5f393 100644
+--- a/examples/l3fwd/meson.build
++++ b/examples/l3fwd/meson.build
+@@ -7,6 +7,7 @@
+ # DPDK instance, use 'make'
+ 
+ allow_experimental_apis = true
++cflags += ['-Wno-array-bounds']
+ deps += ['acl', 'hash', 'lpm', 'fib']
+ sources = files(
+         'l3fwd_acl.c',
+-- 
+2.33.0
+
