@@ -10,7 +10,7 @@
 
 Name: dpdk
 Version: 23.11
-Release: 2
+Release: 3
 URL: http://dpdk.org
 Source: https://fast.dpdk.org/rel/dpdk-%{version}.tar.xz
 
@@ -47,7 +47,7 @@ License: BSD and LGPLv2 and GPLv2
 # other techniques, carefully crafted assembly instructions.  As such it
 # needs extensive work to port it to other architectures.
 #
-ExclusiveArch: x86_64 i686 aarch64
+ExclusiveArch: x86_64 i686 aarch64 ppc64le
 
 BuildRequires: gcc
 BuildRequires: kernel-headers, kernel-devel, libpcap-devel, zlib-devel
@@ -195,6 +195,9 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 %endif
 
 %changelog
+* Tue Jan 16 2024 peng.zou <peng.zou@shingroup.cn> - 23.11-3
+ Add support for ppc64le
+
 * Tue Jan 12 2024 jiangheng <jiangheng14@huawei.com> - 23.11-2
  add self-developed patches
 
