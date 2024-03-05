@@ -1,0 +1,40 @@
+From b894c53c587b901f0a03bcd2506dfc3c468f7fd4 Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Tue, 28 Nov 2023 02:16:55 +0000
+Subject: [PATCH 14/30] dmadev: add telemetry capability for m2d auto free
+
+[ upstream commit ec932cb907b72291af28406d1621d6837771e10c ]
+
+The m2d auto free capability was introduced in [1],
+but it lacks the support in telemetry.
+
+[1] 877cb3e3742 dmadev: add buffer auto free offload
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+---
+ lib/dmadev/rte_dmadev.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/lib/dmadev/rte_dmadev.c b/lib/dmadev/rte_dmadev.c
+index 4e5e420..7729519 100644
+--- a/lib/dmadev/rte_dmadev.c
++++ b/lib/dmadev/rte_dmadev.c
+@@ -749,6 +749,7 @@ dma_capability_name(uint64_t capability)
+ 		{ RTE_DMA_CAPA_SVA,         "sva"     },
+ 		{ RTE_DMA_CAPA_SILENT,      "silent"  },
+ 		{ RTE_DMA_CAPA_HANDLES_ERRORS, "handles_errors" },
++		{ RTE_DMA_CAPA_M2D_AUTO_FREE,  "m2d_auto_free"  },
+ 		{ RTE_DMA_CAPA_OPS_COPY,    "copy"    },
+ 		{ RTE_DMA_CAPA_OPS_COPY_SG, "copy_sg" },
+ 		{ RTE_DMA_CAPA_OPS_FILL,    "fill"    },
+@@ -953,6 +954,7 @@ dmadev_handle_dev_info(const char *cmd __rte_unused,
+ 	ADD_CAPA(dma_caps, dev_capa, RTE_DMA_CAPA_SVA);
+ 	ADD_CAPA(dma_caps, dev_capa, RTE_DMA_CAPA_SILENT);
+ 	ADD_CAPA(dma_caps, dev_capa, RTE_DMA_CAPA_HANDLES_ERRORS);
++	ADD_CAPA(dma_caps, dev_capa, RTE_DMA_CAPA_M2D_AUTO_FREE);
+ 	ADD_CAPA(dma_caps, dev_capa, RTE_DMA_CAPA_OPS_COPY);
+ 	ADD_CAPA(dma_caps, dev_capa, RTE_DMA_CAPA_OPS_COPY_SG);
+ 	ADD_CAPA(dma_caps, dev_capa, RTE_DMA_CAPA_OPS_FILL);
+-- 
+2.33.0
+

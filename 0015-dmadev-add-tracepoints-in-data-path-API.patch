@@ -1,0 +1,426 @@
+From f8e2db6965abc49f6f9c80df2b8277969cec2988 Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Fri, 12 Jan 2024 10:26:59 +0000
+Subject: [PATCH 15/30] dmadev: add tracepoints in data path API
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+[ upstream commit 112327c220befef14129e4852e8df46e60410128 ]
+
+Add tracepoints at data path APIs for tracing support.
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Acked-by: Morten Brørup <mb@smartsharesystems.com>
+---
+ lib/dmadev/meson.build               |   2 +-
+ lib/dmadev/rte_dmadev.h              |  56 +++++++---
+ lib/dmadev/rte_dmadev_trace_fp.h     | 150 +++++++++++++++++++++++++++
+ lib/dmadev/rte_dmadev_trace_points.c |  27 +++++
+ lib/dmadev/version.map               |  15 +++
+ 5 files changed, 236 insertions(+), 14 deletions(-)
+ create mode 100644 lib/dmadev/rte_dmadev_trace_fp.h
+
+diff --git a/lib/dmadev/meson.build b/lib/dmadev/meson.build
+index e0d90ae..62b0650 100644
+--- a/lib/dmadev/meson.build
++++ b/lib/dmadev/meson.build
+@@ -3,7 +3,7 @@
+ 
+ sources = files('rte_dmadev.c', 'rte_dmadev_trace_points.c')
+ headers = files('rte_dmadev.h')
+-indirect_headers += files('rte_dmadev_core.h')
++indirect_headers += files('rte_dmadev_core.h', 'rte_dmadev_trace_fp.h')
+ driver_sdk_headers += files('rte_dmadev_pmd.h')
+ 
+ deps += ['telemetry']
+diff --git a/lib/dmadev/rte_dmadev.h b/lib/dmadev/rte_dmadev.h
+index 450b81c..5474a52 100644
+--- a/lib/dmadev/rte_dmadev.h
++++ b/lib/dmadev/rte_dmadev.h
+@@ -773,6 +773,7 @@ struct rte_dma_sge {
+ };
+ 
+ #include "rte_dmadev_core.h"
++#include "rte_dmadev_trace_fp.h"
+ 
+ /**@{@name DMA operation flag
+  * @see rte_dma_copy()
+@@ -836,6 +837,7 @@ rte_dma_copy(int16_t dev_id, uint16_t vchan, rte_iova_t src, rte_iova_t dst,
+ 	     uint32_t length, uint64_t flags)
+ {
+ 	struct rte_dma_fp_object *obj = &rte_dma_fp_objs[dev_id];
++	int ret;
+ 
+ #ifdef RTE_DMADEV_DEBUG
+ 	if (!rte_dma_is_valid(dev_id) || length == 0)
+@@ -844,7 +846,10 @@ rte_dma_copy(int16_t dev_id, uint16_t vchan, rte_iova_t src, rte_iova_t dst,
+ 		return -ENOTSUP;
+ #endif
+ 
+-	return (*obj->copy)(obj->dev_private, vchan, src, dst, length, flags);
++	ret = (*obj->copy)(obj->dev_private, vchan, src, dst, length, flags);
++	rte_dma_trace_copy(dev_id, vchan, src, dst, length, flags, ret);
++
++	return ret;
+ }
+ 
+ /**
+@@ -883,6 +888,7 @@ rte_dma_copy_sg(int16_t dev_id, uint16_t vchan, struct rte_dma_sge *src,
+ 		uint64_t flags)
+ {
+ 	struct rte_dma_fp_object *obj = &rte_dma_fp_objs[dev_id];
++	int ret;
+ 
+ #ifdef RTE_DMADEV_DEBUG
+ 	if (!rte_dma_is_valid(dev_id) || src == NULL || dst == NULL ||
+@@ -892,8 +898,12 @@ rte_dma_copy_sg(int16_t dev_id, uint16_t vchan, struct rte_dma_sge *src,
+ 		return -ENOTSUP;
+ #endif
+ 
+-	return (*obj->copy_sg)(obj->dev_private, vchan, src, dst, nb_src,
+-			       nb_dst, flags);
++	ret = (*obj->copy_sg)(obj->dev_private, vchan, src, dst, nb_src,
++			      nb_dst, flags);
++	rte_dma_trace_copy_sg(dev_id, vchan, src, dst, nb_src, nb_dst, flags,
++			      ret);
++
++	return ret;
+ }
+ 
+ /**
+@@ -927,6 +937,7 @@ rte_dma_fill(int16_t dev_id, uint16_t vchan, uint64_t pattern,
+ 	     rte_iova_t dst, uint32_t length, uint64_t flags)
+ {
+ 	struct rte_dma_fp_object *obj = &rte_dma_fp_objs[dev_id];
++	int ret;
+ 
+ #ifdef RTE_DMADEV_DEBUG
+ 	if (!rte_dma_is_valid(dev_id) || length == 0)
+@@ -935,8 +946,11 @@ rte_dma_fill(int16_t dev_id, uint16_t vchan, uint64_t pattern,
+ 		return -ENOTSUP;
+ #endif
+ 
+-	return (*obj->fill)(obj->dev_private, vchan, pattern, dst, length,
+-			    flags);
++	ret = (*obj->fill)(obj->dev_private, vchan, pattern, dst, length,
++			   flags);
++	rte_dma_trace_fill(dev_id, vchan, pattern, dst, length, flags, ret);
++
++	return ret;
+ }
+ 
+ /**
+@@ -957,6 +971,7 @@ static inline int
+ rte_dma_submit(int16_t dev_id, uint16_t vchan)
+ {
+ 	struct rte_dma_fp_object *obj = &rte_dma_fp_objs[dev_id];
++	int ret;
+ 
+ #ifdef RTE_DMADEV_DEBUG
+ 	if (!rte_dma_is_valid(dev_id))
+@@ -965,7 +980,10 @@ rte_dma_submit(int16_t dev_id, uint16_t vchan)
+ 		return -ENOTSUP;
+ #endif
+ 
+-	return (*obj->submit)(obj->dev_private, vchan);
++	ret = (*obj->submit)(obj->dev_private, vchan);
++	rte_dma_trace_submit(dev_id, vchan, ret);
++
++	return ret;
+ }
+ 
+ /**
+@@ -995,7 +1013,7 @@ rte_dma_completed(int16_t dev_id, uint16_t vchan, const uint16_t nb_cpls,
+ 		  uint16_t *last_idx, bool *has_error)
+ {
+ 	struct rte_dma_fp_object *obj = &rte_dma_fp_objs[dev_id];
+-	uint16_t idx;
++	uint16_t idx, ret;
+ 	bool err;
+ 
+ #ifdef RTE_DMADEV_DEBUG
+@@ -1019,8 +1037,12 @@ rte_dma_completed(int16_t dev_id, uint16_t vchan, const uint16_t nb_cpls,
+ 		has_error = &err;
+ 
+ 	*has_error = false;
+-	return (*obj->completed)(obj->dev_private, vchan, nb_cpls, last_idx,
+-				 has_error);
++	ret = (*obj->completed)(obj->dev_private, vchan, nb_cpls, last_idx,
++				has_error);
++	rte_dma_trace_completed(dev_id, vchan, nb_cpls, last_idx, has_error,
++				ret);
++
++	return ret;
+ }
+ 
+ /**
+@@ -1055,7 +1077,7 @@ rte_dma_completed_status(int16_t dev_id, uint16_t vchan,
+ 			 enum rte_dma_status_code *status)
+ {
+ 	struct rte_dma_fp_object *obj = &rte_dma_fp_objs[dev_id];
+-	uint16_t idx;
++	uint16_t idx, ret;
+ 
+ #ifdef RTE_DMADEV_DEBUG
+ 	if (!rte_dma_is_valid(dev_id) || nb_cpls == 0 || status == NULL)
+@@ -1067,8 +1089,12 @@ rte_dma_completed_status(int16_t dev_id, uint16_t vchan,
+ 	if (last_idx == NULL)
+ 		last_idx = &idx;
+ 
+-	return (*obj->completed_status)(obj->dev_private, vchan, nb_cpls,
+-					last_idx, status);
++	ret = (*obj->completed_status)(obj->dev_private, vchan, nb_cpls,
++				       last_idx, status);
++	rte_dma_trace_completed_status(dev_id, vchan, nb_cpls, last_idx, status,
++				       ret);
++
++	return ret;
+ }
+ 
+ /**
+@@ -1087,6 +1113,7 @@ static inline uint16_t
+ rte_dma_burst_capacity(int16_t dev_id, uint16_t vchan)
+ {
+ 	struct rte_dma_fp_object *obj = &rte_dma_fp_objs[dev_id];
++	uint16_t ret;
+ 
+ #ifdef RTE_DMADEV_DEBUG
+ 	if (!rte_dma_is_valid(dev_id))
+@@ -1094,7 +1121,10 @@ rte_dma_burst_capacity(int16_t dev_id, uint16_t vchan)
+ 	if (*obj->burst_capacity == NULL)
+ 		return 0;
+ #endif
+-	return (*obj->burst_capacity)(obj->dev_private, vchan);
++	ret = (*obj->burst_capacity)(obj->dev_private, vchan);
++	rte_dma_trace_burst_capacity(dev_id, vchan, ret);
++
++	return ret;
+ }
+ 
+ #ifdef __cplusplus
+diff --git a/lib/dmadev/rte_dmadev_trace_fp.h b/lib/dmadev/rte_dmadev_trace_fp.h
+new file mode 100644
+index 0000000..f5b9683
+--- /dev/null
++++ b/lib/dmadev/rte_dmadev_trace_fp.h
+@@ -0,0 +1,150 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2024 HiSilicon Limited
++ */
++
++#ifndef RTE_DMADEV_TRACE_FP_H
++#define RTE_DMADEV_TRACE_FP_H
++
++/**
++ * @file
++ *
++ * API for dmadev fastpath trace support
++ */
++
++#include <rte_trace_point.h>
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++RTE_TRACE_POINT_FP(
++	rte_dma_trace_stats_get,
++	RTE_TRACE_POINT_ARGS(int16_t dev_id, uint16_t vchan,
++			     struct rte_dma_stats *stats, int ret),
++	rte_trace_point_emit_i16(dev_id);
++	rte_trace_point_emit_u16(vchan);
++	rte_trace_point_emit_u64(stats->submitted);
++	rte_trace_point_emit_u64(stats->completed);
++	rte_trace_point_emit_u64(stats->errors);
++	rte_trace_point_emit_int(ret);
++)
++
++RTE_TRACE_POINT_FP(
++	rte_dma_trace_vchan_status,
++	RTE_TRACE_POINT_ARGS(int16_t dev_id, uint16_t vchan,
++			     enum rte_dma_vchan_status *status, int ret),
++#ifdef _RTE_TRACE_POINT_REGISTER_H_
++	enum rte_dma_vchan_status __status = 0;
++	status = &__status;
++#endif /* _RTE_TRACE_POINT_REGISTER_H_ */
++	int vchan_status = *status;
++	rte_trace_point_emit_i16(dev_id);
++	rte_trace_point_emit_u16(vchan);
++	rte_trace_point_emit_int(vchan_status);
++	rte_trace_point_emit_int(ret);
++)
++
++RTE_TRACE_POINT_FP(
++	rte_dma_trace_copy,
++	RTE_TRACE_POINT_ARGS(int16_t dev_id, uint16_t vchan, rte_iova_t src,
++			     rte_iova_t dst, uint32_t length, uint64_t flags,
++			     int ret),
++	rte_trace_point_emit_i16(dev_id);
++	rte_trace_point_emit_u16(vchan);
++	rte_trace_point_emit_u64(src);
++	rte_trace_point_emit_u64(dst);
++	rte_trace_point_emit_u32(length);
++	rte_trace_point_emit_u64(flags);
++	rte_trace_point_emit_int(ret);
++)
++
++RTE_TRACE_POINT_FP(
++	rte_dma_trace_copy_sg,
++	RTE_TRACE_POINT_ARGS(int16_t dev_id, uint16_t vchan,
++			     struct rte_dma_sge *src, struct rte_dma_sge *dst,
++			     uint16_t nb_src, uint16_t nb_dst, uint64_t flags,
++			     int ret),
++	rte_trace_point_emit_i16(dev_id);
++	rte_trace_point_emit_u16(vchan);
++	rte_trace_point_emit_ptr(src);
++	rte_trace_point_emit_ptr(dst);
++	rte_trace_point_emit_u16(nb_src);
++	rte_trace_point_emit_u16(nb_dst);
++	rte_trace_point_emit_u64(flags);
++	rte_trace_point_emit_int(ret);
++)
++
++RTE_TRACE_POINT_FP(
++	rte_dma_trace_fill,
++	RTE_TRACE_POINT_ARGS(int16_t dev_id, uint16_t vchan, uint64_t pattern,
++			     rte_iova_t dst, uint32_t length, uint64_t flags,
++			     int ret),
++	rte_trace_point_emit_i16(dev_id);
++	rte_trace_point_emit_u16(vchan);
++	rte_trace_point_emit_u64(pattern);
++	rte_trace_point_emit_u64(dst);
++	rte_trace_point_emit_u32(length);
++	rte_trace_point_emit_u64(flags);
++	rte_trace_point_emit_int(ret);
++)
++
++RTE_TRACE_POINT_FP(
++	rte_dma_trace_submit,
++	RTE_TRACE_POINT_ARGS(int16_t dev_id, uint16_t vchan, int ret),
++	rte_trace_point_emit_i16(dev_id);
++	rte_trace_point_emit_u16(vchan);
++	rte_trace_point_emit_int(ret);
++)
++
++RTE_TRACE_POINT_FP(
++	rte_dma_trace_completed,
++	RTE_TRACE_POINT_ARGS(int16_t dev_id, uint16_t vchan,
++			     const uint16_t nb_cpls, uint16_t *last_idx,
++			     bool *has_error, uint16_t ret),
++#ifdef _RTE_TRACE_POINT_REGISTER_H_
++	uint16_t __last_idx = 0;
++	bool __has_error = false;
++	last_idx = &__last_idx;
++	has_error = &__has_error;
++#endif /* _RTE_TRACE_POINT_REGISTER_H_ */
++	int has_error_val = *has_error;
++	int last_idx_val = *last_idx;
++	rte_trace_point_emit_i16(dev_id);
++	rte_trace_point_emit_u16(vchan);
++	rte_trace_point_emit_u16(nb_cpls);
++	rte_trace_point_emit_int(last_idx_val);
++	rte_trace_point_emit_int(has_error_val);
++	rte_trace_point_emit_u16(ret);
++)
++
++RTE_TRACE_POINT_FP(
++	rte_dma_trace_completed_status,
++	RTE_TRACE_POINT_ARGS(int16_t dev_id, uint16_t vchan,
++			     const uint16_t nb_cpls, uint16_t *last_idx,
++			     enum rte_dma_status_code *status, uint16_t ret),
++#ifdef _RTE_TRACE_POINT_REGISTER_H_
++	uint16_t __last_idx = 0;
++	last_idx = &__last_idx;
++#endif /* _RTE_TRACE_POINT_REGISTER_H_ */
++	int last_idx_val = *last_idx;
++	rte_trace_point_emit_i16(dev_id);
++	rte_trace_point_emit_u16(vchan);
++	rte_trace_point_emit_u16(nb_cpls);
++	rte_trace_point_emit_int(last_idx_val);
++	rte_trace_point_emit_ptr(status);
++	rte_trace_point_emit_u16(ret);
++)
++
++RTE_TRACE_POINT_FP(
++	rte_dma_trace_burst_capacity,
++	RTE_TRACE_POINT_ARGS(int16_t dev_id, uint16_t vchan, uint16_t ret),
++	rte_trace_point_emit_i16(dev_id);
++	rte_trace_point_emit_u16(vchan);
++	rte_trace_point_emit_u16(ret);
++)
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* RTE_DMADEV_TRACE_FP_H */
+diff --git a/lib/dmadev/rte_dmadev_trace_points.c b/lib/dmadev/rte_dmadev_trace_points.c
+index 2a83b90..4c74356 100644
+--- a/lib/dmadev/rte_dmadev_trace_points.c
++++ b/lib/dmadev/rte_dmadev_trace_points.c
+@@ -24,8 +24,35 @@ RTE_TRACE_POINT_REGISTER(rte_dma_trace_close,
+ RTE_TRACE_POINT_REGISTER(rte_dma_trace_vchan_setup,
+ 	lib.dmadev.vchan_setup)
+ 
++RTE_TRACE_POINT_REGISTER(rte_dma_trace_stats_get,
++	lib.dmadev.stats_get)
++
+ RTE_TRACE_POINT_REGISTER(rte_dma_trace_stats_reset,
+ 	lib.dmadev.stats_reset)
+ 
++RTE_TRACE_POINT_REGISTER(rte_dma_trace_vchan_status,
++	lib.dmadev.vchan_status)
++
+ RTE_TRACE_POINT_REGISTER(rte_dma_trace_dump,
+ 	lib.dmadev.dump)
++
++RTE_TRACE_POINT_REGISTER(rte_dma_trace_copy,
++	lib.dmadev.copy)
++
++RTE_TRACE_POINT_REGISTER(rte_dma_trace_copy_sg,
++	lib.dmadev.copy_sg)
++
++RTE_TRACE_POINT_REGISTER(rte_dma_trace_fill,
++	lib.dmadev.fill)
++
++RTE_TRACE_POINT_REGISTER(rte_dma_trace_submit,
++	lib.dmadev.submit)
++
++RTE_TRACE_POINT_REGISTER(rte_dma_trace_completed,
++	lib.dmadev.completed)
++
++RTE_TRACE_POINT_REGISTER(rte_dma_trace_completed_status,
++	lib.dmadev.completed_status)
++
++RTE_TRACE_POINT_REGISTER(rte_dma_trace_burst_capacity,
++	lib.dmadev.burst_capacity)
+diff --git a/lib/dmadev/version.map b/lib/dmadev/version.map
+index 2a37365..14e0927 100644
+--- a/lib/dmadev/version.map
++++ b/lib/dmadev/version.map
+@@ -20,6 +20,21 @@ DPDK_24 {
+ 	local: *;
+ };
+ 
++EXPERIMENTAL {
++	global:
++
++	# added in 24.03
++	__rte_dma_trace_burst_capacity;
++	__rte_dma_trace_completed;
++	__rte_dma_trace_completed_status;
++	__rte_dma_trace_copy;
++	__rte_dma_trace_copy_sg;
++	__rte_dma_trace_fill;
++	__rte_dma_trace_submit;
++
++	local: *;
++};
++
+ INTERNAL {
+ 	global:
+ 
+-- 
+2.33.0
+

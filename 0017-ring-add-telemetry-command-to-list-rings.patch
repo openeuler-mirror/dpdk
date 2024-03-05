@@ -1,0 +1,99 @@
+From 5d3158e366fe1293ee5a7293a9050bf93a460f53 Mon Sep 17 00:00:00 2001
+From: Jie Hai <haijie1@huawei.com>
+Date: Mon, 19 Feb 2024 16:32:52 +0800
+Subject: [PATCH 17/30] ring: add telemetry command to list rings
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+[ upstream commit 36e5c1b91607cc41e73e1108bdc5843c68e3ebc6 ]
+
+Add a telemetry command to list the rings used in the system.
+An example using this command is shown below:
+
+--> /ring/list
+{
+  "/ring/list": [
+    "HT_0000:7d:00.2",
+    "MP_mb_pool_0"
+  ]
+}
+
+Signed-off-by: Jie Hai <haijie1@huawei.com>
+Acked-by: Konstantin Ananyev <konstantin.v.ananyev@yandex.ru>
+Reviewed-by: Honnappa Nagarahalli <honnappa.nagarahalli@arm.com>
+Acked-by: Huisong Li <lihuisong@huawei.com>
+Acked-by: Chengwen Feng <fengchengwen@huawei.com>
+Acked-by: Morten Brørup <mb@smartsharesystems.com>
+---
+ lib/ring/meson.build |  1 +
+ lib/ring/rte_ring.c  | 40 ++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 41 insertions(+)
+
+diff --git a/lib/ring/meson.build b/lib/ring/meson.build
+index c20685c..7fca958 100644
+--- a/lib/ring/meson.build
++++ b/lib/ring/meson.build
+@@ -18,3 +18,4 @@ indirect_headers += files (
+         'rte_ring_rts.h',
+         'rte_ring_rts_elem_pvt.h',
+ )
++deps += ['telemetry']
+diff --git a/lib/ring/rte_ring.c b/lib/ring/rte_ring.c
+index 057d25f..6a10280 100644
+--- a/lib/ring/rte_ring.c
++++ b/lib/ring/rte_ring.c
+@@ -22,6 +22,7 @@
+ #include <rte_errno.h>
+ #include <rte_string_fns.h>
+ #include <rte_tailq.h>
++#include <rte_telemetry.h>
+ 
+ #include "rte_ring.h"
+ #include "rte_ring_elem.h"
+@@ -418,3 +419,42 @@ rte_ring_lookup(const char *name)
+ 
+ 	return r;
+ }
++
++static void
++ring_walk(void (*func)(struct rte_ring *, void *), void *arg)
++{
++	struct rte_ring_list *ring_list;
++	struct rte_tailq_entry *tailq_entry;
++
++	ring_list = RTE_TAILQ_CAST(rte_ring_tailq.head, rte_ring_list);
++	rte_mcfg_tailq_read_lock();
++
++	TAILQ_FOREACH(tailq_entry, ring_list, next) {
++		(*func)((struct rte_ring *) tailq_entry->data, arg);
++	}
++
++	rte_mcfg_tailq_read_unlock();
++}
++
++static void
++ring_list_cb(struct rte_ring *r, void *arg)
++{
++	struct rte_tel_data *d = (struct rte_tel_data *)arg;
++
++	rte_tel_data_add_array_string(d, r->name);
++}
++
++static int
++ring_handle_list(const char *cmd __rte_unused,
++		const char *params __rte_unused, struct rte_tel_data *d)
++{
++	rte_tel_data_start_array(d, RTE_TEL_STRING_VAL);
++	ring_walk(ring_list_cb, d);
++	return 0;
++}
++
++RTE_INIT(ring_init_telemetry)
++{
++	rte_telemetry_register_cmd("/ring/list", ring_handle_list,
++		"Returns list of available rings. Takes no parameters");
++}
+-- 
+2.33.0
+
