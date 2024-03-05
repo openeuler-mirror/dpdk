@@ -1,0 +1,30 @@
+From e222cf205386ecfdb4b429e5de3a7545bf0a43b6 Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Fri, 15 Dec 2023 00:35:11 +0000
+Subject: [PATCH 13/30] maintainers: update for DMA device performance tool
+
+[ upstream commit 4ca7aa1af6c6ff32c2c5ad958e527e17d11f6d18 ]
+
+Add myself as a new maintainer to DMA device performance tool.
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Acked-by: Thomas Monjalon <thomas@monjalon.net>
+---
+ MAINTAINERS | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/MAINTAINERS b/MAINTAINERS
+index 0d1c812..78d4695 100644
+--- a/MAINTAINERS
++++ b/MAINTAINERS
+@@ -1789,6 +1789,7 @@ F: doc/guides/testpmd_app_ug/
+ 
+ DMA device performance tool
+ M: Cheng Jiang <honest.jiang@foxmail.com>
++M: Chengwen Feng <fengchengwen@huawei.com>
+ F: app/test-dma-perf/
+ F: doc/guides/tools/dmaperf.rst
+ 
+-- 
+2.33.0
+

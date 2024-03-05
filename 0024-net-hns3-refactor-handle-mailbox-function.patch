@@ -1,0 +1,188 @@
+From f6f87e815c8bc4e287e8f37abfd969464658ea29 Mon Sep 17 00:00:00 2001
+From: Dengdui Huang <huangdengdui@huawei.com>
+Date: Fri, 8 Dec 2023 14:55:08 +0800
+Subject: [PATCH 24/30] net/hns3: refactor handle mailbox function
+
+[ upstream commit 277d522ae39f6c9daa38c5ad5d3b94f632f9cf49 ]
+
+The mailbox messages of the PF and VF are processed in
+the same function. The PF and VF call the same function
+to process the messages. This code is excessive coupling
+and isn't good for maintenance. Therefore, this patch
+separates the interfaces that handle PF mailbox message
+and handle VF mailbox message.
+
+Fixes: 463e748964f5 ("net/hns3: support mailbox")
+Fixes: 109e4dd1bd7a ("net/hns3: get link state change through mailbox")
+Cc: stable@dpdk.org
+
+Signed-off-by: Dengdui Huang <huangdengdui@huawei.com>
+Signed-off-by: Jie Hai <haijie1@huawei.com>
+---
+ drivers/net/hns3/hns3_ethdev.c    |  2 +-
+ drivers/net/hns3/hns3_ethdev_vf.c |  4 +-
+ drivers/net/hns3/hns3_mbx.c       | 69 ++++++++++++++++++++++++-------
+ drivers/net/hns3/hns3_mbx.h       |  3 +-
+ 4 files changed, 58 insertions(+), 20 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index ae81368..bccd9db 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -380,7 +380,7 @@ hns3_interrupt_handler(void *param)
+ 		hns3_warn(hw, "received reset interrupt");
+ 		hns3_schedule_reset(hns);
+ 	} else if (event_cause == HNS3_VECTOR0_EVENT_MBX) {
+-		hns3_dev_handle_mbx_msg(hw);
++		hns3pf_handle_mbx_msg(hw);
+ 	} else if (event_cause != HNS3_VECTOR0_EVENT_PTP) {
+ 		hns3_warn(hw, "received unknown event: vector0_int_stat:0x%x "
+ 			  "ras_int_stat:0x%x cmdq_int_stat:0x%x",
+diff --git a/drivers/net/hns3/hns3_ethdev_vf.c b/drivers/net/hns3/hns3_ethdev_vf.c
+index b0d0c29..f5a7a2b 100644
+--- a/drivers/net/hns3/hns3_ethdev_vf.c
++++ b/drivers/net/hns3/hns3_ethdev_vf.c
+@@ -618,7 +618,7 @@ hns3vf_interrupt_handler(void *param)
+ 		hns3_schedule_reset(hns);
+ 		break;
+ 	case HNS3VF_VECTOR0_EVENT_MBX:
+-		hns3_dev_handle_mbx_msg(hw);
++		hns3vf_handle_mbx_msg(hw);
+ 		break;
+ 	default:
+ 		break;
+@@ -670,7 +670,7 @@ hns3vf_get_push_lsc_cap(struct hns3_hw *hw)
+ 		 * driver has to actively handle the HNS3_MBX_LINK_STAT_CHANGE
+ 		 * mailbox from PF driver to get this capability.
+ 		 */
+-		hns3_dev_handle_mbx_msg(hw);
++		hns3vf_handle_mbx_msg(hw);
+ 		if (__atomic_load_n(&vf->pf_push_lsc_cap, __ATOMIC_ACQUIRE) !=
+ 			HNS3_PF_PUSH_LSC_CAP_UNKNOWN)
+ 			break;
+diff --git a/drivers/net/hns3/hns3_mbx.c b/drivers/net/hns3/hns3_mbx.c
+index 43195ff..9cdbc16 100644
+--- a/drivers/net/hns3/hns3_mbx.c
++++ b/drivers/net/hns3/hns3_mbx.c
+@@ -78,7 +78,7 @@ hns3_get_mbx_resp(struct hns3_hw *hw, uint16_t code, uint16_t subcode,
+ 			return -EIO;
+ 		}
+ 
+-		hns3_dev_handle_mbx_msg(hw);
++		hns3vf_handle_mbx_msg(hw);
+ 		rte_delay_us(HNS3_WAIT_RESP_US);
+ 
+ 		if (hw->mbx_resp.received_match_resp)
+@@ -372,9 +372,57 @@ hns3_handle_mbx_msg_out_intr(struct hns3_hw *hw)
+ }
+ 
+ void
+-hns3_dev_handle_mbx_msg(struct hns3_hw *hw)
++hns3pf_handle_mbx_msg(struct hns3_hw *hw)
++{
++	struct hns3_cmq_ring *crq = &hw->cmq.crq;
++	struct hns3_mbx_vf_to_pf_cmd *req;
++	struct hns3_cmd_desc *desc;
++	uint16_t flag;
++
++	rte_spinlock_lock(&hw->cmq.crq.lock);
++
++	while (!hns3_cmd_crq_empty(hw)) {
++		if (__atomic_load_n(&hw->reset.disable_cmd, __ATOMIC_RELAXED)) {
++			rte_spinlock_unlock(&hw->cmq.crq.lock);
++			return;
++		}
++		desc = &crq->desc[crq->next_to_use];
++		req = (struct hns3_mbx_vf_to_pf_cmd *)desc->data;
++
++		flag = rte_le_to_cpu_16(crq->desc[crq->next_to_use].flag);
++		if (unlikely(!hns3_get_bit(flag, HNS3_CMDQ_RX_OUTVLD_B))) {
++			hns3_warn(hw,
++				  "dropped invalid mailbox message, code = %u",
++				  req->msg.code);
++
++			/* dropping/not processing this invalid message */
++			crq->desc[crq->next_to_use].flag = 0;
++			hns3_mbx_ring_ptr_move_crq(crq);
++			continue;
++		}
++
++		switch (req->msg.code) {
++		case HNS3_MBX_PUSH_LINK_STATUS:
++			hns3pf_handle_link_change_event(hw, req);
++			break;
++		default:
++			hns3_err(hw, "received unsupported(%u) mbx msg",
++				 req->msg.code);
++			break;
++		}
++		crq->desc[crq->next_to_use].flag = 0;
++		hns3_mbx_ring_ptr_move_crq(crq);
++	}
++
++	/* Write back CMDQ_RQ header pointer, IMP need this pointer */
++	hns3_write_dev(hw, HNS3_CMDQ_RX_HEAD_REG, crq->next_to_use);
++
++	rte_spinlock_unlock(&hw->cmq.crq.lock);
++}
++
++void
++hns3vf_handle_mbx_msg(struct hns3_hw *hw)
+ {
+-	struct hns3_adapter *hns = HNS3_DEV_HW_TO_ADAPTER(hw);
+ 	struct hns3_cmq_ring *crq = &hw->cmq.crq;
+ 	struct hns3_mbx_pf_to_vf_cmd *req;
+ 	struct hns3_cmd_desc *desc;
+@@ -385,7 +433,7 @@ hns3_dev_handle_mbx_msg(struct hns3_hw *hw)
+ 	rte_spinlock_lock(&hw->cmq.crq.lock);
+ 
+ 	handle_out = (rte_eal_process_type() != RTE_PROC_PRIMARY ||
+-		      !rte_thread_is_intr()) && hns->is_vf;
++		      !rte_thread_is_intr());
+ 	if (handle_out) {
+ 		/*
+ 		 * Currently, any threads in the primary and secondary processes
+@@ -430,8 +478,7 @@ hns3_dev_handle_mbx_msg(struct hns3_hw *hw)
+ 			continue;
+ 		}
+ 
+-		handle_out = hns->is_vf && desc->opcode == 0;
+-		if (handle_out) {
++		if (desc->opcode == 0) {
+ 			/* Message already processed by other thread */
+ 			crq->desc[crq->next_to_use].flag = 0;
+ 			hns3_mbx_ring_ptr_move_crq(crq);
+@@ -448,16 +495,6 @@ hns3_dev_handle_mbx_msg(struct hns3_hw *hw)
+ 		case HNS3_MBX_ASSERTING_RESET:
+ 			hns3_handle_asserting_reset(hw, req);
+ 			break;
+-		case HNS3_MBX_PUSH_LINK_STATUS:
+-			/*
+-			 * This message is reported by the firmware and is
+-			 * reported in 'struct hns3_mbx_vf_to_pf_cmd' format.
+-			 * Therefore, we should cast the req variable to
+-			 * 'struct hns3_mbx_vf_to_pf_cmd' and then process it.
+-			 */
+-			hns3pf_handle_link_change_event(hw,
+-				(struct hns3_mbx_vf_to_pf_cmd *)req);
+-			break;
+ 		case HNS3_MBX_PUSH_VLAN_INFO:
+ 			/*
+ 			 * When the PVID configuration status of VF device is
+diff --git a/drivers/net/hns3/hns3_mbx.h b/drivers/net/hns3/hns3_mbx.h
+index 2952b96..2b6cb8f 100644
+--- a/drivers/net/hns3/hns3_mbx.h
++++ b/drivers/net/hns3/hns3_mbx.h
+@@ -207,7 +207,8 @@ struct hns3_pf_rst_done_cmd {
+ 	((crq)->next_to_use = ((crq)->next_to_use + 1) % (crq)->desc_num)
+ 
+ struct hns3_hw;
+-void hns3_dev_handle_mbx_msg(struct hns3_hw *hw);
++void hns3pf_handle_mbx_msg(struct hns3_hw *hw);
++void hns3vf_handle_mbx_msg(struct hns3_hw *hw);
+ void hns3vf_mbx_setup(struct hns3_vf_to_pf_msg *req,
+ 		      uint8_t code, uint8_t subcode);
+ int hns3vf_mbx_send(struct hns3_hw *hw,
+-- 
+2.33.0
+

@@ -1,0 +1,84 @@
+From 432000eaee7f2e5188e9517c408ab4bd348a3553 Mon Sep 17 00:00:00 2001
+From: Dengdui Huang <huangdengdui@huawei.com>
+Date: Tue, 30 Jan 2024 09:32:49 +0800
+Subject: [PATCH 30/30] app/testpmd: fix crash in multi-process forwarding
+
+[ upstream commit b3a33138f317d1c651cd86f423cc703176eb7b07 ]
+
+On multi-process scenario, each process creates flows based on the
+number of queues. When nbcore is greater than 1, multiple cores may
+use the same queue to forward packet, like:
+dpdk-testpmd -a BDF --proc-type=auto -- -i --rxq=4 --txq=4
+--nb-cores=2 --num-procs=2 --proc-id=0
+testpmd> start
+mac packet forwarding - ports=1 - cores=2 - streams=4 - NUMA support
+enabled, MP allocation mode: native
+Logical Core 2 (socket 0) forwards packets on 2 streams:
+  RX P=0/Q=0 (socket 0) -> TX P=0/Q=0 (socket 0) peer=02:00:00:00:00:00
+  RX P=0/Q=1 (socket 0) -> TX P=0/Q=1 (socket 0) peer=02:00:00:00:00:00
+Logical Core 3 (socket 0) forwards packets on 2 streams:
+  RX P=0/Q=0 (socket 0) -> TX P=0/Q=0 (socket 0) peer=02:00:00:00:00:00
+  RX P=0/Q=1 (socket 0) -> TX P=0/Q=1 (socket 0) peer=02:00:00:00:00:00
+
+After this commit, the result will be:
+dpdk-testpmd -a BDF --proc-type=auto -- -i --rxq=4 --txq=4
+--nb-cores=2 --num-procs=2 --proc-id=0
+testpmd> start
+io packet forwarding - ports=1 - cores=2 - streams=2 - NUMA support
+enabled, MP allocation mode: native
+Logical Core 2 (socket 0) forwards packets on 1 streams:
+  RX P=0/Q=0 (socket 2) -> TX P=0/Q=0 (socket 2) peer=02:00:00:00:00:00
+Logical Core 3 (socket 0) forwards packets on 1 streams:
+  RX P=0/Q=1 (socket 2) -> TX P=0/Q=1 (socket 2) peer=02:00:00:00:00:00
+
+Fixes: a550baf24af9 ("app/testpmd: support multi-process")
+Cc: stable@dpdk.org
+
+Signed-off-by: Dengdui Huang <huangdengdui@huawei.com>
+Acked-by: Chengwen Feng <fengchengwen@huawei.com>
+Acked-by: Ferruh Yigit <ferruh.yigit@amd.com>
+---
+ app/test-pmd/config.c | 6 +-----
+ 1 file changed, 1 insertion(+), 5 deletions(-)
+
+diff --git a/app/test-pmd/config.c b/app/test-pmd/config.c
+index cad7537..2c4dedd 100644
+--- a/app/test-pmd/config.c
++++ b/app/test-pmd/config.c
+@@ -4794,7 +4794,6 @@ rss_fwd_config_setup(void)
+ 	queueid_t  nb_q;
+ 	streamid_t  sm_id;
+ 	int start;
+-	int end;
+ 
+ 	nb_q = nb_rxq;
+ 	if (nb_q > nb_txq)
+@@ -4802,7 +4801,7 @@ rss_fwd_config_setup(void)
+ 	cur_fwd_config.nb_fwd_lcores = (lcoreid_t) nb_fwd_lcores;
+ 	cur_fwd_config.nb_fwd_ports = nb_fwd_ports;
+ 	cur_fwd_config.nb_fwd_streams =
+-		(streamid_t) (nb_q * cur_fwd_config.nb_fwd_ports);
++		(streamid_t) (nb_q / num_procs * cur_fwd_config.nb_fwd_ports);
+ 
+ 	if (cur_fwd_config.nb_fwd_streams < cur_fwd_config.nb_fwd_lcores)
+ 		cur_fwd_config.nb_fwd_lcores =
+@@ -4824,7 +4823,6 @@ rss_fwd_config_setup(void)
+ 	 * the 2~3 queue for secondary process.
+ 	 */
+ 	start = proc_id * nb_q / num_procs;
+-	end = start + nb_q / num_procs;
+ 	rxp = 0;
+ 	rxq = start;
+ 	for (sm_id = 0; sm_id < cur_fwd_config.nb_fwd_streams; sm_id++) {
+@@ -4843,8 +4841,6 @@ rss_fwd_config_setup(void)
+ 			continue;
+ 		rxp = 0;
+ 		rxq++;
+-		if (rxq >= end)
+-			rxq = start;
+ 	}
+ }
+ 
+-- 
+2.33.0
+

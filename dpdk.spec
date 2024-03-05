@@ -10,12 +10,13 @@
 
 Name: dpdk
 Version: 23.11
-Release: 5
+Release: 6
 URL: http://dpdk.org
 Source: https://fast.dpdk.org/rel/dpdk-%{version}.tar.xz
 
-# upstream patch number start from 6000
-# self developed patch number start from 9000
+# upstream patch number is 6xxx
+# self developed patch number is 9xxx
+# And the name number of two types patch are numbered together
 Patch9001: 0001-add-igb_uio.patch
 Patch9002: 0002-dpdk-add-secure-compile-option-and-fPIC-option.patch
 Patch9003: 0003-dpdk-bugfix-the-deadlock-in-rte_eal_init.patch
@@ -28,6 +29,25 @@ Patch9009: 0009-gro-fix-gro-with-tcp-push-flag.patch
 Patch9010: 0010-example-l3fwd-masking-wrong-warning-array-subscript-.patch
 Patch9011: 0011-dpdk-add-support-for-gazellle.patch
 Patch9012: 0012-lstack-need-skip-rte_bus_probe-when-use-ltran-mode.patch
+
+Patch6013: 0013-maintainers-update-for-DMA-device-performance-tool.patch
+Patch6014: 0014-dmadev-add-telemetry-capability-for-m2d-auto-free.patch
+Patch6015: 0015-dmadev-add-tracepoints-in-data-path-API.patch
+Patch6016: 0016-eal-introduce-more-macros-for-bit-definition.patch
+Patch6017: 0017-ring-add-telemetry-command-to-list-rings.patch
+Patch6018: 0018-ring-add-telemetry-command-for-ring-info.patch
+Patch6019: 0019-ethdev-get-RSS-hash-algorithm-by-name.patch
+Patch6020: 0020-app-testpmd-set-RSS-hash-algorithm.patch
+Patch6021: 0021-net-hns3-refactor-VF-mailbox-message-struct.patch
+Patch6022: 0022-net-hns3-refactor-PF-mailbox-message-struct.patch
+Patch6023: 0023-net-hns3-refactor-send-mailbox-function.patch
+Patch6024: 0024-net-hns3-refactor-handle-mailbox-function.patch
+Patch6025: 0025-net-hns3-fix-VF-multiple-count-on-one-reset.patch
+Patch6026: 0026-net-hns3-fix-disable-command-with-firmware.patch
+Patch6027: 0027-net-hns3-fix-reset-level-comparison.patch
+Patch6028: 0028-net-hns3-remove-QinQ-insert-support-for-VF.patch
+Patch6029: 0029-net-hns3-support-power-monitor.patch
+Patch6030: 0030-app-testpmd-fix-crash-in-multi-process-forwarding.patch
 
 BuildRequires: meson
 BuildRequires: python3-pyelftools
@@ -195,6 +215,28 @@ strip -g $RPM_BUILD_ROOT/lib/modules/%{kern_devel_ver}/extra/dpdk/igb_uio.ko
 %endif
 
 %changelog
+* Tue Mar 5 2024 huangdengdui <huangdengui@huawei.com> - 23.11-6
+ Sync some patches for hns3 about refactor mailbox, add new API for RSS,
+ support power monitor and some bugfix, modifies are as follow:
+ - app/testpmd: fix crash in multi -process forwarding
+ - net/hns3: support power monitor
+ - net/hns3: remove QinQ insert support for VF
+ - net/hns3: fix reset level comparison
+ - net/hns3: fix disable command with firmware
+ - net/hns3: fix VF multiple count on one reset
+ - net/hns3: refactor handle mailbox function
+ - net/hns3: refactor send mailbox function
+ - net/hns3: refactor PF mailbox message struct
+ - net/hns3: refactor VF mailbox message struct
+ - app/testpmd: set RSS hash algorithm
+ - ethdev: get RSS hash algorithm by name
+ - ring: add telemetry command for ring info
+ - ring: add telemetry command to list rings
+ - eal: introduce more macros for bit definition
+ - dmadev: add tracepoints in data path API
+ - dmadev: add telemetry capability for m2d auto free
+ - maintainers: update for DMA device performance tool
+
 * Thu Jan 25 2024 shafeipaozi <sunbo.oerv@isrc.iscas.ac.cn> - 23.11-5
  Add support to riscv64
 

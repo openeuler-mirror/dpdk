@@ -1,0 +1,48 @@
+From 28db014a776d5f3ca2d2e162c1cbab3ab874379c Mon Sep 17 00:00:00 2001
+From: Chengwen Feng <fengchengwen@huawei.com>
+Date: Thu, 28 Dec 2023 20:14:28 +0800
+Subject: [PATCH 28/30] net/hns3: remove QinQ insert support for VF
+
+[ upstream commit f6e79b8d3968150736499bc225762b62fbf1b768 ]
+
+In the HIP08 platform, the PF driver will notify VF driver to update
+the PVID state [1], and VF will declare support QinQ insert when PVID
+is disabled.
+
+In the later platform (e.g. HIP09), the hardware has been improved,
+so the PF driver will NOT notify VF driver to update the PVID state.
+
+However, the later platform still have constraint: PVID and QinQ insert
+cannot be enabled at the same time, otherwise, the hardware discards
+packets and reports an error interrupt.
+
+Plus, as far as we known, VF driver's users don't use the QinQ insert.
+
+Therefore, we declare that the VF driver don't support QinQ insert.
+
+[1] commit b4e4d7ac9f09 ("net/hns3: support setting VF PVID by PF driver")
+
+Cc: stable@dpdk.org
+
+Signed-off-by: Chengwen Feng <fengchengwen@huawei.com>
+Signed-off-by: Jie Hai <haijie1@huawei.com>
+---
+ drivers/net/hns3/hns3_common.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/net/hns3/hns3_common.c b/drivers/net/hns3/hns3_common.c
+index 8f224aa..28c26b0 100644
+--- a/drivers/net/hns3/hns3_common.c
++++ b/drivers/net/hns3/hns3_common.c
+@@ -85,7 +85,7 @@ hns3_dev_infos_get(struct rte_eth_dev *eth_dev, struct rte_eth_dev_info *info)
+ 				 RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE |
+ 				 RTE_ETH_TX_OFFLOAD_VLAN_INSERT);
+ 
+-	if (!hw->port_base_vlan_cfg.state)
++	if (!hns->is_vf && !hw->port_base_vlan_cfg.state)
+ 		info->tx_offload_capa |= RTE_ETH_TX_OFFLOAD_QINQ_INSERT;
+ 
+ 	if (hns3_dev_get_support(hw, OUTER_UDP_CKSUM))
+-- 
+2.33.0
+
