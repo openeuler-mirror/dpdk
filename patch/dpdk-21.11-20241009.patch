@@ -1,0 +1,1747 @@
+diff --git a/dpdk-21.11/adapter/meson.build b/dpdk-21.11/adapter/meson.build
+new file mode 100644
+index 0000000..4c157e7
+--- /dev/null
++++ b/dpdk-21.11/adapter/meson.build
+@@ -0,0 +1,166 @@
++# SPDX-License-Identifier: BSD-3-Clause
++# Copyright(c) 2018 Intel Corporation
++
++sources = files(
++        'rte_atomic_adapter.c',
++        'rte_bus_pci_adapter.c',
++        'rte_bus_vdev_adapter.c',
++        'rte_cycles_adapter.c',
++        'rte_dev_adapter.c',
++        'rte_devargs_adapter.c',
++        'rte_ethdev_adapter.c',
++        'rte_ethdev_driver_adapter.c',
++        'rte_ethdev_pci_adapter.c',
++        'rte_flow_adapter.c',
++        'rte_mbuf_adapter.c',
++        'rte_mempool_adapter.c',
++        'rte_malloc.c',
++        'rte_ring_adapter.c',
++        'rte_mtr_adapter.c',
++        'rte_spinlock_adapter.c')
++
++headers = files('rte_adapter.h')
++
++libname = 'rte_adapter'
++
++default_cflags = machine_args
++default_cflags += ['-DALLOW_EXPERIMENTAL_API']
++default_cflags += ['-DALLOW_INTERNAL_API']
++
++if cc.has_argument('-Wno-format-truncation')
++    default_cflags += '-Wno-format-truncation'
++endif
++
++reason = '<unknown reason>' # set if build == false to explain why
++name = 'adapter'
++use_function_versioning = false
++
++indirect_headers = [] # public headers not directly included by apps
++driver_sdk_headers = [] # public headers included by drivers
++includes = []
++cflags = default_cflags
++objs = [] # other object files to link against, used e.g. for
++          # instruction-set optimized versions of code
++
++# use "deps" for internal DPDK dependencies, and "ext_deps" for
++# external package/library requirements
++ext_deps = []
++deps += ['cfgfile', 'eal', 'kvargs', 'mempool', 'pci', 'bus_pci', 'bus_vdev', 'ring', 'mbuf', 'timer', 'ethdev']
++
++# eal is standard dependency once built
++if dpdk_conf.has('RTE_LIB_EAL')
++    deps += ['eal']
++endif
++
++shared_deps = ext_deps
++static_deps = ext_deps
++foreach d:deps
++    if not is_variable('shared_rte_' + d)
++        error('Missing internal dependency "@0@" for @name@ [@2@]'
++                .format(d, name, 'lib/' + name))
++    endif
++    shared_deps += [get_variable('shared_rte_' + d)]
++    static_deps += [get_variable('static_rte_' + d)]
++endforeach
++
++dpdk_conf.set('RTE_LIB_' + name.to_upper(), name)
++install_headers(headers)
++install_headers(indirect_headers)
++if get_option('enable_driver_sdk')
++    install_headers(driver_sdk_headers)
++endif
++dpdk_chkinc_headers += headers
++
++libname = 'rte_' + name
++#includes += include_directories(name)
++
++if developer_mode and is_windows and use_function_versioning
++    message('@0@: Function versioning is not supported by Windows.'.format(name))
++endif
++
++if use_function_versioning
++    cflags += '-DRTE_USE_FUNCTION_VERSIONING'
++endif
++cflags += '-DRTE_LOG_DEFAULT_LOGTYPE=lib.' + name
++
++# first build static lib
++static_lib = static_library(libname,
++        sources,
++        objects: objs,
++        c_args: cflags,
++        dependencies: static_deps,
++        include_directories: includes,
++        install: true)
++static_dep = declare_dependency(
++        include_directories: includes,
++        dependencies: static_deps)
++
++if not use_function_versioning or is_windows
++    # use pre-build objects to build shared lib
++    sources = []
++    objs += static_lib.extract_all_objects(recursive: false)
++else
++    # for compat we need to rebuild with
++    # RTE_BUILD_SHARED_LIB defined
++    cflags += '-DRTE_BUILD_SHARED_LIB'
++endif
++version_map = '@0@/version.map'.format(
++        meson.current_source_dir())
++implib = 'librte_' + name + '.dll.a'
++
++def_file = custom_target(libname + '_def',
++        command: [map_to_win_cmd, '@INPUT@', '@OUTPUT@'],
++        input: version_map,
++        output: '@0@_exports.def'.format(libname))
++
++mingw_map = custom_target(libname + '_mingw',
++        command: [map_to_win_cmd, '@INPUT@', '@OUTPUT@'],
++        input: version_map,
++        output: '@0@_mingw.map'.format(libname))
++
++if is_ms_linker
++    lk_args = ['-Wl,/def:' + def_file.full_path()]
++    if meson.version().version_compare('<0.54.0')
++        lk_args += ['-Wl,/implib:lib\\' + implib]
++    endif
++else
++    if is_windows
++        lk_args = ['-Wl,--version-script=' + mingw_map.full_path()]
++    else
++        lk_args = ['-Wl,--version-script=' + version_map]
++    endif
++endif
++
++lk_deps = [version_map, def_file, mingw_map]
++if developer_mode and not is_windows
++    # on unix systems check the output of the
++    # check-symbols.sh script, using it as a
++    # dependency of the .so build
++    lk_deps += custom_target(name + '.sym_chk',
++            command: [check_symbols,
++                version_map, '@INPUT@'],
++            capture: true,
++            input: static_lib,
++            output: name + '.sym_chk')
++endif
++
++shared_lib = shared_library(libname,
++        sources,
++        objects: objs,
++        c_args: cflags,
++        dependencies: shared_deps,
++        include_directories: includes,
++        link_args: lk_args,
++        link_depends: lk_deps,
++        version: abi_version,
++        soversion: so_version,
++        install: true)
++shared_dep = declare_dependency(link_with: shared_lib,
++        include_directories: includes,
++        dependencies: shared_deps)
++
++dpdk_libraries = [shared_lib] + dpdk_libraries
++dpdk_static_libraries = [static_lib] + dpdk_static_libraries
++
++set_variable('shared_rte_' + name, shared_dep)
++set_variable('static_rte_' + name, static_dep)
+diff --git a/dpdk-21.11/adapter/rte_adapter.h b/dpdk-21.11/adapter/rte_adapter.h
+new file mode 100644
+index 0000000..654dcce
+--- /dev/null
++++ b/dpdk-21.11/adapter/rte_adapter.h
+@@ -0,0 +1,212 @@
++#ifndef _RTE_ADAPTER_H
++#define _RTE_ADAPTER_H
++
++#include <stdlib.h>
++#include <stdint.h>
++#include <stdbool.h>
++#include <stdarg.h>
++
++#include "rte_atomic.h"
++#include "rte_bus.h"
++#include "rte_bus_pci.h"
++#include "rte_bus_vdev.h"
++#include "rte_cfgfile.h"
++#include "rte_cycles.h"
++#include "rte_dev.h"
++#include "rte_devargs.h"
++#include "rte_ethdev.h"
++#include "ethdev_driver.h"
++#include "rte_bus_pci.h"
++#include "ethdev_pci.h"
++#include "ethdev_vdev.h"
++#include "rte_flow.h"
++#include "rte_flow_driver.h"
++#include "rte_mbuf.h"
++#include "rte_mempool.h"
++#include "rte_ring.h"
++#include "rte_spinlock.h"
++#include "rte_mtr_driver.h"
++
++extern void rte_adapter_init(void);
++extern void rte_adapter_uninit(void);
++
++void rte_atomic16_init_stub(rte_atomic16_t *v);
++int16_t rte_atomic16_read_stub(const rte_atomic16_t *v);
++void rte_atomic16_set_stub(rte_atomic16_t *v, int16_t new_value);
++void rte_atomic16_add_stub(rte_atomic16_t *v, int16_t inc);
++void rte_atomic16_sub_stub(rte_atomic16_t *v, int16_t dec);
++void rte_atomic16_inc_stub(rte_atomic16_t *v);
++void rte_atomic16_dec_stub(rte_atomic16_t *v);
++void rte_atomic32_init_stub(rte_atomic32_t *v);
++int32_t rte_atomic32_read_stub(rte_atomic32_t *v);
++void rte_atomic32_set_stub(rte_atomic32_t *v, int32_t new_value);
++void rte_atomic32_add_stub(rte_atomic32_t *v, int32_t inc);
++void rte_atomic32_sub_stub(rte_atomic32_t *v, int32_t dec);
++void rte_atomic32_inc_stub(rte_atomic32_t *v);
++void rte_atomic32_dec_stub(rte_atomic32_t *v);
++
++struct rte_pci_device_list* rte_pci_bus_get_device_list_ptr(struct rte_pci_bus *pci_bus);
++struct rte_pci_device* rte_pci_device_list_get_first(struct rte_pci_device_list *device_list);
++struct rte_pci_driver* rte_pci_driver_allocate(void);
++void rte_pci_driver_free(struct rte_pci_driver *driver);
++void rte_pci_driver_set_name(struct rte_pci_driver *driver, const char *name);
++void rte_pci_driver_set_id_table(struct rte_pci_driver *driver, const struct rte_pci_id *pci_id);
++void rte_pci_driver_set_drv_flags(struct rte_pci_driver *driver, uint32_t drv_flags);
++void rte_pci_driver_set_probe(struct rte_pci_driver *driver, void *arg);
++void rte_pci_driver_set_remove(struct rte_pci_driver *driver, void *arg);
++struct rte_pci_device* rte_pci_device_get_next(struct rte_pci_device *pci_dev);
++struct rte_pci_addr* rte_pci_device_get_addr_ptr(struct rte_pci_device *device);
++struct rte_pci_id* rte_pci_device_get_id_ptr(struct rte_pci_device *device);
++struct rte_mem_resource* rte_pci_device_get_mem_resource(struct rte_pci_device *device);
++struct rte_device* rte_pci_device_get_device_ptr(struct rte_pci_device *device);
++char* rte_pci_device_get_name(struct rte_pci_device *device);
++
++struct rte_device* rte_vdev_device_get_device_ptr(struct rte_vdev_device *dev);
++struct rte_eth_dev *rte_eth_vdev_allocate_stub(struct rte_vdev_device *dev, size_t private_data_size);
++const char* rte_vdev_device_name_stub(const struct rte_vdev_device *dev);
++struct rte_vdev_driver* rte_vdev_driver_allocate(void);
++void rte_vdev_driver_free(struct rte_vdev_driver *driver);
++void rte_vdev_driver_set_probe(struct rte_vdev_driver *driver, void *arg);
++void rte_vdev_driver_set_remove(struct rte_vdev_driver *driver, void *arg);
++void rte_vdev_driver_set_name(struct rte_vdev_driver *driver, const char *name);
++void rte_vdev_driver_set_alias(struct rte_vdev_driver *driver, const char *alias);
++
++uint64_t rte_get_tsc_cycles_stub(void);
++void rte_delay_ms_stub(unsigned ms);
++uint64_t rte_rdtsc_stub(void);
++uint64_t rte_get_tsc_hz_stub(void);
++
++const struct rte_driver* rte_device_get_driver(struct rte_device *device);
++const char* rte_device_get_name(struct rte_device *device);
++struct rte_devargs* rte_device_get_devargs(struct rte_device *device);
++
++struct rte_eth_dev_info* rte_eth_dev_info_allocate(void);
++void rte_eth_dev_info_free(struct rte_eth_dev_info *info);
++void rte_eth_dev_info_set_driver_name(struct rte_eth_dev_info *info, char *driver_name);
++void rte_eth_dev_info_set_max_rx_queues(struct rte_eth_dev_info *info, uint16_t max_rx_queues);
++void rte_eth_dev_info_set_max_tx_queues(struct rte_eth_dev_info *info, uint16_t max_tx_queues);
++void rte_eth_dev_info_set_max_rx_pktlen(struct rte_eth_dev_info *info, uint32_t max_rx_pktlen);
++void rte_eth_dev_info_set_min_mtu(struct rte_eth_dev_info *info, uint16_t min_mtu);
++void rte_eth_dev_info_set_max_mtu(struct rte_eth_dev_info *info, uint16_t max_mtu);
++void rte_eth_dev_info_set_if_index(struct rte_eth_dev_info *info, unsigned int if_index);
++const char* rte_eth_dev_info_get_driver_name(struct rte_eth_dev_info *info);
++struct rte_device* rte_eth_dev_info_get_device(struct rte_eth_dev_info *info);
++uint32_t rte_eth_dev_info_get_if_index(struct rte_eth_dev_info *info);
++void* rte_eth_dev_get_private_data(uint16_t port_id);
++
++void rte_eth_dev_set_device(struct rte_eth_dev *dev, struct rte_device *device);
++void rte_eth_dev_set_dev_ops(struct rte_eth_dev *dev, struct eth_dev_ops *dev_ops);
++void rte_eth_dev_set_rx_pkt_burst(struct rte_eth_dev *dev, void *burst_cb);
++void rte_eth_dev_set_tx_pkt_burst(struct rte_eth_dev *dev, void *burst_cb);
++struct rte_device* rte_eth_dev_get_device(struct rte_eth_dev *dev);
++struct rte_eth_dev_data* rte_eth_dev_get_data(struct rte_eth_dev *dev);
++void* rte_eth_dev_get_data_dev_private(struct rte_eth_dev *dev);
++struct rte_eth_link* rte_eth_dev_get_data_dev_link_ptr(struct rte_eth_dev *dev);
++struct rte_pci_device* rte_eth_dev_get_pci_device_ptr(struct rte_eth_dev *dev);
++struct rte_vedv_device* rte_eth_dev_get_vdev_device_ptr(struct rte_eth_dev *dev);
++void rte_eth_dev_data_set_rx_queues(struct rte_eth_dev_data *data, void **queues);
++void rte_eth_dev_data_set_rx_queue_single(struct rte_eth_dev_data *data, int idx, void *queue);
++void rte_eth_dev_data_set_tx_queues(struct rte_eth_dev_data *data, void **queues);
++void rte_eth_dev_data_set_tx_queue_single(struct rte_eth_dev_data *data, int idx, void *queue);
++void rte_eth_dev_data_set_dev_private(struct rte_eth_dev_data *data, void *private_data);
++void rte_eth_dev_data_set_nb_rx_queues(struct rte_eth_dev_data *data,uint16_t nb_queues);
++void rte_eth_dev_data_set_nb_tx_queues(struct rte_eth_dev_data *data, uint16_t nb_queues);
++void rte_eth_dev_data_set_dev_link(struct rte_eth_dev_data *data, struct rte_eth_link dev_link);
++void rte_eth_dev_data_set_mac_addrs(struct rte_eth_dev_data *data, struct rte_ether_addr *mac_addrs);
++void rte_eth_dev_data_set_numa_node(struct rte_eth_dev_data *data, int numa_node);
++void rte_eth_dev_data_set_mtu(struct rte_eth_dev_data *data, uint16_t mtu);
++void rte_eth_dev_data_set_dev_started(struct rte_eth_dev_data *data, uint8_t dev_started);
++void* rte_eth_dev_data_get_rx_queue_single(struct rte_eth_dev_data *data, int idx);
++void* rte_eth_dev_data_get_tx_queue_single(struct rte_eth_dev_data *data, int idx);
++uint16_t rte_eth_dev_data_get_nb_rx_queues(struct rte_eth_dev_data *data);
++uint16_t rte_eth_dev_data_get_nb_tx_queues(struct rte_eth_dev_data *data);
++struct rte_ether_addr* rte_eth_dev_data_get_mac_addrs(struct rte_eth_dev_data *data);
++int rte_eth_dev_data_get_numa_node(struct rte_eth_dev_data *data);
++char* rte_eth_dev_data_get_name(struct rte_eth_dev_data *data);
++void* rte_eth_dev_data_get_dev_private(struct rte_eth_dev_data *data);
++struct rte_eth_link* rte_eth_dev_data_get_dev_link_ptr(struct rte_eth_dev_data *data);
++uint16_t rte_eth_dev_data_get_mtu(struct rte_eth_dev_data *data);
++uint8_t rte_eth_dev_data_get_dev_started(struct rte_eth_dev_data *data);
++
++struct eth_dev_ops* rte_eth_dev_ops_allocate(void);
++void rte_eth_dev_ops_free(struct eth_dev_ops *edev_ops);
++void rte_eth_dev_ops_set_dev_configure(struct eth_dev_ops *edev_ops, void *arg);
++void rte_eth_dev_ops_set_dev_start(struct eth_dev_ops *edev_ops, void *arg);
++void rte_eth_dev_ops_set_dev_stop(struct eth_dev_ops *edev_ops, void *arg);
++void rte_eth_dev_ops_set_dev_close(struct eth_dev_ops *edev_ops, void *arg);
++void rte_eth_dev_ops_set_dev_set_link_down(struct eth_dev_ops *edev_ops, void *arg);
++void rte_eth_dev_ops_set_dev_set_link_up(struct eth_dev_ops *edev_ops,void *arg);
++void rte_eth_dev_ops_set_dev_infos_get(struct eth_dev_ops *edev_ops, void *arg);
++void rte_eth_dev_ops_set_stats_get(struct eth_dev_ops *edev_ops, void *arg);
++void rte_eth_dev_ops_set_stats_reset(struct eth_dev_ops *edev_ops, void *arg);
++void rte_eth_dev_ops_set_xstats_get_names(struct eth_dev_ops *edev_ops, void *arg);
++void rte_eth_dev_ops_set_link_update(struct eth_dev_ops *edev_ops, void *arg);
++void rte_eth_dev_ops_set_mtu_set(struct eth_dev_ops *edev_ops, void *arg);
++void rte_eth_dev_ops_set_rx_queue_setup(struct eth_dev_ops *edev_ops, void *arg);
++void rte_eth_dev_ops_set_tx_queue_setup(struct eth_dev_ops *edev_ops, void *arg);
++void rte_eth_dev_ops_set_rx_queue_release(struct eth_dev_ops *edev_ops, void *arg);
++void rte_eth_dev_ops_set_tx_queue_release(struct eth_dev_ops *edev_ops, void *arg);
++void rte_eth_dev_ops_set_flow_ops_get(struct eth_dev_ops *edev_ops, void *arg);
++void rte_eth_dev_ops_mtr_get(struct eth_dev_ops *edev_ops, void *arg);
++
++int rte_eth_dev_pci_generic_probe_stub(struct rte_pci_device *pci_dev,
++    size_t private_data_size, eth_dev_pci_callback_t dev_init);
++int rte_eth_dev_pci_generic_remove_stub(struct rte_pci_device *pci_dev,
++    eth_dev_pci_callback_t dev_uninit);
++
++struct rte_flow_ops* rte_flow_ops_allocate(void);
++void rte_flow_ops_free(struct rte_flow_ops *flow_ops);
++void rte_flow_ops_set_validate(struct rte_flow_ops *flow_ops, void *arg);
++void rte_flow_ops_set_create(struct rte_flow_ops *flow_ops, void *arg);
++void rte_flow_ops_set_destroy(struct rte_flow_ops *flow_ops, void *arg);
++void rte_flow_ops_set_flush(struct rte_flow_ops *flow_ops, void *arg);
++void rte_flow_ops_set_flush_all(struct rte_flow_ops *flow_ops, void *arg);
++void rte_flow_ops_set_query(struct rte_flow_ops *flow_ops, void *arg);
++void rte_flow_ops_set_dev_dump(struct rte_flow_ops *flow_ops, void *arg);
++void rte_flow_ops_tunnel_decap_set(struct rte_flow_ops *flow_ops, void *arg);
++void rte_flow_ops_flow_dump_start(struct rte_flow_ops *flow_ops, void *arg);
++void rte_flow_ops_flow_dump_next(struct rte_flow_ops *flow_ops, void *arg);
++void rte_flow_ops_flow_dump_done(struct rte_flow_ops *flow_ops, void *arg);
++
++size_t rte_mbuf_struct_size(void);
++void* rte_mbuf_get_udata64_ptr(struct rte_mbuf *mbuf);
++void* rte_pktmbuf_get_data(struct rte_mbuf *mbuf);
++uint32_t rte_pktmbuf_get_data_len(struct rte_mbuf *mbuf);
++uint32_t rte_pktmbuf_get_pkt_len(struct rte_mbuf *mbuf);
++uint64_t rte_mbuf_get_ol_flags(struct rte_mbuf *mbuf);
++uint16_t rte_mbuf_get_vlan_tci(struct rte_mbuf *mbuf);
++uint32_t rte_mbuf_get_hash_rss(struct rte_mbuf *mbuf);
++void rte_mbuf_set_ol_flags(struct rte_mbuf *mbuf, uint64_t flag);
++struct rte_mbuf* rte_pktmbuf_alloc_stub(struct rte_mempool *mp);
++int rte_pktmbuf_alloc_bulk_stub(struct rte_mempool *pool,
++    struct rte_mbuf **mbufs, unsigned count);
++void rte_pktmbuf_free_stub(struct rte_mbuf *m);
++
++int rte_mempool_get_stub(struct rte_mempool *mp, void **obj_p);
++void rte_mempool_put_bulk_stub(struct rte_mempool *mp, void *const *obj_table, 
++    unsigned int n);
++void rte_mempool_put_stub(struct rte_mempool *mp, void *obj);
++
++unsigned int rte_ring_enqueue_burst_stub(struct rte_ring *r, void *const *obj_table,
++    unsigned int n, unsigned int *free_space);
++unsigned int rte_ring_dequeue_burst_stub(struct rte_ring *r, void **obj_table,
++    unsigned int n, unsigned int *available);
++unsigned int rte_ring_count_stub(const struct rte_ring *r);
++
++void rte_spinlock_init_stub(rte_spinlock_t *sl);
++void rte_spinlock_lock_stub(rte_spinlock_t *sl);
++void rte_spinlock_unlock_stub(rte_spinlock_t *sl);
++void rte_spinlock_trylock_stub(rte_spinlock_t *sl);
++
++struct malloc_elem * rte_malloc_elem_from_data(const void *addr);
++int rte_from_malloc_elem_get_socket_id(struct malloc_elem *elem);
++uint64_t rte_from_malloc_elem_get_page_sz(struct malloc_elem *elem);
++
++void rte_eth_mtr_ops_create(struct rte_mtr_ops *mtr_ops, void *arg);
++void rte_eth_mtr_ops_destroy(struct rte_mtr_ops *mtr_ops, void *arg);
++void rte_eth_mtr_ops_meter_profile_add(struct rte_mtr_ops *mtr_ops, void *arg);
++void rte_eth_mtr_ops_meter_profile_delete(struct rte_mtr_ops *mtr_ops, void *arg);
++void rte_eth_mtr_ops_meter_profile_update(struct rte_mtr_ops *mtr_ops, void *arg);
++struct rte_mtr_ops *rte_mtr_ops_allocate(void);
++
++#endif
+\ No newline at end of file
+diff --git a/dpdk-21.11/adapter/rte_atomic_adapter.c b/dpdk-21.11/adapter/rte_atomic_adapter.c
+new file mode 100644
+index 0000000..4706ef5
+--- /dev/null
++++ b/dpdk-21.11/adapter/rte_atomic_adapter.c
+@@ -0,0 +1,72 @@
++#include "rte_atomic.h"
++#include "rte_adapter.h"
++
++void rte_atomic16_init_stub(rte_atomic16_t *v)
++{
++    rte_atomic16_init(v);
++}
++
++int16_t rte_atomic16_read_stub(const rte_atomic16_t *v)
++{
++    return rte_atomic16_read(v);
++}
++
++void rte_atomic16_set_stub(rte_atomic16_t *v, int16_t new_value)
++{
++    rte_atomic16_set(v, new_value);
++}
++
++void rte_atomic16_add_stub(rte_atomic16_t *v, int16_t inc)
++{
++    rte_atomic16_add(v, inc);
++}
++
++void rte_atomic16_sub_stub(rte_atomic16_t *v, int16_t dec)
++{
++    rte_atomic16_sub(v, dec);
++}
++
++void rte_atomic16_inc_stub(rte_atomic16_t *v)
++{
++    rte_atomic16_inc(v);
++}
++
++void rte_atomic16_dec_stub(rte_atomic16_t *v)
++{
++    rte_atomic16_dec(v);
++}
++
++void rte_atomic32_init_stub(rte_atomic32_t *v)
++{
++    rte_atomic32_init(v);
++}
++
++int32_t rte_atomic32_read_stub(rte_atomic32_t *v)
++{
++    return rte_atomic32_read(v);
++}
++
++void rte_atomic32_set_stub(rte_atomic32_t *v, int32_t new_value)
++{
++    rte_atomic32_set(v, new_value);
++}
++
++void rte_atomic32_add_stub(rte_atomic32_t *v, int32_t inc)
++{
++    rte_atomic32_add(v, inc);
++}
++
++void rte_atomic32_sub_stub(rte_atomic32_t *v, int32_t dec)
++{
++    rte_atomic32_sub(v, dec);
++}
++
++void rte_atomic32_inc_stub(rte_atomic32_t *v)
++{
++    rte_atomic32_inc(v);
++}
++
++void rte_atomic32_dec_stub(rte_atomic32_t *v)
++{
++    rte_atomic32_dec(v);
++}
+diff --git a/dpdk-21.11/adapter/rte_bus_pci_adapter.c b/dpdk-21.11/adapter/rte_bus_pci_adapter.c
+new file mode 100644
+index 0000000..eb6cd7d
+--- /dev/null
++++ b/dpdk-21.11/adapter/rte_bus_pci_adapter.c
+@@ -0,0 +1,78 @@
++#include <sys/queue.h>
++#include "rte_bus_pci.h"
++#include "rte_adapter.h"
++
++struct rte_pci_device_list* rte_pci_bus_get_device_list_ptr(struct rte_pci_bus *pci_bus)
++{
++    return &pci_bus->device_list;
++}
++
++struct rte_pci_device* rte_pci_device_list_get_first(struct rte_pci_device_list *device_list)
++{
++    return TAILQ_FIRST(device_list);
++}
++
++struct rte_pci_driver* rte_pci_driver_allocate(void)
++{
++    return calloc(1, sizeof(struct rte_pci_driver)); // 考虑malloc是否合适 + glic malloc是否在construtor阶段即准备好
++}
++
++void rte_pci_driver_free(struct rte_pci_driver *driver)
++{
++    free(driver);
++}
++
++void rte_pci_driver_set_name(struct rte_pci_driver *driver, const char *name)
++{
++    driver->driver.name = name;
++}
++
++void rte_pci_driver_set_id_table(struct rte_pci_driver *driver, const struct rte_pci_id *pci_id)
++{
++    driver->id_table = pci_id;
++}
++
++void rte_pci_driver_set_drv_flags(struct rte_pci_driver *driver, uint32_t drv_flags)
++{
++    driver->drv_flags = drv_flags;
++}
++
++void rte_pci_driver_set_probe(struct rte_pci_driver *driver, void *arg)
++{
++    driver->probe = (rte_pci_probe_t*)arg;
++}
++
++void rte_pci_driver_set_remove(struct rte_pci_driver *driver, void *arg)
++{
++    driver->remove = (rte_pci_remove_t*)arg;
++}
++
++struct rte_pci_device* rte_pci_device_get_next(struct rte_pci_device *pci_dev)
++{
++    return TAILQ_NEXT(pci_dev, next);
++}
++
++struct rte_pci_addr* rte_pci_device_get_addr_ptr(struct rte_pci_device *device)
++{
++    return &device->addr;
++}
++
++struct rte_pci_id* rte_pci_device_get_id_ptr(struct rte_pci_device *device)
++{
++    return &device->id;
++}
++
++struct rte_mem_resource* rte_pci_device_get_mem_resource(struct rte_pci_device *device)
++{
++    return device->mem_resource;
++}
++
++struct rte_device* rte_pci_device_get_device_ptr(struct rte_pci_device *device)
++{
++    return &device->device;
++}
++
++char* rte_pci_device_get_name(struct rte_pci_device *device)
++{
++    return device->name;
++}
+diff --git a/dpdk-21.11/adapter/rte_bus_vdev_adapter.c b/dpdk-21.11/adapter/rte_bus_vdev_adapter.c
+new file mode 100644
+index 0000000..12c75f5
+--- /dev/null
++++ b/dpdk-21.11/adapter/rte_bus_vdev_adapter.c
+@@ -0,0 +1,47 @@
++#include "rte_bus_vdev.h"
++#include "rte_adapter.h"
++
++struct rte_device* rte_vdev_device_get_device_ptr(struct rte_vdev_device *dev)
++{
++    return &dev->device;
++}
++
++struct rte_eth_dev *rte_eth_vdev_allocate_stub(struct rte_vdev_device *dev, size_t private_data_size)
++{
++    return rte_eth_vdev_allocate(dev, private_data_size);
++}
++
++const char* rte_vdev_device_name_stub(const struct rte_vdev_device *dev)
++{
++    return rte_vdev_device_name(dev);
++}
++
++struct rte_vdev_driver* rte_vdev_driver_allocate(void)
++{
++    return calloc(1, sizeof(struct rte_vdev_driver));
++}
++
++void rte_vdev_driver_free(struct rte_vdev_driver *driver)
++{
++    free(driver);
++}
++
++void rte_vdev_driver_set_probe(struct rte_vdev_driver *driver, void *arg)
++{
++    driver->probe = (rte_vdev_probe_t*)arg;
++}
++
++void rte_vdev_driver_set_remove(struct rte_vdev_driver *driver, void *arg)
++{
++    driver->remove = (rte_vdev_remove_t*)arg;
++}
++
++void rte_vdev_driver_set_name(struct rte_vdev_driver *driver, const char *name)
++{
++    driver->driver.name = name;
++}
++
++void rte_vdev_driver_set_alias(struct rte_vdev_driver *driver, const char *alias)
++{
++    driver->driver.alias = alias;
++}
+diff --git a/dpdk-21.11/adapter/rte_cycles_adapter.c b/dpdk-21.11/adapter/rte_cycles_adapter.c
+new file mode 100644
+index 0000000..86d59ef
+--- /dev/null
++++ b/dpdk-21.11/adapter/rte_cycles_adapter.c
+@@ -0,0 +1,22 @@
++#include "rte_cycles.h"
++#include "rte_adapter.h"
++
++uint64_t rte_get_tsc_cycles_stub(void)
++{
++    return rte_get_tsc_cycles();
++}
++
++void rte_delay_ms_stub(unsigned ms)
++{
++    rte_delay_ms(ms);
++}
++
++uint64_t rte_rdtsc_stub(void)
++{
++    return rte_rdtsc();
++}
++
++uint64_t rte_get_tsc_hz_stub(void)
++{
++    return rte_get_tsc_hz();
++}
+diff --git a/dpdk-21.11/adapter/rte_dev_adapter.c b/dpdk-21.11/adapter/rte_dev_adapter.c
+new file mode 100644
+index 0000000..5c1d5fc
+--- /dev/null
++++ b/dpdk-21.11/adapter/rte_dev_adapter.c
+@@ -0,0 +1,22 @@
++#include "rte_dev.h"
++#include "rte_adapter.h"
++
++const struct rte_driver* rte_device_get_driver(struct rte_device *device)
++{
++    return device->driver;
++}
++
++const char* rte_device_get_name(struct rte_device *device)
++{
++    return device->name;
++}
++
++struct rte_devargs* rte_device_get_devargs(struct rte_device *device)
++{
++    return device->devargs;
++}
++
++const char* rte_driver_get_name(struct rte_driver *driver)
++{
++    return driver->name;
++}
+diff --git a/dpdk-21.11/adapter/rte_devargs_adapter.c b/dpdk-21.11/adapter/rte_devargs_adapter.c
+new file mode 100644
+index 0000000..177ab2c
+--- /dev/null
++++ b/dpdk-21.11/adapter/rte_devargs_adapter.c
+@@ -0,0 +1,7 @@
++#include "rte_devargs.h"
++#include "rte_adapter.h"
++
++const char* rte_devargs_get_args(struct rte_devargs *devargs)
++{
++    return devargs->args;
++}
+diff --git a/dpdk-21.11/adapter/rte_ethdev_adapter.c b/dpdk-21.11/adapter/rte_ethdev_adapter.c
+new file mode 100644
+index 0000000..f2047df
+--- /dev/null
++++ b/dpdk-21.11/adapter/rte_ethdev_adapter.c
+@@ -0,0 +1,70 @@
++#include "rte_ethdev.h"
++#include "rte_adapter.h"
++
++struct rte_eth_dev_info* rte_eth_dev_info_allocate(void)
++{
++    return calloc(1, sizeof(struct rte_eth_dev_info));
++}
++
++void rte_eth_dev_info_free(struct rte_eth_dev_info *info)
++{
++    free(info);
++}
++
++void rte_eth_dev_info_set_driver_name(struct rte_eth_dev_info *info, char *driver_name)
++{
++    info->driver_name = driver_name;
++}
++
++void rte_eth_dev_info_set_max_rx_queues(struct rte_eth_dev_info *info, uint16_t max_rx_queues)
++{
++    info->max_rx_queues = max_rx_queues;
++}
++
++void rte_eth_dev_info_set_max_tx_queues(struct rte_eth_dev_info *info, uint16_t max_tx_queues)
++{
++    info->max_tx_queues = max_tx_queues;
++}
++
++void rte_eth_dev_info_set_max_rx_pktlen(struct rte_eth_dev_info *info, uint32_t max_rx_pktlen)
++{
++    info->max_rx_pktlen = max_rx_pktlen;
++}
++
++void rte_eth_dev_info_set_min_mtu(struct rte_eth_dev_info *info, uint16_t min_mtu)
++{
++    info->min_mtu = min_mtu;
++}
++
++void rte_eth_dev_info_set_max_mtu(struct rte_eth_dev_info *info, uint16_t max_mtu)
++{
++    info->max_mtu = max_mtu;
++}
++
++void rte_eth_dev_info_set_if_index(struct rte_eth_dev_info *info, unsigned int if_index)
++{
++    info->if_index = if_index;
++}
++
++const char* rte_eth_dev_info_get_driver_name(struct rte_eth_dev_info *info)
++{
++    return info->driver_name;
++}
++
++struct rte_device* rte_eth_dev_info_get_device(struct rte_eth_dev_info *info)
++{
++    return info->device;
++}
++
++uint32_t rte_eth_dev_info_get_if_index(struct rte_eth_dev_info *info)
++{
++    return info->if_index;
++}
++
++void *rte_eth_dev_get_private_data(uint16_t port_id)
++{
++    struct rte_eth_dev *dev;
++    RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, NULL);
++    dev = &rte_eth_devices[port_id];
++    return dev->data->dev_private;
++}
+\ No newline at end of file
+diff --git a/dpdk-21.11/adapter/rte_ethdev_driver_adapter.c b/dpdk-21.11/adapter/rte_ethdev_driver_adapter.c
+new file mode 100644
+index 0000000..a7d2f8d
+--- /dev/null
++++ b/dpdk-21.11/adapter/rte_ethdev_driver_adapter.c
+@@ -0,0 +1,294 @@
++#include "ethdev_driver.h"
++#include "rte_bus_pci.h"
++#include "rte_bus_vdev.h"
++#include "rte_adapter.h"
++
++void rte_eth_dev_set_device(struct rte_eth_dev *dev, struct rte_device *device)
++{
++    dev->device = device;
++}
++
++void rte_eth_dev_set_dev_ops(struct rte_eth_dev *dev, struct eth_dev_ops *dev_ops)
++{
++    dev->dev_ops = dev_ops;
++}
++
++void rte_eth_dev_set_rx_pkt_burst(struct rte_eth_dev *dev, void *burst_cb)
++{
++    dev->rx_pkt_burst = burst_cb;
++}
++
++void rte_eth_dev_set_tx_pkt_burst(struct rte_eth_dev *dev, void *burst_cb)
++{
++    dev->tx_pkt_burst = burst_cb;
++}
++
++struct rte_device* rte_eth_dev_get_device(struct rte_eth_dev *dev)
++{
++    return dev->device;
++}
++
++struct rte_eth_dev_data* rte_eth_dev_get_data(struct rte_eth_dev *dev)
++{
++    return dev->data;
++}
++
++void* rte_eth_dev_get_data_dev_private(struct rte_eth_dev *dev)
++{
++    return dev->data->dev_private;
++}
++
++struct rte_eth_link* rte_eth_dev_get_data_dev_link_ptr(struct rte_eth_dev *dev)
++{
++    return &dev->data->dev_link;
++}
++
++struct rte_pci_device* rte_eth_dev_get_pci_device_ptr(struct rte_eth_dev *dev)
++{
++    return RTE_ETH_DEV_TO_PCI(dev);
++}
++
++struct rte_vedv_device* rte_eth_dev_get_vdev_device_ptr(struct rte_eth_dev *dev)
++{
++    return RTE_ETH_DEV_TO_VDEV(dev);
++}
++
++void rte_eth_dev_data_set_rx_queues(struct rte_eth_dev_data *data, void **queues)
++{
++    data->rx_queues = queues;
++}
++
++void rte_eth_dev_data_set_rx_queue_single(struct rte_eth_dev_data *data, int idx, void *queue)
++{
++    data->rx_queues[idx]=queue;
++}
++
++void rte_eth_dev_data_set_tx_queues(struct rte_eth_dev_data *data, void **queues)
++{
++    data->tx_queues=queues;
++}
++
++void rte_eth_dev_data_set_tx_queue_single(struct rte_eth_dev_data *data, int idx, void *queue)
++{
++    data->tx_queues[idx] = queue;
++}
++
++void rte_eth_dev_data_set_dev_private(struct rte_eth_dev_data *data, void *private_data)
++{
++    data->dev_private = private_data;
++}
++
++void rte_eth_dev_data_set_nb_rx_queues(struct rte_eth_dev_data *data,uint16_t nb_queues)
++{
++    data->nb_rx_queues = nb_queues;
++}
++
++void rte_eth_dev_data_set_nb_tx_queues(struct rte_eth_dev_data *data, uint16_t nb_queues)
++{
++    data->nb_tx_queues = nb_queues;
++}
++
++void rte_eth_dev_data_set_dev_link(struct rte_eth_dev_data *data, struct rte_eth_link dev_link)
++{
++    data->dev_link = dev_link;
++}
++
++void rte_eth_dev_data_set_mac_addrs(struct rte_eth_dev_data *data, struct rte_ether_addr *mac_addrs)
++{
++    data->mac_addrs = mac_addrs;
++}
++
++void rte_eth_dev_data_set_numa_node(struct rte_eth_dev_data *data, int numa_node)
++{
++    data->numa_node = numa_node;
++}
++
++void rte_eth_dev_data_set_mtu(struct rte_eth_dev_data *data, uint16_t mtu)
++{
++    data->mtu = mtu;
++}
++
++void rte_eth_dev_data_set_dev_started(struct rte_eth_dev_data *data, uint8_t dev_started)
++{
++    data->dev_started = dev_started;
++}
++
++void* rte_eth_dev_data_get_rx_queue_single(struct rte_eth_dev_data *data, int idx)
++{
++    return data->rx_queues[idx];
++}
++
++void* rte_eth_dev_data_get_tx_queue_single(struct rte_eth_dev_data *data, int idx)
++{
++    return data->tx_queues[idx];
++}
++
++uint16_t rte_eth_dev_data_get_nb_rx_queues(struct rte_eth_dev_data *data)
++{
++    return data->nb_rx_queues;
++}
++
++uint16_t rte_eth_dev_data_get_nb_tx_queues(struct rte_eth_dev_data *data)
++{
++    return data->nb_tx_queues;
++}
++
++struct rte_ether_addr* rte_eth_dev_data_get_mac_addrs(struct rte_eth_dev_data *data)
++{
++    return data->mac_addrs;
++}
++
++int rte_eth_dev_data_get_numa_node(struct rte_eth_dev_data *data)
++{
++    return data->numa_node;
++}
++
++char* rte_eth_dev_data_get_name(struct rte_eth_dev_data *data)
++{
++    return data->name;
++}
++
++void* rte_eth_dev_data_get_dev_private(struct rte_eth_dev_data *data)
++{
++    return data->dev_private;
++}
++
++struct rte_eth_link* rte_eth_dev_data_get_dev_link_ptr(struct rte_eth_dev_data *data)
++{
++    return &data->dev_link;
++}
++
++uint16_t rte_eth_dev_data_get_mtu(struct rte_eth_dev_data *data)
++{
++    return data->mtu;
++}
++
++uint8_t rte_eth_dev_data_get_dev_started(struct rte_eth_dev_data *data)
++{
++    return data->dev_started;
++}
++
++struct eth_dev_ops* rte_eth_dev_ops_allocate(void)
++{
++    return calloc(1,sizeof(struct eth_dev_ops));
++}
++
++void rte_eth_dev_ops_free(struct eth_dev_ops *edev_ops)
++{
++    free(edev_ops);
++}
++
++void rte_eth_dev_ops_set_dev_configure(struct eth_dev_ops *edev_ops, void *arg)
++{
++    edev_ops->dev_configure = arg;
++}
++
++void rte_eth_dev_ops_set_dev_start(struct eth_dev_ops *edev_ops, void *arg)
++{
++    edev_ops->dev_start = arg;
++}
++
++void rte_eth_dev_ops_set_dev_stop(struct eth_dev_ops *edev_ops, void *arg)
++{
++    edev_ops->dev_stop = arg;
++}
++
++void rte_eth_dev_ops_set_dev_close(struct eth_dev_ops *edev_ops, void *arg)
++{
++    edev_ops->dev_close = arg;
++}
++
++void rte_eth_dev_ops_set_dev_set_link_down(struct eth_dev_ops *edev_ops, void *arg)
++{
++    edev_ops->dev_set_link_down = arg;
++}
++
++void rte_eth_dev_ops_set_dev_set_link_up(struct eth_dev_ops *edev_ops,void *arg)
++{
++    edev_ops->dev_set_link_up = arg;
++}
++
++void rte_eth_dev_ops_set_dev_infos_get(struct eth_dev_ops *edev_ops, void *arg)
++{
++    edev_ops->dev_infos_get = arg;
++}
++
++void rte_eth_dev_ops_set_stats_get(struct eth_dev_ops *edev_ops, void *arg)
++{
++    edev_ops->stats_get = arg;
++}
++
++void rte_eth_dev_ops_set_stats_reset(struct eth_dev_ops *edev_ops, void *arg)
++{
++    edev_ops->stats_reset = arg;
++}
++
++void rte_eth_dev_ops_set_xstats_get(struct eth_dev_ops *edev_ops, void *arg)
++{
++    edev_ops->xstats_get = arg;
++}
++
++void rte_eth_dev_ops_set_xstats_reset(struct eth_dev_ops *edev_ops, void *arg)
++{
++    edev_ops->xstats_reset = arg;
++}
++
++void rte_eth_dev_ops_set_xstats_get_names(struct eth_dev_ops *edev_ops, void *arg)
++{
++    edev_ops->xstats_get_names = arg;
++}
++
++void rte_eth_dev_ops_set_link_update(struct eth_dev_ops *edev_ops, void *arg)
++{
++    edev_ops->link_update = arg;
++}
++
++void rte_eth_dev_ops_set_mtu_set(struct eth_dev_ops *edev_ops, void *arg)
++{
++    edev_ops->mtu_set = arg;
++}
++
++void rte_eth_dev_ops_set_rx_queue_setup(struct eth_dev_ops *edev_ops, void *arg)
++{
++    edev_ops->rx_queue_setup = arg;
++}
++
++void rte_eth_dev_ops_set_tx_queue_setup(struct eth_dev_ops *edev_ops, void *arg)
++{
++    edev_ops->tx_queue_setup = arg;
++}
++
++void rte_eth_dev_ops_set_rx_queue_release(struct eth_dev_ops *edev_ops, void *arg)
++{
++    edev_ops->rx_queue_release = arg;
++}
++
++void rte_eth_dev_ops_set_tx_queue_release(struct eth_dev_ops *edev_ops, void *arg)
++{
++    edev_ops->tx_queue_release = arg;
++}
++void
++rte_eth_dev_ops_set_rx_queue_release_dpdk2011(struct eth_dev_ops *edev_ops, void *arg)
++{
++    
++}
++
++void rte_eth_dev_ops_set_tx_queue_release_dpdk2011(struct eth_dev_ops *edev_ops, void *arg)
++{
++    
++}
++
++void rte_eth_dev_ops_set_flow_ops_get(struct eth_dev_ops *edev_ops, void *arg)
++{
++    edev_ops->flow_ops_get = arg;
++}
++
++void rte_eth_dev_ops_set_filter_ctrl(struct eth_dev_ops *edev_ops, void *arg)
++{
++    
++}
++
++void rte_eth_dev_ops_mtr_get(struct eth_dev_ops *edev_ops, void *arg)
++{
++    edev_ops->mtr_ops_get = arg;
++}
+diff --git a/dpdk-21.11/adapter/rte_ethdev_pci_adapter.c b/dpdk-21.11/adapter/rte_ethdev_pci_adapter.c
+new file mode 100644
+index 0000000..69c8f4c
+--- /dev/null
++++ b/dpdk-21.11/adapter/rte_ethdev_pci_adapter.c
+@@ -0,0 +1,14 @@
++#include "ethdev_pci.h"
++#include "rte_adapter.h"
++
++int rte_eth_dev_pci_generic_probe_stub(struct rte_pci_device *pci_dev,
++    size_t private_data_size, eth_dev_pci_callback_t dev_init)
++{
++    return rte_eth_dev_pci_generic_probe(pci_dev, private_data_size, dev_init);
++}
++
++int rte_eth_dev_pci_generic_remove_stub(struct rte_pci_device *pci_dev,
++    eth_dev_pci_callback_t dev_uninit)
++{
++    return rte_eth_dev_pci_generic_remove(pci_dev, dev_uninit);
++}
+diff --git a/dpdk-21.11/adapter/rte_flow_adapter.c b/dpdk-21.11/adapter/rte_flow_adapter.c
+new file mode 100644
+index 0000000..b49ddb7
+--- /dev/null
++++ b/dpdk-21.11/adapter/rte_flow_adapter.c
+@@ -0,0 +1,68 @@
++#include "rte_flow.h"
++#include "rte_flow_driver.h"
++#include "rte_adapter.h"
++
++struct rte_flow_ops* rte_flow_ops_allocate(void)
++{
++    return calloc(1, sizeof(struct rte_flow_ops));
++}
++
++void rte_flow_ops_free(struct rte_flow_ops *flow_ops)
++{
++    free(flow_ops);
++}
++
++void rte_flow_ops_set_validate(struct rte_flow_ops *flow_ops, void *arg)
++{
++    flow_ops->validate = arg;
++}
++
++void rte_flow_ops_set_create(struct rte_flow_ops *flow_ops, void *arg)
++{
++    flow_ops->create = arg;
++}
++
++void rte_flow_ops_set_destroy(struct rte_flow_ops *flow_ops, void *arg)
++{
++    flow_ops->destroy = arg;
++}
++
++void rte_flow_ops_set_flush(struct rte_flow_ops *flow_ops, void *arg)
++{
++    flow_ops->flush = arg;
++}
++
++void rte_flow_ops_set_flush_all(struct rte_flow_ops *flow_ops, void *arg)
++{
++    flow_ops->flush_all = arg;
++}
++
++void rte_flow_ops_set_query(struct rte_flow_ops *flow_ops, void *arg)
++{
++    flow_ops->query = arg;
++}
++
++void rte_flow_ops_set_dev_dump(struct rte_flow_ops *flow_ops, void *arg)
++{
++    flow_ops->dev_dump = arg;
++}
++
++void rte_flow_ops_tunnel_decap_set(struct rte_flow_ops *flow_ops, void *arg)
++{
++    flow_ops->tunnel_decap_set = arg;
++}
++
++void rte_flow_ops_flow_dump_start(struct rte_flow_ops *flow_ops, void *arg)
++{
++    flow_ops->flow_dump_start = arg;
++}
++
++void rte_flow_ops_flow_dump_next(struct rte_flow_ops *flow_ops, void *arg)
++{
++    flow_ops->flow_dump_next = arg;
++}
++
++void rte_flow_ops_flow_dump_done(struct rte_flow_ops *flow_ops, void *arg)
++{
++    flow_ops->flow_dump_done = arg;
++}
+\ No newline at end of file
+diff --git a/dpdk-21.11/adapter/rte_malloc.c b/dpdk-21.11/adapter/rte_malloc.c
+new file mode 100644
+index 0000000..bc3589f
+--- /dev/null
++++ b/dpdk-21.11/adapter/rte_malloc.c
+@@ -0,0 +1,18 @@
++#include "rte_adapter.h"
++#include "malloc_heap.h"
++#include "malloc_elem.h"
++
++struct malloc_elem *rte_malloc_elem_from_data(const void *data)
++{
++    return malloc_elem_from_data(data);
++}
++
++int rte_from_malloc_elem_get_socket_id(struct malloc_elem *elem)
++{
++    return elem->msl->socket_id;
++}
++
++uint64_t rte_from_malloc_elem_get_page_sz(struct malloc_elem *elem)
++{
++    return elem->msl->page_sz;
++}
+\ No newline at end of file
+diff --git a/dpdk-21.11/adapter/rte_mbuf_adapter.c b/dpdk-21.11/adapter/rte_mbuf_adapter.c
+new file mode 100644
+index 0000000..5a4cb09
+--- /dev/null
++++ b/dpdk-21.11/adapter/rte_mbuf_adapter.c
+@@ -0,0 +1,63 @@
++#include "rte_mbuf.h"
++#include "rte_adapter.h"
++
++size_t rte_mbuf_struct_size(void)
++{
++    return sizeof(struct rte_mbuf);
++}
++
++void* rte_mbuf_get_udata64_ptr(struct rte_mbuf *mbuf)
++{
++    return &mbuf->dynfield1[1];
++}
++
++void* rte_pktmbuf_get_data(struct rte_mbuf *mbuf)
++{
++    return rte_pktmbuf_mtod(mbuf, void*);
++}
++
++uint32_t rte_pktmbuf_get_data_len(struct rte_mbuf *mbuf)
++{
++    return rte_pktmbuf_data_len(mbuf);
++}
++
++uint32_t rte_pktmbuf_get_pkt_len(struct rte_mbuf *mbuf)
++{
++    return rte_pktmbuf_pkt_len(mbuf);
++}
++
++uint64_t rte_mbuf_get_ol_flags(struct rte_mbuf *mbuf)
++{
++    return mbuf->ol_flags;
++}
++
++uint16_t rte_mbuf_get_vlan_tci(struct rte_mbuf *mbuf)
++{
++    return mbuf->vlan_tci;
++}
++
++uint32_t rte_mbuf_get_hash_rss(struct rte_mbuf *mbuf)
++{
++    return mbuf->hash.rss;
++}
++
++void rte_mbuf_set_ol_flags(struct rte_mbuf *mbuf, uint64_t flag)
++{
++    mbuf->ol_flags = flag;
++}
++
++struct rte_mbuf* rte_pktmbuf_alloc_stub(struct rte_mempool *mp)
++{
++    return rte_pktmbuf_alloc(mp);
++}
++
++int rte_pktmbuf_alloc_bulk_stub(struct rte_mempool *pool,
++    struct rte_mbuf **mbufs, unsigned count)
++{
++    return rte_pktmbuf_alloc_bulk(pool, mbufs, count);
++}
++
++void rte_pktmbuf_free_stub(struct rte_mbuf *m)
++{
++    rte_pktmbuf_free(m);
++}
+diff --git a/dpdk-21.11/adapter/rte_mempool_adapter.c b/dpdk-21.11/adapter/rte_mempool_adapter.c
+new file mode 100644
+index 0000000..2cbbd4d
+--- /dev/null
++++ b/dpdk-21.11/adapter/rte_mempool_adapter.c
+@@ -0,0 +1,18 @@
++#include "rte_mempool.h"
++#include "rte_adapter.h"
++
++int rte_mempool_get_stub(struct rte_mempool *mp, void **obj_p)
++{
++    return rte_mempool_get(mp, obj_p);
++}
++
++void rte_mempool_put_bulk_stub(struct rte_mempool *mp, void *const *obj_table, 
++    unsigned int n)
++{
++    rte_mempool_put_bulk(mp, obj_table, n);
++}
++
++void rte_mempool_put_stub(struct rte_mempool *mp, void *obj)
++{
++    rte_mempool_put(mp, obj);
++}
+diff --git a/dpdk-21.11/adapter/rte_mtr_adapter.c b/dpdk-21.11/adapter/rte_mtr_adapter.c
+new file mode 100644
+index 0000000..0ed5d5d
+--- /dev/null
++++ b/dpdk-21.11/adapter/rte_mtr_adapter.c
+@@ -0,0 +1,32 @@
++#include "rte_adapter.h"
++#include "rte_mtr_driver.h"
++
++void rte_eth_mtr_ops_create(struct rte_mtr_ops *mtr_ops, void *arg)
++{
++    mtr_ops->create = arg;
++}
++
++void rte_eth_mtr_ops_destroy(struct rte_mtr_ops *mtr_ops, void *arg)
++{
++    mtr_ops->destroy = arg;
++}
++
++void rte_eth_mtr_ops_meter_profile_add(struct rte_mtr_ops *mtr_ops, void *arg)
++{
++    mtr_ops->meter_profile_add = arg;
++}
++
++void rte_eth_mtr_ops_meter_profile_delete(struct rte_mtr_ops *mtr_ops, void *arg)
++{
++    mtr_ops->meter_profile_delete = arg;
++}
++
++void rte_eth_mtr_ops_meter_profile_update(struct rte_mtr_ops *mtr_ops, void *arg)
++{
++    mtr_ops->meter_profile_update = arg;
++}
++
++struct rte_mtr_ops *rte_mtr_ops_allocate(void)
++{
++    return calloc(1, sizeof(struct rte_mtr_ops));
++}
+\ No newline at end of file
+diff --git a/dpdk-21.11/adapter/rte_ring_adapter.c b/dpdk-21.11/adapter/rte_ring_adapter.c
+new file mode 100644
+index 0000000..475430f
+--- /dev/null
++++ b/dpdk-21.11/adapter/rte_ring_adapter.c
+@@ -0,0 +1,19 @@
++#include "rte_ring.h"
++#include "rte_adapter.h"
++
++unsigned int rte_ring_enqueue_burst_stub(struct rte_ring *r, void *const *obj_table,
++    unsigned int n, unsigned int *free_space)
++{
++    return rte_ring_enqueue_burst(r, obj_table, n, free_space);
++}
++
++unsigned int rte_ring_dequeue_burst_stub(struct rte_ring *r, void **obj_table,
++    unsigned int n, unsigned int *available)
++{
++    return rte_ring_dequeue_burst(r, obj_table, n, available);
++}
++
++unsigned int rte_ring_count_stub(const struct rte_ring *r)
++{
++    return rte_ring_count(r);
++}
+diff --git a/dpdk-21.11/adapter/rte_spinlock_adapter.c b/dpdk-21.11/adapter/rte_spinlock_adapter.c
+new file mode 100644
+index 0000000..dd0dca6
+--- /dev/null
++++ b/dpdk-21.11/adapter/rte_spinlock_adapter.c
+@@ -0,0 +1,22 @@
++#include "rte_spinlock.h"
++#include "rte_adapter.h"
++
++void rte_spinlock_init_stub(rte_spinlock_t *sl)
++{
++    rte_spinlock_init(sl);
++}
++
++void rte_spinlock_lock_stub(rte_spinlock_t *sl)
++{
++    rte_spinlock_lock(sl);
++}
++
++void rte_spinlock_unlock_stub(rte_spinlock_t *sl)
++{
++    rte_spinlock_unlock(sl);
++}
++
++void rte_spinlock_trylock_stub(rte_spinlock_t *sl)
++{
++    rte_spinlock_trylock(sl);
++}
+diff --git a/dpdk-21.11/adapter/version.map b/dpdk-21.11/adapter/version.map
+new file mode 100644
+index 0000000..21c911f
+--- /dev/null
++++ b/dpdk-21.11/adapter/version.map
+@@ -0,0 +1,190 @@
++DPDK_22 {
++    global:
++
++    rte_eth_dev_set_device;
++    rte_eth_dev_set_dev_ops;
++    rte_eth_dev_set_rx_pkt_burst;
++    rte_eth_dev_set_tx_pkt_burst;
++    rte_eth_dev_get_device;
++    rte_eth_dev_get_data;
++    rte_eth_dev_get_data_dev_private;
++    rte_eth_dev_get_data_dev_link_ptr;
++    rte_eth_dev_get_pci_device_ptr;
++    rte_eth_dev_get_vdev_device_ptr;
++
++    rte_eth_dev_data_set_rx_queues;
++    rte_eth_dev_data_set_rx_queue_single;
++    rte_eth_dev_data_set_tx_queues;
++    rte_eth_dev_data_set_tx_queue_single;
++    rte_eth_dev_data_set_dev_private;
++    rte_eth_dev_data_set_nb_rx_queues;
++    rte_eth_dev_data_set_nb_tx_queues;
++    rte_eth_dev_data_set_dev_link;
++    rte_eth_dev_data_set_mac_addrs;
++    rte_eth_dev_data_set_numa_node;
++    rte_eth_dev_data_set_mtu;
++    rte_eth_dev_data_set_dev_started;
++    rte_eth_dev_data_get_rx_queue_single;
++    rte_eth_dev_data_get_tx_queue_single;
++    rte_eth_dev_data_get_nb_rx_queues;
++    rte_eth_dev_data_get_nb_tx_queues;
++    rte_eth_dev_data_get_mac_addrs;
++    rte_eth_dev_data_get_numa_node;
++    rte_eth_dev_data_get_name;
++    rte_eth_dev_data_get_dev_private;
++    rte_eth_dev_data_get_dev_link_ptr;
++    rte_eth_dev_data_get_mtu;
++    rte_eth_dev_data_get_dev_started;
++
++    rte_eth_dev_ops_allocate;
++    rte_eth_dev_ops_free;
++    rte_eth_dev_ops_set_dev_configure;
++    rte_eth_dev_ops_set_dev_start;
++    rte_eth_dev_ops_set_dev_stop;
++    rte_eth_dev_ops_set_dev_close;
++    rte_eth_dev_ops_set_dev_set_link_down;
++    rte_eth_dev_ops_set_dev_set_link_up;
++    rte_eth_dev_ops_set_dev_infos_get;
++    rte_eth_dev_ops_set_stats_get;
++    rte_eth_dev_ops_set_stats_reset;
++    rte_eth_dev_ops_set_xstats_get;
++    rte_eth_dev_ops_set_xstats_reset;
++    rte_eth_dev_ops_set_xstats_get_names;
++    rte_eth_dev_ops_set_link_update;
++    rte_eth_dev_ops_set_mtu_set;
++    rte_eth_dev_ops_set_rx_queue_setup;
++    rte_eth_dev_ops_set_tx_queue_setup;
++    rte_eth_dev_ops_set_rx_queue_release;
++    rte_eth_dev_ops_set_tx_queue_release;
++    rte_eth_dev_ops_set_rx_queue_release_dpdk2011;
++    rte_eth_dev_ops_set_tx_queue_release_dpdk2011;
++    rte_eth_dev_ops_set_flow_ops_get;
++    rte_eth_dev_ops_set_filter_ctrl;
++
++    rte_eth_dev_pci_generic_probe_stub;
++    rte_eth_dev_pci_generic_remove_stub;
++
++    rte_atomic16_init_stub;
++    rte_atomic16_read_stub;
++    rte_atomic16_set_stub;
++    rte_atomic16_add_stub;
++    rte_atomic16_sub_stub;
++    rte_atomic16_inc_stub;
++    rte_atomic16_dec_stub;
++
++    rte_atomic32_init_stub;
++    rte_atomic32_read_stub;
++    rte_atomic32_set_stub;
++    rte_atomic32_add_stub;
++    rte_atomic32_sub_stub;
++    rte_atomic32_inc_stub;
++    rte_atomic32_dec_stub;
++
++    rte_pci_bus_get_device_list_ptr;
++    rte_pci_device_list_get_first;
++    rte_pci_driver_allocate;
++    rte_pci_driver_free;
++    rte_pci_driver_set_name;
++    rte_pci_driver_set_id_table;
++    rte_pci_driver_set_drv_flags;
++    rte_pci_driver_set_probe;
++    rte_pci_driver_set_remove;
++
++    rte_pci_device_get_next;
++    rte_pci_device_get_addr_ptr;
++    rte_pci_device_get_id_ptr;
++    rte_pci_device_get_mem_resource;
++    rte_pci_device_get_device_ptr;
++    rte_pci_device_get_name;
++
++    rte_vdev_device_get_device_ptr;
++    rte_eth_vdev_allocate_stub;
++    rte_vdev_device_name_stub;
++
++    rte_vdev_driver_allocate;
++    rte_vdev_driver_free;
++    rte_vdev_driver_set_probe;
++    rte_vdev_driver_set_remove;
++    rte_vdev_driver_set_name;
++    rte_vdev_driver_set_alias;
++
++    rte_get_tsc_cycles_stub;
++    rte_rdtsc_stub;
++    rte_delay_ms_stub;
++    rte_get_tsc_hz_stub;
++
++    rte_device_get_driver;
++    rte_device_get_devargs;
++    rte_device_get_name;
++    rte_driver_get_name;
++
++    rte_devargs_get_args;
++    
++    rte_eth_dev_info_allocate;
++    rte_eth_dev_info_free;
++    rte_eth_dev_info_set_driver_name;
++    rte_eth_dev_info_set_max_rx_queues;
++    rte_eth_dev_info_set_max_tx_queues;
++    rte_eth_dev_info_set_max_rx_pktlen;
++    rte_eth_dev_info_set_min_mtu;
++    rte_eth_dev_info_set_max_mtu;
++    rte_eth_dev_info_set_if_index;
++    rte_eth_dev_info_get_driver_name;
++    rte_eth_dev_info_get_device;
++    rte_eth_dev_info_get_if_index;
++    rte_eth_dev_get_private_data;
++
++    rte_flow_ops_allocate;
++    rte_flow_ops_free;
++    rte_flow_ops_set_validate;
++    rte_flow_ops_set_create;
++    rte_flow_ops_set_destroy;
++    rte_flow_ops_set_flush;
++    rte_flow_ops_set_flush_all;
++    rte_flow_ops_set_query;
++    rte_flow_ops_set_dev_dump;
++    rte_flow_ops_tunnel_decap_set;
++    rte_flow_ops_flow_dump_start;
++    rte_flow_ops_flow_dump_next;
++    rte_flow_ops_flow_dump_done;
++
++    rte_pktmbuf_alloc_stub;
++    rte_pktmbuf_alloc_bulk_stub;
++    rte_pktmbuf_free_stub;
++    rte_mbuf_struct_size;
++    rte_mbuf_get_udata64_ptr;
++    rte_pktmbuf_get_data;
++    rte_pktmbuf_get_pkt_len;
++    rte_pktmbuf_get_data_len;
++    rte_mbuf_get_ol_flags;
++    rte_mbuf_get_vlan_tci;
++    rte_mbuf_get_hash_rss;
++    rte_mbuf_set_ol_flags;
++
++    rte_mempool_get_stub;
++    rte_mempool_put_bulk_stub;
++    rte_mempool_put_stub;
++
++    rte_spinlock_init_stub;
++    rte_spinlock_lock_stub;
++    rte_spinlock_unlock_stub;
++    rte_spinlock_trylock_stub;
++
++    rte_ring_enqueue_burst_stub;
++    rte_ring_dequeue_burst_stub;
++    rte_ring_count_stub;
++
++    rte_malloc_elem_from_data;
++    rte_from_malloc_elem_get_socket_id;
++    rte_from_malloc_elem_get_page_sz;
++
++    rte_eth_mtr_ops_create;
++    rte_eth_mtr_ops_destroy;
++    rte_eth_mtr_ops_meter_profile_add;
++    rte_eth_mtr_ops_meter_profile_delete;
++    rte_eth_mtr_ops_meter_profile_update;
++    rte_mtr_ops_allocate;
++    rte_eth_dev_ops_mtr_get;
++    
++    local: *;
++};
+\ No newline at end of file
+diff --git a/dpdk-21.11/lib/eal/common/rte_malloc.c b/dpdk-21.11/lib/eal/common/rte_malloc.c
+index d0bec26..db79e60 100644
+--- a/dpdk-21.11/lib/eal/common/rte_malloc.c
++++ b/dpdk-21.11/lib/eal/common/rte_malloc.c
+@@ -49,6 +49,42 @@ rte_free(void *addr)
+ 	return mem_free(addr, true);
+ }
+ 
++int rte_free_ex(void *addr)
++{
++    struct malloc_elem *elem = NULL;
++
++    if (!addr) {
++        return -1;
++    }
++
++    elem = malloc_elem_from_data(addr);
++    if (!elem) {
++        return -1;
++    }
++
++    return malloc_heap_free(elem);
++}
++
++void* rte_malloc_socket_ex(const char *type, size_t size, int socket_arg, unsigned int flags, size_t align,
++                           size_t bound, int contig)
++{
++    return malloc_heap_alloc(type, size, socket_arg, flags, align, bound, (bool)contig);
++}
++
++int rte_malloc_elem_from_addr(const void *data, unsigned long long *pg_size, int *socket_id)
++{
++    struct malloc_elem *elem = NULL;
++
++    elem = malloc_elem_from_data(data);
++    if (!elem) {
++        return -1;
++    }
++
++    *socket_id = elem->msl->socket_id;
++    *pg_size = elem->msl->page_sz;
++    return 0;
++}
++
+ void
+ eal_free_no_trace(void *addr)
+ {
+diff --git a/dpdk-21.11/lib/eal/include/rte_malloc.h b/dpdk-21.11/lib/eal/include/rte_malloc.h
+index ed02e15..921f876 100644
+--- a/dpdk-21.11/lib/eal/include/rte_malloc.h
++++ b/dpdk-21.11/lib/eal/include/rte_malloc.h
+@@ -188,6 +188,13 @@ void *
+ rte_malloc_socket(const char *type, size_t size, unsigned align, int socket)
+ 	__rte_alloc_size(2);
+ 
++void* rte_malloc_socket_ex(const char *type, size_t size, int socket_arg, unsigned int flags, size_t align,
++    size_t bound, int contig);
++
++int rte_malloc_elem_from_addr(const void *data, unsigned long long *pg_size, int *socket_id);
++
++int rte_free_ex(void *addr);
++
+ /**
+  * Allocate zero'ed memory from the heap.
+  *
+diff --git a/dpdk-21.11/lib/eal/version.map b/dpdk-21.11/lib/eal/version.map
+index ab28c22..0c0200f 100644
+--- a/dpdk-21.11/lib/eal/version.map
++++ b/dpdk-21.11/lib/eal/version.map
+@@ -155,6 +155,9 @@ DPDK_22 {
+ 	rte_malloc_heap_socket_is_external;
+ 	rte_malloc_set_limit;
+ 	rte_malloc_socket;
++	rte_malloc_socket_ex;
++	rte_malloc_elem_from_addr;
++	rte_free_ex;
+ 	rte_malloc_validate;
+ 	rte_malloc_virt2iova;
+ 	rte_mcfg_get_single_file_segments;
+diff --git a/dpdk-21.11/lib/ethdev/rte_flow.h b/dpdk-21.11/lib/ethdev/rte_flow.h
+index 1031fb2..b29773c 100644
+--- a/dpdk-21.11/lib/ethdev/rte_flow.h
++++ b/dpdk-21.11/lib/ethdev/rte_flow.h
+@@ -660,6 +660,36 @@ enum rte_flow_item_type {
+ 	 * See struct rte_flow_item_ppp.
+ 	 */
+ 	RTE_FLOW_ITEM_TYPE_PPP,
++
++	/*
++	 * special type for hiovs offload
++	 * which pmd offload the flow
++	 */
++	RTE_FLOW_ITEM_TYPE_PMD_ID,
++
++	/*
++	 * special type for hiovs offload
++	 * offload packets batch
++	 */
++	RTE_FLOW_ITEM_TYPE_PACKETS,
++
++	/*
++	 * special type for hiovs offload
++	 * ovs flow ufid
++	 */
++	RTE_FLOW_ITEM_TYPE_SW_UFID,
++
++	/*
++	 * special type for hiovs offload
++	 * recircle rte flow
++	 */
++	RTE_FLOW_ITEM_TYPE_FLOW,
++
++	/*
++	 * special type for hiovs offload
++	 * the input port type, hiovs port or no
++	 */
++	RTE_FLOW_ITEM_TYPE_PORT_TYPE,
+ };
+ 
+ /**
+@@ -2860,6 +2890,20 @@ enum rte_flow_action_type {
+ 	 * @see struct rte_flow_action_ethdev
+ 	 */
+ 	RTE_FLOW_ACTION_TYPE_REPRESENTED_PORT,
++#ifdef HAVE_HWOFF_AGENT
++	/*
++	 * conntrack action.
++	 *
++	 * See struct .
++	 */
++	RTE_FLOW_ACTION_TYPE_CT,
++	/*
++	 * recirle.
++	 *
++	 * See struct .
++	 */
++	RTE_FLOW_ACTION_TYPE_RECIRC,
++#endif
+ };
+ 
+ /**
+diff --git a/dpdk-21.11/lib/ethdev/rte_flow_driver.h b/dpdk-21.11/lib/ethdev/rte_flow_driver.h
+index f691b04..fc5e069 100644
+--- a/dpdk-21.11/lib/ethdev/rte_flow_driver.h
++++ b/dpdk-21.11/lib/ethdev/rte_flow_driver.h
+@@ -60,6 +60,11 @@ struct rte_flow_ops {
+ 	int (*flush)
+ 		(struct rte_eth_dev *,
+ 		 struct rte_flow_error *);
++	/** See rte_flow_flush_all(). */
++    int (*flush_all)
++        (struct rte_eth_dev *,
++         uint32_t type,
++         struct rte_flow_error *);
+ 	/** See rte_flow_query(). */
+ 	int (*query)
+ 		(struct rte_eth_dev *,
+@@ -152,6 +157,23 @@ struct rte_flow_ops {
+ 		(struct rte_eth_dev *dev,
+ 		 const struct rte_flow_item_flex_handle *handle,
+ 		 struct rte_flow_error *error);
++	/** See rte_flow_dump_start() */
++	int (*flow_dump_start)
++		(void **context,
++		 uint32_t type,
++		 struct rte_flow_error *error);
++	/** See rte_flow_dump_next() */
++	int (*flow_dump_next)
++		(void *context,
++		 uint32_t count,
++		 uint32_t *dumped_count,
++		 const struct rte_flow_item **pattern,
++		 const struct rte_flow_action **actions,
++		 struct rte_flow_error *error);
++	/** See rte_flow_dump_done() */
++	int (*flow_dump_done)
++		(void *context,
++		 struct rte_flow_error *error);
+ };
+ 
+ /**
+diff --git a/dpdk-21.11/meson.build b/dpdk-21.11/meson.build
+index 12cb6e0..e2ca028 100644
+--- a/dpdk-21.11/meson.build
++++ b/dpdk-21.11/meson.build
+@@ -62,6 +62,7 @@ subdir('config')
+ # build libs and drivers
+ subdir('lib')
+ subdir('drivers')
++subdir('adapter')
+ 
+ # build binaries and installable tools
+ subdir('usertools')
