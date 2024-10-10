@@ -1,0 +1,62 @@
+diff --git a/dpdk-21.11/lib/ethdev/rte_flow.h b/dpdk-21.11/lib/ethdev/rte_flow.h
+index 1031fb2..b29773c 100644
+--- a/dpdk-21.11/lib/ethdev/rte_flow.h
++++ b/dpdk-21.11/lib/ethdev/rte_flow.h
+@@ -660,6 +660,36 @@ enum rte_flow_item_type {
+ 	 * See struct rte_flow_item_ppp.
+ 	 */
+ 	RTE_FLOW_ITEM_TYPE_PPP,
++
++	/*
++	 * special type for hiovs offload
++	 * which pmd offload the flow
++	 */
++	RTE_FLOW_ITEM_TYPE_PMD_ID,
++
++	/*
++	 * special type for hiovs offload
++	 * offload packets batch
++	 */
++	RTE_FLOW_ITEM_TYPE_PACKETS,
++
++	/*
++	 * special type for hiovs offload
++	 * ovs flow ufid
++	 */
++	RTE_FLOW_ITEM_TYPE_SW_UFID,
++
++	/*
++	 * special type for hiovs offload
++	 * recircle rte flow
++	 */
++	RTE_FLOW_ITEM_TYPE_FLOW,
++
++	/*
++	 * special type for hiovs offload
++	 * the input port type, hiovs port or no
++	 */
++	RTE_FLOW_ITEM_TYPE_PORT_TYPE,
+ };
+ 
+ /**
+@@ -2860,6 +2890,20 @@ enum rte_flow_action_type {
+ 	 * @see struct rte_flow_action_ethdev
+ 	 */
+ 	RTE_FLOW_ACTION_TYPE_REPRESENTED_PORT,
++#ifdef HAVE_HWOFF_AGENT
++	/*
++	 * conntrack action.
++	 *
++	 * See struct .
++	 */
++	RTE_FLOW_ACTION_TYPE_CT,
++	/*
++	 * recirle.
++	 *
++	 * See struct .
++	 */
++	RTE_FLOW_ACTION_TYPE_RECIRC,
++#endif
+ };
+ 
+ /**
