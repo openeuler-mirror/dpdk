@@ -1,0 +1,730 @@
+diff --git a/dpdk-22.11/app/test-pmd/cmdline_flow.c b/dpdk-22.11/app/test-pmd/cmdline_flow.c
+index 8810849..8881a86 100644
+--- a/dpdk-22.11/app/test-pmd/cmdline_flow.c
++++ b/dpdk-22.11/app/test-pmd/cmdline_flow.c
+@@ -7500,7 +7500,7 @@ parse_setup_vxlan_encap_data(struct action_vxlan_encap_data *action_vxlan_encap_
+ 			.src_port = vxlan_encap_conf.udp_src,
+ 			.dst_port = vxlan_encap_conf.udp_dst,
+ 		},
+-		.item_vxlan.flags = 0,
++		.item_vxlan.flags = 0x08, // 标志VNI有效
+ 	};
+ 	memcpy(action_vxlan_encap_data->item_eth.dst.addr_bytes,
+ 	       vxlan_encap_conf.eth_dst, RTE_ETHER_ADDR_LEN);
+diff --git a/dpdk-22.11/app/test-pmd/hwoff_vtep_info.cfg b/dpdk-22.11/app/test-pmd/hwoff_vtep_info.cfg
+new file mode 100644
+index 0000000..4ff30b1
+--- /dev/null
++++ b/dpdk-22.11/app/test-pmd/hwoff_vtep_info.cfg
+@@ -0,0 +1,17 @@
++[hwoff_vtep]
++; vtep ip type, 1 ipv4; 2 ipv6
++ip_type=1
++; vtep src_mac
++src_mac=00:4f:a6:23:00:dc
++; vtep dst_mac
++dst_mac=00:4f:a6:23:00:ab
++; vtep src_ip
++src_ip=10.10.1.2
++; vtep dst_ip
++dst_ip=10.10.1.1
++; vtep sport
++src_port=1024
++; vtep dport
++dst_port=4789
++; vtep vni
++vni=5
+\ No newline at end of file
+diff --git a/dpdk-22.11/app/test-pmd/iofwd.c b/dpdk-22.11/app/test-pmd/iofwd.c
+index 8fafdec..7c34c11 100644
+--- a/dpdk-22.11/app/test-pmd/iofwd.c
++++ b/dpdk-22.11/app/test-pmd/iofwd.c
+@@ -32,15 +32,282 @@
+ #include <rte_ethdev.h>
+ #include <rte_string_fns.h>
+ #include <rte_flow.h>
+-
++#include <rte_table_action.h>
+ #include "testpmd.h"
+
++#define IP_PROTO_UDP                                       17
++#define VLAN(pcp, dei, vid)                                \
++	((uint16_t)((((uint64_t)(pcp)) & 0x7LLU) << 13) |  \
++	((((uint64_t)(dei)) & 0x1LLU) << 12) |             \
++	(((uint64_t)(vid)) & 0xFFFLLU))                    \
++
++static uint16_t
++hwoff_vxlan_ipv4_checksum_update(uint16_t cksum0,
++	uint16_t total_length)
++{
++	int32_t cksum1;
++
++	cksum1 = cksum0;
++	cksum1 = ~cksum1 & 0xFFFF;
++
++	/* Add total length (one's complement logic) */
++	cksum1 += total_length;
++	cksum1 = (cksum1 & 0xFFFF) + (cksum1 >> 16);
++	cksum1 = (cksum1 & 0xFFFF) + (cksum1 >> 16);
++
++	return (uint16_t)(~cksum1);
++}
++
++struct hwoff_encap_vxlan_ipv4_data {
++	struct rte_ether_hdr ether;
++	struct rte_ipv4_hdr ipv4;
++	struct rte_udp_hdr udp;
++	struct rte_vxlan_hdr vxlan;
++} __rte_packed __rte_aligned(2);
++
++struct hwoff_encap_vxlan_ipv4_vlan_data {
++	struct rte_ether_hdr ether;
++	struct rte_vlan_hdr vlan;
++	struct rte_ipv4_hdr ipv4;
++	struct rte_udp_hdr udp;
++	struct rte_vxlan_hdr vxlan;
++} __rte_packed __rte_aligned(2);
++
++struct hwoff_encap_vxlan_ipv6_data {
++	struct rte_ether_hdr ether;
++	struct rte_ipv6_hdr ipv6;
++	struct rte_udp_hdr udp;
++	struct rte_vxlan_hdr vxlan;
++} __rte_packed __rte_aligned(2);
++
++struct hwoff_encap_vxlan_ipv6_vlan_data {
++	struct rte_ether_hdr ether;
++	struct rte_vlan_hdr vlan;
++	struct rte_ipv6_hdr ipv6;
++	struct rte_udp_hdr udp;
++	struct rte_vxlan_hdr vxlan;
++} __rte_packed __rte_aligned(2);
++
++static int
++hwoff_encap_vxlan_apply(void *data,
++	struct rte_table_action_encap_params *p,
++	struct rte_table_action_encap_config *cfg)
++{
++	if ((p->vxlan.vxlan.vni > 0xFFFFFF) ||
++		(cfg->vxlan.ip_version && (p->vxlan.ipv4.dscp > 0x3F)) ||
++		(!cfg->vxlan.ip_version && (p->vxlan.ipv6.flow_label > 0xFFFFF)) ||
++		(!cfg->vxlan.ip_version && (p->vxlan.ipv6.dscp > 0x3F)) ||
++		(cfg->vxlan.vlan && (p->vxlan.vlan.vid > 0xFFF)))
++		return -1;
++
++	if (cfg->vxlan.ip_version)
++		if (cfg->vxlan.vlan) {
++			struct hwoff_encap_vxlan_ipv4_vlan_data *d = data;
++
++			/* Ethernet */
++			rte_ether_addr_copy(&p->vxlan.ether.da,
++					&d->ether.dst_addr);
++			rte_ether_addr_copy(&p->vxlan.ether.sa,
++					&d->ether.src_addr);
++			d->ether.ether_type = htons(RTE_ETHER_TYPE_VLAN);
++
++			/* VLAN */
++			d->vlan.vlan_tci = htons(VLAN(p->vxlan.vlan.pcp,
++				p->vxlan.vlan.dei,
++				p->vxlan.vlan.vid));
++			d->vlan.eth_proto = htons(RTE_ETHER_TYPE_IPV4);
++
++			/* IPv4*/
++			d->ipv4.version_ihl = 0x45;
++			d->ipv4.type_of_service = p->vxlan.ipv4.dscp << 2;
++			d->ipv4.total_length = 0; /* not pre-computed */
++			d->ipv4.packet_id = 0;
++			d->ipv4.fragment_offset = 0;
++			d->ipv4.time_to_live = p->vxlan.ipv4.ttl;
++			d->ipv4.next_proto_id = IP_PROTO_UDP;
++			d->ipv4.hdr_checksum = 0;
++			d->ipv4.src_addr = htonl(p->vxlan.ipv4.sa);
++			d->ipv4.dst_addr = htonl(p->vxlan.ipv4.da);
++
++			d->ipv4.hdr_checksum = rte_ipv4_cksum(&d->ipv4);
++
++			/* UDP */
++			d->udp.src_port = htons(p->vxlan.udp.sp);
++			d->udp.dst_port = htons(p->vxlan.udp.dp);
++			d->udp.dgram_len = 0; /* not pre-computed */
++			d->udp.dgram_cksum = 0;
++
++			/* VXLAN */
++			d->vxlan.vx_flags = htonl(0x08000000);
++			d->vxlan.vx_vni = htonl(p->vxlan.vxlan.vni << 8);
++
++			return 0;
++		} else {
++			struct hwoff_encap_vxlan_ipv4_data *d = data;
++
++			/* Ethernet */
++			rte_ether_addr_copy(&p->vxlan.ether.da,
++					&d->ether.dst_addr);
++			rte_ether_addr_copy(&p->vxlan.ether.sa,
++					&d->ether.src_addr);
++			d->ether.ether_type = htons(RTE_ETHER_TYPE_IPV4);
++
++			/* IPv4*/
++			d->ipv4.version_ihl = 0x45;
++			d->ipv4.type_of_service = p->vxlan.ipv4.dscp << 2;
++			d->ipv4.total_length = 0; /* not pre-computed */
++			d->ipv4.packet_id = 0;
++			d->ipv4.fragment_offset = 0;
++			d->ipv4.time_to_live = p->vxlan.ipv4.ttl;
++			d->ipv4.next_proto_id = IP_PROTO_UDP;
++			d->ipv4.hdr_checksum = 0;
++			d->ipv4.src_addr = htonl(p->vxlan.ipv4.sa);
++			d->ipv4.dst_addr = htonl(p->vxlan.ipv4.da);
++
++			d->ipv4.hdr_checksum = rte_ipv4_cksum(&d->ipv4);
++
++			/* UDP */
++			d->udp.src_port = htons(p->vxlan.udp.sp);
++			d->udp.dst_port = htons(p->vxlan.udp.dp);
++			d->udp.dgram_len = 0; /* not pre-computed */
++			d->udp.dgram_cksum = 0;
++
++			/* VXLAN */
++			d->vxlan.vx_flags = htonl(0x08000000);
++			d->vxlan.vx_vni = htonl(p->vxlan.vxlan.vni << 8);
++
++			return 0;
++		}
++	else
++		if (cfg->vxlan.vlan) {
++			struct hwoff_encap_vxlan_ipv6_vlan_data *d = data;
++
++			/* Ethernet */
++			rte_ether_addr_copy(&p->vxlan.ether.da,
++					&d->ether.dst_addr);
++			rte_ether_addr_copy(&p->vxlan.ether.sa,
++					&d->ether.src_addr);
++			d->ether.ether_type = htons(RTE_ETHER_TYPE_VLAN);
++
++			/* VLAN */
++			d->vlan.vlan_tci = htons(VLAN(p->vxlan.vlan.pcp,
++				p->vxlan.vlan.dei,
++				p->vxlan.vlan.vid));
++			d->vlan.eth_proto = htons(RTE_ETHER_TYPE_IPV6);
++
++			/* IPv6*/
++			d->ipv6.vtc_flow = htonl((6 << 28) |
++				(p->vxlan.ipv6.dscp << 22) |
++				p->vxlan.ipv6.flow_label);
++			d->ipv6.payload_len = 0; /* not pre-computed */
++			d->ipv6.proto = IP_PROTO_UDP;
++			d->ipv6.hop_limits = p->vxlan.ipv6.hop_limit;
++			memcpy(d->ipv6.src_addr,
++				p->vxlan.ipv6.sa,
++				sizeof(p->vxlan.ipv6.sa));
++			memcpy(d->ipv6.dst_addr,
++				p->vxlan.ipv6.da,
++				sizeof(p->vxlan.ipv6.da));
++
++			/* UDP */
++			d->udp.src_port = htons(p->vxlan.udp.sp);
++			d->udp.dst_port = htons(p->vxlan.udp.dp);
++			d->udp.dgram_len = 0; /* not pre-computed */
++			d->udp.dgram_cksum = 0;
++
++			/* VXLAN */
++			d->vxlan.vx_flags = htonl(0x08000000);
++			d->vxlan.vx_vni = htonl(p->vxlan.vxlan.vni << 8);
++
++			return 0;
++		} else {
++			struct hwoff_encap_vxlan_ipv6_data *d = data;
++
++			/* Ethernet */
++			rte_ether_addr_copy(&p->vxlan.ether.da,
++					&d->ether.dst_addr);
++			rte_ether_addr_copy(&p->vxlan.ether.sa,
++					&d->ether.src_addr);
++			d->ether.ether_type = htons(RTE_ETHER_TYPE_IPV6);
++
++			/* IPv6*/
++			d->ipv6.vtc_flow = htonl((6 << 28) |
++				(p->vxlan.ipv6.dscp << 22) |
++				p->vxlan.ipv6.flow_label);
++			d->ipv6.payload_len = 0; /* not pre-computed */
++			d->ipv6.proto = IP_PROTO_UDP;
++			d->ipv6.hop_limits = p->vxlan.ipv6.hop_limit;
++			memcpy(d->ipv6.src_addr,
++				p->vxlan.ipv6.sa,
++				sizeof(p->vxlan.ipv6.sa));
++			memcpy(d->ipv6.dst_addr,
++				p->vxlan.ipv6.da,
++				sizeof(p->vxlan.ipv6.da));
++
++			/* UDP */
++			d->udp.src_port = htons(p->vxlan.udp.sp);
++			d->udp.dst_port = htons(p->vxlan.udp.dp);
++			d->udp.dgram_len = 0; /* not pre-computed */
++			d->udp.dgram_cksum = 0;
++
++			/* VXLAN */
++			d->vxlan.vx_flags = htonl(0x08000000);
++			d->vxlan.vx_vni = htonl(p->vxlan.vxlan.vni << 8);
++
++			return 0;
++		}
++}
++
++static int hwoff_vxlan_ipv4_head_encap(struct rte_mbuf *m, struct hwoff_encap_vxlan_ipv4_data *encap_data)
++{
++    struct rte_vxlan_hdr vxlan_hdr = {0};
++    vxlan_hdr.vx_vni = encap_data->vxlan.vx_vni;
++    vxlan_hdr.vx_flags = htonl(0x08000000);
++
++    uint16_t ether_length, ipv4_total_length, ipv4_hdr_cksum, udp_length;
++    ether_length = (uint16_t)m->pkt_len;
++    ipv4_total_length = ether_length +
++		(sizeof(struct rte_vxlan_hdr) +
++		sizeof(struct rte_udp_hdr) +
++		sizeof(struct rte_ipv4_hdr));
++    udp_length = ether_length +
++		(sizeof(struct rte_vxlan_hdr) +
++		sizeof(struct rte_udp_hdr));
++    ipv4_hdr_cksum = hwoff_vxlan_ipv4_checksum_update(encap_data->ipv4.hdr_checksum, htons(ipv4_total_length));
++
++    struct rte_vxlan_hdr *vxlan = rte_pktmbuf_prepend(m, sizeof(struct rte_vxlan_hdr));
++    vxlan->vx_flags = vxlan_hdr.vx_flags;
++    vxlan->vx_vni = vxlan_hdr.vx_vni;
++
++    struct rte_udp_hdr *udp_hdr = rte_pktmbuf_prepend(m, sizeof(struct rte_udp_hdr));
++    if (udp_hdr == NULL) {
++        return -1;
++    }
++
++    encap_data->udp.dgram_len  = htons(udp_length);
++    rte_memcpy(udp_hdr, &encap_data->udp, sizeof(struct rte_udp_hdr));
++    struct rte_ipv4_hdr *ipv4  = rte_pktmbuf_prepend(m, sizeof(struct rte_ipv4_hdr));
++    if (ipv4 == NULL) {
++        return -1;
++    }
++
++    encap_data->ipv4.total_length = htons(ipv4_total_length);
++    encap_data->ipv4.hdr_checksum = ipv4_hdr_cksum;
++    rte_memcpy(ipv4, &encap_data->ipv4, sizeof(struct rte_ipv4_hdr));
++
++    struct rte_ether_hdr *eth = rte_pktmbuf_prepend(m, sizeof(struct rte_ether_hdr));
++    if (eth == NULL) {
++        return  -1;
++    }
++    rte_memcpy(eth, &encap_data->ether, sizeof(struct rte_ether_hdr));
++}
+ /*
+  * Forwarding of packets in I/O mode.
+  * Forward packets "as-is".
+  * This is the fastest possible forwarding operation, as it does not access
+  * to packets data.
+  */
++#define HWOFF_VXLAN_TOTAL_LEN (sizeof(struct rte_ether_hdr) + sizeof(struct rte_ipv4_hdr) + sizeof(struct rte_udp_hdr) + sizeof(struct rte_vxlan_hdr))
+ static void
+ pkt_burst_io_forward(struct fwd_stream *fs)
+ {
+@@ -49,7 +316,7 @@ pkt_burst_io_forward(struct fwd_stream *fs)
+	uint16_t nb_tx;
+	uint32_t retry;
+	uint64_t start_tsc = 0;
+-
++    struct hwoff_vtep_info *vxlan_param = hwoff_get_vxlan_encap_info();
+	get_start_cycles(&start_tsc);
+
+	/*
+@@ -61,6 +328,27 @@ pkt_burst_io_forward(struct fwd_stream *fs)
+	if (unlikely(nb_rx == 0))
+		return;
+	fs->rx_packets += nb_rx;
++    // 如果upcall报文是bond口上来的，去掉vxlan头
++    if (fs->rx_port == vxlan_param->bond_id) {
++        for (int i = 0; i < nb_rx; i++) {
++            rte_pktmbuf_adj(pkts_burst[i], HWOFF_VXLAN_TOTAL_LEN);
++        }
++    }
++
++    // 如果upcall报文是发送给bond0的，就填充vxlan头
++    if (fs->tx_port == vxlan_param->bond_id) {
++        struct hwoff_encap_vxlan_ipv4_data data = {0};
++        struct rte_table_action_encap_config cfg = {
++            .vxlan.vlan  = 0,
++            .vxlan.ip_version = 1,
++            .vxlan.data_offset = 0,
++        };
++
++        hwoff_encap_vxlan_apply(&data, &vxlan_param->vxlan_encap, &cfg);
++        for (int i = 0; i < nb_rx; i++) {
++            hwoff_vxlan_ipv4_head_encap(pkts_burst[i], &data);
++        }
++    }
+
+	nb_tx = rte_eth_tx_burst(fs->tx_port, fs->tx_queue,
+			pkts_burst, nb_rx);
+diff --git a/dpdk-22.11/app/test-pmd/meson.build b/dpdk-22.11/app/test-pmd/meson.build
+index 8488efc..dcada5b 100644
+--- a/dpdk-22.11/app/test-pmd/meson.build
++++ b/dpdk-22.11/app/test-pmd/meson.build
+@@ -32,7 +32,7 @@ if dpdk_conf.has('RTE_HAS_JANSSON')
+     ext_deps += jansson_dep
+ endif
+
+-deps += ['ethdev', 'cmdline']
++deps += ['ethdev', 'cmdline','cfgfile', 'pipeline']
+ if dpdk_conf.has('RTE_CRYPTO_SCHEDULER')
+     deps += 'crypto_scheduler'
+ endif
+diff --git a/dpdk-22.11/app/test-pmd/testpmd.c b/dpdk-22.11/app/test-pmd/testpmd.c
+index 134d79a..abef558 100644
+--- a/dpdk-22.11/app/test-pmd/testpmd.c
++++ b/dpdk-22.11/app/test-pmd/testpmd.c
+@@ -1,4 +1,4 @@
+-/* SPDX-License-Identifier: BSD-3-Clause
++/* SPDX-License-Identifier: BSD-3-Clause
+  * Copyright(c) 2010-2017 Intel Corporation
+  */
+
+@@ -72,7 +72,7 @@
+ #ifdef RTE_NET_MLX5
+ #include "mlx5_testpmd.h"
+ #endif
+-
++#include <dlfcn.h>
+ #include "testpmd.h"
+
+ #ifndef MAP_HUGETLB
+@@ -3450,8 +3450,8 @@ attach_port(char *identifier)
+ {
+	portid_t pi;
+	struct rte_dev_iterator iterator;
+-
+-	printf("Attaching a new port...\n");
++    bool is_bond = strstr(identifier, "bond") == NULL ? false : true;
++    printf("Attaching a new port...\n");
+
+	if (identifier == NULL) {
+		fprintf(stderr, "Invalid parameters are specified\n");
+@@ -3466,10 +3466,15 @@ attach_port(char *identifier)
+	/* first attach mode: event */
+	if (setup_on_probe_event) {
+		/* new ports are detected on RTE_ETH_EVENT_NEW event */
+-		for (pi = 0; pi < RTE_MAX_ETHPORTS; pi++)
++		for (pi = 0; pi < RTE_MAX_ETHPORTS; pi++) {
+			if (ports[pi].port_status == RTE_PORT_HANDLING &&
+-					ports[pi].need_setup != 0)
+-				setup_attached_port(pi);
++					ports[pi].need_setup != 0) {
++                    setup_attached_port(pi);
++                    if (is_bond) {
++                        hwoff_vtep_set(pi);
++                    }
++                }
++        }
+		return;
+	}
+
+@@ -3479,6 +3484,9 @@ attach_port(char *identifier)
+		if (port_is_forwarding(pi))
+			continue; /* port was already attached before */
+		setup_attached_port(pi);
++        if (is_bond) {
++            hwoff_vtep_set(pi);
++        }
+	}
+ }
+
+@@ -3553,21 +3561,25 @@ detach_port_device(portid_t port_id)
+	if (port_id_is_invalid(port_id, ENABLED_WARN))
+		return;
+
+-	if (ports[port_id].port_status != RTE_PORT_CLOSED) {
+-		if (ports[port_id].port_status != RTE_PORT_STOPPED) {
+-			fprintf(stderr, "Port not stopped\n");
+-			return;
+-		}
+-		fprintf(stderr, "Port was not closed\n");
++    if (ports[port_id].port_status != RTE_PORT_STOPPED) {
++		fprintf(stderr, "Port not stopped\n");
++		return;
+	}
+-
++
+	ret = eth_dev_info_get_print_err(port_id, &dev_info);
+	if (ret != 0) {
+		TESTPMD_LOG(ERR,
+			"Failed to get device info for port %d, not detaching\n",
+			port_id);
+		return;
+-	}
++    }
++
++    close_port(port_id);
++    if (ports[port_id].port_status != RTE_PORT_CLOSED) {
++        fprintf(stderr, "Port was not closed\n");
++        return;
++    }
++
+	detach_device(dev_info.device);
+ }
+
+@@ -4380,11 +4392,17 @@ main(int argc, char** argv)
+		rte_exit(EXIT_FAILURE, "Cannot register log type");
+	rte_log_set_level(testpmd_logtype, RTE_LOG_DEBUG);
+
+-	diag = rte_eal_init(argc, argv);
++    diag = rte_eal_init(argc, argv);
+	if (diag < 0)
+		rte_exit(EXIT_FAILURE, "Cannot init EAL: %s\n",
+			 rte_strerror(rte_errno));
+
++    void *hwoff_dpak_handle = dlopen("/usr/lib64/libdpak_ovs.so", RTLD_NOW);
++    if (hwoff_dpak_handle == NULL) {
++        rte_exit(EXIT_FAILURE, "Cannot load driver");
++        return -1;
++    }
++
+	ret = register_eth_event_callback();
+	if (ret != 0)
+		rte_exit(EXIT_FAILURE, "Cannot register for ethdev events");
+@@ -4575,7 +4593,7 @@ main(int argc, char** argv)
+		if (rc < 0)
+			return 1;
+	}
+-
++    dlclose(hwoff_dpak_handle);
+	ret = rte_eal_cleanup();
+	if (ret != 0)
+		rte_exit(EXIT_FAILURE,
+@@ -4583,3 +4601,205 @@ main(int argc, char** argv)
+
+	return EXIT_SUCCESS;
+ }
++
++#define HWOFF_VTEP_INFO  "/etc/dpak/net/hwoff_vtep_info.cfg"
++#define HWOFF_VTEP_SECTION "hwoff_vtep"
++#define HWOFF_VTEP_TYPE "ip_type"
++#define HWOFF_VTEP_SIP "src_ip"
++#define HWOFF_VTEP_DIP "dst_ip"
++#define HWOFF_VTEP_SMAC "src_mac"
++#define HWOFF_VTEP_DMAC "dst_mac"
++#define HWOFF_VTEP_SPORT "src_port"
++#define HWOFF_VTEP_DPORT "dst_port"
++#define HWOFF_VTEP_VNI "vni"
++#include "rte_cfgfile.h"
++
++static bool g_hwoff_vtep_set = false;
++struct hwoff_vtep_info g_hwoff_vxlan_encap = {
++    .vxlan_encap = {
++        .type = RTE_TABLE_ACTION_ENCAP_VXLAN,
++        .vxlan.ipv4.dscp = 0,
++        .vxlan.ipv4.ttl = 64,
++    },
++    .bond_id = 65535,
++};
++
++struct hwoff_vtep_info *hwoff_get_vxlan_encap_info(void)
++{
++    return &g_hwoff_vxlan_encap;
++}
++
++static int hwoff_parse_vtep_eth(struct rte_cfgfile *cfg, struct rte_table_action_encap_params *vtep)
++{
++    int ret = 0;
++    const char *smac = rte_cfgfile_get_entry(cfg, HWOFF_VTEP_SECTION, HWOFF_VTEP_SMAC);
++    if (smac == NULL) {
++        printf("hwoff offload, get smac failed\n");
++        return -1;
++    }
++
++    const char *dmac = rte_cfgfile_get_entry(cfg, HWOFF_VTEP_SECTION, HWOFF_VTEP_DMAC);
++    if (dmac == NULL) {
++        printf("hwoff offload, get dmac failed\n");
++        return -1;
++    }
++
++    ret = rte_ether_unformat_addr(smac, &vtep->vxlan.ether.sa);
++    if (ret != 0) {
++        printf("hwoff offload, translate smac failed\n");
++        return -1;
++    }
++
++    ret = rte_ether_unformat_addr(dmac, &vtep->vxlan.ether.da);
++    if (ret != 0) {
++        printf("hwoff offload, translate dmac failed\n");
++        return -1;
++    }
++
++    return 0;
++}
++
++static int hwoff_parse_vtep_ip(struct rte_cfgfile *cfg, struct rte_table_action_encap_params *vtep)
++
++{
++    int ret = 0;
++    int af = 0;
++    void *src = NULL;
++    void *dst = NULL;
++    const char *sip = rte_cfgfile_get_entry(cfg, HWOFF_VTEP_SECTION, HWOFF_VTEP_SIP);
++    if (sip == NULL) {
++        printf("hwoff offload, get sip failed\n");
++        return -1;
++    }
++
++    // Ipv4
++    af = AF_INET;
++    src = &vtep->vxlan.ipv4.sa;
++    dst = &vtep->vxlan.ipv4.da;
++
++    ret = inet_pton(af, sip, src);
++    if (ret != 1) {
++        printf("hwoff offload, translate sip failed\n");
++        return -1;
++    }
++
++    const char *dip = rte_cfgfile_get_entry(cfg, HWOFF_VTEP_SECTION, HWOFF_VTEP_DIP);
++    if (dip == NULL) {
++        printf("hwoff offload, get dip failed\n");
++        return -1;
++    }
++    ret = inet_pton(af, dip, dst);
++    if (ret != 1) {
++        printf("hwoff offload, translate sip failed\n");
++        return -1;
++    }
++    return 0;
++}
++
++static int hwoff_parse_vtep_port(struct rte_cfgfile *cfg, struct rte_table_action_encap_params *vtep)
++{
++    const char *sport = rte_cfgfile_get_entry(cfg, HWOFF_VTEP_SECTION, HWOFF_VTEP_SPORT);
++    if (sport == NULL) {
++        printf("hwoff offload, get sport failed\n");
++        return -1;
++    }
++
++    const char *dport = rte_cfgfile_get_entry(cfg, HWOFF_VTEP_SECTION, HWOFF_VTEP_DPORT);
++    if (dport == NULL) {
++        printf("hwoff offload, get dport failed\n");
++        return -1;
++    }
++
++    vtep->vxlan.udp.sp = atoi(sport);
++    vtep->vxlan.udp.dp = atoi(dport);
++    return 0;
++}
++
++static int hwoff_parse_vetp_tunnel_info(struct rte_table_action_encap_params *tunnel, portid_t port_id)
++{
++    if (g_hwoff_vtep_set == true) {
++        return 0;
++    }
++
++    char *file = HWOFF_VTEP_INFO;
++    int ret = 0;
++
++    struct rte_cfgfile *cfg = rte_cfgfile_load(file, 0);
++    if (cfg == NULL) {
++        printf("hwoff offload, open vtep cfg file failed\n");
++        return -1;
++    }
++
++    const char *ip_type = rte_cfgfile_get_entry(cfg, HWOFF_VTEP_SECTION, HWOFF_VTEP_TYPE);
++    if (ip_type == NULL) {
++        printf("hwoff offload, get vtep type failed\n");
++        rte_cfgfile_close(cfg);
++        return -1;
++    }
++
++    int ip = atoi(ip_type);
++    if (ip == 0) { // 1 ipv4, 2 ipv6
++        printf("hwoff offload, translate vtep type failed\n");
++        rte_cfgfile_close(cfg);
++        return -1;
++    }
++
++    ret = hwoff_parse_vtep_eth(cfg, tunnel);
++    if (ret != 0) {
++        printf("hwoff offload, parse vtep mac failed\n");
++        rte_cfgfile_close(cfg);
++    }
++
++    ret = hwoff_parse_vtep_ip(cfg, tunnel);
++    if (ret != 0) {
++        rte_cfgfile_close(cfg);
++        return -1;
++    }
++
++    ret = hwoff_parse_vtep_port(cfg, tunnel);
++    if (ret != 0) {
++        rte_cfgfile_close(cfg);
++        return -1;
++    }
++
++    const char *vni = rte_cfgfile_get_entry(cfg, HWOFF_VTEP_SECTION, HWOFF_VTEP_VNI);
++    if (vni == NULL) {
++        printf("hwoff offload, get vni failed\n");
++        rte_cfgfile_close(cfg);
++        return -1;
++    }
++
++    tunnel->vxlan.vxlan.vni = atoi(vni);
++    g_hwoff_vxlan_encap.vxlan_encap.vxlan.ipv4.sa = htonl(g_hwoff_vxlan_encap.vxlan_encap.vxlan.ipv4.sa);
++    g_hwoff_vxlan_encap.vxlan_encap.vxlan.ipv4.da = htonl(g_hwoff_vxlan_encap.vxlan_encap.vxlan.ipv4.da);
++    g_hwoff_vxlan_encap.bond_id = port_id;
++
++    g_hwoff_vtep_set = true;
++    return 0;
++};
++
++void hwoff_vtep_set(portid_t port_id)
++{
++    if (g_hwoff_vtep_set == true) {
++        return;
++    }
++
++    struct rte_flow_tunnel tunnel = {.type = RTE_FLOW_ITEM_TYPE_VXLAN};
++    struct rte_flow_error error = {0};
++    int ret = hwoff_parse_vetp_tunnel_info(&g_hwoff_vxlan_encap.vxlan_encap, port_id);
++    if (ret != 0) {
++        printf("hwoff offload, parse vtep info failed\n");
++        return;
++    }
++
++    // dst_addrtp_dstuplinkvxlanIPvtepip
++    tunnel.ipv4.dst_addr = g_hwoff_vxlan_encap.vxlan_encap.vxlan.ipv4.sa;
++    tunnel.tp_dst = htons(g_hwoff_vxlan_encap.vxlan_encap.vxlan.udp.dp);
++
++    ret = rte_flow_tunnel_decap_set(port_id, &tunnel, NULL, 0, &error);
++    if (ret != 0) {
++        printf("hwoff offload, set vtep failed\n");
++        return;
++    }
++}
++
+diff --git a/dpdk-22.11/app/test-pmd/testpmd.h b/dpdk-22.11/app/test-pmd/testpmd.h
+index 7d24d25..6398c0e 100644
+--- a/dpdk-22.11/app/test-pmd/testpmd.h
++++ b/dpdk-22.11/app/test-pmd/testpmd.h
+@@ -17,7 +17,7 @@
+ #include <rte_ethdev.h>
+ #include <rte_flow.h>
+ #include <rte_mbuf_dyn.h>
+-
++#include <rte_table_action.h>
+ #include <cmdline.h>
+ #include <cmdline_parse.h>
+
+@@ -1063,6 +1063,14 @@ int all_ports_stopped(void);
+ int port_is_stopped(portid_t port_id);
+ int port_is_started(portid_t port_id);
+ void pmd_test_exit(void);
++
++struct hwoff_vtep_info {
++    struct rte_table_action_encap_params vxlan_encap;
++    portid_t bond_id;
++};
++
++void hwoff_vtep_set(portid_t port_id);
++struct hwoff_vtep_info  *hwoff_get_vxlan_encap_info(void);
+ #if defined(RTE_NET_I40E) || defined(RTE_NET_IXGBE)
+ void fdir_get_infos(portid_t port_id);
+ #endif
