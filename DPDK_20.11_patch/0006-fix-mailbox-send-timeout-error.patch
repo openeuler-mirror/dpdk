@@ -1,0 +1,37 @@
+From 38c03712390f00b756f1b1db4c031b1572368bb6 Mon Sep 17 00:00:00 2001
+From: xiaobai <chenyi19990512@163.com>
+Date: Wed, 2 Apr 2025 10:54:46 +0800
+Subject: [PATCH] fix mailbox send timeout error
+
+---
+ hinic3/base/hinic3_pmd_eqs.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/hinic3/base/hinic3_pmd_eqs.c b/hinic3/base/hinic3_pmd_eqs.c
+index 8e876b1..1851f6c 100644
+--- a/hinic3/base/hinic3_pmd_eqs.c
++++ b/hinic3/base/hinic3_pmd_eqs.c
+@@ -618,7 +618,6 @@ int hinic3_aeq_poll_msg(struct hinic3_eq *eq, u32 timeout, void *param)
+ 		end = jiffies + msecs_to_jiffies(timeout);
+ 		do {
+ 			aeqe_pos = GET_CURR_AEQ_ELEM(eq);
+-			rte_rmb();
+ 
+ 			/* Data in HW is in Big endian Format */
+ 			aeqe_desc = be32_to_cpu(aeqe_pos->desc);
+@@ -630,6 +629,12 @@ int hinic3_aeq_poll_msg(struct hinic3_eq *eq, u32 timeout, void *param)
+ 			if (EQ_ELEM_DESC_GET(aeqe_desc, WRAPPED)
+ 				!= eq->wrapped) {
+ 				err = 0;
++				/*
++				 * Barrier is to prevent the CPU from
++				 * loading the wrong memory content
++				 * before HW updating wrapped bit.
++				 */
++				rte_rmb();
+ 				break;
+ 			}
+ 
+-- 
+2.45.1.windows.1
+
