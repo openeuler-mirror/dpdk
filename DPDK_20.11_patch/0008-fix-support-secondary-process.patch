@@ -1,0 +1,50 @@
+From 5a2720bd3407f3f183335dcb192a1c7a6e112827 Mon Sep 17 00:00:00 2001
+From: liya51 <luckly0822@qq.com>
+Date: Tue, 8 Apr 2025 10:33:03 +0800
+Subject: [PATCH] fix support secondary process
+
+---
+ hinic3/hinic3_pmd_ethdev.c | 27 +++++++++++++++++++++++++++
+ 1 file changed, 27 insertions(+)
+
+diff --git a/hinic3/hinic3_pmd_ethdev.c b/hinic3/hinic3_pmd_ethdev.c
+index 35ce44e..cfc85c0 100644
+--- a/hinic3/hinic3_pmd_ethdev.c
++++ b/hinic3/hinic3_pmd_ethdev.c
+@@ -3364,6 +3364,33 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
+ 		PMD_DRV_LOG(INFO, "Initialize %s in secondary process",
+ 			    eth_dev->data->name);
+ 
++		char name[RTE_ETH_NAME_MAX_LEN];
++		(void)snprintf(name, sizeof(name), "%s", eth_dev->data->name);
++		
++		eth_dev = rte_eth_dev_attach_secondary(name);
++		if (eth_dev == NULL) {
++			PMD_DRV_LOG(ERR, "can not attach rte ethdev, "
++				"dev_name: %s",
++				name);
++			
++			return -ENOMEM;
++		}
++
++		nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
++		if (nic_dev->hwdev == NULL) {
++				PMD_DRV_LOG(ERR, "nic_dev hwdev is NULL, "
++				"dev_name: %s",
++				name);
++			
++			return -ENOMEM;
++		}
++
++		if (HINIC3_FUNC_TYPE(nic_dev->hwdev) == TYPE_VF) {
++			eth_dev->dev_ops = &hinic3_pmd_vf_ops;
++		} else {
++			eth_dev->dev_ops = &hinic3_pmd_ops;
++		}
++
+ 		return 0;
+ 	}
+ 
+-- 
+2.45.1.windows.1
+
