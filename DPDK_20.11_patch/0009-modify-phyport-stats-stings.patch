@@ -1,0 +1,39 @@
+From 99b3ea7981c68d88537302691876250765c91fff Mon Sep 17 00:00:00 2001
+From: xiaobai <chenyi19990512@163.com>
+Date: Mon, 21 Apr 2025 11:36:31 +0800
+Subject: [PATCH] modify phyport stats stings
+
+---
+ hinic3/base/hinic3_pmd_nic_cfg.h | 2 +-
+ hinic3/hinic3_pmd_ethdev.c       | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/hinic3/base/hinic3_pmd_nic_cfg.h b/hinic3/base/hinic3_pmd_nic_cfg.h
+index 1ddce37..5dcb25a 100644
+--- a/hinic3/base/hinic3_pmd_nic_cfg.h
++++ b/hinic3/base/hinic3_pmd_nic_cfg.h
+@@ -524,7 +524,7 @@ struct mag_phy_port_stats {
+ 	u64 mac_rx_pfc_pri7_pkt_num;
+ 	u64 mac_rx_control_pkt_num;
+ 	u64 mac_rx_sym_err_pkt_num;
+-	u64 mac_rx_fcs_err_pkt_num;
++	u64 rx_crc_errors;
+ 	u64 mac_rx_send_app_good_pkt_num;
+ 	u64 mac_rx_send_app_bad_pkt_num;
+ 	u64 mac_rx_unfilter_pkt_num;
+diff --git a/hinic3/hinic3_pmd_ethdev.c b/hinic3/hinic3_pmd_ethdev.c
+index 35ce44e..785aadd 100644
+--- a/hinic3/hinic3_pmd_ethdev.c
++++ b/hinic3/hinic3_pmd_ethdev.c
+@@ -192,7 +192,7 @@ static const struct hinic3_xstats_name_off hinic3_phyport_stats_strings[] = {
+ 	HINIC3_PORT_STAT(mac_rx_pfc_pri7_pkt_num),
+ 	HINIC3_PORT_STAT(mac_rx_control_pkt_num),
+ 	HINIC3_PORT_STAT(mac_rx_sym_err_pkt_num),
+-	HINIC3_PORT_STAT(mac_rx_fcs_err_pkt_num),
++	HINIC3_PORT_STAT(rx_crc_errors),
+ 	HINIC3_PORT_STAT(mac_rx_send_app_good_pkt_num),
+ 	HINIC3_PORT_STAT(mac_rx_send_app_bad_pkt_num),
+ 	HINIC3_PORT_STAT(mac_rx_unfilter_pkt_num)
+-- 
+2.45.1.windows.1
+
