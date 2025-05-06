@@ -1,4 +1,4 @@
-From 8c95007af1862d79902d0ae5507aeec2988b506c Mon Sep 17 00:00:00 2001
+From e704647c6faa1477793358c7a0f8063e761fda13 Mon Sep 17 00:00:00 2001
 From: Feifei Wang <wangfeifei40@huawei.com>
 Date: Mon, 17 Mar 2025 18:31:48 +0800
 Subject: [PATCH] vxlan tso support checksum offload
@@ -185,5 +185,5 @@ index bfae4cf..398a474 100644
  
  void hinic3_free_txq_mbufs(struct hinic3_txq *txq);
 -- 
-2.47.0.windows.2
+2.45.1.windows.1
 

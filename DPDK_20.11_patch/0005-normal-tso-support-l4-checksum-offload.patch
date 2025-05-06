@@ -1,4 +1,4 @@
-From 22a27754fbe693229a9055de5bb2248a36082919 Mon Sep 17 00:00:00 2001
+From 38b37324a2f6c0b74598b8ea664611ebb8fbdc22 Mon Sep 17 00:00:00 2001
 From: Feifei Wang <wangfeifei40@huawei.com>
 Date: Tue, 1 Apr 2025 15:26:50 +0800
 Subject: [PATCH] normal tso support l4 checksum offload
@@ -76,5 +76,5 @@ index 1ec3ff3..8cb622c 100644
  	} else {
  		if (ol_flags & HINIC3_PKT_TX_IP_CKSUM)
 -- 
-2.47.0.windows.2
+2.45.1.windows.1
 

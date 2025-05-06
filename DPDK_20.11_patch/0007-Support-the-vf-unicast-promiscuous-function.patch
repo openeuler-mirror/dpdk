@@ -1,17 +1,17 @@
-From 8ca678fd190d74f50b3766bd753ec1a443e37940 Mon Sep 17 00:00:00 2001
+From 4a51cab9f49bcca394888735fd7794636a61f7bc Mon Sep 17 00:00:00 2001
 From: xiaobai <chenyi19990512@163.com>
-Date: Wed, 2 Apr 2025 15:18:52 +0800
+Date: Tue, 6 May 2025 11:22:51 +0800
 Subject: [PATCH] Support the vf unicast promiscuous function
 
 ---
- hinic3/hinic3_pmd_ethdev.c | 14 ++++++++++++++
+ drivers/net/hinic3/hinic3_pmd_ethdev.c | 14 ++++++++++++++
  1 file changed, 14 insertions(+)
 
-diff --git a/hinic3/hinic3_pmd_ethdev.c b/hinic3/hinic3_pmd_ethdev.c
-index 35ce44e..0502d3a 100644
---- a/hinic3/hinic3_pmd_ethdev.c
-+++ b/hinic3/hinic3_pmd_ethdev.c
-@@ -2141,6 +2141,12 @@ static int hinic3_dev_promiscuous_enable(struct rte_eth_dev *dev)
+diff --git a/drivers/net/hinic3/hinic3_pmd_ethdev.c b/drivers/net/hinic3/hinic3_pmd_ethdev.c
+index 0fceeb4..3e8f8bc 100644
+--- a/drivers/net/hinic3/hinic3_pmd_ethdev.c
++++ b/drivers/net/hinic3/hinic3_pmd_ethdev.c
+@@ -2143,6 +2143,12 @@ static int hinic3_dev_promiscuous_enable(struct rte_eth_dev *dev)
  	u32 rx_mode;
  	int err;
  
@@ -24,7 +24,7 @@ index 35ce44e..0502d3a 100644
  	err = hinic3_mutex_lock(&nic_dev->rx_mode_mutex);
  	if (err)
  		return err;
-@@ -2179,6 +2185,12 @@ static int hinic3_dev_promiscuous_disable(struct rte_eth_dev *dev)
+@@ -2181,6 +2187,12 @@ static int hinic3_dev_promiscuous_disable(struct rte_eth_dev *dev)
  	u32 rx_mode;
  	int err;
  
@@ -37,7 +37,7 @@ index 35ce44e..0502d3a 100644
  	err = hinic3_mutex_lock(&nic_dev->rx_mode_mutex);
  	if (err)
  		return err;
-@@ -3182,6 +3194,8 @@ static const struct eth_dev_ops hinic3_pmd_vf_ops = {
+@@ -3184,6 +3196,8 @@ static const struct eth_dev_ops hinic3_pmd_vf_ops = {
  	.vlan_offload_set              = hinic3_vlan_offload_set,
  	.allmulticast_enable           = hinic3_dev_allmulticast_enable,
  	.allmulticast_disable          = hinic3_dev_allmulticast_disable,

@@ -1,4 +1,4 @@
-From db198a783a88d8fe2ca7620faf40a4d4b98fb89c Mon Sep 17 00:00:00 2001
+From a3c007d6569fded1db72dce69d5a07d7530d98c7 Mon Sep 17 00:00:00 2001
 From: Feifei Wang <wangfeifei40@huawei.com>
 Date: Mon, 17 Mar 2025 16:28:04 +0800
 Subject: [PATCH] net/hinic3: add vxlan packet ptype
@@ -55,5 +55,5 @@ index 7178439..bba25fa 100644
  		rxm->ol_flags |= hinic3_rx_rss_hash(offload_type, hash_value,
  						    &rxm->hash.rss);
 -- 
-2.47.1.windows.2
+2.45.1.windows.1
 
