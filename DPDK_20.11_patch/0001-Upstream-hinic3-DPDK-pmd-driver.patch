@@ -1,4 +1,4 @@
-From d8567a6824bbc4f178b5329ac2499058fd1b6d32 Mon Sep 17 00:00:00 2001
+From 059a36c13ad691d044bd1d25591e55c6913151e3 Mon Sep 17 00:00:00 2001
 From: Huawei <@huawei.com>
 Date: Tue, 26 Nov 2024 15:16:09 +0800
 Subject: [PATCH 1/2] Upstream hinic3 DPDK pmd driver
@@ -119,7 +119,7 @@ Signed-off-by: Huawei <@huawei.com>
 
 diff --git a/drivers/net/hinic3/Makefile b/drivers/net/hinic3/Makefile
 new file mode 100644
-index 0000000000..ea89e191db
+index 0000000..ea89e19
 --- /dev/null
 +++ b/drivers/net/hinic3/Makefile
 @@ -0,0 +1,106 @@
@@ -231,7 +231,7 @@ index 0000000000..ea89e191db
 +include $(RTE_SDK)/mk/rte.lib.mk
 diff --git a/drivers/net/hinic3/base/hinic3_compat.h b/drivers/net/hinic3/base/hinic3_compat.h
 new file mode 100644
-index 0000000000..0a98a60b08
+index 0000000..0a98a60
 --- /dev/null
 +++ b/drivers/net/hinic3/base/hinic3_compat.h
 @@ -0,0 +1,256 @@
@@ -493,7 +493,7 @@ index 0000000000..0a98a60b08
 +
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_cmd.h b/drivers/net/hinic3/base/hinic3_pmd_cmd.h
 new file mode 100644
-index 0000000000..c07720bd51
+index 0000000..c07720b
 --- /dev/null
 +++ b/drivers/net/hinic3/base/hinic3_pmd_cmd.h
 @@ -0,0 +1,232 @@
@@ -731,7 +731,7 @@ index 0000000000..c07720bd51
 +#endif /* _HINIC3_PMD_CMD_H_ */
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_cmdq.c b/drivers/net/hinic3/base/hinic3_pmd_cmdq.c
 new file mode 100644
-index 0000000000..d7497ce74f
+index 0000000..d7497ce
 --- /dev/null
 +++ b/drivers/net/hinic3/base/hinic3_pmd_cmdq.c
 @@ -0,0 +1,894 @@
@@ -1631,7 +1631,7 @@ index 0000000000..d7497ce74f
 +
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_cmdq.h b/drivers/net/hinic3/base/hinic3_pmd_cmdq.h
 new file mode 100644
-index 0000000000..7c6a37a293
+index 0000000..7c6a37a
 --- /dev/null
 +++ b/drivers/net/hinic3/base/hinic3_pmd_cmdq.h
 @@ -0,0 +1,248 @@
@@ -1885,7 +1885,7 @@ index 0000000000..7c6a37a293
 +#endif /* _HINIC3_PMD_CMDQ_H_ */
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_csr.h b/drivers/net/hinic3/base/hinic3_pmd_csr.h
 new file mode 100644
-index 0000000000..fa10821385
+index 0000000..fa10821
 --- /dev/null
 +++ b/drivers/net/hinic3/base/hinic3_pmd_csr.h
 @@ -0,0 +1,113 @@
@@ -2004,7 +2004,7 @@ index 0000000000..fa10821385
 +
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_eqs.c b/drivers/net/hinic3/base/hinic3_pmd_eqs.c
 new file mode 100644
-index 0000000000..8e876b1d0d
+index 0000000..8e876b1
 --- /dev/null
 +++ b/drivers/net/hinic3/base/hinic3_pmd_eqs.c
 @@ -0,0 +1,670 @@
@@ -2680,7 +2680,7 @@ index 0000000000..8e876b1d0d
 +}
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_eqs.h b/drivers/net/hinic3/base/hinic3_pmd_eqs.h
 new file mode 100644
-index 0000000000..26dba929ba
+index 0000000..26dba92
 --- /dev/null
 +++ b/drivers/net/hinic3/base/hinic3_pmd_eqs.h
 @@ -0,0 +1,102 @@
@@ -2788,7 +2788,7 @@ index 0000000000..26dba929ba
 +#endif /* _HINIC3_PMD_EQS_H_ */
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_hw_cfg.c b/drivers/net/hinic3/base/hinic3_pmd_hw_cfg.c
 new file mode 100644
-index 0000000000..6e28370d7c
+index 0000000..6e28370
 --- /dev/null
 +++ b/drivers/net/hinic3/base/hinic3_pmd_hw_cfg.c
 @@ -0,0 +1,226 @@
@@ -3020,7 +3020,7 @@ index 0000000000..6e28370d7c
 +
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_hw_cfg.h b/drivers/net/hinic3/base/hinic3_pmd_hw_cfg.h
 new file mode 100644
-index 0000000000..96dcdb3533
+index 0000000..96dcdb3
 --- /dev/null
 +++ b/drivers/net/hinic3/base/hinic3_pmd_hw_cfg.h
 @@ -0,0 +1,129 @@
@@ -3155,7 +3155,7 @@ index 0000000000..96dcdb3533
 +
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_hw_comm.c b/drivers/net/hinic3/base/hinic3_pmd_hw_comm.c
 new file mode 100644
-index 0000000000..1d44786434
+index 0000000..1d44786
 --- /dev/null
 +++ b/drivers/net/hinic3/base/hinic3_pmd_hw_comm.c
 @@ -0,0 +1,440 @@
@@ -3601,7 +3601,7 @@ index 0000000000..1d44786434
 +}
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_hw_comm.h b/drivers/net/hinic3/base/hinic3_pmd_hw_comm.h
 new file mode 100644
-index 0000000000..cf4ca948c3
+index 0000000..cf4ca94
 --- /dev/null
 +++ b/drivers/net/hinic3/base/hinic3_pmd_hw_comm.h
 @@ -0,0 +1,257 @@
@@ -3864,7 +3864,7 @@ index 0000000000..cf4ca948c3
 +#endif
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_hwdev.c b/drivers/net/hinic3/base/hinic3_pmd_hwdev.c
 new file mode 100644
-index 0000000000..0ec5f90393
+index 0000000..0ec5f90
 --- /dev/null
 +++ b/drivers/net/hinic3/base/hinic3_pmd_hwdev.c
 @@ -0,0 +1,559 @@
@@ -4429,7 +4429,7 @@ index 0000000000..0ec5f90393
 +}
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_hwdev.h b/drivers/net/hinic3/base/hinic3_pmd_hwdev.h
 new file mode 100644
-index 0000000000..37b8ee3f10
+index 0000000..37b8ee3
 --- /dev/null
 +++ b/drivers/net/hinic3/base/hinic3_pmd_hwdev.h
 @@ -0,0 +1,158 @@
@@ -4593,7 +4593,7 @@ index 0000000000..37b8ee3f10
 +#endif /* _HINIC3_PMD_HWDEV_H_ */
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_hwif.c b/drivers/net/hinic3/base/hinic3_pmd_hwif.c
 new file mode 100644
-index 0000000000..110b7e9a57
+index 0000000..110b7e9
 --- /dev/null
 +++ b/drivers/net/hinic3/base/hinic3_pmd_hwif.c
 @@ -0,0 +1,748 @@
@@ -5347,7 +5347,7 @@ index 0000000000..110b7e9a57
 +
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_hwif.h b/drivers/net/hinic3/base/hinic3_pmd_hwif.h
 new file mode 100644
-index 0000000000..c52f63677d
+index 0000000..c52f636
 --- /dev/null
 +++ b/drivers/net/hinic3/base/hinic3_pmd_hwif.h
 @@ -0,0 +1,149 @@
@@ -5502,7 +5502,7 @@ index 0000000000..c52f63677d
 +#endif /* _HINIC3_PMD_HWIF_H_ */
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_mbox.c b/drivers/net/hinic3/base/hinic3_pmd_mbox.c
 new file mode 100644
-index 0000000000..89d81df321
+index 0000000..89d81df
 --- /dev/null
 +++ b/drivers/net/hinic3/base/hinic3_pmd_mbox.c
 @@ -0,0 +1,1216 @@
@@ -6724,7 +6724,7 @@ index 0000000000..89d81df321
 +
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_mbox.h b/drivers/net/hinic3/base/hinic3_pmd_mbox.h
 new file mode 100644
-index 0000000000..2cb97c8fa2
+index 0000000..2cb97c8
 --- /dev/null
 +++ b/drivers/net/hinic3/base/hinic3_pmd_mbox.h
 @@ -0,0 +1,211 @@
@@ -6941,7 +6941,7 @@ index 0000000000..2cb97c8fa2
 +
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_mgmt.c b/drivers/net/hinic3/base/hinic3_pmd_mgmt.c
 new file mode 100644
-index 0000000000..73b9f182be
+index 0000000..73b9f18
 --- /dev/null
 +++ b/drivers/net/hinic3/base/hinic3_pmd_mgmt.c
 @@ -0,0 +1,387 @@
@@ -7334,7 +7334,7 @@ index 0000000000..73b9f182be
 +
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_mgmt.h b/drivers/net/hinic3/base/hinic3_pmd_mgmt.h
 new file mode 100644
-index 0000000000..20d2d74b37
+index 0000000..20d2d74
 --- /dev/null
 +++ b/drivers/net/hinic3/base/hinic3_pmd_mgmt.h
 @@ -0,0 +1,124 @@
@@ -7464,7 +7464,7 @@ index 0000000000..20d2d74b37
 +
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c
 new file mode 100644
-index 0000000000..94af5e3bdd
+index 0000000..94af5e3
 --- /dev/null
 +++ b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c
 @@ -0,0 +1,1627 @@
@@ -9098,7 +9098,7 @@ index 0000000000..94af5e3bdd
 \ No newline at end of file
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h
 new file mode 100644
-index 0000000000..1ddce37f86
+index 0000000..1ddce37
 --- /dev/null
 +++ b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h
 @@ -0,0 +1,1521 @@
@@ -10625,7 +10625,7 @@ index 0000000000..1ddce37f86
 +#endif /* _HINIC3_PMD_NIC_CFG_H_ */
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_nic_event.c b/drivers/net/hinic3/base/hinic3_pmd_nic_event.c
 new file mode 100644
-index 0000000000..46227105ae
+index 0000000..4622710
 --- /dev/null
 +++ b/drivers/net/hinic3/base/hinic3_pmd_nic_event.c
 @@ -0,0 +1,391 @@
@@ -11022,7 +11022,7 @@ index 0000000000..46227105ae
 +
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_nic_event.h b/drivers/net/hinic3/base/hinic3_pmd_nic_event.h
 new file mode 100644
-index 0000000000..936691f368
+index 0000000..936691f
 --- /dev/null
 +++ b/drivers/net/hinic3/base/hinic3_pmd_nic_event.h
 @@ -0,0 +1,30 @@
@@ -11058,7 +11058,7 @@ index 0000000000..936691f368
 +
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_wq.c b/drivers/net/hinic3/base/hinic3_pmd_wq.c
 new file mode 100644
-index 0000000000..a266f60d16
+index 0000000..a266f60
 --- /dev/null
 +++ b/drivers/net/hinic3/base/hinic3_pmd_wq.c
 @@ -0,0 +1,137 @@
@@ -11201,7 +11201,7 @@ index 0000000000..a266f60d16
 +
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_wq.h b/drivers/net/hinic3/base/hinic3_pmd_wq.h
 new file mode 100644
-index 0000000000..c001e68f27
+index 0000000..c001e68
 --- /dev/null
 +++ b/drivers/net/hinic3/base/hinic3_pmd_wq.h
 @@ -0,0 +1,62 @@
@@ -11269,7 +11269,7 @@ index 0000000000..c001e68f27
 +
 diff --git a/drivers/net/hinic3/base/hinic3pmd_cmdq.h b/drivers/net/hinic3/base/hinic3pmd_cmdq.h
 new file mode 100644
-index 0000000000..7c6a37a293
+index 0000000..7c6a37a
 --- /dev/null
 +++ b/drivers/net/hinic3/base/hinic3pmd_cmdq.h
 @@ -0,0 +1,248 @@
@@ -11523,7 +11523,7 @@ index 0000000000..7c6a37a293
 +#endif /* _HINIC3_PMD_CMDQ_H_ */
 diff --git a/drivers/net/hinic3/base/meson.build b/drivers/net/hinic3/base/meson.build
 new file mode 100644
-index 0000000000..b42375c1ee
+index 0000000..b42375c
 --- /dev/null
 +++ b/drivers/net/hinic3/base/meson.build
 @@ -0,0 +1,38 @@
@@ -11567,7 +11567,7 @@ index 0000000000..b42375c1ee
 +base_objs = base_lib.extract_all_objects()
 diff --git a/drivers/net/hinic3/hinic3_pmd_ethdev.c b/drivers/net/hinic3/hinic3_pmd_ethdev.c
 new file mode 100644
-index 0000000000..35ce44ed31
+index 0000000..35ce44e
 --- /dev/null
 +++ b/drivers/net/hinic3/hinic3_pmd_ethdev.c
 @@ -0,0 +1,3634 @@
@@ -15207,7 +15207,7 @@ index 0000000000..35ce44ed31
 +
 diff --git a/drivers/net/hinic3/hinic3_pmd_ethdev.h b/drivers/net/hinic3/hinic3_pmd_ethdev.h
 new file mode 100644
-index 0000000000..d7dca3d4c0
+index 0000000..d7dca3d
 --- /dev/null
 +++ b/drivers/net/hinic3/hinic3_pmd_ethdev.h
 @@ -0,0 +1,179 @@
@@ -15392,7 +15392,7 @@ index 0000000000..d7dca3d4c0
 +#endif /* _HINIC3_PMD_ETHDEV_H_ */
 diff --git a/drivers/net/hinic3/hinic3_pmd_fdir.c b/drivers/net/hinic3/hinic3_pmd_fdir.c
 new file mode 100644
-index 0000000000..f5c64fe70f
+index 0000000..f5c64fe
 --- /dev/null
 +++ b/drivers/net/hinic3/hinic3_pmd_fdir.c
 @@ -0,0 +1,1081 @@
@@ -16479,7 +16479,7 @@ index 0000000000..f5c64fe70f
 +
 diff --git a/drivers/net/hinic3/hinic3_pmd_fdir.h b/drivers/net/hinic3/hinic3_pmd_fdir.h
 new file mode 100644
-index 0000000000..481490dd08
+index 0000000..481490d
 --- /dev/null
 +++ b/drivers/net/hinic3/hinic3_pmd_fdir.h
 @@ -0,0 +1,395 @@
@@ -16880,7 +16880,7 @@ index 0000000000..481490dd08
 +#endif
 diff --git a/drivers/net/hinic3/hinic3_pmd_flow.c b/drivers/net/hinic3/hinic3_pmd_flow.c
 new file mode 100644
-index 0000000000..3ccafcd998
+index 0000000..3ccafcd
 --- /dev/null
 +++ b/drivers/net/hinic3/hinic3_pmd_flow.c
 @@ -0,0 +1,1419 @@
@@ -18305,7 +18305,7 @@ index 0000000000..3ccafcd998
 +};
 diff --git a/drivers/net/hinic3/hinic3_pmd_flow.h b/drivers/net/hinic3/hinic3_pmd_flow.h
 new file mode 100644
-index 0000000000..d1108db1af
+index 0000000..d1108db
 --- /dev/null
 +++ b/drivers/net/hinic3/hinic3_pmd_flow.h
 @@ -0,0 +1,80 @@
@@ -18392,7 +18392,7 @@ index 0000000000..d1108db1af
 \ No newline at end of file
 diff --git a/drivers/net/hinic3/hinic3_pmd_nic_io.c b/drivers/net/hinic3/hinic3_pmd_nic_io.c
 new file mode 100644
-index 0000000000..723e2eca46
+index 0000000..723e2ec
 --- /dev/null
 +++ b/drivers/net/hinic3/hinic3_pmd_nic_io.c
 @@ -0,0 +1,737 @@
@@ -19135,7 +19135,7 @@ index 0000000000..723e2eca46
 +
 diff --git a/drivers/net/hinic3/hinic3_pmd_nic_io.h b/drivers/net/hinic3/hinic3_pmd_nic_io.h
 new file mode 100644
-index 0000000000..79d935e466
+index 0000000..79d935e
 --- /dev/null
 +++ b/drivers/net/hinic3/hinic3_pmd_nic_io.h
 @@ -0,0 +1,154 @@
@@ -19295,7 +19295,7 @@ index 0000000000..79d935e466
 +
 diff --git a/drivers/net/hinic3/hinic3_pmd_rx.c b/drivers/net/hinic3/hinic3_pmd_rx.c
 new file mode 100644
-index 0000000000..7178439f95
+index 0000000..7178439
 --- /dev/null
 +++ b/drivers/net/hinic3/hinic3_pmd_rx.c
 @@ -0,0 +1,1050 @@
@@ -20351,7 +20351,7 @@ index 0000000000..7178439f95
 +
 diff --git a/drivers/net/hinic3/hinic3_pmd_rx.h b/drivers/net/hinic3/hinic3_pmd_rx.h
 new file mode 100644
-index 0000000000..d03cf22bdd
+index 0000000..d03cf22
 --- /dev/null
 +++ b/drivers/net/hinic3/hinic3_pmd_rx.h
 @@ -0,0 +1,360 @@
@@ -20717,7 +20717,7 @@ index 0000000000..d03cf22bdd
 +
 diff --git a/drivers/net/hinic3/hinic3_pmd_tx.c b/drivers/net/hinic3/hinic3_pmd_tx.c
 new file mode 100644
-index 0000000000..b2199e9dea
+index 0000000..b2199e9
 --- /dev/null
 +++ b/drivers/net/hinic3/hinic3_pmd_tx.c
 @@ -0,0 +1,938 @@
@@ -21661,7 +21661,7 @@ index 0000000000..b2199e9dea
 +}
 diff --git a/drivers/net/hinic3/hinic3_pmd_tx.h b/drivers/net/hinic3/hinic3_pmd_tx.h
 new file mode 100644
-index 0000000000..bfae4cf5d9
+index 0000000..bfae4cf
 --- /dev/null
 +++ b/drivers/net/hinic3/hinic3_pmd_tx.h
 @@ -0,0 +1,329 @@
@@ -21996,7 +21996,7 @@ index 0000000000..bfae4cf5d9
 +
 diff --git a/drivers/net/hinic3/meson.build b/drivers/net/hinic3/meson.build
 new file mode 100644
-index 0000000000..00853014d9
+index 0000000..0085301
 --- /dev/null
 +++ b/drivers/net/hinic3/meson.build
 @@ -0,0 +1,49 @@
@@ -22051,7 +22051,7 @@ index 0000000000..00853014d9
 +includes += include_directories('mml')
 diff --git a/drivers/net/hinic3/mml/hinic3_pmd_dbg.c b/drivers/net/hinic3/mml/hinic3_pmd_dbg.c
 new file mode 100644
-index 0000000000..3cda4799f4
+index 0000000..3cda479
 --- /dev/null
 +++ b/drivers/net/hinic3/mml/hinic3_pmd_dbg.c
 @@ -0,0 +1,154 @@
@@ -22211,7 +22211,7 @@ index 0000000000..3cda4799f4
 +}
 diff --git a/drivers/net/hinic3/mml/hinic3_pmd_dbg.h b/drivers/net/hinic3/mml/hinic3_pmd_dbg.h
 new file mode 100644
-index 0000000000..7ddc6347bd
+index 0000000..7ddc634
 --- /dev/null
 +++ b/drivers/net/hinic3/mml/hinic3_pmd_dbg.h
 @@ -0,0 +1,64 @@
@@ -22281,7 +22281,7 @@ index 0000000000..7ddc6347bd
 +#endif
 diff --git a/drivers/net/hinic3/mml/hinic3_pmd_mml_cmd.c b/drivers/net/hinic3/mml/hinic3_pmd_mml_cmd.c
 new file mode 100644
-index 0000000000..8e6553baf4
+index 0000000..8e6553b
 --- /dev/null
 +++ b/drivers/net/hinic3/mml/hinic3_pmd_mml_cmd.c
 @@ -0,0 +1,343 @@
@@ -22630,7 +22630,7 @@ index 0000000000..8e6553baf4
 +}
 diff --git a/drivers/net/hinic3/mml/hinic3_pmd_mml_cmd.h b/drivers/net/hinic3/mml/hinic3_pmd_mml_cmd.h
 new file mode 100644
-index 0000000000..16b723ad55
+index 0000000..16b723a
 --- /dev/null
 +++ b/drivers/net/hinic3/mml/hinic3_pmd_mml_cmd.h
 @@ -0,0 +1,77 @@
@@ -22713,7 +22713,7 @@ index 0000000000..16b723ad55
 +#endif /* HINIC3_PMD_MML_CMD */
 diff --git a/drivers/net/hinic3/mml/hinic3_pmd_mml_ioctl.c b/drivers/net/hinic3/mml/hinic3_pmd_mml_ioctl.c
 new file mode 100644
-index 0000000000..df4edfbb74
+index 0000000..df4edfb
 --- /dev/null
 +++ b/drivers/net/hinic3/mml/hinic3_pmd_mml_ioctl.c
 @@ -0,0 +1,203 @@
@@ -22922,7 +22922,7 @@ index 0000000000..df4edfbb74
 +}
 diff --git a/drivers/net/hinic3/mml/hinic3_pmd_mml_lib.c b/drivers/net/hinic3/mml/hinic3_pmd_mml_lib.c
 new file mode 100644
-index 0000000000..e30d9918ae
+index 0000000..e30d991
 --- /dev/null
 +++ b/drivers/net/hinic3/mml/hinic3_pmd_mml_lib.c
 @@ -0,0 +1,123 @@
@@ -23051,7 +23051,7 @@ index 0000000000..e30d9918ae
 +}
 diff --git a/drivers/net/hinic3/mml/hinic3_pmd_mml_lib.h b/drivers/net/hinic3/mml/hinic3_pmd_mml_lib.h
 new file mode 100644
-index 0000000000..d1ebcf89ad
+index 0000000..d1ebcf8
 --- /dev/null
 +++ b/drivers/net/hinic3/mml/hinic3_pmd_mml_lib.h
 @@ -0,0 +1,233 @@
@@ -23290,7 +23290,7 @@ index 0000000000..d1ebcf89ad
 +#endif /* HINIC3_PMD_MML_LIB */
 diff --git a/drivers/net/hinic3/mml/hinic3_pmd_mml_main.c b/drivers/net/hinic3/mml/hinic3_pmd_mml_main.c
 new file mode 100644
-index 0000000000..36c24b12b9
+index 0000000..36c24b1
 --- /dev/null
 +++ b/drivers/net/hinic3/mml/hinic3_pmd_mml_main.c
 @@ -0,0 +1,122 @@
@@ -23418,7 +23418,7 @@ index 0000000000..36c24b12b9
 +}
 diff --git a/drivers/net/hinic3/mml/hinic3_pmd_mml_queue.c b/drivers/net/hinic3/mml/hinic3_pmd_mml_queue.c
 new file mode 100644
-index 0000000000..2f079fa19a
+index 0000000..2f079fa
 --- /dev/null
 +++ b/drivers/net/hinic3/mml/hinic3_pmd_mml_queue.c
 @@ -0,0 +1,533 @@
@@ -23957,7 +23957,7 @@ index 0000000000..2f079fa19a
 +}
 diff --git a/drivers/net/hinic3/mml/hinic3_pmd_mml_queue.h b/drivers/net/hinic3/mml/hinic3_pmd_mml_queue.h
 new file mode 100644
-index 0000000000..cd9782a0d7
+index 0000000..cd9782a
 --- /dev/null
 +++ b/drivers/net/hinic3/mml/hinic3_pmd_mml_queue.h
 @@ -0,0 +1,235 @@
@@ -24198,7 +24198,7 @@ index 0000000000..cd9782a0d7
 +#endif /* HINIC3_PMD_MML_QUEUE */
 diff --git a/drivers/net/hinic3/mml/meson.build b/drivers/net/hinic3/mml/meson.build
 new file mode 100644
-index 0000000000..affb3b15a8
+index 0000000..affb3b1
 --- /dev/null
 +++ b/drivers/net/hinic3/mml/meson.build
 @@ -0,0 +1,49 @@
@@ -24254,7 +24254,7 @@ index 0000000000..affb3b15a8
 \ No newline at end of file
 diff --git a/drivers/net/hinic3/readme.txt b/drivers/net/hinic3/readme.txt
 new file mode 100644
-index 0000000000..352de295a2
+index 0000000..352de29
 --- /dev/null
 +++ b/drivers/net/hinic3/readme.txt
 @@ -0,0 +1 @@
@@ -24262,7 +24262,7 @@ index 0000000000..352de295a2
 \ No newline at end of file
 diff --git a/drivers/net/hinic3/rte_pmd_hinic3_version.map b/drivers/net/hinic3/rte_pmd_hinic3_version.map
 new file mode 100644
-index 0000000000..ef35398402
+index 0000000..ef35398
 --- /dev/null
 +++ b/drivers/net/hinic3/rte_pmd_hinic3_version.map
 @@ -0,0 +1,4 @@
@@ -24272,7 +24272,7 @@ index 0000000000..ef35398402
 +};
 diff --git a/drivers/net/hinic3/version.map b/drivers/net/hinic3/version.map
 new file mode 100644
-index 0000000000..3d2a99a88d
+index 0000000..3d2a99a
 --- /dev/null
 +++ b/drivers/net/hinic3/version.map
 @@ -0,0 +1,4 @@
@@ -24281,5 +24281,5 @@ index 0000000000..3d2a99a88d
 +	local: *;
 +};
 -- 
-2.46.0.windows.1
+2.45.1.windows.1
 

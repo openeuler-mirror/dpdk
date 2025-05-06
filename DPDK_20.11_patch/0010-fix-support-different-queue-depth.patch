@@ -1,4 +1,4 @@
-From ea382787ef02ca87a78555b41d0d0e0e0d8e24a7 Mon Sep 17 00:00:00 2001
+From e73c63a3e7f9442645371397c66e45b78cad6801 Mon Sep 17 00:00:00 2001
 From: thy <19855679967@163.com>
 Date: Thu, 24 Apr 2025 19:18:34 +0800
 Subject: [PATCH] fix support different queue depth
@@ -8,7 +8,7 @@ Subject: [PATCH] fix support different queue depth
  1 file changed, 12 insertions(+)
 
 diff --git a/drivers/net/hinic3/hinic3_pmd_ethdev.c b/drivers/net/hinic3/hinic3_pmd_ethdev.c
-index 0fceeb41bc..7d3442a951 100644
+index 7777ed5..3092085 100644
 --- a/drivers/net/hinic3/hinic3_pmd_ethdev.c
 +++ b/drivers/net/hinic3/hinic3_pmd_ethdev.c
 @@ -640,6 +640,12 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
