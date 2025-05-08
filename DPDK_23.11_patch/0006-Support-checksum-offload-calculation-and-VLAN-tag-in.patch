@@ -1,0 +1,44 @@
+From 8874859134ed23c6541afd6da2a5d610a1757ba9 Mon Sep 17 00:00:00 2001
+From: Huawei <@huawei.com>
+Date: Thu, 8 May 2025 11:00:01 +0800
+Subject: [PATCH 6/6] Support checksum offload calculation and VLAN tag in DPDK
+ VXLAN scenario
+
+Signed-off-by: Huawei <@huawei.com>
+---
+ drivers/net/hinic3/hinic3_pmd_tx.c | 14 ++++++++++++--
+ 1 file changed, 12 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/hinic3/hinic3_pmd_tx.c b/drivers/net/hinic3/hinic3_pmd_tx.c
+index e73ed3e..dfac1d1 100644
+--- a/drivers/net/hinic3/hinic3_pmd_tx.c
++++ b/drivers/net/hinic3/hinic3_pmd_tx.c
+@@ -423,13 +423,23 @@ static uint8_t hinic3_ip_phdr_cksum(hinic3_ip_cs_handler_t *ip_handler, uint8_t
+ }
+ 
+ static int hinic3_vxlan_tso_ip_phdr_cksum(struct rte_mbuf *mbuf) {
++	struct rte_ether_hdr *eth_hdr = NULL;
++	struct rte_vlan_hdr *vlan_hdr = NULL;
+ 	uint8_t *ip_hdr = NULL;
+ 	uint8_t version, l4_proto;
+-	uint16_t offset = 0;
++	uint16_t offset = 0, ether_type;
+ 	hinic3_ip_cs_handler_t *ip_handler = NULL;
+ 	uint8_t *pkt_data = rte_pktmbuf_mtod(mbuf, uint8_t *);
+-	
++
++	eth_hdr = (struct rte_ether_hdr *)pkt_data;
+ 	offset += sizeof(struct rte_ether_hdr);
++	ether_type = eth_hdr->ether_type;
++	while (ether_type == rte_cpu_to_be_16(RTE_ETHER_TYPE_VLAN) || ether_type == rte_cpu_to_be_16(RTE_ETHER_TYPE_QINQ)) {
++		vlan_hdr = (struct rte_vlan_hdr *)(pkt_data + offset);
++		ether_type = vlan_hdr->eth_proto;
++		offset += sizeof(struct rte_vlan_hdr);
++	}
++
+ 	ip_hdr = (uint8_t *)(pkt_data + offset);
+ 	version = (*ip_hdr >> 4) & 0x0F;
+ 	if (version == IPV4_VERSION || version == IPV6_VERSION) {
+-- 
+2.45.1.windows.1
+
