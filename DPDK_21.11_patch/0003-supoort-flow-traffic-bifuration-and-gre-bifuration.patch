@@ -4,29 +4,29 @@ Date: Mon, 16 Jun 2025 09:34:52 +0800
 Subject: [PATCH] supoort flow traffic bifuration and gre bifuration
 
 ---
- net/hinic3/base/hinic3_pmd_cmd.h     |   2 +
- net/hinic3/base/hinic3_pmd_csr.h     |   1 +
- net/hinic3/base/hinic3_pmd_mbox.c    |  17 +
- net/hinic3/base/hinic3_pmd_nic_cfg.c |  64 ++
- net/hinic3/base/hinic3_pmd_nic_cfg.h |  20 +-
- net/hinic3/hinic3_pmd_bifur.c        | 992 +++++++++++++++++++++++++++
- net/hinic3/hinic3_pmd_bifur.h        |  20 +
- net/hinic3/hinic3_pmd_ethdev.c       |  45 +-
- net/hinic3/hinic3_pmd_ethdev.h       |  11 +-
- net/hinic3/hinic3_pmd_fdir.c         | 177 ++++-
- net/hinic3/hinic3_pmd_fdir.h         |  37 +-
- net/hinic3/hinic3_pmd_flow.c         | 189 +++++
- net/hinic3/hinic3_pmd_rx.c           |  45 ++
- net/hinic3/hinic3_pmd_rx.h           |  17 +-
- net/hinic3/meson.build               |   4 +
+ drivers/net/hinic3/base/hinic3_pmd_cmd.h     |   2 +
+ drivers/net/hinic3/base/hinic3_pmd_csr.h     |   1 +
+ drivers/net/hinic3/base/hinic3_pmd_mbox.c    |  17 +
+ drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c |  64 ++
+ drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h |  20 +-
+ drivers/net/hinic3/hinic3_pmd_bifur.c        | 992 +++++++++++++++++++++++++++
+ drivers/net/hinic3/hinic3_pmd_bifur.h        |  20 +
+ drivers/net/hinic3/hinic3_pmd_ethdev.c       |  45 +-
+ drivers/net/hinic3/hinic3_pmd_ethdev.h       |  11 +-
+ drivers/net/hinic3/hinic3_pmd_fdir.c         | 177 ++++-
+ drivers/net/hinic3/hinic3_pmd_fdir.h         |  37 +-
+ drivers/net/hinic3/hinic3_pmd_flow.c         | 189 +++++
+ drivers/net/hinic3/hinic3_pmd_rx.c           |  45 ++
+ drivers/net/hinic3/hinic3_pmd_rx.h           |  17 +-
+ drivers/net/hinic3/meson.build               |   4 +
  15 files changed, 1627 insertions(+), 14 deletions(-)
- create mode 100644 net/hinic3/hinic3_pmd_bifur.c
- create mode 100644 net/hinic3/hinic3_pmd_bifur.h
+ create mode 100644 drivers/net/hinic3/hinic3_pmd_bifur.c
+ create mode 100644 drivers/net/hinic3/hinic3_pmd_bifur.h
 
-diff --git a/net/hinic3/base/hinic3_pmd_cmd.h b/net/hinic3/base/hinic3_pmd_cmd.h
+diff --git a/drivers/net/hinic3/base/hinic3_pmd_cmd.h b/drivers/net/hinic3/base/hinic3_pmd_cmd.h
 index c07720b..96262d0 100644
---- a/net/hinic3/base/hinic3_pmd_cmd.h
-+++ b/net/hinic3/base/hinic3_pmd_cmd.h
+--- a/drivers/net/hinic3/base/hinic3_pmd_cmd.h
++++ b/drivers/net/hinic3/base/hinic3_pmd_cmd.h
 @@ -122,6 +122,8 @@ enum hinic3_nic_cmd {
  	HINIC3_NIC_CMD_SET_ETS,
  	HINIC3_NIC_CMD_SET_PFC,
@@ -36,10 +36,10 @@ index c07720b..96262d0 100644
  	/* MISC */
  	HINIC3_NIC_CMD_BIOS_CFG = 120,
  	HINIC3_NIC_CMD_SET_FIRMWARE_CUSTOM_PACKETS_MSG,
-diff --git a/net/hinic3/base/hinic3_pmd_csr.h b/net/hinic3/base/hinic3_pmd_csr.h
+diff --git a/drivers/net/hinic3/base/hinic3_pmd_csr.h b/drivers/net/hinic3/base/hinic3_pmd_csr.h
 index fa10821..d8cbe61 100644
---- a/net/hinic3/base/hinic3_pmd_csr.h
-+++ b/net/hinic3/base/hinic3_pmd_csr.h
+--- a/drivers/net/hinic3/base/hinic3_pmd_csr.h
++++ b/drivers/net/hinic3/base/hinic3_pmd_csr.h
 @@ -12,6 +12,7 @@
  #else
  #define PCI_VENDOR_ID_HUAWEI			0x19e5
@@ -48,10 +48,10 @@ index fa10821..d8cbe61 100644
  #define HINIC3_DEV_ID_VF			0x375F
  #endif
  
-diff --git a/net/hinic3/base/hinic3_pmd_mbox.c b/net/hinic3/base/hinic3_pmd_mbox.c
+diff --git a/drivers/net/hinic3/base/hinic3_pmd_mbox.c b/drivers/net/hinic3/base/hinic3_pmd_mbox.c
 index 89d81df..896762c 100644
---- a/net/hinic3/base/hinic3_pmd_mbox.c
-+++ b/net/hinic3/base/hinic3_pmd_mbox.c
+--- a/drivers/net/hinic3/base/hinic3_pmd_mbox.c
++++ b/drivers/net/hinic3/base/hinic3_pmd_mbox.c
 @@ -28,6 +28,7 @@
  #define HINIC3_MBOX_INT_TX_SIZE_MASK				0x1F
  #define HINIC3_MBOX_INT_STAT_DMA_SO_RO_MASK			0x3
@@ -108,10 +108,10 @@ index 89d81df..896762c 100644
  		send_tlp_mbox_to_func(hwdev->func_to_func, mod, cmd, buf_in,
  				      in_size, HINIC3_MGMT_SRC_ID,
  				      HINIC3_MSG_RESPONSE, HINIC3_MSG_NO_ACK,
-diff --git a/net/hinic3/base/hinic3_pmd_nic_cfg.c b/net/hinic3/base/hinic3_pmd_nic_cfg.c
+diff --git a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c
 index 94af5e3..8929fdd 100644
---- a/net/hinic3/base/hinic3_pmd_nic_cfg.c
-+++ b/net/hinic3/base/hinic3_pmd_nic_cfg.c
+--- a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c
++++ b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c
 @@ -14,6 +14,9 @@
  #include "hinic3_pmd_cmdq.h"
  #include "hinic3_pmd_nic_cfg.h"
@@ -224,10 +224,10 @@ index 94af5e3..8929fdd 100644
 +	return 0;
  }
 \ No newline at end of file
-diff --git a/net/hinic3/base/hinic3_pmd_nic_cfg.h b/net/hinic3/base/hinic3_pmd_nic_cfg.h
+diff --git a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h
 index 1ddce37..2d4c48a 100644
---- a/net/hinic3/base/hinic3_pmd_nic_cfg.h
-+++ b/net/hinic3/base/hinic3_pmd_nic_cfg.h
+--- a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h
++++ b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h
 @@ -840,7 +840,7 @@ struct hinic3_cmd_register_vf {
  
  struct hinic3_tcam_result {
@@ -275,11 +275,11 @@ index 1ddce37..2d4c48a 100644
 +
 +int hinic3_get_bifur_enable(void *hwdev, u8 *enable);
  #endif /* _HINIC3_PMD_NIC_CFG_H_ */
-diff --git a/net/hinic3/hinic3_pmd_bifur.c b/net/hinic3/hinic3_pmd_bifur.c
+diff --git a/drivers/net/hinic3/hinic3_pmd_bifur.c b/drivers/net/hinic3/hinic3_pmd_bifur.c
 new file mode 100644
 index 0000000..3be9e9a
 --- /dev/null
-+++ b/net/hinic3/hinic3_pmd_bifur.c
++++ b/drivers/net/hinic3/hinic3_pmd_bifur.c
 @@ -0,0 +1,992 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
 + * Copyright(c) 2019 Huawei Technologies Co., Ltd
@@ -1274,11 +1274,11 @@ index 0000000..3be9e9a
 +
 +#endif
 \ No newline at end of file
-diff --git a/net/hinic3/hinic3_pmd_bifur.h b/net/hinic3/hinic3_pmd_bifur.h
+diff --git a/drivers/net/hinic3/hinic3_pmd_bifur.h b/drivers/net/hinic3/hinic3_pmd_bifur.h
 new file mode 100644
 index 0000000..84e75e1
 --- /dev/null
-+++ b/net/hinic3/hinic3_pmd_bifur.h
++++ b/drivers/net/hinic3/hinic3_pmd_bifur.h
 @@ -0,0 +1,20 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
 + * Copyright(c) 2019 Huawei Technologies Co., Ltd
@@ -1301,10 +1301,10 @@ index 0000000..84e75e1
 +
 +#endif // _HINIC3_PMD_BIFUR_H_
 \ No newline at end of file
-diff --git a/net/hinic3/hinic3_pmd_ethdev.c b/net/hinic3/hinic3_pmd_ethdev.c
+diff --git a/drivers/net/hinic3/hinic3_pmd_ethdev.c b/drivers/net/hinic3/hinic3_pmd_ethdev.c
 index 35ce44e..c56994a 100644
---- a/net/hinic3/hinic3_pmd_ethdev.c
-+++ b/net/hinic3/hinic3_pmd_ethdev.c
+--- a/drivers/net/hinic3/hinic3_pmd_ethdev.c
++++ b/drivers/net/hinic3/hinic3_pmd_ethdev.c
 @@ -14,18 +14,21 @@
  #include "base/hinic3_pmd_csr.h"
  #include "base/hinic3_pmd_wq.h"
@@ -1395,10 +1395,10 @@ index 35ce44e..c56994a 100644
  	.probe = hinic3_pci_probe,
  	.remove = hinic3_pci_remove,
  };
-diff --git a/net/hinic3/hinic3_pmd_ethdev.h b/net/hinic3/hinic3_pmd_ethdev.h
+diff --git a/drivers/net/hinic3/hinic3_pmd_ethdev.h b/drivers/net/hinic3/hinic3_pmd_ethdev.h
 index d7dca3d..1b6be69 100644
---- a/net/hinic3/hinic3_pmd_ethdev.h
-+++ b/net/hinic3/hinic3_pmd_ethdev.h
+--- a/drivers/net/hinic3/hinic3_pmd_ethdev.h
++++ b/drivers/net/hinic3/hinic3_pmd_ethdev.h
 @@ -7,6 +7,7 @@
  
  #include <rte_ethdev.h>
@@ -1438,10 +1438,10 @@ index d7dca3d..1b6be69 100644
  };
  
  extern const struct rte_flow_ops hinic3_flow_ops;
-diff --git a/net/hinic3/hinic3_pmd_fdir.c b/net/hinic3/hinic3_pmd_fdir.c
+diff --git a/drivers/net/hinic3/hinic3_pmd_fdir.c b/drivers/net/hinic3/hinic3_pmd_fdir.c
 index f5c64fe..7afdfe5 100644
---- a/net/hinic3/hinic3_pmd_fdir.c
-+++ b/net/hinic3/hinic3_pmd_fdir.c
+--- a/drivers/net/hinic3/hinic3_pmd_fdir.c
++++ b/drivers/net/hinic3/hinic3_pmd_fdir.c
 @@ -22,11 +22,17 @@
  #include "base/hinic3_pmd_mgmt.h"
  #include "base/hinic3_pmd_nic_cfg.h"
@@ -1686,10 +1686,10 @@ index f5c64fe..7afdfe5 100644
 +}
 +#endif
 \ No newline at end of file
-diff --git a/net/hinic3/hinic3_pmd_fdir.h b/net/hinic3/hinic3_pmd_fdir.h
+diff --git a/drivers/net/hinic3/hinic3_pmd_fdir.h b/drivers/net/hinic3/hinic3_pmd_fdir.h
 index 481490d..fa347f9 100644
---- a/net/hinic3/hinic3_pmd_fdir.h
-+++ b/net/hinic3/hinic3_pmd_fdir.h
+--- a/drivers/net/hinic3/hinic3_pmd_fdir.h
++++ b/drivers/net/hinic3/hinic3_pmd_fdir.h
 @@ -14,6 +14,10 @@
  #define HINIC3_PKT_TCAM_DYNAMIC_INDEX_START(block_index)  \
  		(HINIC3_TCAM_DYNAMIC_BLOCK_SIZE * (block_index))
@@ -1801,10 +1801,10 @@ index 481490d..fa347f9 100644
 +int hinic3_flow_query_fdir_filter(struct rte_eth_dev *dev, struct hinic3_fdir_filter *fdir_filter,
 +					__rte_unused u64 *hits, __rte_unused u64 *bytes_count);
  #endif
-diff --git a/net/hinic3/hinic3_pmd_flow.c b/net/hinic3/hinic3_pmd_flow.c
+diff --git a/drivers/net/hinic3/hinic3_pmd_flow.c b/drivers/net/hinic3/hinic3_pmd_flow.c
 index 3ccafcd..b0d25d6 100644
---- a/net/hinic3/hinic3_pmd_flow.c
-+++ b/net/hinic3/hinic3_pmd_flow.c
+--- a/drivers/net/hinic3/hinic3_pmd_flow.c
++++ b/drivers/net/hinic3/hinic3_pmd_flow.c
 @@ -24,6 +24,16 @@
  #include "hinic3_pmd_fdir.h"
  #include "hinic3_pmd_flow.h"
@@ -2060,10 +2060,10 @@ index 3ccafcd..b0d25d6 100644
 +	.query = hinic3_flow_query,
 +#endif
  };
-diff --git a/net/hinic3/hinic3_pmd_rx.c b/net/hinic3/hinic3_pmd_rx.c
+diff --git a/drivers/net/hinic3/hinic3_pmd_rx.c b/drivers/net/hinic3/hinic3_pmd_rx.c
 index 7178439..001c484 100644
---- a/net/hinic3/hinic3_pmd_rx.c
-+++ b/net/hinic3/hinic3_pmd_rx.c
+--- a/drivers/net/hinic3/hinic3_pmd_rx.c
++++ b/drivers/net/hinic3/hinic3_pmd_rx.c
 @@ -15,6 +15,14 @@
  #include "hinic3_pmd_tx.h"
  #include "hinic3_pmd_rx.h"
@@ -2137,10 +2137,10 @@ index 7178439..001c484 100644
  		rx_cqe->status = 0;
  
  		rx_bytes += pkt_len;
-diff --git a/net/hinic3/hinic3_pmd_rx.h b/net/hinic3/hinic3_pmd_rx.h
+diff --git a/drivers/net/hinic3/hinic3_pmd_rx.h b/drivers/net/hinic3/hinic3_pmd_rx.h
 index d03cf22..6eeb997 100644
---- a/net/hinic3/hinic3_pmd_rx.h
-+++ b/net/hinic3/hinic3_pmd_rx.h
+--- a/drivers/net/hinic3/hinic3_pmd_rx.h
++++ b/drivers/net/hinic3/hinic3_pmd_rx.h
 @@ -9,11 +9,13 @@
  #include "hinic3_pmd_nic_io.h"
  
@@ -2183,10 +2183,10 @@ index d03cf22..6eeb997 100644
  struct hinic3_rxq_stats {
  	u64 packets;
  	u64 bytes;
-diff --git a/net/hinic3/meson.build b/net/hinic3/meson.build
+diff --git a/drivers/net/hinic3/meson.build b/drivers/net/hinic3/meson.build
 index 0085301..fb3997e 100644
---- a/net/hinic3/meson.build
-+++ b/net/hinic3/meson.build
+--- a/drivers/net/hinic3/meson.build
++++ b/drivers/net/hinic3/meson.build
 @@ -15,15 +15,18 @@ endif
  
  cflags += ['-DHW_CONVERT_ENDIAN']
