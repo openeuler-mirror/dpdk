@@ -1,0 +1,588 @@
+From e03dfd213b84df966b38d88ba4a82a7712b03bd8 Mon Sep 17 00:00:00 2001
+From: zry6666 <zhangruiyu2@huawei.com>
+Date: Thu, 26 Jun 2025 16:47:38 +0800
+Subject: [PATCH] remove macro HAVE_OVS_DPDK
+
+---
+ drivers/net/hinic3/meson.build                |  7 +++-
+ .../common/hinic3_utils/hinic3_file_util.c    | 41 -------------------
+ .../common/hinic3_utils/hinic3_file_util.h    |  1 -
+ .../hinic3_utils/hinic3_packets_types.h       |  2 -
+ .../common/hinic3_utils/hinic3_set_userdata.c |  2 -
+ .../src/common/hinic3_utils/hinic3_util.c     |  3 --
+ .../hinic3_capture/hinic3_capture_command.c   |  2 -
+ .../src/hinic3_capture/hinic3_capture_core.c  |  2 -
+ .../hinic3_capture/hinic3_capture_filter.c    |  5 ---
+ .../src/hinic3_capture/hinic3_capture_hooks.c |  2 -
+ .../src/hinic3_capture/hinic3_capture_main.c  |  2 -
+ .../src/hinic3_capture/hinic3_capture_save.c  |  2 -
+ .../src/hinic3_capture/hinic3_capture_utils.c |  2 -
+ .../comm/hinic3_agent_flow_cmd_dump_file.c    |  6 ---
+ .../comm/hinic3_dfx_port_bond_slave.c         |  2 -
+ .../comm/hinic3_dfx_port_flush_dump.c         |  2 -
+ .../comm/hinic3_dfx_port_upcall_queue.c       |  2 -
+ .../src/hinic3_cmds/server/hinic3_command.c   | 34 ---------------
+ .../hinic3_iface_global.c                     |  2 -
+ .../hinic3_iface_global_api_record.c          |  2 -
+ .../comm/hinic3_offload_flow_public.c         |  2 -
+ .../hinic3_flow_dump/hinic3_flow_api.c        |  2 -
+ .../hinic3_flows/hinic3_vxlan/hinic3_vxlan.c  |  2 -
+ .../hinic3/src/hinic3_init/comm/hinic3_init.c |  2 -
+ .../hinic3_bond/hinic3_bond_controller.c      |  2 -
+ .../hinic3_bond/hinic3_bond_controller.h      |  2 -
+ .../hinic3_bond/hinic3_bond_statistics.c      |  2 -
+ .../hinic3_vf/hinic3_function_statistics.c    |  2 -
+ .../hinic3_vf/hinic3_vf_controller.h          |  2 -
+ .../hinic3_ports/hinic3_vf/hinic3_vf_mgmt.c   |  3 --
+ .../hinic3/src/hinic3_qos/meter/hinic3_qos.c  |  2 -
+ 31 files changed, 6 insertions(+), 140 deletions(-)
+
+diff --git a/drivers/net/hinic3/meson.build b/drivers/net/hinic3/meson.build
+index af0793845f..77916f79e1 100644
+--- a/drivers/net/hinic3/meson.build
++++ b/drivers/net/hinic3/meson.build
+@@ -174,7 +174,12 @@ foreach d:deps
+     static_deps += [get_variable('static_rte_' + d)]
+ endforeach
+ 
+-executable('dpak_ovs_ctl',
++executable('dpak-ovs-ctl',
+     'src/hinic3_cmds/client/hinic3_command_client.c',
+ 	include_directories: includes,
++    install_rpath: '/usr/bin',
++    install: true
+ )
++
++install_data('cfg/ovs_dpu_virt/agent_config.ini', install_dir: '/etc/dpak/net')
++install_data('scripts/dpak_ovs_completion_ovs.sh', install_dir: '/etc/bash_completion.d')
+diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_file_util.c b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_file_util.c
+index 2cefeaafd7..9635cedcbf 100644
+--- a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_file_util.c
++++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_file_util.c
+@@ -65,8 +65,6 @@ static bool hinic3_check_directory_existence(char *path)
+ static int hinic3_mkdir(char *path)
+ {
+     char dir_path[PATH_MAX];
+-    struct passwd *user = NULL;
+-    struct group *grp = NULL;
+     int ret;
+ 
+     ret = snprintf(dir_path, PATH_MAX, "%s", path);
+@@ -80,29 +78,6 @@ static int hinic3_mkdir(char *path)
+         return -1;
+     }
+ 
+-    user = getpwnam(HINIC3_FILE_USER);
+-    if (user == NULL) {
+-        HINIC3_LOG(ERR, AGENT, "get file directory user fail, path: %s", path);
+-        return 0;
+-    }
+-    grp = getgrnam(HINIC3_FILE_GROUP);
+-    if (grp == NULL) {
+-        HINIC3_LOG(ERR, AGENT, "get file directory group fail, path: %s", path);
+-        return 0;
+-    }
+-
+-    if (hinic3_check_masked_to_exact_switch() == false) {
+-        if (chown(path, -1, grp->gr_gid) == -1) {
+-            HINIC3_LOG(ERR, AGENT, "change file directory group fail, path: %s", path);
+-            return 0;
+-        }
+-    } else {
+-        if (chown(path, user->pw_uid, grp->gr_gid) == -1) {
+-            HINIC3_LOG(ERR, AGENT, "change file directory user and group fail, path: %s", path);
+-            return 0;
+-        }
+-    }
+-
+     return 0;
+ }
+ 
+@@ -192,22 +167,6 @@ static bool hinic3_is_directory_reach_limit(void)
+     return false;
+ }
+ 
+-int hinic3_agent_chown_output_file_path(const char *resolve_path)
+-{
+-    struct group *grp = getgrnam(HINIC3_OVS_GROUP_NAME);
+-    if (grp != NULL) {
+-        gid_t group_id = grp->gr_gid;
+-        if (chown(resolve_path, -1, group_id) == -1) {
+-            HINIC3_LOG(ERR, AGENT, "chown fail, errno: %d", errno);
+-            return -1;
+-        }
+-    } else {
+-        HINIC3_LOG(ERR, AGENT, "getgrnam %s fail", HINIC3_OVS_GROUP_NAME);
+-        return -1;
+-    }
+-    return 0;
+-}
+-
+ int hinic3_check_output_file_directory(const char *filename, char *absolute_path, unsigned int path_len, struct ds *ds)
+ {
+     int ret;
+diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_file_util.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_file_util.h
+index 70313bf2cd..806218c8cc 100644
+--- a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_file_util.h
++++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_file_util.h
+@@ -11,7 +11,6 @@
+ 
+ const char *hinic3_get_default_directory(void);
+ int hinic3_check_output_file_directory(const char *filename, char *absolute_path, unsigned int path_len, struct ds *ds);
+-int hinic3_agent_chown_output_file_path(const char *resolve_path);
+ uint64_t hinic3_get_default_file_directory_size(bool *is_obtained);
+ uint64_t hinic3_get_partition_free_space_size(void);
+ int hinic3_check_file_realpath(const char *absolute_path, char *resolve_path, struct ds *ds);
+diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_packets_types.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_packets_types.h
+index aec6355bd4..9f8c1d711d 100644
+--- a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_packets_types.h
++++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_packets_types.h
+@@ -323,9 +323,7 @@ struct padding_info {
+ };
+ 
+ struct hinic3_packet {
+-#ifdef HAVE_OVS_DPDK
+     struct rte_mbuf mbuf;
+-#endif
+     /* basic packet info */
+     hinic3_be16 dl_type;
+     uint16_t l3_ofs;               /* l3 header offset, or UINT16_MAX. */
+diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_set_userdata.c b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_set_userdata.c
+index 1ab68bd1c1..6842024acc 100644
+--- a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_set_userdata.c
++++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_set_userdata.c
+@@ -18,9 +18,7 @@
+ #include "hinic3_offload_flow.h"
+ #include "hinic3_iface_global.h"
+ #include "hinic3_set_userdata.h"
+-#ifdef HAVE_OVS_DPDK
+ #include "hinic3_dpdk_adapter.h"
+-#endif
+ 
+ #define HINIC3_METER_RTE_MBUF_GET_PTR 8
+ 
+diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_util.c b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_util.c
+index aa7484de07..a4d4c5c98e 100644
+--- a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_util.c
++++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_util.c
+@@ -14,10 +14,7 @@
+ #include "rte_ethdev.h"
+ #include "hinic3_meminfo.h"
+ #include "hinic3_string_util.h"
+-
+-#ifdef HAVE_OVS_DPDK
+ #include "hinic3_dpdk_adapter.h"
+-#endif
+ 
+ #define HINIC3_HEX_PREFIX_LEN 2
+ static clockid_t g_monotonic_clock = CLOCK_MONOTONIC;
+diff --git a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_command.c b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_command.c
+index 099d7b198e..919c5f1484 100644
+--- a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_command.c
++++ b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_command.c
+@@ -11,10 +11,8 @@
+ #include "rte_cycles.h"
+ #include "rte_lcore.h"
+ #include "rte_spinlock.h"
+-#ifdef HAVE_OVS_DPDK
+ #include "hinic3_dpdk_adapter.h"
+ #include "hinic3_ovs_adapter.h"
+-#endif
+ 
+ #include "hinic3_ds.h"
+ #include "hinic3_log.h"
+diff --git a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_core.c b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_core.c
+index 328ce6522b..34afa037a8 100644
+--- a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_core.c
++++ b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_core.c
+@@ -13,11 +13,9 @@
+ #include "hinic3_iface_global.h"
+ #include "hinic3_capture_filter.h"
+ #include "hinic3_capture_save.h"
+-#ifdef HAVE_OVS_DPDK
+ #include "hinic3_dpdk_adapter.h"
+ #include "hinic3_ovs_adapter.h"
+ #include "hinic3_capture_core.h"
+-#endif
+ 
+ static inline void
+ pcap_hinic3_pkt_summary_init(struct pcap_pkt_summary *buf, struct rte_mbuf *pkt)
+diff --git a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_filter.c b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_filter.c
+index 61c36faf0d..d1c44faa20 100644
+--- a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_filter.c
++++ b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_filter.c
+@@ -1116,11 +1116,6 @@ pcap_file_open(const char *file_name, const char *mode)
+         return NULL;
+     }
+ 
+-    if (hinic3_agent_chown_output_file_path(file_name) != 0) {
+-        fclose(file);
+-        return NULL;
+-    }
+-
+     return file;
+ }
+ 
+diff --git a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_hooks.c b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_hooks.c
+index 4c38fe7544..b33be8bb7f 100644
+--- a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_hooks.c
++++ b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_hooks.c
+@@ -13,10 +13,8 @@
+ #include "rte_cycles.h"
+ #include "rte_lcore.h"
+ #include "rte_spinlock.h"
+-#ifdef HAVE_OVS_DPDK
+ #include "hinic3_dpdk_adapter.h"
+ #include "hinic3_ovs_adapter.h"
+-#endif
+ 
+ #include "hinic3_log.h"
+ #include "hinic3_init.h"
+diff --git a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_main.c b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_main.c
+index a87f38f69a..a66844347f 100644
+--- a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_main.c
++++ b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_main.c
+@@ -12,10 +12,8 @@
+ #include "rte_lcore.h"
+ #include "rte_spinlock.h"
+ #include "hinic3_thread.h"
+-#ifdef HAVE_OVS_DPDK
+ #include "hinic3_dpdk_adapter.h"
+ #include "hinic3_ovs_adapter.h"
+-#endif
+ 
+ #include "hinic3_log.h"
+ #include "hinic3_init.h"
+diff --git a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_save.c b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_save.c
+index ffc1c5d40c..75e08f61c5 100644
+--- a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_save.c
++++ b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_save.c
+@@ -13,10 +13,8 @@
+ #include "rte_cycles.h"
+ #include "rte_lcore.h"
+ #include "rte_spinlock.h"
+-#ifdef HAVE_OVS_DPDK
+ #include "hinic3_dpdk_adapter.h"
+ #include "hinic3_ovs_adapter.h"
+-#endif
+ 
+ #include "hinic3_log.h"
+ #include "hinic3_init.h"
+diff --git a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_utils.c b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_utils.c
+index dedcaf590b..3dcec18e5b 100644
+--- a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_utils.c
++++ b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_utils.c
+@@ -28,11 +28,9 @@
+ #include "hinic3_ds.h"
+ #include "hinic3_ui_string.h"
+ #include "hinic3_dpdk_adapter.h"
+-#ifdef HAVE_OVS_DPDK
+ #include "hinic3_dpdk_adapter.h"
+ #include "hinic3_ovs_adapter.h"
+ #include "hinic3_capture_utils.h"
+-#endif
+ 
+ #define HINIC3_EVENT_FD_INVAILD (-1)
+ uint64_t g_ticks_per_ms;
+diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_dump_file.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_dump_file.c
+index 852ed9486e..1b2cbf763a 100644
+--- a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_dump_file.c
++++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_dump_file.c
+@@ -115,12 +115,6 @@ hinic3_agent_parse_output_file_path(struct hinic3_dump_all_flows_mgmt_t *m, int
+         goto fail;
+     }
+ 
+-    if (hinic3_agent_chown_output_file_path(resolve_path) != 0) {
+-        fclose(m->file);
+-        m->file = NULL;
+-        goto fail;
+-    }
+-
+     hinic3_free(resolve_path);
+     return 0;
+ 
+diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_bond_slave.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_bond_slave.c
+index fd46999cb7..af069cba92 100644
+--- a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_bond_slave.c
++++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_bond_slave.c
+@@ -20,9 +20,7 @@
+ #include "hinic3_smap.h"
+ #include "hinic3_command.h"
+ #include "hinic3_vf_controller.h"
+-#ifdef HAVE_OVS_DPDK
+ #include "hinic3_dpdk_adapter.h"
+-#endif
+ #include "hinic3_dfx_port.h"
+ 
+ static void
+diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_flush_dump.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_flush_dump.c
+index e9d8f2b99a..471bba5d1d 100644
+--- a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_flush_dump.c
++++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_flush_dump.c
+@@ -14,9 +14,7 @@
+ #include "hinic3_bond_controller.h"
+ #include "hinic3_agent_cmd_format.h"
+ #include "rte_ethdev.h"
+-#ifdef HAVE_OVS_DPDK
+ #include "hinic3_dpdk_adapter.h"
+-#endif
+ 
+ #define HINIC3_LINK_STATUS_STR_LEN     10
+ #define HINIC3_LINK_STATUS_NUM         2
+diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_upcall_queue.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_upcall_queue.c
+index fc6d3f2c71..2f6c76c205 100644
+--- a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_upcall_queue.c
++++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_upcall_queue.c
+@@ -9,9 +9,7 @@
+ #include "hinic3_vf_port_qos_public.h"
+ #include "hinic3_vf_controller.h"
+ #include "hinic3_bond_controller.h"
+-#ifdef HAVE_OVS_DPDK
+ #include "hinic3_dpdk_adapter.h"
+-#endif
+ 
+ static int
+ hinic3_dump_virtual_upcall_queues_info(struct ds *ds)
+diff --git a/drivers/net/hinic3/src/hinic3_cmds/server/hinic3_command.c b/drivers/net/hinic3/src/hinic3_cmds/server/hinic3_command.c
+index 9208521eed..7fdf61fc46 100644
+--- a/drivers/net/hinic3/src/hinic3_cmds/server/hinic3_command.c
++++ b/drivers/net/hinic3/src/hinic3_cmds/server/hinic3_command.c
+@@ -480,34 +480,6 @@ hinic3_command_thread(void *arg)
+     return 0;
+ }
+ 
+-static int
+-hinic3_change_group(void)
+-{
+-    int ret;
+-    gid_t group_id;
+-    struct group *grp;
+-
+-    grp = getgrnam(HINIC3_OVS_GROUP_NAME);
+-    if (grp == NULL) {
+-        HINIC3_LOG(ERR, AGENT, "getgrnam fail");
+-        return -1;
+-    }
+-    group_id = grp->gr_gid;
+-
+-    ret = chown(SOCKET_PATH, -1, group_id);
+-    if (ret == -1) {
+-        HINIC3_LOG(ERR, AGENT, "chown fail");
+-        return -1;
+-    }
+-
+-    ret = chmod(SOCKET_PATH, HINIC3_SOCKET_RIGHT);
+-    if (ret == -1) {
+-        HINIC3_LOG(ERR, AGENT, "chmod fail");
+-        return -1;
+-    }
+-    return 0;
+-}
+-
+ static int
+ hinic3_command_pre_init(int *listen_socket)
+ {
+@@ -607,12 +579,6 @@ hinic3_command_mgr_init(void)
+         return ret;
+     }
+ 
+-    ret = hinic3_change_group();
+-    if (ret != 0) {
+-        HINIC3_LOG(ERR, AGENT, "change group fail");
+-        return ret;
+-    }
+-
+     HINIC3_LOG(INFO, AGENT, "command mgr init success");
+     return 0;
+ }
+diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global.c b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global.c
+index 8ee1b5a343..13e1f2cac0 100644
+--- a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global.c
++++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global.c
+@@ -21,10 +21,8 @@
+ #include "hinic3_smap.h"
+ #include "hinic3_ds.h"
+ #include "hinic3_iface_global.h"
+-#ifdef HAVE_OVS_DPDK
+ #include "hinic3_dpdk_adapter.h"
+ #include "hinic3_ovs_adapter.h"
+-#endif
+ #include "hinic3_command.h"
+ #include "hinic3_parse_agent_config.h"
+ #include "hinic3_ui_string.h"
+diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global_api_record.c b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global_api_record.c
+index b76c281320..852f9bf23d 100644
+--- a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global_api_record.c
++++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global_api_record.c
+@@ -19,10 +19,8 @@
+ #include "hinic3_util.h"
+ #include "hinic3_iface_global.h"
+ #include "hinic3_ds.h"
+-#ifdef HAVE_OVS_DPDK
+ #include "hinic3_dpdk_adapter.h"
+ #include "hinic3_ovs_adapter.h"
+-#endif
+ #include "hinic3_iface_global_api_record.h"
+ 
+ hiovs_api_record g_global_api_record[HINIC3_GLOBAL_API_MAX];
+diff --git a/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_offload_flow_public.c b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_offload_flow_public.c
+index b84961a241..3b817fc4ea 100644
+--- a/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_offload_flow_public.c
++++ b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_offload_flow_public.c
+@@ -10,10 +10,8 @@
+ #include "hinic3_iface_global.h"
+ #include "hinic3_iface_flow.h"
+ #include "hinic3_log.h"
+-#ifdef HAVE_OVS_DPDK
+ #include "hinic3_dpdk_adapter.h"
+ #include "hinic3_ovs_adapter.h"
+-#endif
+ 
+ void hinic3_offload_thread_rx_put_ack(uint32_t thread_id, struct hinic3_dp_extend_info *dp_info)
+ {
+diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_dump/hinic3_flow_api.c b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_dump/hinic3_flow_api.c
+index 48d89eab81..289d6ed92a 100644
+--- a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_dump/hinic3_flow_api.c
++++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_dump/hinic3_flow_api.c
+@@ -21,11 +21,9 @@
+ #include "hinic3_agent_flow_cmd_dump.h"
+ #include "hinic3_agent_cmd_format.h"
+ #include "hinic3_offload_flow.h"
+-#ifdef HAVE_OVS_DPDK
+ #include "hinic3_dpdk_adapter.h"
+ #include "hinic3_ovs_adapter.h"
+ #include "hinic3_iface_flow.h"
+-#endif
+ 
+ #define HINIC3_NO_FOUND_FLOW (-4)
+ uint64_t g_get_related_ufid;
+diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_vxlan/hinic3_vxlan.c b/drivers/net/hinic3/src/hinic3_flows/hinic3_vxlan/hinic3_vxlan.c
+index 3349adfb83..4889c37cf7 100644
+--- a/drivers/net/hinic3/src/hinic3_flows/hinic3_vxlan/hinic3_vxlan.c
++++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_vxlan/hinic3_vxlan.c
+@@ -2,9 +2,7 @@
+  * Copyright(c) 2023 Huawei Technologies Co., Ltd
+  */
+ #include "hinic3_vxlan.h"
+-#ifdef HAVE_OVS_DPDK
+ #include "hinic3_dpdk_adapter.h"
+-#endif
+ #define HINIC3_IPV6_ADDR_SIZE 4
+ #define HINIC3_VNI_LOW 0
+ #define HINIC3_VNI_MID 1
+diff --git a/drivers/net/hinic3/src/hinic3_init/comm/hinic3_init.c b/drivers/net/hinic3/src/hinic3_init/comm/hinic3_init.c
+index 5abd51cab1..652faad002 100644
+--- a/drivers/net/hinic3/src/hinic3_init/comm/hinic3_init.c
++++ b/drivers/net/hinic3/src/hinic3_init/comm/hinic3_init.c
+@@ -22,9 +22,7 @@
+ #include "hinic3_agent.h"
+ #include "hinic3_smap.h"
+ #include "hinic3_parse_agent_config.h"
+-#ifdef HAVE_OVS_DPDK
+ #include "hinic3_dpdk_adapter.h"
+-#endif
+ 
+ #define HINIC3_DRV_SHARD_LIBRARY         "/usr/lib64/libhiovs3.so"
+ #define HINIC3_PF_ADDR_NULL_STR          "XXXX:XX:XX.X"
+diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_controller.c b/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_controller.c
+index e626a5dd19..4149684984 100644
+--- a/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_controller.c
++++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_controller.c
+@@ -10,9 +10,7 @@
+ #include "hinic3_vxlan.h"
+ #include "hinic3_flow_dump.h"
+ #include "hinic3_tlv_key.h"
+-#ifdef HAVE_OVS_DPDK
+ #include "hinic3_dpdk_adapter.h"
+-#endif
+ #include "hinic3_bond_controller.h"
+ 
+ #define PRIORITY_UPCALL_MAX_NUM  2
+diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_controller.h b/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_controller.h
+index d145013b54..16b10b4a2f 100644
+--- a/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_controller.h
++++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_controller.h
+@@ -7,9 +7,7 @@
+ 
+ #include <ethdev_driver.h>
+ #include "hinic3_queue.h"
+-#ifdef HAVE_OVS_DPDK
+ #include "hinic3_dpdk_adapter.h"
+-#endif
+ 
+ #define HINIC3_PF_DEFAULT_MTU        9058
+ #define HINIC3_PF_DEFAULT_NB_QUEUES  1
+diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_statistics.c b/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_statistics.c
+index 6f48552b88..c2e767b2d8 100644
+--- a/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_statistics.c
++++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_statistics.c
+@@ -6,9 +6,7 @@
+ #include "hinic3_dfx_port.h"
+ #include "hinic3_port_util.h"
+ #include "hinic3_bond_controller.h"
+-#ifdef HAVE_OVS_DPDK
+ #include "hinic3_dpdk_adapter.h"
+-#endif
+ #include "hinic3_bond_statistics.h"
+ 
+ int
+diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_function_statistics.c b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_function_statistics.c
+index 7e3d7aa2c0..ea4e2c8d6e 100644
+--- a/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_function_statistics.c
++++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_function_statistics.c
+@@ -19,9 +19,7 @@
+ #include "hinic3_vxlan.h"
+ #include "hinic3_flow_dump.h"
+ #include "hinic3_offload_flow_port.h"
+-#ifdef HAVE_OVS_DPDK
+ #include "hinic3_dpdk_adapter.h"
+-#endif
+ 
+ int hinic3_vf_dev_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
+ {
+diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_controller.h b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_controller.h
+index 7c2acb0719..cc5b2d28cd 100644
+--- a/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_controller.h
++++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_controller.h
+@@ -16,9 +16,7 @@
+ #include "hinic3_eth_util.h"
+ #include "hinic3_vf_mgmt.h"
+ #include "hinic3_queue.h"
+-#ifdef HAVE_OVS_DPDK
+ #include "hinic3_dpdk_adapter.h"
+-#endif
+ 
+ #define HINIC3_VF_DEFAULT_NB_QUEUES             1
+ #define HINIC3_MAX_JUMBO_FRAME_SIZE             9626
+diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_mgmt.c b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_mgmt.c
+index 91a82d6727..29116b76ac 100644
+--- a/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_mgmt.c
++++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_mgmt.c
+@@ -25,10 +25,7 @@
+ #include "hinic3_mutex.h"
+ #include "hinic3_vf_mgmt_virtual.h"
+ #include "hinic3_vf_mgmt_baremetal.h"
+-
+-#ifdef HAVE_OVS_DPDK
+ #include "hinic3_dpdk_adapter.h"
+-#endif
+ 
+ struct hinic3_mutex hwpt_phy_dev_mutex;
+ static int g_port_conf_type = PORT_CONF_NULL;
+diff --git a/drivers/net/hinic3/src/hinic3_qos/meter/hinic3_qos.c b/drivers/net/hinic3/src/hinic3_qos/meter/hinic3_qos.c
+index 93dc57f888..241d8c2072 100644
+--- a/drivers/net/hinic3/src/hinic3_qos/meter/hinic3_qos.c
++++ b/drivers/net/hinic3/src/hinic3_qos/meter/hinic3_qos.c
+@@ -5,9 +5,7 @@
+ #include "hinic3_mtr.h"
+ #include "hinic3_meminfo.h"
+ #include "hinic3_qos.h"
+-#ifdef HAVE_OVS_DPDK
+ #include "hinic3_dpdk_adapter.h"
+-#endif
+ 
+ struct rte_mtr_ops *g_hinic3_mtr_ops = NULL;
+ 
+-- 
+2.47.0.windows.2
+
