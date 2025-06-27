@@ -25,7 +25,7 @@ git am DPDK_22.11.0_patch/*.patch
 
 #### 3.编译安装
 ```shell
-meson --prefix=/usr/ -Ddisable_drivers=net/cnxk -Dplatform=generic build
+meson --prefix=/usr/ -Ddisable_drivers=net/cnxk -Dplatform=generic -Ddefault_library='shared' build
 ninja -C build
 ninja install -C build
 ```
