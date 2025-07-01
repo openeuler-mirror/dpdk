@@ -1,0 +1,139 @@
+From e5c13b8eda2557b0961f84357e258fb8b925286c Mon Sep 17 00:00:00 2001
+From: zry6666 <zhangruiyu2@huawei.com>
+Date: Thu, 26 Jun 2025 11:11:29 +0800
+Subject: [PATCH] Support set mtu feature
+
+---
+ .../hinic3/scripts/dpak_ovs_completion_ovs.sh |  1 +
+ .../src/common/hinic3_utils/hinic3_drv.h      |  1 +
+ .../hinic3_driver_adapter/hinic3_iface_port.c | 31 ++++++++++++++++++-
+ .../hinic3_driver_adapter/hinic3_iface_port.h |  4 +++
+ .../hinic3_driver_adapter/hiovs/hiovs_api.h   | 10 ++++++
+ .../hinic3/src/hinic3_init/comm/hinic3_init.c |  1 +
+ 6 files changed, 47 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/net/hinic3/scripts/dpak_ovs_completion_ovs.sh b/drivers/net/hinic3/scripts/dpak_ovs_completion_ovs.sh
+index bd7a820d00..f18e1f2c0d 100644
+--- a/drivers/net/hinic3/scripts/dpak_ovs_completion_ovs.sh
++++ b/drivers/net/hinic3/scripts/dpak_ovs_completion_ovs.sh
+@@ -93,6 +93,7 @@ _complete_show_global_api() {
+     local api_opts=(
+             hovs_global_cfg_set
+             hovs_global_cfg_get
++            hovs_global_device_feature_get
+             hovs_global_statistics_get
+             hovs_global_statistics_flush
+             hovs_open_log
+diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_drv.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_drv.h
+index 49aa55403b..cf0ba3bc2b 100644
+--- a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_drv.h
++++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_drv.h
+@@ -65,6 +65,7 @@ struct hinic3_drv_ops {
+     int (*hovs_global_cfg_set)(const struct nlattr *args, size_t args_len, struct nlattr *unset_args,
+         size_t *unset_args_len);
+     int (*hovs_global_cfg_get)(struct nlattr *args, size_t *args_len);
++    int (*hovs_global_device_feature_get)(uint64_t *default_device_feature, uint64_t *support_device_feature);
+     int (*hovs_global_statistics_get)(struct hovs_global_stats *stats);
+     int (*hovs_global_statistics_flush)(void);
+     int (*hovs_mml_lib)(const char *buf_in, uint32_t in_size, char *buf_out, uint32_t *out_len,
+diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_port.c b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_port.c
+index 48635ed641..59d7e92cfe 100644
+--- a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_port.c
++++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_port.c
+@@ -628,6 +628,25 @@ const char *hinic3_port_get_api_name(hinic3_port_api api_index)
+     return NULL;
+ }
+ 
++static int hinic3_vdpa_feature_add_mtu(uint64_t *vdpa_feature)
++{
++    int ret;
++    struct hinic3_drv_ops *ops = NULL;
++    uint64_t default_feature = 0;
++    uint64_t support_feature = 0;
++
++    ops = hinic3_get_drv_ops();
++    HINIC3_FUNC_PTR_OR_ERR_RET(ops->hovs_global_device_feature_get, HINIC3_DRV_FUNC_NO_PTR);
++
++    ret = ops->hovs_global_device_feature_get(&default_feature, &support_feature);
++    if (ret != 0) {
++        return -1;
++    }
++
++    *vdpa_feature = default_feature | (1 << VIRTIO_NET_F_MTU);
++    return 0;
++}
++
+ int hinic3_port_mgmt_add_dynamic(uint16_t *port_id, const struct smap *args)
+ {
+     int ret;
+@@ -656,8 +675,18 @@ int hinic3_port_mgmt_add_dynamic(uint16_t *port_id, const struct smap *args)
+     hinic3_nlattr_init(&nla_args, tmp_buff, HOVS_MAX_TLV_BUF_LEN);
+     /* smap to nlattr */
+     port_args_smap_to_nlattr(args, &nla_args);
++
+     /* vdpa feature */
+-    vdpa_feature = hinic3_vdpa_feature_get();
++    if (hinic3_hiovs_mode_get() == HIOVS_WORK_MODE_ZERO_VM_PT) {
++        // 只在虚拟化场景下支持
++        ret = hinic3_vdpa_feature_add_mtu(&vdpa_feature);
++        if (ret != 0) {
++            HINIC3_LOG(ERR, VPORT, "get featrue failed.");
++            return -EPERM;
++        }
++    } else {
++        vdpa_feature = hinic3_vdpa_feature_get();
++    }
+     if (vdpa_feature != 0) {
+         hinic3_nlattr_put_u64(&nla_args, HINIC3_PORT_ARG_DEVICE_FEATURE, vdpa_feature);
+     }
+diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_port.h b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_port.h
+index 1385e990db..b75b09a336 100644
+--- a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_port.h
++++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_port.h
+@@ -13,6 +13,10 @@
+ #include "hinic3_map.h"
+ #include "hinic3_provider.h"
+ 
++#ifndef VIRTIO_NET_F_MTU
++ #define VIRTIO_NET_F_MTU 3
++#endif
++
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hiovs/hiovs_api.h b/drivers/net/hinic3/src/hinic3_driver_adapter/hiovs/hiovs_api.h
+index e5caf628a0..df1cfe0e47 100644
+--- a/drivers/net/hinic3/src/hinic3_driver_adapter/hiovs/hiovs_api.h
++++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hiovs/hiovs_api.h
+@@ -862,6 +862,16 @@ int hovs_global_cfg_set(const struct nlattr *args, size_t args_len, struct nlatt
+ 
+ int hovs_global_cfg_get(struct nlattr *args, size_t *args_len);
+ 
++/**
++ * Get the the device feature, include default feature, support feature.
++ *
++ * @param[out] stats Output default feature, support feature.
++ * @return
++ * - HIOVS_OK:     if successful.
++ * - HIOVS_ERROR:  if the parameter check fails or the execute fails.
++ */
++int hovs_global_device_feature_get(uint64_t *default_device_feature, uint64_t *support_device_feature);
++
+ /**
+  * Get the the global statistics, include offload stats, upcall stats, other drop stats.
+  *
+diff --git a/drivers/net/hinic3/src/hinic3_init/comm/hinic3_init.c b/drivers/net/hinic3/src/hinic3_init/comm/hinic3_init.c
+index 8b76577cb5..5abd51cab1 100644
+--- a/drivers/net/hinic3/src/hinic3_init/comm/hinic3_init.c
++++ b/drivers/net/hinic3/src/hinic3_init/comm/hinic3_init.c
+@@ -74,6 +74,7 @@ static struct hinic3_drv_ops_map g_hinic3_drv_ops_map[] = {
+     HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_flow_callback_register),
+     HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_global_cfg_set),
+     HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_global_cfg_get),
++    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_global_device_feature_get),
+     HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_global_statistics_get),
+     HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_global_statistics_flush),
+     HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_mml_lib),
+-- 
+2.47.0.windows.2
+
