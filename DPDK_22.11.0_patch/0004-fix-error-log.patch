@@ -1,0 +1,37 @@
+From b03da19934166533e88ffd23642cae80c27be253 Mon Sep 17 00:00:00 2001
+From: zry6666 <zhangruiyu2@huawei.com>
+Date: Thu, 26 Jun 2025 11:27:27 +0800
+Subject: [PATCH] fix_error_log
+
+---
+ .../net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global.c   | 1 +
+ drivers/net/hinic3/src/hinic3_driver_adapter/hiovs/hiovs_api.h   | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global.c b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global.c
+index c292fc62d1..8ee1b5a343 100644
+--- a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global.c
++++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global.c
+@@ -649,6 +649,7 @@ static void hinic3_lib_arg_init(struct rte_mempool *mempool, uint32_t data_room_
+     arg->ext_cb_ops.hovs_memzone_reserve = hinic3_adapt_memzone_reserve;
+     arg->ext_cb_ops.hovs_memzone_reserve_aligned = hinic3_adapt_memzone_reserve_aligned;
+     arg->ext_cb_ops.hovs_memzone_free = hinic3_adapt_memzone_free;
++    arg->ext_cb_ops.hovs_memzone_lookup = rte_memzone_lookup;
+     arg->bond_rx_depth = hinic3_bond_rx_depth_get();
+     arg->bond_tx_depth = hinic3_bond_tx_depth_get();
+     arg->vport_rx_depth = hinic3_vport_rx_depth();
+diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hiovs/hiovs_api.h b/drivers/net/hinic3/src/hinic3_driver_adapter/hiovs/hiovs_api.h
+index df1cfe0e47..53758e9266 100644
+--- a/drivers/net/hinic3/src/hinic3_driver_adapter/hiovs/hiovs_api.h
++++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hiovs/hiovs_api.h
+@@ -218,6 +218,7 @@ struct hovs_callback_ext_ops {
+     const void *(*hovs_memzone_reserve_aligned)(const char *name, size_t len,
+         int socket_id, uint32_t flags, uint32_t align);
+     int (*hovs_memzone_free)(void *mz);
++    const struct rte_memzone *(*hovs_memzone_lookup)(const char *name);
+ };
+ 
+ struct hiovs_lib_arg {
+-- 
+2.47.0.windows.2
+
