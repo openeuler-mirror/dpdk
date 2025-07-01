@@ -7,7 +7,12 @@
 cd dpdk
 ```
 
-###### 2）查看当前路径下文件
+###### 2）将dpdk版本回退到基线commit_id
+```shell
+git reset f262f16087ea6a77357a915cf4c0d10ddc7b6562 --hard
+```
+
+###### 3）查看当前路径下文件
 
 ```shell
 ls
@@ -18,7 +23,7 @@ ls
 ABI_VERSION app/ buildtools/ config/ devtools/ doc/ examples/ kernel/ lib/ license/ MAINTAINERS Makefile meson.build meson_option.txt README usertools VERSION DPDK_22.11.0_patch/
 ```
 
-###### 3）安装patch
+###### 4）安装patch
 ```shell
 git am DPDK_22.11.0_patch/*.patch
 ```
