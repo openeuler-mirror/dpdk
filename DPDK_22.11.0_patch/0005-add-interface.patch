@@ -1,0 +1,148 @@
+From ec181f7fc7f18353b21550299c618424620a9276 Mon Sep 17 00:00:00 2001
+From: Feifei Wang <wff_light@vip.163.com>
+Date: Wed, 2 Jul 2025 16:44:48 +0800
+Subject: [PATCH] =?UTF-8?q?=E4=BD=BF=E7=94=A8=E6=8E=A5=E5=8F=A3=E8=B0=83?=
+ =?UTF-8?q?=E7=94=A8?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ drivers/net/hinic3/include/rte_pmd_hinic3.h            | 10 ++++++++++
+ drivers/net/hinic3/meson.build                         |  5 +++++
+ drivers/net/hinic3/scripts/dpak_ovs_completion_ovs.sh  |  4 ++--
+ .../src/hinic3_cmds/comm/hinic3_agent_flow_cmd_dump.c  |  4 ++--
+ .../net/hinic3/src/hinic3_cmds/server/hinic3_command.c |  2 +-
+ drivers/net/hinic3/src/hinic3_init/comm/hinic3_agent.c |  5 +++--
+ 6 files changed, 23 insertions(+), 7 deletions(-)
+ create mode 100644 drivers/net/hinic3/include/rte_pmd_hinic3.h
+
+diff --git a/drivers/net/hinic3/include/rte_pmd_hinic3.h b/drivers/net/hinic3/include/rte_pmd_hinic3.h
+new file mode 100644
+index 0000000000..c97c01bcb0
+--- /dev/null
++++ b/drivers/net/hinic3/include/rte_pmd_hinic3.h
+@@ -0,0 +1,10 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2022 Huawei Technologies Co., Ltd
++ */
++#ifndef RTE_PMD_HINIC3_H
++#define RTE_PMD_HINIC3_H
++
++int hinic3_agent_construct(void);
++void hinic3_agent_destruct(void);
++
++#endif
+\ No newline at end of file
+diff --git a/drivers/net/hinic3/meson.build b/drivers/net/hinic3/meson.build
+index 77916f79e1..cbb26cdf2f 100644
+--- a/drivers/net/hinic3/meson.build
++++ b/drivers/net/hinic3/meson.build
+@@ -109,6 +109,9 @@ sources = files(
+ )
+ 
+ includes += include_directories(
++    '../../../lib/distributor/',
++    '../../../build',
++    '../../../config',
+ 	'include',
+     'src/',
+     'src/hinic3_capture',
+@@ -181,5 +184,7 @@ executable('dpak-ovs-ctl',
+     install: true
+ )
+ 
++install_headers('include/rte_pmd_hinic3.h')
++
+ install_data('cfg/ovs_dpu_virt/agent_config.ini', install_dir: '/etc/dpak/net')
+ install_data('scripts/dpak_ovs_completion_ovs.sh', install_dir: '/etc/bash_completion.d')
+diff --git a/drivers/net/hinic3/scripts/dpak_ovs_completion_ovs.sh b/drivers/net/hinic3/scripts/dpak_ovs_completion_ovs.sh
+index f18e1f2c0d..488dc5e2fc 100644
+--- a/drivers/net/hinic3/scripts/dpak_ovs_completion_ovs.sh
++++ b/drivers/net/hinic3/scripts/dpak_ovs_completion_ovs.sh
+@@ -10,7 +10,7 @@ TOP_LEVEL_OPTS=(
+     hwoff/show-forward-mode
+     hwoff/set-forward-mode
+     hwoff/show-global-api
+-    hwoff/dump-hinic3-flows
++    hwoff/dump-hwoff-flows
+     hwoff/dump-upcall-queue-info
+     hwoff/dump-bond-slave-info
+     hwoff/show-port-api
+@@ -649,7 +649,7 @@ _dpak_ovs_ctl() {
+             _complete_show_global_api
+             return 0
+             ;;
+-        hwoff/dump-hinic3-flows)
++        hwoff/dump-hwoff-flows)
+             _complete_dump_hinic3_flows
+             return 0
+             ;;
+diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_dump.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_dump.c
+index 3e0b10b2a7..4b289dbd54 100644
+--- a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_dump.c
++++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_dump.c
+@@ -291,7 +291,7 @@ hinic3_agent_dump_specific_flow(int argc, const char *argv[], struct ds *ds)
+ static void
+ hinic3_agent_dump_flows_help(struct ds *ds)
+ {
+-    hinic3_ds_put_format(ds, "%2s%sdpak-ovs-ctl hwoff/dump-hinic3-flows [ ufid <hw-ufid> | -n |"
++    hinic3_ds_put_format(ds, "%2s%sdpak-ovs-ctl hwoff/dump-hwoff-flows [ ufid <hw-ufid> | -n |"
+     " -f <file-name> | -i <block-id> | check | stop | { -h | --help } ]\n\n", HINIC3_UI_INDENT_SPACE,
+         HINIC3_UI_CMD_USAGE_STRING);
+     hinic3_ds_put_format(ds, "%2s%s\n", HINIC3_UI_INDENT_SPACE, HINIC3_UI_FLOW_OPTION_LIST_STRING);
+@@ -547,7 +547,7 @@ unixctl_hinic3_flow_dump_cmd_init(void)
+         DUMP_HINIC3_FLOWS_PARAM = 2,
+     };
+ 
+-    hinic3_command_register("hwoff/dump-hinic3-flows",
++    hinic3_command_register("hwoff/dump-hwoff-flows",
+         "[ ufid <hw-ufid> | -n | -f <file-name> | -i <block-id> | check | stop | { -h | --help } ]", 0,
+         DUMP_HINIC3_FLOWS_PARAM, hinic3_agent_dump_hinic3_emc_flows, NULL);
+     hinic3_pthread_mutex_init(&dump_flows_mgmt.mutex_lock);
+diff --git a/drivers/net/hinic3/src/hinic3_cmds/server/hinic3_command.c b/drivers/net/hinic3/src/hinic3_cmds/server/hinic3_command.c
+index 7fdf61fc46..c120e0c130 100644
+--- a/drivers/net/hinic3/src/hinic3_cmds/server/hinic3_command.c
++++ b/drivers/net/hinic3/src/hinic3_cmds/server/hinic3_command.c
+@@ -310,7 +310,7 @@ static struct hinic3_command_info g_hinic3_command_info[] = {
+     {"hwoff/exec-cmd", "This command is used to issue or query OVS driver information for debugging."},
+     {"hwoff/show-flow-api", "This API is used to query the hardware flow table."},
+     {"hwoff/show-error-stats", "Indicates the error information recorded during flow table unloading."},
+-    {"hwoff/dump-hinic3-flows", "Queries hardware flow table information."},
++    {"hwoff/dump-hwoff-flows", "Queries hardware flow table information."},
+     {"hwoff/flow-offload-speed-stat", "Collects statistics on or queries the flow table offloading rate."},
+     {"hwoff/show-offload-flow-num",
+         "This command is used to query the number of flow tables that are unloaded (software statistics)."},
+diff --git a/drivers/net/hinic3/src/hinic3_init/comm/hinic3_agent.c b/drivers/net/hinic3/src/hinic3_init/comm/hinic3_agent.c
+index a7d57b47ff..460a316fd8 100644
+--- a/drivers/net/hinic3/src/hinic3_init/comm/hinic3_agent.c
++++ b/drivers/net/hinic3/src/hinic3_init/comm/hinic3_agent.c
+@@ -39,6 +39,7 @@
+ #include "hinic3_agent_cmd.h"
+ #include "hinic3_error_stats.h"
+ #include "hinic3_agent.h"
++#include "rte_pmd_hinic3.h"
+ 
+ static bool g_agent_construct_init = false;
+ 
+@@ -286,7 +287,7 @@ static void hinic3_post_uninit(void)
+     (void)hinic3_command_mgr_uninit();
+ }
+ 
+-__attribute__((constructor(HINIC3_PRIORITY_LAST))) int hinic3_agent_construct(void)
++int hinic3_agent_construct(void)
+ {
+     int ret;
+ 
+@@ -326,7 +327,7 @@ __attribute__((constructor(HINIC3_PRIORITY_LAST))) int hinic3_agent_construct(vo
+     return -1;
+ }
+ 
+-__attribute__((destructor(HINIC3_PRIORITY_LAST))) void hinic3_agent_destruct(void)
++void hinic3_agent_destruct(void)
+ {
+     hinic3_net_qos_clear();
+     hinic3_post_uninit();
+-- 
+2.47.0.windows.2
+
