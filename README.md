@@ -1,6 +1,6 @@
 # OpenEuler开源仓patch使用简介
 
-**以OpenEuler开源仓 DPDK 20.11 patch为例**
+**以OpenEuler开源仓 DPDK 21.11 patch为例**
 
 # DPDK下载
 **下载链接：** https://core.dpdk.org/download/
@@ -21,6 +21,7 @@
 
 **本地初始化：**
 ```
+    cd dpdk-stable-21.11.9
     git log
     git init
     git add .
@@ -30,8 +31,7 @@
 
 **打patch到dpdk源码：**
 ```
-    cd dpdk-stable-21.11.9
-    git am ../dpdk/DPDK_20.11_patch/00*
+    git am ../dpdk/DPDK_21.11_patch/00*
 ```
 - 解释：
   - 0001-*-*.patch 作用是将pmd源码添加到dpdk-stable-21.11.9/drivers/net/hinic3 目录中。

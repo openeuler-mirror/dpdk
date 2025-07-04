@@ -1,8 +1,8 @@
-From 8874859134ed23c6541afd6da2a5d610a1757ba9 Mon Sep 17 00:00:00 2001
+From eb6156d9a962e3ebfd55dfed624417846483b81c Mon Sep 17 00:00:00 2001
 From: Huawei <@huawei.com>
 Date: Thu, 8 May 2025 11:00:01 +0800
-Subject: [PATCH 6/6] Support checksum offload calculation and VLAN tag in DPDK
- VXLAN scenario
+Subject: [PATCH 06/12] Support checksum offload calculation and VLAN tag in
+ DPDK VXLAN scenario
 
 Signed-off-by: Huawei <@huawei.com>
 ---

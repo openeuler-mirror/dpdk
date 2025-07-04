@@ -1,7 +1,7 @@
-From 6f48a5ad3922a5f06ae0025be06d2d09e292994e Mon Sep 17 00:00:00 2001
+From 4f61ca1b3b72fbe85b18a698f78daff29e732eeb Mon Sep 17 00:00:00 2001
 From: xiaobai <chenyi19990512@163.com>
 Date: Mon, 19 May 2025 11:50:52 +0800
-Subject: [PATCH 10/11] modify phyport stats strings
+Subject: [PATCH 10/12] modify phyport stats strings
 
 ---
  drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h | 2 +-

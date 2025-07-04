@@ -1,7 +1,7 @@
-From 06d528b2e0de14c6873d0534d56f4dc92c5d1f90 Mon Sep 17 00:00:00 2001
+From cb7ca6c02dd42a46e38f73a669129ee995d8dcb6 Mon Sep 17 00:00:00 2001
 From: xiaobai <chenyi19990512@163.com>
 Date: Mon, 19 May 2025 11:41:16 +0800
-Subject: [PATCH 08/11] fix mailbox send timeout err
+Subject: [PATCH 08/12] fix mailbox send timeout err
 
 ---
  drivers/net/hinic3/base/hinic3_pmd_eqs.c | 7 ++++++-

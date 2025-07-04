@@ -1,7 +1,7 @@
-From f81260d8deabc915f05d9af6867e218ad7d75e2e Mon Sep 17 00:00:00 2001
+From ba8a2feb6daf1d0b805672a18df0b63ae1b8d9ef Mon Sep 17 00:00:00 2001
 From: xiaobai <chenyi19990512@163.com>
 Date: Mon, 19 May 2025 11:37:25 +0800
-Subject: [PATCH 07/11] Normal tso support l4 checnksum offload
+Subject: [PATCH 07/12] Normal tso support l4 checnksum offload
 
 ---
  drivers/net/hinic3/hinic3_pmd_ethdev.c |  1 +
