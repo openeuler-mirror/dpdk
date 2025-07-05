@@ -1,7 +1,7 @@
-From 1fb40457ac55d087d8c06c4b4fe8eea58ded779d Mon Sep 17 00:00:00 2001
+From d3bc576b657fd94929994557428ecf3b42822c9f Mon Sep 17 00:00:00 2001
 From: Huawei <@huawei.com>
 Date: Wed, 7 May 2025 10:53:38 +0800
-Subject: [PATCH 1/6] Upstream hinic3 DPDK pmd driver
+Subject: [PATCH 01/12] Upstream hinic3 DPDK pmd driver
 
 Signed-off-by: Huawei <@huawei.com>
 ---

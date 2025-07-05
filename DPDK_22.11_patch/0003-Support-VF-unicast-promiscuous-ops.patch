@@ -1,7 +1,7 @@
-From fc6089db5cfeb2fd2c9efdc6064f7343fb2d8245 Mon Sep 17 00:00:00 2001
+From 2233f75ac37669fe0b5de5bbe4501b07c6155c72 Mon Sep 17 00:00:00 2001
 From: Huawei <@huawei.com>
 Date: Wed, 7 May 2025 11:53:45 +0800
-Subject: [PATCH 3/6] Support VF unicast promiscuous ops
+Subject: [PATCH 03/12] Support VF unicast promiscuous ops
 
 Signed-off-by: Huawei <@huawei.com>
 ---
