@@ -1,13 +1,13 @@
-From bb99a36260e83c8b0e70c16b8d45bdd157725668 Mon Sep 17 00:00:00 2001
-From: Feifei Wang <wff_light@vip.163.com>
-Date: Wed, 25 Jun 2025 16:59:05 +0800
+From be4735fe620dfa94e84d2bf87eeb2f6d83b4038b Mon Sep 17 00:00:00 2001
+From: kaiyuan001 <leifan13@huawei.com>
+Date: Mon, 7 Jul 2025 19:54:22 +0800
 Subject: [PATCH] Upstream-hinic3-DPDK-driver
 
 ---
  .../hinic3/cfg/ovs_dpu_virt/agent_config.ini  |   49 +
- drivers/net/hinic3/include/dpak_cfg.h         |   97 +
+ drivers/net/hinic3/include/dpak_cfg.h         |   95 +
  drivers/net/hinic3/meson.build                |  180 ++
- .../hinic3/scripts/dpak_ovs_completion_ovs.sh |  717 ++++++++
+ .../hinic3/scripts/dpak_ovs_completion_ovs.sh |  716 ++++++++
  .../src/common/hinic3_cfg/ovs_dpu_virt.c      |   37 +
  .../hinic3/src/common/hinic3_ds/hinic3_ds.c   |  143 ++
  .../hinic3/src/common/hinic3_ds/hinic3_ds.h   |   37 +
@@ -218,7 +218,7 @@ Subject: [PATCH] Upstream-hinic3-DPDK-driver
  .../comm/hinic3_vf_port_qos_public.c          |  331 ++++
  .../comm/hinic3_vf_port_qos_public.h          |   79 +
  .../hinic3/src/hinic3_qos/meter/hinic3_qos.c  |   26 +
- .../hinic3/src/hinic3_qos/meter/hinic3_qos.h  |   15 +
+ .../hinic3/src/hinic3_qos/meter/hinic3_qos.h  |   13 +
  .../hinic3_qos/multilevel_qos/hinic3_mtr.c    | 1555 ++++++++++++++++
  .../hinic3_qos/multilevel_qos/hinic3_mtr.h    |  100 ++
  .../multilevel_qos/hinic3_mtr_policy.c        |  165 ++
@@ -232,7 +232,7 @@ Subject: [PATCH] Upstream-hinic3-DPDK-driver
  .../hinic3_ufid_map_rte_flow.c                |  466 +++++
  .../hinic3_ufid_map_rte_flow.h                |  122 ++
  drivers/net/meson.build                       |    1 +
- 228 files changed, 46341 insertions(+)
+ 228 files changed, 46336 insertions(+)
  create mode 100644 drivers/net/hinic3/cfg/ovs_dpu_virt/agent_config.ini
  create mode 100644 drivers/net/hinic3/include/dpak_cfg.h
  create mode 100644 drivers/net/hinic3/meson.build
@@ -463,7 +463,7 @@ Subject: [PATCH] Upstream-hinic3-DPDK-driver
 
 diff --git a/drivers/net/hinic3/cfg/ovs_dpu_virt/agent_config.ini b/drivers/net/hinic3/cfg/ovs_dpu_virt/agent_config.ini
 new file mode 100644
-index 0000000000..526bdfa4bf
+index 0000000..526bdfa
 --- /dev/null
 +++ b/drivers/net/hinic3/cfg/ovs_dpu_virt/agent_config.ini
 @@ -0,0 +1,49 @@
@@ -518,10 +518,10 @@ index 0000000000..526bdfa4bf
 +qos_level=port_bps,port_pps,vm_bps,vm_pps,net_bps,net_pps
 diff --git a/drivers/net/hinic3/include/dpak_cfg.h b/drivers/net/hinic3/include/dpak_cfg.h
 new file mode 100644
-index 0000000000..8e8b494490
+index 0000000..c2c7d49
 --- /dev/null
 +++ b/drivers/net/hinic3/include/dpak_cfg.h
-@@ -0,0 +1,97 @@
+@@ -0,0 +1,95 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
 + * Copyright(c) 2022 Huawei Technologies Co., Ltd
 + */
@@ -606,9 +606,7 @@ index 0000000000..8e8b494490
 +    uint32_t pcap_cpu;
 +    enum hinic3_query_bdf_type query_bdf_type;
 +    bool support_port_hot_plug;
-+    // DPU虚拟化和裸机容器场景，以及百度的裸金属场景下 支持VF端口创建，其他模式下不生效
 +    bool support_vf_port;
-+    // DPU虚拟化和裸机容器场景，以及百度的裸金属场景下 支持PF端口创建，其他模式下不生效
 +    bool support_pf_port;
 +    char qos_level[QOS_LEVEL_MAX_LENGTH];
 +    bool is_virtio_queue_depth_set;
@@ -621,7 +619,7 @@ index 0000000000..8e8b494490
 +#endif
 diff --git a/drivers/net/hinic3/meson.build b/drivers/net/hinic3/meson.build
 new file mode 100644
-index 0000000000..af0793845f
+index 0000000..af07938
 --- /dev/null
 +++ b/drivers/net/hinic3/meson.build
 @@ -0,0 +1,180 @@
@@ -807,15 +805,14 @@ index 0000000000..af0793845f
 +)
 diff --git a/drivers/net/hinic3/scripts/dpak_ovs_completion_ovs.sh b/drivers/net/hinic3/scripts/dpak_ovs_completion_ovs.sh
 new file mode 100644
-index 0000000000..bd7a820d00
+index 0000000..4eb0f1a
 --- /dev/null
 +++ b/drivers/net/hinic3/scripts/dpak_ovs_completion_ovs.sh
-@@ -0,0 +1,717 @@
+@@ -0,0 +1,716 @@
 +#!/bin/bash
 +
-+# 版权所有 (c) 华为技术有限公司 2024-2024
-+# 生成日期 : 2024年7月25日
-+# 功能描述 : dpak-ovs 网络卸载工具命令自动补全功能实现
++# SPDX-License-Identifier: BSD-3-Clause
++# Copyright(c) 2022 Huawei Technologies Co., Ltd
 +
 +config_file="/etc/dpak/net/agent_config.ini"
 +
@@ -1530,7 +1527,7 @@ index 0000000000..bd7a820d00
 +complete -F _dpak_ovs_ctl dpak-ovs-ctl
 diff --git a/drivers/net/hinic3/src/common/hinic3_cfg/ovs_dpu_virt.c b/drivers/net/hinic3/src/common/hinic3_cfg/ovs_dpu_virt.c
 new file mode 100644
-index 0000000000..d77b928793
+index 0000000..d77b928
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_cfg/ovs_dpu_virt.c
 @@ -0,0 +1,37 @@
@@ -1573,7 +1570,7 @@ index 0000000000..d77b928793
 +}
 diff --git a/drivers/net/hinic3/src/common/hinic3_ds/hinic3_ds.c b/drivers/net/hinic3/src/common/hinic3_ds/hinic3_ds.c
 new file mode 100644
-index 0000000000..bfdb82d3ba
+index 0000000..bfdb82d
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_ds/hinic3_ds.c
 @@ -0,0 +1,143 @@
@@ -1722,7 +1719,7 @@ index 0000000000..bfdb82d3ba
 +}
 diff --git a/drivers/net/hinic3/src/common/hinic3_ds/hinic3_ds.h b/drivers/net/hinic3/src/common/hinic3_ds/hinic3_ds.h
 new file mode 100644
-index 0000000000..c73810e888
+index 0000000..c73810e
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_ds/hinic3_ds.h
 @@ -0,0 +1,37 @@
@@ -1765,7 +1762,7 @@ index 0000000000..c73810e888
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_hash/hinic3_hash.c b/drivers/net/hinic3/src/common/hinic3_hash/hinic3_hash.c
 new file mode 100644
-index 0000000000..3c1293408e
+index 0000000..3c12934
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_hash/hinic3_hash.c
 @@ -0,0 +1,94 @@
@@ -1865,7 +1862,7 @@ index 0000000000..3c1293408e
 +}
 diff --git a/drivers/net/hinic3/src/common/hinic3_hash/hinic3_hash.h b/drivers/net/hinic3/src/common/hinic3_hash/hinic3_hash.h
 new file mode 100644
-index 0000000000..3fe70627f7
+index 0000000..3fe7062
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_hash/hinic3_hash.h
 @@ -0,0 +1,23 @@
@@ -1894,7 +1891,7 @@ index 0000000000..3fe70627f7
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_hmap/hinic3_hmap.c b/drivers/net/hinic3/src/common/hinic3_hmap/hinic3_hmap.c
 new file mode 100644
-index 0000000000..2f7c9e1292
+index 0000000..2f7c9e1
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_hmap/hinic3_hmap.c
 @@ -0,0 +1,186 @@
@@ -2086,7 +2083,7 @@ index 0000000000..2f7c9e1292
 +}
 diff --git a/drivers/net/hinic3/src/common/hinic3_hmap/hinic3_hmap.h b/drivers/net/hinic3/src/common/hinic3_hmap/hinic3_hmap.h
 new file mode 100644
-index 0000000000..66757343b9
+index 0000000..6675734
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_hmap/hinic3_hmap.h
 @@ -0,0 +1,58 @@
@@ -2150,7 +2147,7 @@ index 0000000000..66757343b9
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_log/hinic3_log.c b/drivers/net/hinic3/src/common/hinic3_log/hinic3_log.c
 new file mode 100644
-index 0000000000..8a08d5daac
+index 0000000..8a08d5d
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_log/hinic3_log.c
 @@ -0,0 +1,528 @@
@@ -2684,7 +2681,7 @@ index 0000000000..8a08d5daac
 +}
 diff --git a/drivers/net/hinic3/src/common/hinic3_log/hinic3_log.h b/drivers/net/hinic3/src/common/hinic3_log/hinic3_log.h
 new file mode 100644
-index 0000000000..b24b707e57
+index 0000000..b24b707
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_log/hinic3_log.h
 @@ -0,0 +1,112 @@
@@ -2802,7 +2799,7 @@ index 0000000000..b24b707e57
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_mpool_mgmt/hinic3_mpool.c b/drivers/net/hinic3/src/common/hinic3_mpool_mgmt/hinic3_mpool.c
 new file mode 100644
-index 0000000000..eda2279b79
+index 0000000..eda2279
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_mpool_mgmt/hinic3_mpool.c
 @@ -0,0 +1,371 @@
@@ -3179,7 +3176,7 @@ index 0000000000..eda2279b79
 +}
 diff --git a/drivers/net/hinic3/src/common/hinic3_mpool_mgmt/hinic3_mpool.h b/drivers/net/hinic3/src/common/hinic3_mpool_mgmt/hinic3_mpool.h
 new file mode 100644
-index 0000000000..ad40415f5c
+index 0000000..ad40415
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_mpool_mgmt/hinic3_mpool.h
 @@ -0,0 +1,52 @@
@@ -3237,7 +3234,7 @@ index 0000000000..ad40415f5c
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_mutex/hinic3_mutex.c b/drivers/net/hinic3/src/common/hinic3_mutex/hinic3_mutex.c
 new file mode 100644
-index 0000000000..ae5972d5d3
+index 0000000..ae5972d
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_mutex/hinic3_mutex.c
 @@ -0,0 +1,210 @@
@@ -3453,7 +3450,7 @@ index 0000000000..ae5972d5d3
 +}
 diff --git a/drivers/net/hinic3/src/common/hinic3_packets/hinic3_packets.c b/drivers/net/hinic3/src/common/hinic3_packets/hinic3_packets.c
 new file mode 100644
-index 0000000000..4ca291f59f
+index 0000000..4ca291f
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_packets/hinic3_packets.c
 @@ -0,0 +1,20 @@
@@ -3479,7 +3476,7 @@ index 0000000000..4ca291f59f
 +}
 diff --git a/drivers/net/hinic3/src/common/hinic3_packets/hinic3_packets.h b/drivers/net/hinic3/src/common/hinic3_packets/hinic3_packets.h
 new file mode 100644
-index 0000000000..0351ee9e26
+index 0000000..0351ee9
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_packets/hinic3_packets.h
 @@ -0,0 +1,18 @@
@@ -3503,7 +3500,7 @@ index 0000000000..0351ee9e26
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_smap/hinic3_shash.c b/drivers/net/hinic3/src/common/hinic3_smap/hinic3_shash.c
 new file mode 100644
-index 0000000000..771660453f
+index 0000000..7716604
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_smap/hinic3_shash.c
 @@ -0,0 +1,156 @@
@@ -3665,7 +3662,7 @@ index 0000000000..771660453f
 +}
 diff --git a/drivers/net/hinic3/src/common/hinic3_smap/hinic3_shash.h b/drivers/net/hinic3/src/common/hinic3_smap/hinic3_shash.h
 new file mode 100644
-index 0000000000..8fce7f84e4
+index 0000000..8fce7f8
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_smap/hinic3_shash.h
 @@ -0,0 +1,30 @@
@@ -3701,7 +3698,7 @@ index 0000000000..8fce7f84e4
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_smap/hinic3_smap.c b/drivers/net/hinic3/src/common/hinic3_smap/hinic3_smap.c
 new file mode 100644
-index 0000000000..fc62fdee54
+index 0000000..fc62fde
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_smap/hinic3_smap.c
 @@ -0,0 +1,159 @@
@@ -3866,7 +3863,7 @@ index 0000000000..fc62fdee54
 +}
 diff --git a/drivers/net/hinic3/src/common/hinic3_smap/hinic3_smap.h b/drivers/net/hinic3/src/common/hinic3_smap/hinic3_smap.h
 new file mode 100644
-index 0000000000..2603ab23f2
+index 0000000..2603ab2
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_smap/hinic3_smap.h
 @@ -0,0 +1,30 @@
@@ -3902,7 +3899,7 @@ index 0000000000..2603ab23f2
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_string_util/hinic3_string_format.c b/drivers/net/hinic3/src/common/hinic3_string_util/hinic3_string_format.c
 new file mode 100644
-index 0000000000..d4283ff321
+index 0000000..d4283ff
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_string_util/hinic3_string_format.c
 @@ -0,0 +1,404 @@
@@ -4312,7 +4309,7 @@ index 0000000000..d4283ff321
 +}
 diff --git a/drivers/net/hinic3/src/common/hinic3_string_util/hinic3_string_format.h b/drivers/net/hinic3/src/common/hinic3_string_util/hinic3_string_format.h
 new file mode 100644
-index 0000000000..ab75cfed55
+index 0000000..ab75cfe
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_string_util/hinic3_string_format.h
 @@ -0,0 +1,25 @@
@@ -4343,7 +4340,7 @@ index 0000000000..ab75cfed55
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_string_util/hinic3_string_util.c b/drivers/net/hinic3/src/common/hinic3_string_util/hinic3_string_util.c
 new file mode 100644
-index 0000000000..33474f0eb8
+index 0000000..33474f0
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_string_util/hinic3_string_util.c
 @@ -0,0 +1,71 @@
@@ -4420,7 +4417,7 @@ index 0000000000..33474f0eb8
 +}
 diff --git a/drivers/net/hinic3/src/common/hinic3_string_util/hinic3_string_util.h b/drivers/net/hinic3/src/common/hinic3_string_util/hinic3_string_util.h
 new file mode 100644
-index 0000000000..5425e18c7d
+index 0000000..5425e18
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_string_util/hinic3_string_util.h
 @@ -0,0 +1,19 @@
@@ -4445,7 +4442,7 @@ index 0000000000..5425e18c7d
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_thread/hinic3_thread.c b/drivers/net/hinic3/src/common/hinic3_thread/hinic3_thread.c
 new file mode 100644
-index 0000000000..a6423f3e3e
+index 0000000..a6423f3
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_thread/hinic3_thread.c
 @@ -0,0 +1,112 @@
@@ -4563,7 +4560,7 @@ index 0000000000..a6423f3e3e
 +}
 diff --git a/drivers/net/hinic3/src/common/hinic3_thread/hinic3_thread.h b/drivers/net/hinic3/src/common/hinic3_thread/hinic3_thread.h
 new file mode 100644
-index 0000000000..d674c6f3bb
+index 0000000..d674c6f
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_thread/hinic3_thread.h
 @@ -0,0 +1,28 @@
@@ -4597,7 +4594,7 @@ index 0000000000..d674c6f3bb
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_check_thread_health_state.c b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_check_thread_health_state.c
 new file mode 100644
-index 0000000000..675d708c98
+index 0000000..675d708
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_check_thread_health_state.c
 @@ -0,0 +1,174 @@
@@ -4777,7 +4774,7 @@ index 0000000000..675d708c98
 +}
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_check_thread_health_state.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_check_thread_health_state.h
 new file mode 100644
-index 0000000000..241719f2d9
+index 0000000..241719f
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_check_thread_health_state.h
 @@ -0,0 +1,42 @@
@@ -4825,7 +4822,7 @@ index 0000000000..241719f2d9
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_dpdk_adapter.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_dpdk_adapter.h
 new file mode 100644
-index 0000000000..20833ae1b1
+index 0000000..20833ae
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_dpdk_adapter.h
 @@ -0,0 +1,285 @@
@@ -5116,7 +5113,7 @@ index 0000000000..20833ae1b1
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_drv.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_drv.h
 new file mode 100644
-index 0000000000..49aa55403b
+index 0000000..49aa554
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_drv.h
 @@ -0,0 +1,120 @@
@@ -5242,7 +5239,7 @@ index 0000000000..49aa55403b
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_error_stats.c b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_error_stats.c
 new file mode 100644
-index 0000000000..a4754824a8
+index 0000000..a475482
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_error_stats.c
 @@ -0,0 +1,187 @@
@@ -5435,7 +5432,7 @@ index 0000000000..a4754824a8
 +}
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_error_stats.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_error_stats.h
 new file mode 100644
-index 0000000000..9f39a5b0e8
+index 0000000..9f39a5b
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_error_stats.h
 @@ -0,0 +1,185 @@
@@ -5626,7 +5623,7 @@ index 0000000000..9f39a5b0e8
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_eth_packets.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_eth_packets.h
 new file mode 100644
-index 0000000000..a25a536c98
+index 0000000..a25a536
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_eth_packets.h
 @@ -0,0 +1,114 @@
@@ -5746,7 +5743,7 @@ index 0000000000..a25a536c98
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_file_util.c b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_file_util.c
 new file mode 100644
-index 0000000000..2cefeaafd7
+index 0000000..2cefeaa
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_file_util.c
 @@ -0,0 +1,293 @@
@@ -6045,7 +6042,7 @@ index 0000000000..2cefeaafd7
 +}
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_file_util.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_file_util.h
 new file mode 100644
-index 0000000000..70313bf2cd
+index 0000000..70313bf
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_file_util.h
 @@ -0,0 +1,19 @@
@@ -6070,7 +6067,7 @@ index 0000000000..70313bf2cd
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_flow_agent_enum.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_flow_agent_enum.h
 new file mode 100644
-index 0000000000..fcad0a46ce
+index 0000000..fcad0a4
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_flow_agent_enum.h
 @@ -0,0 +1,93 @@
@@ -6169,7 +6166,7 @@ index 0000000000..fcad0a46ce
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_flow_agent_public.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_flow_agent_public.h
 new file mode 100644
-index 0000000000..25e1533746
+index 0000000..25e1533
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_flow_agent_public.h
 @@ -0,0 +1,336 @@
@@ -6511,7 +6508,7 @@ index 0000000000..25e1533746
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_hugepage_meminfo.c b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_hugepage_meminfo.c
 new file mode 100644
-index 0000000000..55346db350
+index 0000000..55346db
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_hugepage_meminfo.c
 @@ -0,0 +1,472 @@
@@ -6989,7 +6986,7 @@ index 0000000000..55346db350
 +}
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_hugepage_meminfo.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_hugepage_meminfo.h
 new file mode 100644
-index 0000000000..f3ca1410e1
+index 0000000..f3ca141
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_hugepage_meminfo.h
 @@ -0,0 +1,75 @@
@@ -7070,7 +7067,7 @@ index 0000000000..f3ca1410e1
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_list.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_list.h
 new file mode 100644
-index 0000000000..756c4ec523
+index 0000000..756c4ec
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_list.h
 @@ -0,0 +1,72 @@
@@ -7148,7 +7145,7 @@ index 0000000000..756c4ec523
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_map.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_map.h
 new file mode 100644
-index 0000000000..b260759e17
+index 0000000..b260759
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_map.h
 @@ -0,0 +1,44 @@
@@ -7198,7 +7195,7 @@ index 0000000000..b260759e17
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_meminfo.c b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_meminfo.c
 new file mode 100644
-index 0000000000..9fc827dec8
+index 0000000..9fc827d
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_meminfo.c
 @@ -0,0 +1,107 @@
@@ -7311,7 +7308,7 @@ index 0000000000..9fc827dec8
 +}
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_meminfo.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_meminfo.h
 new file mode 100644
-index 0000000000..d5ddda1d2d
+index 0000000..d5ddda1
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_meminfo.h
 @@ -0,0 +1,34 @@
@@ -7351,7 +7348,7 @@ index 0000000000..d5ddda1d2d
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_message.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_message.h
 new file mode 100644
-index 0000000000..811da8178f
+index 0000000..811da81
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_message.h
 @@ -0,0 +1,605 @@
@@ -7962,7 +7959,7 @@ index 0000000000..811da8178f
 +#endif /* HINIC3_MESSAGE_H */
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_mutex.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_mutex.h
 new file mode 100644
-index 0000000000..39946effbc
+index 0000000..39946ef
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_mutex.h
 @@ -0,0 +1,57 @@
@@ -8025,7 +8022,7 @@ index 0000000000..39946effbc
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_nlattr.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_nlattr.h
 new file mode 100644
-index 0000000000..6263e64203
+index 0000000..6263e64
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_nlattr.h
 @@ -0,0 +1,205 @@
@@ -8236,7 +8233,7 @@ index 0000000000..6263e64203
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_option.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_option.h
 new file mode 100644
-index 0000000000..ed4baf4eb1
+index 0000000..ed4baf4
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_option.h
 @@ -0,0 +1,18 @@
@@ -8260,10 +8257,10 @@ index 0000000000..ed4baf4eb1
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_ovs_adapter.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_ovs_adapter.h
 new file mode 100644
-index 0000000000..e69de29bb2
+index 0000000..e69de29
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_packets_types.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_packets_types.h
 new file mode 100644
-index 0000000000..aec6355bd4
+index 0000000..aec6355
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_packets_types.h
 @@ -0,0 +1,383 @@
@@ -8652,7 +8649,7 @@ index 0000000000..aec6355bd4
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_provider.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_provider.h
 new file mode 100644
-index 0000000000..63021b7a64
+index 0000000..63021b7
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_provider.h
 @@ -0,0 +1,265 @@
@@ -8923,7 +8920,7 @@ index 0000000000..63021b7a64
 +#endif /* HINIC3_PROVIDER_H */
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_set_userdata.c b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_set_userdata.c
 new file mode 100644
-index 0000000000..1ab68bd1c1
+index 0000000..1ab68bd
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_set_userdata.c
 @@ -0,0 +1,67 @@
@@ -8996,7 +8993,7 @@ index 0000000000..1ab68bd1c1
 +}
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_set_userdata.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_set_userdata.h
 new file mode 100644
-index 0000000000..a6f4b6204a
+index 0000000..a6f4b62
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_set_userdata.h
 @@ -0,0 +1,26 @@
@@ -9028,7 +9025,7 @@ index 0000000000..a6f4b6204a
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_timeval.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_timeval.h
 new file mode 100644
-index 0000000000..9e282f11c9
+index 0000000..9e282f1
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_timeval.h
 @@ -0,0 +1,27 @@
@@ -9061,7 +9058,7 @@ index 0000000000..9e282f11c9
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_tlv_key.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_tlv_key.h
 new file mode 100644
-index 0000000000..b3a1cca95c
+index 0000000..b3a1cca
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_tlv_key.h
 @@ -0,0 +1,154 @@
@@ -9221,7 +9218,7 @@ index 0000000000..b3a1cca95c
 +#endif /* HINIC3_TLV_KEY_H */
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_types.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_types.h
 new file mode 100644
-index 0000000000..84d83ff689
+index 0000000..84d83ff
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_types.h
 @@ -0,0 +1,29 @@
@@ -9256,7 +9253,7 @@ index 0000000000..84d83ff689
 +#endif /* HINIC3_TYPES_H */
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_ui_string.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_ui_string.h
 new file mode 100644
-index 0000000000..9409dfc465
+index 0000000..9409dfc
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_ui_string.h
 @@ -0,0 +1,410 @@
@@ -9672,7 +9669,7 @@ index 0000000000..9409dfc465
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_unaligned.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_unaligned.h
 new file mode 100644
-index 0000000000..0c1449efc5
+index 0000000..0c1449e
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_unaligned.h
 @@ -0,0 +1,16 @@
@@ -9694,7 +9691,7 @@ index 0000000000..0c1449efc5
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_util.c b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_util.c
 new file mode 100644
-index 0000000000..aa7484de07
+index 0000000..aa7484d
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_util.c
 @@ -0,0 +1,515 @@
@@ -10215,7 +10212,7 @@ index 0000000000..aa7484de07
 +}
 diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_util.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_util.h
 new file mode 100644
-index 0000000000..e355038260
+index 0000000..e355038
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_util.h
 @@ -0,0 +1,220 @@
@@ -10441,7 +10438,7 @@ index 0000000000..e355038260
 +#endif
 diff --git a/drivers/net/hinic3/src/common/hinic3_uuid/hinic3_uuid.c b/drivers/net/hinic3/src/common/hinic3_uuid/hinic3_uuid.c
 new file mode 100644
-index 0000000000..77e5e5ef57
+index 0000000..77e5e5e
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_uuid/hinic3_uuid.c
 @@ -0,0 +1,89 @@
@@ -10536,7 +10533,7 @@ index 0000000000..77e5e5ef57
 +}
 diff --git a/drivers/net/hinic3/src/common/hinic3_uuid/hinic3_uuid.h b/drivers/net/hinic3/src/common/hinic3_uuid/hinic3_uuid.h
 new file mode 100644
-index 0000000000..4d4254f61a
+index 0000000..4d4254f
 --- /dev/null
 +++ b/drivers/net/hinic3/src/common/hinic3_uuid/hinic3_uuid.h
 @@ -0,0 +1,29 @@
@@ -10571,7 +10568,7 @@ index 0000000000..4d4254f61a
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_command.c b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_command.c
 new file mode 100644
-index 0000000000..099d7b198e
+index 0000000..099d7b1
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_command.c
 @@ -0,0 +1,437 @@
@@ -11014,7 +11011,7 @@ index 0000000000..099d7b198e
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_command.h b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_command.h
 new file mode 100644
-index 0000000000..966e6de641
+index 0000000..966e6de
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_command.h
 @@ -0,0 +1,13 @@
@@ -11033,7 +11030,7 @@ index 0000000000..966e6de641
 +#endif /* HINIC3_CAPTURE_COMMAND_H */
 diff --git a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_core.c b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_core.c
 new file mode 100644
-index 0000000000..328ce6522b
+index 0000000..328ce65
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_core.c
 @@ -0,0 +1,140 @@
@@ -11179,7 +11176,7 @@ index 0000000000..328ce6522b
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_core.h b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_core.h
 new file mode 100644
-index 0000000000..5bfa67eeea
+index 0000000..5bfa67e
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_core.h
 @@ -0,0 +1,19 @@
@@ -11204,7 +11201,7 @@ index 0000000000..5bfa67eeea
 +#endif /* HINIC3_CAPTURE_CORE_H */
 diff --git a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_filter.c b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_filter.c
 new file mode 100644
-index 0000000000..61c36faf0d
+index 0000000..61c36fa
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_filter.c
 @@ -0,0 +1,1188 @@
@@ -12398,7 +12395,7 @@ index 0000000000..61c36faf0d
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_filter.h b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_filter.h
 new file mode 100644
-index 0000000000..999ea9fdfd
+index 0000000..999ea9f
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_filter.h
 @@ -0,0 +1,185 @@
@@ -12589,7 +12586,7 @@ index 0000000000..999ea9fdfd
 +#endif /* HINIC3_CAPTURE_FILTER_H */
 diff --git a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_hooks.c b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_hooks.c
 new file mode 100644
-index 0000000000..4c38fe7544
+index 0000000..4c38fe7
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_hooks.c
 @@ -0,0 +1,58 @@
@@ -12653,7 +12650,7 @@ index 0000000000..4c38fe7544
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_hooks.h b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_hooks.h
 new file mode 100644
-index 0000000000..e178f594ba
+index 0000000..e178f59
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_hooks.h
 @@ -0,0 +1,9 @@
@@ -12668,7 +12665,7 @@ index 0000000000..e178f594ba
 +#endif /* HINIC3_CAPTURE_HOOKS_H */
 diff --git a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_main.c b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_main.c
 new file mode 100644
-index 0000000000..a87f38f69a
+index 0000000..a87f38f
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_main.c
 @@ -0,0 +1,178 @@
@@ -12852,7 +12849,7 @@ index 0000000000..a87f38f69a
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_main.h b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_main.h
 new file mode 100644
-index 0000000000..7dd56ae093
+index 0000000..7dd56ae
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_main.h
 @@ -0,0 +1,13 @@
@@ -12871,7 +12868,7 @@ index 0000000000..7dd56ae093
 +#endif /* HINIC3_CAPTURE_MAIN_H */
 diff --git a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_save.c b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_save.c
 new file mode 100644
-index 0000000000..ffc1c5d40c
+index 0000000..ffc1c5d
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_save.c
 @@ -0,0 +1,266 @@
@@ -13143,7 +13140,7 @@ index 0000000000..ffc1c5d40c
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_save.h b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_save.h
 new file mode 100644
-index 0000000000..8d50ed817a
+index 0000000..8d50ed8
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_save.h
 @@ -0,0 +1,11 @@
@@ -13160,7 +13157,7 @@ index 0000000000..8d50ed817a
 +#endif /* HINIC3_CAPTURE_SAVE_H */
 diff --git a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_utils.c b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_utils.c
 new file mode 100644
-index 0000000000..dedcaf590b
+index 0000000..dedcaf5
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_utils.c
 @@ -0,0 +1,1303 @@
@@ -14469,7 +14466,7 @@ index 0000000000..dedcaf590b
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_utils.h b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_utils.h
 new file mode 100644
-index 0000000000..7477896cd7
+index 0000000..7477896
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_utils.h
 @@ -0,0 +1,281 @@
@@ -14756,7 +14753,7 @@ index 0000000000..7477896cd7
 +#endif /* HINIC3_CAPTURE_UTILS_H */
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/client/hinic3_command_client.c b/drivers/net/hinic3/src/hinic3_cmds/client/hinic3_command_client.c
 new file mode 100644
-index 0000000000..6c5a52df3a
+index 0000000..6c5a52d
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/client/hinic3_command_client.c
 @@ -0,0 +1,278 @@
@@ -15040,7 +15037,7 @@ index 0000000000..6c5a52df3a
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_cmd.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_cmd.c
 new file mode 100644
-index 0000000000..47d04fd836
+index 0000000..47d04fd
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_cmd.c
 @@ -0,0 +1,74 @@
@@ -15120,7 +15117,7 @@ index 0000000000..47d04fd836
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_cmd.h b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_cmd.h
 new file mode 100644
-index 0000000000..3986d7aefe
+index 0000000..3986d7a
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_cmd.h
 @@ -0,0 +1,19 @@
@@ -15145,7 +15142,7 @@ index 0000000000..3986d7aefe
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_cmd_format.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_cmd_format.c
 new file mode 100644
-index 0000000000..c72f3e6495
+index 0000000..c72f3e6
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_cmd_format.c
 @@ -0,0 +1,527 @@
@@ -15678,7 +15675,7 @@ index 0000000000..c72f3e6495
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_cmd_format.h b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_cmd_format.h
 new file mode 100644
-index 0000000000..3e2e9db7bb
+index 0000000..3e2e9db
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_cmd_format.h
 @@ -0,0 +1,50 @@
@@ -15734,7 +15731,7 @@ index 0000000000..3e2e9db7bb
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_cmd_time.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_cmd_time.c
 new file mode 100644
-index 0000000000..63c6380fbc
+index 0000000..63c6380
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_cmd_time.c
 @@ -0,0 +1,40 @@
@@ -15780,7 +15777,7 @@ index 0000000000..63c6380fbc
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_cmd_time.h b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_cmd_time.h
 new file mode 100644
-index 0000000000..2536971a2a
+index 0000000..2536971
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_cmd_time.h
 @@ -0,0 +1,88 @@
@@ -15874,7 +15871,7 @@ index 0000000000..2536971a2a
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd.c
 new file mode 100644
-index 0000000000..41fb29ac57
+index 0000000..41fb29a
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd.c
 @@ -0,0 +1,92 @@
@@ -15972,7 +15969,7 @@ index 0000000000..41fb29ac57
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd.h b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd.h
 new file mode 100644
-index 0000000000..4bfdbabd34
+index 0000000..4bfdbab
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd.h
 @@ -0,0 +1,80 @@
@@ -16058,7 +16055,7 @@ index 0000000000..4bfdbabd34
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_api.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_api.c
 new file mode 100644
-index 0000000000..de4d2511a8
+index 0000000..de4d251
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_api.c
 @@ -0,0 +1,268 @@
@@ -16332,7 +16329,7 @@ index 0000000000..de4d2511a8
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_dump.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_dump.c
 new file mode 100644
-index 0000000000..3e0b10b2a7
+index 0000000..3e0b10b
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_dump.c
 @@ -0,0 +1,554 @@
@@ -16892,7 +16889,7 @@ index 0000000000..3e0b10b2a7
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_dump.h b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_dump.h
 new file mode 100644
-index 0000000000..9b2d7b4262
+index 0000000..9b2d7b4
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_dump.h
 @@ -0,0 +1,152 @@
@@ -17050,7 +17047,7 @@ index 0000000000..9b2d7b4262
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_dump_file.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_dump_file.c
 new file mode 100644
-index 0000000000..852ed9486e
+index 0000000..852ed94
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_dump_file.c
 @@ -0,0 +1,302 @@
@@ -17358,7 +17355,7 @@ index 0000000000..852ed9486e
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_speed.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_speed.c
 new file mode 100644
-index 0000000000..ab6c98b2eb
+index 0000000..ab6c98b
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_speed.c
 @@ -0,0 +1,472 @@
@@ -17836,7 +17833,7 @@ index 0000000000..ab6c98b2eb
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_error_stats.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_error_stats.c
 new file mode 100644
-index 0000000000..2114202657
+index 0000000..2114202
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_error_stats.c
 @@ -0,0 +1,151 @@
@@ -17993,7 +17990,7 @@ index 0000000000..2114202657
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_error_stats.h b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_error_stats.h
 new file mode 100644
-index 0000000000..10cf76f7f8
+index 0000000..10cf76f
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_error_stats.h
 @@ -0,0 +1,19 @@
@@ -18018,7 +18015,7 @@ index 0000000000..10cf76f7f8
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_exec.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_exec.c
 new file mode 100644
-index 0000000000..f835fdfa6a
+index 0000000..f835fdf
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_exec.c
 @@ -0,0 +1,82 @@
@@ -18106,7 +18103,7 @@ index 0000000000..f835fdfa6a
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_exec.h b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_exec.h
 new file mode 100644
-index 0000000000..85a1349f33
+index 0000000..85a1349
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_exec.h
 @@ -0,0 +1,15 @@
@@ -18127,7 +18124,7 @@ index 0000000000..85a1349f33
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_forward.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_forward.c
 new file mode 100644
-index 0000000000..465c57c96b
+index 0000000..465c57c
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_forward.c
 @@ -0,0 +1,210 @@
@@ -18343,7 +18340,7 @@ index 0000000000..465c57c96b
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_forward.h b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_forward.h
 new file mode 100644
-index 0000000000..0f579d5826
+index 0000000..0f579d5
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_forward.h
 @@ -0,0 +1,9 @@
@@ -18358,7 +18355,7 @@ index 0000000000..0f579d5826
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_meminfo.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_meminfo.c
 new file mode 100644
-index 0000000000..0e9062f4a4
+index 0000000..0e9062f
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_meminfo.c
 @@ -0,0 +1,124 @@
@@ -18488,7 +18485,7 @@ index 0000000000..0e9062f4a4
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_meminfo.h b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_meminfo.h
 new file mode 100644
-index 0000000000..278158a11a
+index 0000000..278158a
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_meminfo.h
 @@ -0,0 +1,16 @@
@@ -18510,7 +18507,7 @@ index 0000000000..278158a11a
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_version.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_version.c
 new file mode 100644
-index 0000000000..a96f577468
+index 0000000..a96f577
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_version.c
 @@ -0,0 +1,28 @@
@@ -18544,7 +18541,7 @@ index 0000000000..a96f577468
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_version.h b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_version.h
 new file mode 100644
-index 0000000000..bee862135a
+index 0000000..bee8621
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_version.h
 @@ -0,0 +1,11 @@
@@ -18561,7 +18558,7 @@ index 0000000000..bee862135a
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port.c
 new file mode 100644
-index 0000000000..88cc50613c
+index 0000000..88cc506
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port.c
 @@ -0,0 +1,114 @@
@@ -18681,7 +18678,7 @@ index 0000000000..88cc50613c
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port.h b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port.h
 new file mode 100644
-index 0000000000..66bc38ad39
+index 0000000..66bc38a
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port.h
 @@ -0,0 +1,55 @@
@@ -18742,7 +18739,7 @@ index 0000000000..66bc38ad39
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_bond_slave.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_bond_slave.c
 new file mode 100644
-index 0000000000..fd46999cb7
+index 0000000..fd46999
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_bond_slave.c
 @@ -0,0 +1,238 @@
@@ -18986,7 +18983,7 @@ index 0000000000..fd46999cb7
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_flush_dump.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_flush_dump.c
 new file mode 100644
-index 0000000000..e9d8f2b99a
+index 0000000..e9d8f2b
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_flush_dump.c
 @@ -0,0 +1,502 @@
@@ -19494,7 +19491,7 @@ index 0000000000..e9d8f2b99a
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_upcall_queue.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_upcall_queue.c
 new file mode 100644
-index 0000000000..fc6d3f2c71
+index 0000000..fc6d3f2
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_upcall_queue.c
 @@ -0,0 +1,582 @@
@@ -20082,7 +20079,7 @@ index 0000000000..fc6d3f2c71
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_trace_flow.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_trace_flow.c
 new file mode 100644
-index 0000000000..14b32d963d
+index 0000000..14b32d9
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_trace_flow.c
 @@ -0,0 +1,395 @@
@@ -20483,7 +20480,7 @@ index 0000000000..14b32d963d
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_trace_flow.h b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_trace_flow.h
 new file mode 100644
-index 0000000000..89a9455af4
+index 0000000..89a9455
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_trace_flow.h
 @@ -0,0 +1,79 @@
@@ -20568,7 +20565,7 @@ index 0000000000..89a9455af4
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_vf_dfx.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_vf_dfx.c
 new file mode 100644
-index 0000000000..63d8969ab2
+index 0000000..63d8969
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_vf_dfx.c
 @@ -0,0 +1,363 @@
@@ -20937,7 +20934,7 @@ index 0000000000..63d8969ab2
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_vf_dfx.h b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_vf_dfx.h
 new file mode 100644
-index 0000000000..cb0f1068c2
+index 0000000..cb0f106
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_vf_dfx.h
 @@ -0,0 +1,76 @@
@@ -21019,7 +21016,7 @@ index 0000000000..cb0f1068c2
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_vf_dfx_multi_qos.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_vf_dfx_multi_qos.c
 new file mode 100644
-index 0000000000..fed7659068
+index 0000000..fed7659
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_vf_dfx_multi_qos.c
 @@ -0,0 +1,1121 @@
@@ -22146,7 +22143,7 @@ index 0000000000..fed7659068
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/server/hinic3_command.c b/drivers/net/hinic3/src/hinic3_cmds/server/hinic3_command.c
 new file mode 100644
-index 0000000000..9208521eed
+index 0000000..9208521
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/server/hinic3_command.c
 @@ -0,0 +1,625 @@
@@ -22777,7 +22774,7 @@ index 0000000000..9208521eed
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_cmds/server/hinic3_command.h b/drivers/net/hinic3/src/hinic3_cmds/server/hinic3_command.h
 new file mode 100644
-index 0000000000..d3056df175
+index 0000000..d3056df
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_cmds/server/hinic3_command.h
 @@ -0,0 +1,49 @@
@@ -22832,7 +22829,7 @@ index 0000000000..d3056df175
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_driver_public.h b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_driver_public.h
 new file mode 100644
-index 0000000000..0e882b8e01
+index 0000000..0e882b8
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_driver_public.h
 @@ -0,0 +1,152 @@
@@ -22990,7 +22987,7 @@ index 0000000000..0e882b8e01
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_flow.c b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_flow.c
 new file mode 100644
-index 0000000000..dc1b053676
+index 0000000..dc1b053
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_flow.c
 @@ -0,0 +1,552 @@
@@ -23548,7 +23545,7 @@ index 0000000000..dc1b053676
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_flow.h b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_flow.h
 new file mode 100644
-index 0000000000..ea409a7823
+index 0000000..ea409a7
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_flow.h
 @@ -0,0 +1,112 @@
@@ -23666,7 +23663,7 @@ index 0000000000..ea409a7823
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_flow_api_record.c b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_flow_api_record.c
 new file mode 100644
-index 0000000000..d7d901c1a3
+index 0000000..d7d901c
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_flow_api_record.c
 @@ -0,0 +1,122 @@
@@ -23794,7 +23791,7 @@ index 0000000000..d7d901c1a3
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_flow_api_record.h b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_flow_api_record.h
 new file mode 100644
-index 0000000000..bbb16d3d19
+index 0000000..bbb16d3
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_flow_api_record.h
 @@ -0,0 +1,82 @@
@@ -23882,7 +23879,7 @@ index 0000000000..bbb16d3d19
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global.c b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global.c
 new file mode 100644
-index 0000000000..c292fc62d1
+index 0000000..c292fc6
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global.c
 @@ -0,0 +1,1560 @@
@@ -25448,7 +25445,7 @@ index 0000000000..c292fc62d1
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global.h b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global.h
 new file mode 100644
-index 0000000000..66962731ee
+index 0000000..6696273
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global.h
 @@ -0,0 +1,156 @@
@@ -25610,7 +25607,7 @@ index 0000000000..66962731ee
 +#endif /* HINIC3_IFACE_GLOBAL_H */
 diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global_api_record.c b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global_api_record.c
 new file mode 100644
-index 0000000000..b76c281320
+index 0000000..b76c281
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global_api_record.c
 @@ -0,0 +1,86 @@
@@ -25702,7 +25699,7 @@ index 0000000000..b76c281320
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global_api_record.h b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global_api_record.h
 new file mode 100644
-index 0000000000..17859b6005
+index 0000000..17859b6
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global_api_record.h
 @@ -0,0 +1,14 @@
@@ -25722,7 +25719,7 @@ index 0000000000..17859b6005
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_port.c b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_port.c
 new file mode 100644
-index 0000000000..48635ed641
+index 0000000..48635ed
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_port.c
 @@ -0,0 +1,910 @@
@@ -26638,7 +26635,7 @@ index 0000000000..48635ed641
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_port.h b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_port.h
 new file mode 100644
-index 0000000000..1385e990db
+index 0000000..1385e99
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_port.h
 @@ -0,0 +1,121 @@
@@ -26765,7 +26762,7 @@ index 0000000000..1385e990db
 +#endif /* _HINIC3_IFACE_PORT_H_ */
 diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_port_api_record.c b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_port_api_record.c
 new file mode 100644
-index 0000000000..3e09b4fd63
+index 0000000..3e09b4f
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_port_api_record.c
 @@ -0,0 +1,92 @@
@@ -26863,7 +26860,7 @@ index 0000000000..3e09b4fd63
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_port_api_record.h b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_port_api_record.h
 new file mode 100644
-index 0000000000..9e6e3dfc17
+index 0000000..9e6e3df
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_port_api_record.h
 @@ -0,0 +1,60 @@
@@ -26929,7 +26926,7 @@ index 0000000000..9e6e3dfc17
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_port_util.c b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_port_util.c
 new file mode 100644
-index 0000000000..86e55d310b
+index 0000000..86e55d3
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_port_util.c
 @@ -0,0 +1,529 @@
@@ -27464,7 +27461,7 @@ index 0000000000..86e55d310b
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_port_util.h b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_port_util.h
 new file mode 100644
-index 0000000000..1d58d5fa80
+index 0000000..1d58d5f
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_port_util.h
 @@ -0,0 +1,23 @@
@@ -27493,7 +27490,7 @@ index 0000000000..1d58d5fa80
 +#endif /* HINIC3_IFACE_PORT_UTIL_H */
 diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hiovs/hiovs_acl_api.h b/drivers/net/hinic3/src/hinic3_driver_adapter/hiovs/hiovs_acl_api.h
 new file mode 100644
-index 0000000000..f04a3be5df
+index 0000000..f04a3be
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hiovs/hiovs_acl_api.h
 @@ -0,0 +1,21 @@
@@ -27520,7 +27517,7 @@ index 0000000000..f04a3be5df
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hiovs/hiovs_api.h b/drivers/net/hinic3/src/hinic3_driver_adapter/hiovs/hiovs_api.h
 new file mode 100644
-index 0000000000..e5caf628a0
+index 0000000..e5caf62
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hiovs/hiovs_api.h
 @@ -0,0 +1,1170 @@
@@ -28696,7 +28693,7 @@ index 0000000000..e5caf628a0
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_age_delete_flow_public.c b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_age_delete_flow_public.c
 new file mode 100644
-index 0000000000..394a92387d
+index 0000000..394a923
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_age_delete_flow_public.c
 @@ -0,0 +1,22 @@
@@ -28724,7 +28721,7 @@ index 0000000000..394a92387d
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_age_delete_flow_public.h b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_age_delete_flow_public.h
 new file mode 100644
-index 0000000000..3abc1bb2cb
+index 0000000..3abc1bb
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_age_delete_flow_public.h
 @@ -0,0 +1,17 @@
@@ -28747,7 +28744,7 @@ index 0000000000..3abc1bb2cb
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_flow_agent_sync_stats_public.h b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_flow_agent_sync_stats_public.h
 new file mode 100644
-index 0000000000..40d7ff3279
+index 0000000..40d7ff3
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_flow_agent_sync_stats_public.h
 @@ -0,0 +1,29 @@
@@ -28782,7 +28779,7 @@ index 0000000000..40d7ff3279
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_flow_dump_public.c b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_flow_dump_public.c
 new file mode 100644
-index 0000000000..e4fb288492
+index 0000000..e4fb288
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_flow_dump_public.c
 @@ -0,0 +1,142 @@
@@ -28930,7 +28927,7 @@ index 0000000000..e4fb288492
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_flow_dump_public.h b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_flow_dump_public.h
 new file mode 100644
-index 0000000000..a4616a373d
+index 0000000..a4616a3
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_flow_dump_public.h
 @@ -0,0 +1,102 @@
@@ -29038,7 +29035,7 @@ index 0000000000..a4616a373d
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_offload_action_public.c b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_offload_action_public.c
 new file mode 100644
-index 0000000000..e2467861ef
+index 0000000..e246786
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_offload_action_public.c
 @@ -0,0 +1,299 @@
@@ -29343,7 +29340,7 @@ index 0000000000..e2467861ef
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_offload_action_public.h b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_offload_action_public.h
 new file mode 100644
-index 0000000000..ce186b2360
+index 0000000..ce186b2
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_offload_action_public.h
 @@ -0,0 +1,24 @@
@@ -29373,7 +29370,7 @@ index 0000000000..ce186b2360
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_offload_flow_port.c b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_offload_flow_port.c
 new file mode 100644
-index 0000000000..d879186f9e
+index 0000000..d879186
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_offload_flow_port.c
 @@ -0,0 +1,125 @@
@@ -29504,7 +29501,7 @@ index 0000000000..d879186f9e
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_offload_flow_port.h b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_offload_flow_port.h
 new file mode 100644
-index 0000000000..1e056898fe
+index 0000000..1e05689
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_offload_flow_port.h
 @@ -0,0 +1,12 @@
@@ -29522,7 +29519,7 @@ index 0000000000..1e056898fe
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_offload_flow_public.c b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_offload_flow_public.c
 new file mode 100644
-index 0000000000..b84961a241
+index 0000000..b84961a
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_offload_flow_public.c
 @@ -0,0 +1,45 @@
@@ -29573,7 +29570,7 @@ index 0000000000..b84961a241
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_offload_flow_public.h b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_offload_flow_public.h
 new file mode 100644
-index 0000000000..04abf69aac
+index 0000000..04abf69
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_offload_flow_public.h
 @@ -0,0 +1,204 @@
@@ -29783,7 +29780,7 @@ index 0000000000..04abf69aac
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_packet_key_public.h b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_packet_key_public.h
 new file mode 100644
-index 0000000000..3cc7524604
+index 0000000..3cc7524
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_packet_key_public.h
 @@ -0,0 +1,284 @@
@@ -30073,7 +30070,7 @@ index 0000000000..3cc7524604
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_emc_dump/hinic3_flow_dump_action.c b/drivers/net/hinic3/src/hinic3_flows/hinic3_emc_dump/hinic3_flow_dump_action.c
 new file mode 100644
-index 0000000000..668ce6b100
+index 0000000..668ce6b
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_emc_dump/hinic3_flow_dump_action.c
 @@ -0,0 +1,616 @@
@@ -30695,7 +30692,7 @@ index 0000000000..668ce6b100
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_emc_dump/hinic3_flow_dump_action.h b/drivers/net/hinic3/src/hinic3_flows/hinic3_emc_dump/hinic3_flow_dump_action.h
 new file mode 100644
-index 0000000000..840c082ace
+index 0000000..840c082
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_emc_dump/hinic3_flow_dump_action.h
 @@ -0,0 +1,18 @@
@@ -30719,7 +30716,7 @@ index 0000000000..840c082ace
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_emc_dump/hinic3_flow_dump_item.c b/drivers/net/hinic3/src/hinic3_flows/hinic3_emc_dump/hinic3_flow_dump_item.c
 new file mode 100644
-index 0000000000..d056b6cc69
+index 0000000..d056b6c
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_emc_dump/hinic3_flow_dump_item.c
 @@ -0,0 +1,363 @@
@@ -31088,7 +31085,7 @@ index 0000000000..d056b6cc69
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_emc_dump/hinic3_flow_dump_item.h b/drivers/net/hinic3/src/hinic3_flows/hinic3_emc_dump/hinic3_flow_dump_item.h
 new file mode 100644
-index 0000000000..48e122e588
+index 0000000..48e122e
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_emc_dump/hinic3_flow_dump_item.h
 @@ -0,0 +1,18 @@
@@ -31112,7 +31109,7 @@ index 0000000000..48e122e588
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_emc_dump/hinic3_flow_dump_item_key.c b/drivers/net/hinic3/src/hinic3_flows/hinic3_emc_dump/hinic3_flow_dump_item_key.c
 new file mode 100644
-index 0000000000..6cab59b9ca
+index 0000000..6cab59b
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_emc_dump/hinic3_flow_dump_item_key.c
 @@ -0,0 +1,174 @@
@@ -31292,7 +31289,7 @@ index 0000000000..6cab59b9ca
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_emc_dump/hinic3_flow_dump_item_key.h b/drivers/net/hinic3/src/hinic3_flows/hinic3_emc_dump/hinic3_flow_dump_item_key.h
 new file mode 100644
-index 0000000000..dbc8c07e32
+index 0000000..dbc8c07
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_emc_dump/hinic3_flow_dump_item_key.h
 @@ -0,0 +1,39 @@
@@ -31337,7 +31334,7 @@ index 0000000000..dbc8c07e32
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_emc_dump/hinic3_flow_emc_dump.c b/drivers/net/hinic3/src/hinic3_flows/hinic3_emc_dump/hinic3_flow_emc_dump.c
 new file mode 100644
-index 0000000000..59d5d85a25
+index 0000000..59d5d85
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_emc_dump/hinic3_flow_emc_dump.c
 @@ -0,0 +1,154 @@
@@ -31497,7 +31494,7 @@ index 0000000000..59d5d85a25
 +};
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_emc_dump/hinic3_flow_emc_dump.h b/drivers/net/hinic3/src/hinic3_flows/hinic3_emc_dump/hinic3_flow_emc_dump.h
 new file mode 100644
-index 0000000000..b2e4614c8d
+index 0000000..b2e4614
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_emc_dump/hinic3_flow_emc_dump.h
 @@ -0,0 +1,7 @@
@@ -31510,7 +31507,7 @@ index 0000000000..b2e4614c8d
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_delete/hinic3_age_delete_flow.c b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_delete/hinic3_age_delete_flow.c
 new file mode 100644
-index 0000000000..a7edc6b11f
+index 0000000..a7edc6b
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_delete/hinic3_age_delete_flow.c
 @@ -0,0 +1,142 @@
@@ -31658,7 +31655,7 @@ index 0000000000..a7edc6b11f
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_delete/hinic3_age_delete_flow.h b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_delete/hinic3_age_delete_flow.h
 new file mode 100644
-index 0000000000..96aff487e8
+index 0000000..96aff48
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_delete/hinic3_age_delete_flow.h
 @@ -0,0 +1,14 @@
@@ -31678,7 +31675,7 @@ index 0000000000..96aff487e8
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_dump/hinic3_flow_api.c b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_dump/hinic3_flow_api.c
 new file mode 100644
-index 0000000000..48d89eab81
+index 0000000..48d89ea
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_dump/hinic3_flow_api.c
 @@ -0,0 +1,153 @@
@@ -31837,7 +31834,7 @@ index 0000000000..48d89eab81
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_dump/hinic3_flow_dump.c b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_dump/hinic3_flow_dump.c
 new file mode 100644
-index 0000000000..4cd75d0978
+index 0000000..4cd75d0
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_dump/hinic3_flow_dump.c
 @@ -0,0 +1,338 @@
@@ -32181,7 +32178,7 @@ index 0000000000..4cd75d0978
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_dump/hinic3_flow_dump.h b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_dump/hinic3_flow_dump.h
 new file mode 100644
-index 0000000000..f0d003b17e
+index 0000000..f0d003b
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_dump/hinic3_flow_dump.h
 @@ -0,0 +1,19 @@
@@ -32206,7 +32203,7 @@ index 0000000000..f0d003b17e
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_format/hinic3_flow_format.c b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_format/hinic3_flow_format.c
 new file mode 100644
-index 0000000000..87c9a7048f
+index 0000000..87c9a70
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_format/hinic3_flow_format.c
 @@ -0,0 +1,549 @@
@@ -32761,7 +32758,7 @@ index 0000000000..87c9a7048f
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_format/hinic3_flow_format.h b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_format/hinic3_flow_format.h
 new file mode 100644
-index 0000000000..7da67523ec
+index 0000000..7da6752
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_format/hinic3_flow_format.h
 @@ -0,0 +1,26 @@
@@ -32793,7 +32790,7 @@ index 0000000000..7da67523ec
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_mirror/hinic3_flow_mirror.c b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_mirror/hinic3_flow_mirror.c
 new file mode 100644
-index 0000000000..65ebe6edf8
+index 0000000..65ebe6e
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_mirror/hinic3_flow_mirror.c
 @@ -0,0 +1,306 @@
@@ -33105,7 +33102,7 @@ index 0000000000..65ebe6edf8
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_mirror/hinic3_flow_mirror.h b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_mirror/hinic3_flow_mirror.h
 new file mode 100644
-index 0000000000..39bc95025c
+index 0000000..39bc950
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_mirror/hinic3_flow_mirror.h
 @@ -0,0 +1,72 @@
@@ -33183,7 +33180,7 @@ index 0000000000..39bc95025c
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_mirror/hinic3_flow_session.c b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_mirror/hinic3_flow_session.c
 new file mode 100644
-index 0000000000..73e3885ebf
+index 0000000..73e3885
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_mirror/hinic3_flow_session.c
 @@ -0,0 +1,569 @@
@@ -33758,7 +33755,7 @@ index 0000000000..73e3885ebf
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_mirror/hinic3_flow_session.h b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_mirror/hinic3_flow_session.h
 new file mode 100644
-index 0000000000..dbcec928dc
+index 0000000..dbcec92
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_mirror/hinic3_flow_session.h
 @@ -0,0 +1,102 @@
@@ -33866,7 +33863,7 @@ index 0000000000..dbcec928dc
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_offload/hinic3_dump_flow.c b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_offload/hinic3_dump_flow.c
 new file mode 100644
-index 0000000000..f74e297a49
+index 0000000..f74e297
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_offload/hinic3_dump_flow.c
 @@ -0,0 +1,71 @@
@@ -33943,7 +33940,7 @@ index 0000000000..f74e297a49
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_offload/hinic3_dump_flow.h b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_offload/hinic3_dump_flow.h
 new file mode 100644
-index 0000000000..f5c1da629f
+index 0000000..f5c1da6
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_offload/hinic3_dump_flow.h
 @@ -0,0 +1,23 @@
@@ -33972,7 +33969,7 @@ index 0000000000..f5c1da629f
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_offload/hinic3_offload_action.c b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_offload/hinic3_offload_action.c
 new file mode 100644
-index 0000000000..5d198b8af0
+index 0000000..5d198b8
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_offload/hinic3_offload_action.c
 @@ -0,0 +1,128 @@
@@ -34106,7 +34103,7 @@ index 0000000000..5d198b8af0
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_offload/hinic3_offload_action.h b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_offload/hinic3_offload_action.h
 new file mode 100644
-index 0000000000..aeb0914759
+index 0000000..aeb0914
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_offload/hinic3_offload_action.h
 @@ -0,0 +1,14 @@
@@ -34126,7 +34123,7 @@ index 0000000000..aeb0914759
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_offload/hinic3_offload_flow.c b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_offload/hinic3_offload_flow.c
 new file mode 100644
-index 0000000000..d193d8f915
+index 0000000..d193d8f
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_offload/hinic3_offload_flow.c
 @@ -0,0 +1,587 @@
@@ -34719,7 +34716,7 @@ index 0000000000..d193d8f915
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_offload/hinic3_offload_flow.h b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_offload/hinic3_offload_flow.h
 new file mode 100644
-index 0000000000..d1e8115db4
+index 0000000..d1e8115
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_offload/hinic3_offload_flow.h
 @@ -0,0 +1,17 @@
@@ -34742,7 +34739,7 @@ index 0000000000..d1e8115db4
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_query/hinic3_flow_agent_sync_stats.c b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_query/hinic3_flow_agent_sync_stats.c
 new file mode 100644
-index 0000000000..1a9f08af1c
+index 0000000..1a9f08a
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_query/hinic3_flow_agent_sync_stats.c
 @@ -0,0 +1,192 @@
@@ -34940,7 +34937,7 @@ index 0000000000..1a9f08af1c
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_query/hinic3_flow_agent_sync_stats.h b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_query/hinic3_flow_agent_sync_stats.h
 new file mode 100644
-index 0000000000..b7b508019c
+index 0000000..b7b5080
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_query/hinic3_flow_agent_sync_stats.h
 @@ -0,0 +1,11 @@
@@ -34957,7 +34954,7 @@ index 0000000000..b7b508019c
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_query/hinic3_key_query.c b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_query/hinic3_key_query.c
 new file mode 100644
-index 0000000000..76fc7b4c29
+index 0000000..76fc7b4
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_query/hinic3_key_query.c
 @@ -0,0 +1,737 @@
@@ -35700,7 +35697,7 @@ index 0000000000..76fc7b4c29
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_query/hinic3_key_query.h b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_query/hinic3_key_query.h
 new file mode 100644
-index 0000000000..f797e1a3c3
+index 0000000..f797e1a
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_query/hinic3_key_query.h
 @@ -0,0 +1,29 @@
@@ -35735,7 +35732,7 @@ index 0000000000..f797e1a3c3
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_query/hinic3_query_flow.c b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_query/hinic3_query_flow.c
 new file mode 100644
-index 0000000000..35fedefd84
+index 0000000..35fedef
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_query/hinic3_query_flow.c
 @@ -0,0 +1,65 @@
@@ -35806,7 +35803,7 @@ index 0000000000..35fedefd84
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_query/hinic3_query_flow.h b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_query/hinic3_query_flow.h
 new file mode 100644
-index 0000000000..653150e751
+index 0000000..653150e
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_query/hinic3_query_flow.h
 @@ -0,0 +1,13 @@
@@ -35825,7 +35822,7 @@ index 0000000000..653150e751
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_vxlan/hinic3_vxlan.c b/drivers/net/hinic3/src/hinic3_flows/hinic3_vxlan/hinic3_vxlan.c
 new file mode 100644
-index 0000000000..3349adfb83
+index 0000000..3349adf
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_vxlan/hinic3_vxlan.c
 @@ -0,0 +1,68 @@
@@ -35899,7 +35896,7 @@ index 0000000000..3349adfb83
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_vxlan/hinic3_vxlan.h b/drivers/net/hinic3/src/hinic3_flows/hinic3_vxlan/hinic3_vxlan.h
 new file mode 100644
-index 0000000000..2d920bf6aa
+index 0000000..2d920bf
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_vxlan/hinic3_vxlan.h
 @@ -0,0 +1,16 @@
@@ -35921,7 +35918,7 @@ index 0000000000..2d920bf6aa
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_vxlan/hinic3_vxlan_dump.c b/drivers/net/hinic3/src/hinic3_flows/hinic3_vxlan/hinic3_vxlan_dump.c
 new file mode 100644
-index 0000000000..c995bee454
+index 0000000..c995bee
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_vxlan/hinic3_vxlan_dump.c
 @@ -0,0 +1,256 @@
@@ -36183,7 +36180,7 @@ index 0000000000..c995bee454
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_vxlan/hinic3_vxlan_dump.h b/drivers/net/hinic3/src/hinic3_flows/hinic3_vxlan/hinic3_vxlan_dump.h
 new file mode 100644
-index 0000000000..ecb99c25cd
+index 0000000..ecb99c2
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_vxlan/hinic3_vxlan_dump.h
 @@ -0,0 +1,11 @@
@@ -36200,7 +36197,7 @@ index 0000000000..ecb99c25cd
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_init/comm/hinic3_agent.c b/drivers/net/hinic3/src/hinic3_init/comm/hinic3_agent.c
 new file mode 100644
-index 0000000000..a7d57b47ff
+index 0000000..a7d57b4
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_init/comm/hinic3_agent.c
 @@ -0,0 +1,335 @@
@@ -36541,7 +36538,7 @@ index 0000000000..a7d57b47ff
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_init/comm/hinic3_agent.h b/drivers/net/hinic3/src/hinic3_init/comm/hinic3_agent.h
 new file mode 100644
-index 0000000000..e25614442c
+index 0000000..e256144
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_init/comm/hinic3_agent.h
 @@ -0,0 +1,57 @@
@@ -36604,7 +36601,7 @@ index 0000000000..e25614442c
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_init/comm/hinic3_flow_agent.c b/drivers/net/hinic3/src/hinic3_init/comm/hinic3_flow_agent.c
 new file mode 100644
-index 0000000000..bfd4ac0e0e
+index 0000000..bfd4ac0
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_init/comm/hinic3_flow_agent.c
 @@ -0,0 +1,659 @@
@@ -37269,7 +37266,7 @@ index 0000000000..bfd4ac0e0e
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_init/comm/hinic3_flow_agent.h b/drivers/net/hinic3/src/hinic3_init/comm/hinic3_flow_agent.h
 new file mode 100644
-index 0000000000..185caf03d6
+index 0000000..185caf0
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_init/comm/hinic3_flow_agent.h
 @@ -0,0 +1,48 @@
@@ -37323,7 +37320,7 @@ index 0000000000..185caf03d6
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_init/comm/hinic3_init.c b/drivers/net/hinic3/src/hinic3_init/comm/hinic3_init.c
 new file mode 100644
-index 0000000000..8b76577cb5
+index 0000000..8b76577
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_init/comm/hinic3_init.c
 @@ -0,0 +1,294 @@
@@ -37623,7 +37620,7 @@ index 0000000000..8b76577cb5
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_init/comm/hinic3_init.h b/drivers/net/hinic3/src/hinic3_init/comm/hinic3_init.h
 new file mode 100644
-index 0000000000..94155f23a9
+index 0000000..94155f2
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_init/comm/hinic3_init.h
 @@ -0,0 +1,35 @@
@@ -37664,7 +37661,7 @@ index 0000000000..94155f23a9
 +#endif /* HINIC3_INIT_H */
 diff --git a/drivers/net/hinic3/src/hinic3_init/comm/hinic3_parse_agent_config.c b/drivers/net/hinic3/src/hinic3_init/comm/hinic3_parse_agent_config.c
 new file mode 100644
-index 0000000000..109837523f
+index 0000000..1098375
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_init/comm/hinic3_parse_agent_config.c
 @@ -0,0 +1,649 @@
@@ -38319,7 +38316,7 @@ index 0000000000..109837523f
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_init/comm/hinic3_parse_agent_config.h b/drivers/net/hinic3/src/hinic3_init/comm/hinic3_parse_agent_config.h
 new file mode 100644
-index 0000000000..a52d63e9a0
+index 0000000..a52d63e
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_init/comm/hinic3_parse_agent_config.h
 @@ -0,0 +1,238 @@
@@ -38563,7 +38560,7 @@ index 0000000000..a52d63e9a0
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_ports/comm/hinic3_port_util.c b/drivers/net/hinic3/src/hinic3_ports/comm/hinic3_port_util.c
 new file mode 100644
-index 0000000000..5c9bc9f98f
+index 0000000..5c9bc9f
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ports/comm/hinic3_port_util.c
 @@ -0,0 +1,202 @@
@@ -38771,7 +38768,7 @@ index 0000000000..5c9bc9f98f
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_ports/comm/hinic3_port_util.h b/drivers/net/hinic3/src/hinic3_ports/comm/hinic3_port_util.h
 new file mode 100644
-index 0000000000..5e48ee4ef3
+index 0000000..5e48ee4
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ports/comm/hinic3_port_util.h
 @@ -0,0 +1,44 @@
@@ -38821,7 +38818,7 @@ index 0000000000..5e48ee4ef3
 +#endif /* HINIC3_PORT_UTIL_H */
 diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_controller.c b/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_controller.c
 new file mode 100644
-index 0000000000..e626a5dd19
+index 0000000..e626a5d
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_controller.c
 @@ -0,0 +1,930 @@
@@ -39757,7 +39754,7 @@ index 0000000000..e626a5dd19
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_controller.h b/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_controller.h
 new file mode 100644
-index 0000000000..d145013b54
+index 0000000..d145013
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_controller.h
 @@ -0,0 +1,91 @@
@@ -39854,7 +39851,7 @@ index 0000000000..d145013b54
 +#endif /* HINIC3_BOND_CONTROLLER_H */
 diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_statistics.c b/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_statistics.c
 new file mode 100644
-index 0000000000..6f48552b88
+index 0000000..6f48552
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_statistics.c
 @@ -0,0 +1,135 @@
@@ -39995,7 +39992,7 @@ index 0000000000..6f48552b88
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_statistics.h b/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_statistics.h
 new file mode 100644
-index 0000000000..2d6677ea37
+index 0000000..2d6677e
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_statistics.h
 @@ -0,0 +1,19 @@
@@ -40020,7 +40017,7 @@ index 0000000000..2d6677ea37
 +#endif /* HINIC3_BOND_STATISTICS_H */
 diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_queue/hinic3_queue.c b/drivers/net/hinic3/src/hinic3_ports/hinic3_queue/hinic3_queue.c
 new file mode 100644
-index 0000000000..a7a0a12f54
+index 0000000..a7a0a12
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_queue/hinic3_queue.c
 @@ -0,0 +1,128 @@
@@ -40154,7 +40151,7 @@ index 0000000000..a7a0a12f54
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_queue/hinic3_queue.h b/drivers/net/hinic3/src/hinic3_ports/hinic3_queue/hinic3_queue.h
 new file mode 100644
-index 0000000000..cfd8217fde
+index 0000000..cfd8217
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_queue/hinic3_queue.h
 @@ -0,0 +1,52 @@
@@ -40212,7 +40209,7 @@ index 0000000000..cfd8217fde
 +#endif /* HINIC3_QUEUE_H */
 diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_queue/hinic3_standard_queue.c b/drivers/net/hinic3/src/hinic3_ports/hinic3_queue/hinic3_standard_queue.c
 new file mode 100644
-index 0000000000..2801dea897
+index 0000000..2801dea
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_queue/hinic3_standard_queue.c
 @@ -0,0 +1,21 @@
@@ -40239,7 +40236,7 @@ index 0000000000..2801dea897
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_queue/hinic3_standard_queue.h b/drivers/net/hinic3/src/hinic3_ports/hinic3_queue/hinic3_standard_queue.h
 new file mode 100644
-index 0000000000..5c0fafac5a
+index 0000000..5c0fafa
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_queue/hinic3_standard_queue.h
 @@ -0,0 +1,36 @@
@@ -40281,7 +40278,7 @@ index 0000000000..5c0fafac5a
 +#endif /* HINIC3_STANDARD_QUEUE_H */
 diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_queue/hinic3_virtual_queue.c b/drivers/net/hinic3/src/hinic3_ports/hinic3_queue/hinic3_virtual_queue.c
 new file mode 100644
-index 0000000000..dd83f585c3
+index 0000000..dd83f58
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_queue/hinic3_virtual_queue.c
 @@ -0,0 +1,300 @@
@@ -40587,7 +40584,7 @@ index 0000000000..dd83f585c3
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_queue/hinic3_virtual_queue.h b/drivers/net/hinic3/src/hinic3_ports/hinic3_queue/hinic3_virtual_queue.h
 new file mode 100644
-index 0000000000..15fcb10c02
+index 0000000..15fcb10
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_queue/hinic3_virtual_queue.h
 @@ -0,0 +1,72 @@
@@ -40665,7 +40662,7 @@ index 0000000000..15fcb10c02
 +#endif /* HINIC3_VIRTUAL_QUEUE_H */
 diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_vdev/hinic3_vdev.c b/drivers/net/hinic3/src/hinic3_ports/hinic3_vdev/hinic3_vdev.c
 new file mode 100644
-index 0000000000..e4d44328a7
+index 0000000..e4d4432
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_vdev/hinic3_vdev.c
 @@ -0,0 +1,1111 @@
@@ -41782,7 +41779,7 @@ index 0000000000..e4d44328a7
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_vdev/hinic3_vdev.h b/drivers/net/hinic3/src/hinic3_ports/hinic3_vdev/hinic3_vdev.h
 new file mode 100644
-index 0000000000..5fb1170cdb
+index 0000000..5fb1170
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_vdev/hinic3_vdev.h
 @@ -0,0 +1,13 @@
@@ -41801,7 +41798,7 @@ index 0000000000..5fb1170cdb
 +#endif /* HINIC3_VDEV_H */
 diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_eth_util.c b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_eth_util.c
 new file mode 100644
-index 0000000000..65dd980abe
+index 0000000..65dd980
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_eth_util.c
 @@ -0,0 +1,174 @@
@@ -41981,7 +41978,7 @@ index 0000000000..65dd980abe
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_eth_util.h b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_eth_util.h
 new file mode 100644
-index 0000000000..5dd897e351
+index 0000000..5dd897e
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_eth_util.h
 @@ -0,0 +1,27 @@
@@ -42014,7 +42011,7 @@ index 0000000000..5dd897e351
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_function_statistics.c b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_function_statistics.c
 new file mode 100644
-index 0000000000..7e3d7aa2c0
+index 0000000..7e3d7aa
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_function_statistics.c
 @@ -0,0 +1,144 @@
@@ -42164,7 +42161,7 @@ index 0000000000..7e3d7aa2c0
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_function_statistics.h b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_function_statistics.h
 new file mode 100644
-index 0000000000..345d92435c
+index 0000000..345d924
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_function_statistics.h
 @@ -0,0 +1,20 @@
@@ -42190,7 +42187,7 @@ index 0000000000..345d92435c
 +#endif // HINIC3_FUNCTION_STATISTICS_H
 diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_controller.c b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_controller.c
 new file mode 100644
-index 0000000000..fc182deedc
+index 0000000..fc182de
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_controller.c
 @@ -0,0 +1,1325 @@
@@ -43521,7 +43518,7 @@ index 0000000000..fc182deedc
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_controller.h b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_controller.h
 new file mode 100644
-index 0000000000..7c2acb0719
+index 0000000..7c2acb0
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_controller.h
 @@ -0,0 +1,196 @@
@@ -43723,7 +43720,7 @@ index 0000000000..7c2acb0719
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_mgmt.c b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_mgmt.c
 new file mode 100644
-index 0000000000..91a82d6727
+index 0000000..91a82d6
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_mgmt.c
 @@ -0,0 +1,643 @@
@@ -44372,7 +44369,7 @@ index 0000000000..91a82d6727
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_mgmt.h b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_mgmt.h
 new file mode 100644
-index 0000000000..3cacee6fb8
+index 0000000..3cacee6
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_mgmt.h
 @@ -0,0 +1,113 @@
@@ -44491,7 +44488,7 @@ index 0000000000..3cacee6fb8
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_mgmt_baremetal.c b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_mgmt_baremetal.c
 new file mode 100644
-index 0000000000..dbe60c725b
+index 0000000..dbe60c7
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_mgmt_baremetal.c
 @@ -0,0 +1,72 @@
@@ -44569,7 +44566,7 @@ index 0000000000..dbe60c725b
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_mgmt_baremetal.h b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_mgmt_baremetal.h
 new file mode 100644
-index 0000000000..b04458bdc3
+index 0000000..b04458b
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_mgmt_baremetal.h
 @@ -0,0 +1,10 @@
@@ -44585,7 +44582,7 @@ index 0000000000..b04458bdc3
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_mgmt_virtual.c b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_mgmt_virtual.c
 new file mode 100644
-index 0000000000..6f93278913
+index 0000000..6f93278
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_mgmt_virtual.c
 @@ -0,0 +1,61 @@
@@ -44652,7 +44649,7 @@ index 0000000000..6f93278913
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_mgmt_virtual.h b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_mgmt_virtual.h
 new file mode 100644
-index 0000000000..abf54caff4
+index 0000000..abf54ca
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_mgmt_virtual.h
 @@ -0,0 +1,11 @@
@@ -44669,7 +44666,7 @@ index 0000000000..abf54caff4
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_qos/comm/hinic3_vf_port_qos_public.c b/drivers/net/hinic3/src/hinic3_qos/comm/hinic3_vf_port_qos_public.c
 new file mode 100644
-index 0000000000..ba5ca31d78
+index 0000000..ba5ca31
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_qos/comm/hinic3_vf_port_qos_public.c
 @@ -0,0 +1,331 @@
@@ -45006,7 +45003,7 @@ index 0000000000..ba5ca31d78
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_qos/comm/hinic3_vf_port_qos_public.h b/drivers/net/hinic3/src/hinic3_qos/comm/hinic3_vf_port_qos_public.h
 new file mode 100644
-index 0000000000..408387cd32
+index 0000000..408387c
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_qos/comm/hinic3_vf_port_qos_public.h
 @@ -0,0 +1,79 @@
@@ -45091,7 +45088,7 @@ index 0000000000..408387cd32
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_qos/meter/hinic3_qos.c b/drivers/net/hinic3/src/hinic3_qos/meter/hinic3_qos.c
 new file mode 100644
-index 0000000000..93dc57f888
+index 0000000..93dc57f
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_qos/meter/hinic3_qos.c
 @@ -0,0 +1,26 @@
@@ -45123,14 +45120,12 @@ index 0000000000..93dc57f888
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_qos/meter/hinic3_qos.h b/drivers/net/hinic3/src/hinic3_qos/meter/hinic3_qos.h
 new file mode 100644
-index 0000000000..bc19cb132c
+index 0000000..4c076ef
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_qos/meter/hinic3_qos.h
-@@ -0,0 +1,15 @@
-+/*
-+ * 版权所有 (c) 华为技术有限公司 2022-2023
-+ * 功能描述: 1822网卡端口限速功能适配中国移动规范头文件
-+ * 创建日期: 2022-11-16
+@@ -0,0 +1,13 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2022 Huawei Technologies Co., Ltd
 + */
 +#ifndef HINIC3_MTR_H
 +#define HINIC3_MTR_H
@@ -45144,7 +45139,7 @@ index 0000000000..bc19cb132c
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_qos/multilevel_qos/hinic3_mtr.c b/drivers/net/hinic3/src/hinic3_qos/multilevel_qos/hinic3_mtr.c
 new file mode 100644
-index 0000000000..53b11c5545
+index 0000000..53b11c5
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_qos/multilevel_qos/hinic3_mtr.c
 @@ -0,0 +1,1555 @@
@@ -46705,7 +46700,7 @@ index 0000000000..53b11c5545
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_qos/multilevel_qos/hinic3_mtr.h b/drivers/net/hinic3/src/hinic3_qos/multilevel_qos/hinic3_mtr.h
 new file mode 100644
-index 0000000000..0593a63f08
+index 0000000..0593a63
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_qos/multilevel_qos/hinic3_mtr.h
 @@ -0,0 +1,100 @@
@@ -46811,7 +46806,7 @@ index 0000000000..0593a63f08
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_qos/multilevel_qos/hinic3_mtr_policy.c b/drivers/net/hinic3/src/hinic3_qos/multilevel_qos/hinic3_mtr_policy.c
 new file mode 100644
-index 0000000000..d4b80c6fc5
+index 0000000..d4b80c6
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_qos/multilevel_qos/hinic3_mtr_policy.c
 @@ -0,0 +1,165 @@
@@ -46982,7 +46977,7 @@ index 0000000000..d4b80c6fc5
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_qos/multilevel_qos/hinic3_mtr_policy.h b/drivers/net/hinic3/src/hinic3_qos/multilevel_qos/hinic3_mtr_policy.h
 new file mode 100644
-index 0000000000..c06515b078
+index 0000000..c06515b
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_qos/multilevel_qos/hinic3_mtr_policy.h
 @@ -0,0 +1,36 @@
@@ -47024,7 +47019,7 @@ index 0000000000..c06515b078
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_qos/multilevel_qos/hinic3_mtr_profile.c b/drivers/net/hinic3/src/hinic3_qos/multilevel_qos/hinic3_mtr_profile.c
 new file mode 100644
-index 0000000000..731ab21aaf
+index 0000000..731ab21
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_qos/multilevel_qos/hinic3_mtr_profile.c
 @@ -0,0 +1,181 @@
@@ -47211,7 +47206,7 @@ index 0000000000..731ab21aaf
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_qos/multilevel_qos/hinic3_mtr_profile.h b/drivers/net/hinic3/src/hinic3_qos/multilevel_qos/hinic3_mtr_profile.h
 new file mode 100644
-index 0000000000..9eef841e7a
+index 0000000..9eef841
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_qos/multilevel_qos/hinic3_mtr_profile.h
 @@ -0,0 +1,35 @@
@@ -47252,7 +47247,7 @@ index 0000000000..9eef841e7a
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_ufid_map/hinic3_mpool_rte_flow.c b/drivers/net/hinic3/src/hinic3_ufid_map/hinic3_mpool_rte_flow.c
 new file mode 100644
-index 0000000000..ef76e2d503
+index 0000000..ef76e2d
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ufid_map/hinic3_mpool_rte_flow.c
 @@ -0,0 +1,105 @@
@@ -47363,7 +47358,7 @@ index 0000000000..ef76e2d503
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_ufid_map/hinic3_mpool_rte_flow.h b/drivers/net/hinic3/src/hinic3_ufid_map/hinic3_mpool_rte_flow.h
 new file mode 100644
-index 0000000000..a01509f623
+index 0000000..a01509f
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ufid_map/hinic3_mpool_rte_flow.h
 @@ -0,0 +1,31 @@
@@ -47400,7 +47395,7 @@ index 0000000000..a01509f623
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_ufid_map/hinic3_ufid_hmap.c b/drivers/net/hinic3/src/hinic3_ufid_map/hinic3_ufid_hmap.c
 new file mode 100644
-index 0000000000..82eddfb411
+index 0000000..82eddfb
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ufid_map/hinic3_ufid_hmap.c
 @@ -0,0 +1,118 @@
@@ -47524,7 +47519,7 @@ index 0000000000..82eddfb411
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_ufid_map/hinic3_ufid_hmap.h b/drivers/net/hinic3/src/hinic3_ufid_map/hinic3_ufid_hmap.h
 new file mode 100644
-index 0000000000..4057784250
+index 0000000..4057784
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ufid_map/hinic3_ufid_hmap.h
 @@ -0,0 +1,32 @@
@@ -47562,7 +47557,7 @@ index 0000000000..4057784250
 +#endif
 diff --git a/drivers/net/hinic3/src/hinic3_ufid_map/hinic3_ufid_map_rte_flow.c b/drivers/net/hinic3/src/hinic3_ufid_map/hinic3_ufid_map_rte_flow.c
 new file mode 100644
-index 0000000000..21e66abd39
+index 0000000..21e66ab
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ufid_map/hinic3_ufid_map_rte_flow.c
 @@ -0,0 +1,466 @@
@@ -48034,7 +48029,7 @@ index 0000000000..21e66abd39
 +}
 diff --git a/drivers/net/hinic3/src/hinic3_ufid_map/hinic3_ufid_map_rte_flow.h b/drivers/net/hinic3/src/hinic3_ufid_map/hinic3_ufid_map_rte_flow.h
 new file mode 100644
-index 0000000000..d6a444dc3b
+index 0000000..d6a444d
 --- /dev/null
 +++ b/drivers/net/hinic3/src/hinic3_ufid_map/hinic3_ufid_map_rte_flow.h
 @@ -0,0 +1,122 @@
@@ -48161,7 +48156,7 @@ index 0000000000..d6a444dc3b
 +
 +#endif
 diff --git a/drivers/net/meson.build b/drivers/net/meson.build
-index 6470bf3636..f7fb628a92 100644
+index 6470bf3..f7fb628 100644
 --- a/drivers/net/meson.build
 +++ b/drivers/net/meson.build
 @@ -25,6 +25,7 @@ drivers = [
