@@ -1,0 +1,124 @@
+From 2f3252084c9358b5ab3eca93241b2dab82f8a5c1 Mon Sep 17 00:00:00 2001
+From: zry6666 <zhangruiyu2@huawei.com>
+Date: Tue, 8 Jul 2025 11:13:20 +0800
+Subject: [PATCH] add-collect-info-script
+
+---
+ .../scripts/network_info_collect_ovs.sh       | 104 ++++++++++++++++++
+ 1 file changed, 104 insertions(+)
+ create mode 100644 drivers/net/hinic3/scripts/network_info_collect_ovs.sh
+
+diff --git a/drivers/net/hinic3/scripts/network_info_collect_ovs.sh b/drivers/net/hinic3/scripts/network_info_collect_ovs.sh
+new file mode 100644
+index 0000000000..cae772cbb1
+--- /dev/null
++++ b/drivers/net/hinic3/scripts/network_info_collect_ovs.sh
+@@ -0,0 +1,104 @@
++#!/bin/bash
++# Copyright (c) Huawei Technologies Co., Ltd. 2023-2023. All rights reserved.
++# Description: 巡检信息收集脚本
++# Create: 2023-10-19
++
++set -e
++function get_info() {
++    #版本号
++    echo "------------------------------Version info------------------------------"
++    dpak-ovs-ctl hwoff-agent-version
++    echo ""
++    dpak-ovs-ctl -v
++    echo ""
++
++    #内存占用情况
++    echo "------------------------------Memory info-------------------------------"
++    cat /proc/$(pidof -s ovs-vswitchd)/status | grep VmRSS 2>/dev/null
++    echo ""
++
++    #端口个数
++    echo "------------------------------Port num----------------------------------"
++    dpak-ovs-ctl hwoff/show-function-flavor
++    echo ""
++
++    #收发队列信息
++    echo "-------------------------Dump unpcall queue info-------------------------"
++    dpak-ovs-ctl hwoff/dump-upcall-queue-info
++    echo ""
++
++    #丢包统计信息
++    echo "---------------------------Dump info------------------------------------"
++    #获取端口大名称
++    port_name_str=$(ovs-vsctl show | awk '/^ +Port/ { port=$2; getline; getline; \
++        if ($1 == "type:") { if ($2 == "dpdk") { gsub(/^"|"$/, "", port); print port } } }')
++    # echo "$port_name_str"
++    for i in $port_name_str
++    do
++        port_name=$i
++        # echo $port_name
++        echo "Port $port_name dump info:"
++        dpak-ovs-ctl hwoff/dump-ports $port_name
++        echo ""
++    done
++    echo ""
++
++    #回调线程个数
++    echo "--------------------------Flow offload thread num-----------------------"
++    cat /etc/dpak/net/agent_config.ini | grep offload_thread_num
++    echo ""
++
++    #当前抓包任务列表
++    echo "-------------------------------Capture probe info-----------------------"
++    dpak-ovs-ctl hwoff/capture-probe show all
++    echo ""
++
++    #收集网络卸载相关日志
++    echo "-----------------------------Collecting log-----------------------------"
++    if [ -d "$1/dpak-snic_log" ];then
++        rm -rf $1/dpak-snic_log #收集日志存放位置
++    fi
++    mkdir -p $1/dpak-snic_log
++    cp $(find /var/log/openvswitch/ -name 'ovs-vswitchd*') $1/dpak-snic_log 2>/dev/null
++    logname=$1/dpak-snic-$(date +%Y_%m_%d_%H_%M_%S).tar.gz
++    tar czvf $logname -C $1 dpak-snic_log --remove-files
++    if [ ! -d "$1/logs" ];then
++        mkdir -p $1/logs
++    fi
++    mv $logname $1/logs
++    echo "Collecting log finished. The log is stored in \"$1/logs\""
++    echo ""
++
++    #收集异常分支统计信息
++    echo "--------------------------Error stats info-------------------------------"
++    dpak-ovs-ctl hwoff/show-error-stats
++    echo ""
++
++    #已卸载流表个数信息
++    echo "--------------------------Flow num-----------------------------------------"
++    dpak-ovs-ctl hwoff/show-offload-flow-num #软件流表
++    dpak-ovs-ctl hwoff/dump-hwoff-flows -n #硬件流表
++    echo ""
++}
++
++function check_input() {
++    if [[ $# == 0 || $# > 1]];then
++        echo "Please input a parameter as the output file path."
++        exit 1
++    fi
++
++    if [ ! -d "$1" ];then
++        echo "The path does not exist, please input a valid path."
++        exit 1
++    fi
++}
++
++function main() {
++    check_input $@
++
++    info_file_path=$1
++    file_name="network_info.txt"
++    get_info $1 > $info_file_path/$file_name
++}
++
++main $@
+\ No newline at end of file
+-- 
+2.47.0.windows.2
+
