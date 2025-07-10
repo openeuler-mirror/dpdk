@@ -1,4 +1,4 @@
-From 0c52e44a33d161a4c9e67011082bb9f35266a700 Mon Sep 17 00:00:00 2001
+From d885c8ce7b2ea611eced8f98275ad3c25495b9d7 Mon Sep 17 00:00:00 2001
 From: liya51 <luckly0822@qq.com>
 Date: Fri, 4 Jul 2025 19:54:52 +0800
 Subject: [PATCH 12/12] support flow traffic bifur for dpdk22.11
@@ -17,7 +17,7 @@ Subject: [PATCH 12/12] support flow traffic bifur for dpdk22.11
  drivers/net/hinic3/hinic3_pmd_bifur.h         |  20 +
  drivers/net/hinic3/hinic3_pmd_ethdev.c        | 296 +++---
  drivers/net/hinic3/hinic3_pmd_ethdev.h        |  14 +-
- drivers/net/hinic3/hinic3_pmd_fdir.c          | 202 +++-
+ drivers/net/hinic3/hinic3_pmd_fdir.c          | 205 +++-
  drivers/net/hinic3/hinic3_pmd_fdir.h          |  36 +-
  drivers/net/hinic3/hinic3_pmd_flow.c          | 219 +++-
  drivers/net/hinic3/hinic3_pmd_flow.h          |   2 +-
@@ -26,7 +26,7 @@ Subject: [PATCH 12/12] support flow traffic bifur for dpdk22.11
  drivers/net/hinic3/hinic3_pmd_tx.c            |   2 +-
  drivers/net/hinic3/meson.build                |   3 +
  drivers/net/hinic3/mml/hinic3_pmd_mml_ioctl.c |  11 +-
- 22 files changed, 2069 insertions(+), 225 deletions(-)
+ 22 files changed, 2072 insertions(+), 225 deletions(-)
  create mode 100644 drivers/net/hinic3/base/hinic3_base.h
  create mode 100644 drivers/net/hinic3/hinic3_pmd_bifur.c
  create mode 100644 drivers/net/hinic3/hinic3_pmd_bifur.h
@@ -2637,7 +2637,7 @@ index 0314f71..89d77f4 100644
  
  extern const struct rte_flow_ops hinic3_flow_ops;
 diff --git a/drivers/net/hinic3/hinic3_pmd_fdir.c b/drivers/net/hinic3/hinic3_pmd_fdir.c
-index 1210f47..5c9686a 100644
+index 1210f47..8207707 100644
 --- a/drivers/net/hinic3/hinic3_pmd_fdir.c
 +++ b/drivers/net/hinic3/hinic3_pmd_fdir.c
 @@ -22,11 +22,17 @@
@@ -2735,7 +2735,7 @@ index 1210f47..5c9686a 100644
  
  	tcam_key->key_mask.sport = rule->key_mask.src_port;
  	tcam_key->key_info.sport = rule->key_spec.src_port;
-@@ -176,16 +224,37 @@ static void hinic3_fdir_tcam_notunnel_init(struct rte_eth_dev *dev,
+@@ -176,16 +224,40 @@ static void hinic3_fdir_tcam_notunnel_init(struct rte_eth_dev *dev,
  	tcam_key->key_info.tunnel_type = HINIC3_FDIR_TUNNEL_MODE_NORMAL;
  
  	tcam_key->key_mask.function_id = HINIC3_UINT15_MAX;
@@ -2746,8 +2746,11 @@ index 1210f47..5c9686a 100644
 +	if (hinic3_get_bifur_enable(nic_dev->hwdev, &enable) != 0) {
 +		PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable status failed.");
 +	} 
++
++	struct rte_pci_device *pci_dev = NULL;
++	pci_dev = RTE_ETH_DEV_TO_PCI(dev);
 +	
-+	if (enable) {
++	if (enable || pci_dev->id.device_id == HINIC3_DEV_ID_DPU) {
 +		tcam_key->key_info.function_id = HINIC3_UINT15_MAX;
 +		tcam_key->key_mask.ether_type =  rule->key_mask.ether_type;
 +		tcam_key->key_info.ether_type = rule->key_spec.ether_type;
@@ -2776,7 +2779,7 @@ index 1210f47..5c9686a 100644
  }
  
  static void hinic3_fdir_tcam_vxlan_ipv4_init(struct hinic3_fdir_filter *rule,
-@@ -328,7 +397,7 @@ static void hinic3_fdir_tcam_ipv6_vxlan_init(struct rte_eth_dev *dev,
+@@ -328,7 +400,7 @@ static void hinic3_fdir_tcam_ipv6_vxlan_init(struct rte_eth_dev *dev,
  			struct hinic3_fdir_filter *rule,
  			struct hinic3_tcam_key *tcam_key)
  {
@@ -2785,7 +2788,7 @@ index 1210f47..5c9686a 100644
  
  	tcam_key->key_mask_ipv6.ip_proto = rule->key_mask.proto;
  	tcam_key->key_info_ipv6.ip_proto = rule->key_spec.proto;
-@@ -357,7 +426,7 @@ static void hinic3_fdir_tcam_vxlan_init(struct rte_eth_dev *dev,
+@@ -357,7 +429,7 @@ static void hinic3_fdir_tcam_vxlan_init(struct rte_eth_dev *dev,
  			struct hinic3_fdir_filter *rule,
  			struct hinic3_tcam_key *tcam_key)
  {
@@ -2794,7 +2797,7 @@ index 1210f47..5c9686a 100644
  
  	if (rule->outer_ip_type == HINIC3_FDIR_IP_TYPE_IPV6) {
  		hinic3_fdir_tcam_ipv6_vxlan_init(dev, rule, tcam_key);
-@@ -425,10 +494,25 @@ static void hinic3_fdir_tcam_info_init(struct rte_eth_dev *dev,
+@@ -425,10 +497,25 @@ static void hinic3_fdir_tcam_info_init(struct rte_eth_dev *dev,
  		hinic3_fdir_tcam_vxlan_init(dev, rule, tcam_key);
  
  	fdir_tcam_rule->data.qid = rule->rq_index;
@@ -2821,7 +2824,7 @@ index 1210f47..5c9686a 100644
  static inline uint16_t
  hinic3_ethertype_filter_lookup(struct hinic3_ethertype_filter_list *ethertype_list,
  			uint16_t type)
-@@ -507,7 +591,7 @@ hinic3_dynamic_lookup_tcam_filter(struct rte_eth_dev *dev,
+@@ -507,7 +594,7 @@ hinic3_dynamic_lookup_tcam_filter(struct rte_eth_dev *dev,
  		struct hinic3_tcam_filter *tcam_filter,
  		u16 *tcam_index)
  {
@@ -2830,7 +2833,7 @@ index 1210f47..5c9686a 100644
  	u16 block_cnt = tcam_info->tcam_dynamic_info.dynamic_block_cnt;
  	struct hinic3_tcam_dynamic_block *dynamic_block_ptr = NULL;
  	struct hinic3_tcam_dynamic_block *tmp = NULL;
-@@ -595,7 +679,7 @@ static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
+@@ -595,7 +682,7 @@ static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
  {
  	struct hinic3_tcam_info *tcam_info =
  		HINIC3_DEV_PRIVATE_TO_TCAM_INFO(dev->data->dev_private);
@@ -2839,7 +2842,7 @@ index 1210f47..5c9686a 100644
  	struct hinic3_tcam_dynamic_block *dynamic_block_ptr = NULL;
  	struct hinic3_tcam_dynamic_block *tmp = NULL;
  	struct hinic3_tcam_filter *tcam_filter;
-@@ -684,7 +768,7 @@ static int hinic3_del_dynamic_tcam_filter(struct rte_eth_dev *dev,
+@@ -684,7 +771,7 @@ static int hinic3_del_dynamic_tcam_filter(struct rte_eth_dev *dev,
  {
  	struct hinic3_tcam_info *tcam_info =
  		HINIC3_DEV_PRIVATE_TO_TCAM_INFO(dev->data->dev_private);
@@ -2848,7 +2851,7 @@ index 1210f47..5c9686a 100644
  	u16 dynamic_block_id = tcam_filter->dynamic_block_id;
  	struct hinic3_tcam_dynamic_block *tmp = NULL;
  	u32 index = 0;
-@@ -804,7 +888,7 @@ int hinic3_flow_add_del_fdir_filter(struct rte_eth_dev *dev,
+@@ -804,7 +891,7 @@ int hinic3_flow_add_del_fdir_filter(struct rte_eth_dev *dev,
  int hinic3_enable_rxq_fdir_filter(struct rte_eth_dev *dev, u32 queue_id, u32 able)
  {
  	struct hinic3_tcam_info *tcam_info = HINIC3_DEV_PRIVATE_TO_TCAM_INFO(dev->data->dev_private);
@@ -2857,7 +2860,7 @@ index 1210f47..5c9686a 100644
  	struct hinic3_tcam_filter *it;
  	struct hinic3_tcam_cfg_rule fdir_tcam_rule;
  	int ret;
-@@ -870,7 +954,7 @@ int hinic3_enable_rxq_fdir_filter(struct rte_eth_dev *dev, u32 queue_id, u32 abl
+@@ -870,7 +957,7 @@ int hinic3_enable_rxq_fdir_filter(struct rte_eth_dev *dev, u32 queue_id, u32 abl
  
  void hinic3_free_fdir_filter(struct rte_eth_dev *dev)
  {
@@ -2866,7 +2869,7 @@ index 1210f47..5c9686a 100644
  
  	(void)hinic3_set_fdir_tcam_rule_filter(nic_dev->hwdev, false);
  
-@@ -880,7 +964,7 @@ void hinic3_free_fdir_filter(struct rte_eth_dev *dev)
+@@ -880,7 +967,7 @@ void hinic3_free_fdir_filter(struct rte_eth_dev *dev)
  static int hinic3_flow_set_arp_filter(struct rte_eth_dev *dev, struct rte_eth_ethertype_filter *ethertype_filter,
  				      bool add)
  {
@@ -2875,7 +2878,7 @@ index 1210f47..5c9686a 100644
  	int ret;
  
  	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_ARP, ethertype_filter->queue, add);
-@@ -916,7 +1000,7 @@ static int hinic3_flow_set_slow_filter(struct rte_eth_dev *dev,
+@@ -916,7 +1003,7 @@ static int hinic3_flow_set_slow_filter(struct rte_eth_dev *dev,
  				       struct rte_eth_ethertype_filter *ethertype_filter,
  				       bool add)
  {
@@ -2884,7 +2887,7 @@ index 1210f47..5c9686a 100644
  	int ret;
  
  	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_LACP, ethertype_filter->queue, add);
-@@ -943,7 +1027,7 @@ static int hinic3_flow_set_lldp_filter(struct rte_eth_dev *dev,
+@@ -943,7 +1030,7 @@ static int hinic3_flow_set_lldp_filter(struct rte_eth_dev *dev,
  				       struct rte_eth_ethertype_filter *ethertype_filter,
  				       bool add)
  {
@@ -2893,7 +2896,7 @@ index 1210f47..5c9686a 100644
  	int ret;
  
  	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_LLDP, ethertype_filter->queue, add);
-@@ -970,7 +1054,7 @@ static int hinic3_flow_add_del_ethertype_filter_rule(struct rte_eth_dev *dev,
+@@ -970,7 +1057,7 @@ static int hinic3_flow_add_del_ethertype_filter_rule(struct rte_eth_dev *dev,
  						     struct rte_eth_ethertype_filter *ethertype_filter,
  						     bool add)
  {
@@ -2902,7 +2905,7 @@ index 1210f47..5c9686a 100644
  	struct hinic3_ethertype_filter_list *ethertype_list = &nic_dev->filter_ethertype_list;
  
  	if (hinic3_ethertype_filter_lookup(ethertype_list, ethertype_filter->ether_type)) {
-@@ -1040,7 +1124,7 @@ int hinic3_flow_add_del_ethertype_filter(struct rte_eth_dev *dev,
+@@ -1040,7 +1127,7 @@ int hinic3_flow_add_del_ethertype_filter(struct rte_eth_dev *dev,
  					 struct rte_eth_ethertype_filter *ethertype_filter,
  					 bool add)
  {
@@ -2911,7 +2914,7 @@ index 1210f47..5c9686a 100644
  	int ret;
  
  	ret = hinic3_flow_add_del_ethertype_filter_rule(dev, ethertype_filter, add);
-@@ -1079,3 +1163,87 @@ int hinic3_flow_add_del_ethertype_filter(struct rte_eth_dev *dev,
+@@ -1079,3 +1166,87 @@ int hinic3_flow_add_del_ethertype_filter(struct rte_eth_dev *dev,
  	return ret;
  }
  

@@ -1,4 +1,4 @@
-From 7b6ec6be2133681c1ed143ebf5865ffdf157f980 Mon Sep 17 00:00:00 2001
+From 22165760d1f0e32f280a3d533546281a42241e8c Mon Sep 17 00:00:00 2001
 From: Huawei <@huawei.com>
 Date: Wed, 7 May 2025 10:54:09 +0800
 Subject: [PATCH 02/12] net/meson: add support for hinic3 DPDK pmd driver

@@ -1,4 +1,4 @@
-From e53dc96e7aa3dd1f8c07aaa69ef2d7b78543e4c5 Mon Sep 17 00:00:00 2001
+From a0d6660b0944498b55e5de869d35f7365225aa6a Mon Sep 17 00:00:00 2001
 From: Huawei <@huawei.com>
 Date: Thu, 8 May 2025 10:27:01 +0800
 Subject: [PATCH 04/12] Support checksum offload calculation in DPDK VXLAN
