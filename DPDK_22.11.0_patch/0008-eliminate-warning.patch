@@ -1,11 +1,11 @@
-From 7e4bb5bb36a876c52d2a63c99a7a401a88a946dc Mon Sep 17 00:00:00 2001
+From 0fd16f090e5199cf55830cef6931d501db61c688 Mon Sep 17 00:00:00 2001
 From: zry6666 <zhangruiyu2@huawei.com>
 Date: Wed, 9 Jul 2025 09:30:33 +0800
 Subject: [PATCH] eliminate-warning
 
 ---
  0001-eliminate-warning.patch                  | 1190 +++++++++++++++++
- drivers/net/hinic3/meson.build                |    1 +
+ drivers/net/hinic3/meson.build                |    5 +-
  ...collect_ovs.sh => network_info_collect.sh} |    0
  .../src/common/hinic3_hmap/hinic3_hmap.c      |    2 +-
  .../hinic3/src/common/hinic3_log/hinic3_log.c |   10 +-
@@ -52,7 +52,7 @@ Subject: [PATCH] eliminate-warning
  .../hinic3_ufid_map/hinic3_mpool_rte_flow.c   |    2 +-
  .../src/hinic3_ufid_map/hinic3_ufid_hmap.c    |    4 +-
  .../hinic3_ufid_map_rte_flow.c                |    4 +-
- 48 files changed, 1303 insertions(+), 112 deletions(-)
+ 48 files changed, 1305 insertions(+), 114 deletions(-)
  create mode 100644 0001-eliminate-warning.patch
  rename drivers/net/hinic3/scripts/{network_info_collect_ovs.sh => network_info_collect.sh} (100%)
 
@@ -1253,14 +1253,19 @@ index 0000000000..9bca34b8af
 +2.47.0.windows.2
 +
 diff --git a/drivers/net/hinic3/meson.build b/drivers/net/hinic3/meson.build
-index 4eb5f5e76d..c8b7cb2c4b 100644
+index 4eb5f5e76d..178e82193b 100644
 --- a/drivers/net/hinic3/meson.build
 +++ b/drivers/net/hinic3/meson.build
-@@ -188,3 +188,4 @@ install_headers('include/rte_pmd_hinic3.h')
+@@ -186,5 +186,6 @@ executable('dpak-ovs-ctl',
  
- install_data('cfg/ovs_dpu_virt/agent_config.ini', install_dir: '/etc/dpak/net')
- install_data('scripts/dpak_ovs_completion_ovs.sh', install_dir: '/etc/bash_completion.d')
-+install_data('scripts/network_info_collect.sh', install_dir: '/usr/bin')
+ install_headers('include/rte_pmd_hinic3.h')
+ 
+-install_data('cfg/ovs_dpu_virt/agent_config.ini', install_dir: '/etc/dpak/net')
+-install_data('scripts/dpak_ovs_completion_ovs.sh', install_dir: '/etc/bash_completion.d')
++install_data('cfg/ovs_dpu_virt/agent_config.ini', install_dir: join_paths(get_option('prefix'),'etc','dpak','net'))
++install_data('scripts/dpak_ovs_completion_ovs.sh', install_dir: join_paths(get_option('prefix'),'etc','bash_completion.d'))
++install_data('scripts/network_info_collect.sh', install_dir: join_paths(get_option('prefix'),'usr','bin'))
+\ No newline at end of file
 diff --git a/drivers/net/hinic3/scripts/network_info_collect_ovs.sh b/drivers/net/hinic3/scripts/network_info_collect.sh
 similarity index 100%
 rename from drivers/net/hinic3/scripts/network_info_collect_ovs.sh
