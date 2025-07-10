@@ -1,0 +1,145 @@
+From 45f217f28265eee82fbdda6e876658f1e4fc9240 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?=E6=B1=A4=E6=B5=B7=E8=95=B4?= <19855679967@163.com>
+Date: Thu, 10 Jul 2025 10:20:57 +0800
+Subject: [PATCH] 20.11 patch0013 support tx csum hw offload
+
+---
+ app/test-pmd/csumonly.c | 90 +++++++++++++++++++++++++++++++++++++----
+ 1 file changed, 83 insertions(+), 7 deletions(-)
+
+diff --git a/app/test-pmd/csumonly.c b/app/test-pmd/csumonly.c
+index d813d4fae0..75c13de987 100644
+--- a/app/test-pmd/csumonly.c
++++ b/app/test-pmd/csumonly.c
+@@ -99,6 +99,64 @@ get_udptcp_checksum(void *l3_hdr, void *l4_hdr, uint16_t ethertype)
+ 		return rte_ipv6_udptcp_cksum(l3_hdr, l4_hdr);
+ }
+ 
++static uint16_t
++ipv4_phdr_cksum(const struct rte_ipv4_hdr *ipv4_hdr, uint64_t ol_flags)
++{
++	struct ipv4_psd_header {
++		uint32_t src_addr; /* IP address of source host. */
++		uint32_t dst_addr; /* IP address of destination host. */
++		uint8_t zero;	/* zero. */
++		uint8_t proto;	/* L4 protocol type. */
++		uint16_t len;	/* L4 length. */
++	} psd_hdr;
++	uint8_t ihl;
++
++	psd_hdr.src_addr = ipv4_hdr->src_addr;
++	psd_hdr.dst_addr = ipv4_hdr->dst_addr;
++	psd_hdr.zero = 0;
++	psd_hdr.proto = ipv4_hdr->next_proto_id;
++	if (ol_flags & PKT_TX_TCP_SEG) {
++		psd_hdr.len = 0;
++	} else {
++		/* ipv4_hdr->version_ihl is uint8_t big endian, ihl locates
++		 * lower 4 bits and unit is 4 bytes
++		 */
++		ihl = (ipv4_hdr->version_ihl & 0xF) << 2;
++		psd_hdr.len =
++		rte_cpu_to_be_16(rte_be_to_cpu_16(ipv4_hdr->total_length) -
++						 ihl);
++	}
++	return rte_raw_cksum(&psd_hdr, sizeof(psd_hdr));
++}
++
++static uint16_t
++ipv6_phdr_cksum(const struct rte_ipv6_hdr *ipv6_hdr, uint64_t ol_flags, uint16_t l3_len)
++{
++	uint32_t sum;
++	rte_be32_t len;	/* L4 length. */
++	rte_be32_t proto;	/* L4 protocol. */
++
++	if (ol_flags & PKT_TX_TCP_SEG) {
++		len = 0;
++		proto = rte_cpu_to_be_16(IPPROTO_TCP);
++	} else {
++		len = rte_cpu_to_be_16(rte_be_to_cpu_16(ipv6_hdr->payload_len) -
++						l3_len + sizeof(*ipv6_hdr));
++		
++		if ((ol_flags & PKT_TX_L4_MASK) == PKT_TX_UDP_CKSUM)
++			proto = rte_cpu_to_be_16(IPPROTO_UDP);
++		else
++			proto = rte_cpu_to_be_16(IPPROTO_TCP);
++	}
++	sum = __rte_raw_cksum(ipv6_hdr->src_addr,
++		sizeof(ipv6_hdr->src_addr) + sizeof(ipv6_hdr->dst_addr),
++		0);
++	sum = __rte_raw_cksum(&len, sizeof(len), sum);
++
++	sum = __rte_raw_cksum(&proto, sizeof(proto), sum);
++	return __rte_raw_cksum_reduce(sum);
++}
++
+ /* Parse an IPv4 header to fill l3_len, l4_len, and l4_proto */
+ static void
+ parse_ipv4(struct rte_ipv4_hdr *ipv4_hdr, struct testpmd_offload_info *info)
+@@ -458,6 +516,7 @@ process_inner_cksums(void *l3_hdr, const struct testpmd_offload_info *info,
+ 	uint64_t tx_offloads)
+ {
+ 	struct rte_ipv4_hdr *ipv4_hdr = l3_hdr;
++	struct rte_ipv6_hdr *ipv6_hdr = l3_hdr;
+ 	struct rte_udp_hdr *udp_hdr;
+ 	struct rte_tcp_hdr *tcp_hdr;
+ 	struct rte_sctp_hdr *sctp_hdr;
+@@ -492,19 +551,26 @@ process_inner_cksums(void *l3_hdr, const struct testpmd_offload_info *info,
+ 				ipv4_hdr->hdr_checksum =
+ 					rte_ipv4_cksum(ipv4_hdr);
+ 		}
+-	} else if (info->ethertype == _htons(RTE_ETHER_TYPE_IPV6))
++	} else if (info->ethertype == _htons(RTE_ETHER_TYPE_IPV6)) {
+ 		ol_flags |= PKT_TX_IPV6;
+-	else
++		ipv6_hdr = l3_hdr;
++	} else {
+ 		return 0; /* packet type not supported, nothing to do */
++	}
+ 
+ 	if (info->l4_proto == IPPROTO_UDP) {
+ 		udp_hdr = (struct rte_udp_hdr *)((char *)l3_hdr + info->l3_len);
+ 		/* do not recalculate udp cksum if it was 0 */
+ 		if (udp_hdr->dgram_cksum != 0) {
+ 			udp_hdr->dgram_cksum = 0;
+-			if (tx_offloads & DEV_TX_OFFLOAD_UDP_CKSUM)
++			if (tx_offloads & DEV_TX_OFFLOAD_UDP_CKSUM) {
+ 				ol_flags |= PKT_TX_UDP_CKSUM;
+-			else {
++
++				if (ol_flags & PKT_TX_IPV4)
++					udp_hdr->dgram_cksum = ipv4_phdr_cksum(ipv4_hdr, ol_flags);
++				else
++					udp_hdr->dgram_cksum = ipv6_phdr_cksum(ipv6_hdr, ol_flags, info->l3_len);
++			} else {
+ 				udp_hdr->dgram_cksum =
+ 					get_udptcp_checksum(l3_hdr, udp_hdr,
+ 						info->ethertype);
+@@ -515,11 +581,21 @@ process_inner_cksums(void *l3_hdr, const struct testpmd_offload_info *info,
+ 	} else if (info->l4_proto == IPPROTO_TCP) {
+ 		tcp_hdr = (struct rte_tcp_hdr *)((char *)l3_hdr + info->l3_len);
+ 		tcp_hdr->cksum = 0;
+-		if (tso_segsz)
++		if (tso_segsz) {
+ 			ol_flags |= PKT_TX_TCP_SEG;
+-		else if (tx_offloads & DEV_TX_OFFLOAD_TCP_CKSUM)
++
++			if (ol_flags & PKT_TX_IPV4)
++				tcp_hdr->cksum = ipv4_phdr_cksum(ipv4_hdr, ol_flags);
++			else
++				tcp_hdr->cksum = ipv6_phdr_cksum(ipv6_hdr, ol_flags, info->l3_len);
++		} else if (tx_offloads & DEV_TX_OFFLOAD_TCP_CKSUM) {
+ 			ol_flags |= PKT_TX_TCP_CKSUM;
+-		else {
++
++			if (ol_flags & PKT_TX_IPV4)
++				tcp_hdr->cksum = ipv4_phdr_cksum(ipv4_hdr, ol_flags);
++			else
++				tcp_hdr->cksum = ipv6_phdr_cksum(ipv6_hdr, ol_flags, info->l3_len);
++		} else {
+ 			tcp_hdr->cksum =
+ 				get_udptcp_checksum(l3_hdr, tcp_hdr,
+ 					info->ethertype);
+-- 
+2.45.1.windows.1
+
