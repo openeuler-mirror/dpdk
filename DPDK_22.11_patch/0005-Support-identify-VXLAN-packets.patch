@@ -1,4 +1,4 @@
-From b241f45987e0f434ec15ec3d892c479ad9d2f962 Mon Sep 17 00:00:00 2001
+From 3ebfeb39f33e1a0cd60cf79d16a7e708e8c87c52 Mon Sep 17 00:00:00 2001
 From: Huawei <@huawei.com>
 Date: Thu, 8 May 2025 10:54:09 +0800
 Subject: [PATCH 05/12] Support identify VXLAN packets
