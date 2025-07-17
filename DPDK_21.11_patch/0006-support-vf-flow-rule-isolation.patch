@@ -1,0 +1,123 @@
+From 3f1d36e4c0cbbb0c21785c62234e1db947f92a4f Mon Sep 17 00:00:00 2001
+From: liya51 <luckly0822@qq.com>
+Date: Thu, 17 Jul 2025 19:29:46 +0800
+Subject: [PATCH 6/6] support vf flow rule isolation
+
+---
+ drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c |  5 +++--
+ drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h |  3 ++-
+ drivers/net/hinic3/hinic3_pmd_fdir.c         | 14 +++++++++++---
+ drivers/net/hinic3/hinic3_pmd_fdir.h         | 10 ++++++++++
+ 4 files changed, 26 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c
+index 8929fdd..69d66bd 100644
+--- a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c
++++ b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c
+@@ -1662,7 +1662,7 @@ int hinic3_set_link_status_follow(void *hwdev, enum hinic3_link_follow_status st
+ 	return follow.head.status;
+ }
+ 
+-int hinic3_get_bifur_enable(void *hwdev, u8 *enable)
++int hinic3_get_bifur_enable(void *hwdev, u8 *bifur_en, u8 *iso_en)
+ {
+ 	struct hinic3_port_flow_bifur_en_cmd bifur_cmd;
+ 	u16 out_size = sizeof(bifur_cmd);
+@@ -1685,7 +1685,8 @@ int hinic3_get_bifur_enable(void *hwdev, u8 *enable)
+ 		return -EIO;
+ 	}
+ 
+-	*enable = bifur_cmd.flow_bifur_en;
++	*bifur_en = bifur_cmd.flow_bifur_en;
++	*iso_en = bifur_cmd.iso_en;
+ 
+ 	return 0;
+ }
+\ No newline at end of file
+diff --git a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h
+index 2d4c48a..9778d94 100644
+--- a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h
++++ b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h
+@@ -883,6 +883,7 @@ struct hinic3_port_flow_bifur_en_cmd {
+ 	u8 flow_bifur_en;
+ 	u8 flow_bifur_type; /* 0: vf bifur, 2: traffic bifur */
+ 	u8 config_flag;
++	u8 iso_en; /* 0 -> off, 1 -> on */
+ 	u8 rsvd[3];
+ };
+ 
+@@ -1533,5 +1534,5 @@ int hinic3_set_fdir_ethertype_filter(void *hwdev, u8 pkt_type, u16 queue_id, u8
+ 
+ int hinic3_set_link_status_follow(void *hwdev, enum hinic3_link_follow_status status);
+ 
+-int hinic3_get_bifur_enable(void *hwdev, u8 *enable);
++int hinic3_get_bifur_enable(void *hwdev, u8 *bifur_en, u8 *iso_en);
+ #endif /* _HINIC3_PMD_NIC_CFG_H_ */
+diff --git a/drivers/net/hinic3/hinic3_pmd_fdir.c b/drivers/net/hinic3/hinic3_pmd_fdir.c
+index 7afdfe5..d132df8 100644
+--- a/drivers/net/hinic3/hinic3_pmd_fdir.c
++++ b/drivers/net/hinic3/hinic3_pmd_fdir.c
+@@ -226,12 +226,14 @@ static void hinic3_fdir_tcam_notunnel_init(struct rte_eth_dev *dev,
+ 	tcam_key->key_mask.function_id = HINIC3_UINT15_MAX;
+ 
+ #ifdef HINIC3_TRAFFIC_BIFUR
+-	u8 enable;
+-	if (hinic3_get_bifur_enable(nic_dev->hwdev, &enable) != 0) {
++	u8 bifur_en, iso_en;
++	u8 er_id = nic_dev->hwdev->cfg_mgmt->svc_cap.er_id;
++
++	if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &iso_en) != 0) {
+ 		PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable status failed.");
+ 	} 
+ 	
+-	if (enable) {
++	if (bifur_en) {
+ 		tcam_key->key_info.function_id = HINIC3_UINT15_MAX;
+ 		tcam_key->key_mask.ether_type =  rule->key_mask.ether_type;
+ 		tcam_key->key_info.ether_type = rule->key_spec.ether_type;
+@@ -239,6 +241,12 @@ static void hinic3_fdir_tcam_notunnel_init(struct rte_eth_dev *dev,
+ 		tcam_key->key_info.function_id =
+ 			hinic3_global_func_id(nic_dev->hwdev) & HINIC3_UINT15_MAX;
+ 	}
++
++	if (iso_en) {
++		tcam_key->key_mask.er_id = HINIC3_UINT4_MAX;
++		tcam_key->key_info.er_id = er_id;
++	}
++
+ #endif
+ 
+ 	tcam_key->key_mask.ip_proto = rule->key_mask.proto;
+diff --git a/drivers/net/hinic3/hinic3_pmd_fdir.h b/drivers/net/hinic3/hinic3_pmd_fdir.h
+index fa347f9..6976577 100644
+--- a/drivers/net/hinic3/hinic3_pmd_fdir.h
++++ b/drivers/net/hinic3/hinic3_pmd_fdir.h
+@@ -99,7 +99,12 @@ struct hinic3_tcam_key_mem {
+ 	u32 sport : 16;
+ 	u32 rsvd5 : 16;
+ 
++#ifdef HINIC3_TRAFFIC_BIFUR
++	u32 rsvd6 : 12;
++	u32 er_id : 4;
++#else
+ 	u32 rsvd6 : 16;
++#endif
+ 	u32 outer_sipv4_h : 16;
+ 
+ 	u32 outer_sipv4_l : 16;
+@@ -141,7 +146,12 @@ struct hinic3_tcam_key_mem {
+ 	u32 sport : 16;
+ 
+ 	u32 outer_sipv4_h : 16;
++#ifdef HINIC3_TRAFFIC_BIFUR
++	u32 er_id : 4;
++	u32 rsvd6 : 12;
++#else
+ 	u32 rsvd6 : 16;
++#endif
+ 
+ 	u32 outer_dipv4_h : 16;
+ 	u32 outer_sipv4_l : 16;
+-- 
+2.45.1.windows.1
+

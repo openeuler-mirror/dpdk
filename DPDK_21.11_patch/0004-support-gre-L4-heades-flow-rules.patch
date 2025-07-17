@@ -1,7 +1,7 @@
-From c5ef87a27fd80f41157cff194911a15680fe0b10 Mon Sep 17 00:00:00 2001
+From a62def90ceb324656b81b1c3e008684c75517328 Mon Sep 17 00:00:00 2001
 From: liya51 <luckly0822@qq.com>
 Date: Sat, 21 Jun 2025 16:48:08 +0800
-Subject: [PATCH] support gre L4 heades flow rules
+Subject: [PATCH 4/6] support gre L4 heades flow rules
 
 ---
  drivers/net/hinic3/hinic3_pmd_flow.c | 19 ++++++++++++++-----

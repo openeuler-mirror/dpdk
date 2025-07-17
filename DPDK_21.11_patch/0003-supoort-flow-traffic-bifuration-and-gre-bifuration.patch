@@ -1,7 +1,7 @@
-From 29b1c082657b35c7b3857f490efedc34492c3515 Mon Sep 17 00:00:00 2001
+From 8184e9bf63431ad7de7a51ae6a7567646cde12cb Mon Sep 17 00:00:00 2001
 From: liya51 <luckly0822@qq.com>
 Date: Mon, 16 Jun 2025 09:34:52 +0800
-Subject: [PATCH] supoort flow traffic bifuration and gre bifuration
+Subject: [PATCH 3/6] supoort flow traffic bifuration and gre bifuration
 
 ---
  drivers/net/hinic3/base/hinic3_pmd_cmd.h     |   2 +
@@ -9,14 +9,14 @@ Subject: [PATCH] supoort flow traffic bifuration and gre bifuration
  drivers/net/hinic3/base/hinic3_pmd_mbox.c    |  17 +
  drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c |  64 ++
  drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h |  20 +-
- drivers/net/hinic3/hinic3_pmd_bifur.c        | 992 +++++++++++++++++++++++++++
+ drivers/net/hinic3/hinic3_pmd_bifur.c        | 992 +++++++++++++++++++
  drivers/net/hinic3/hinic3_pmd_bifur.h        |  20 +
  drivers/net/hinic3/hinic3_pmd_ethdev.c       |  45 +-
  drivers/net/hinic3/hinic3_pmd_ethdev.h       |  11 +-
- drivers/net/hinic3/hinic3_pmd_fdir.c         | 177 ++++-
+ drivers/net/hinic3/hinic3_pmd_fdir.c         | 177 +++-
  drivers/net/hinic3/hinic3_pmd_fdir.h         |  37 +-
- drivers/net/hinic3/hinic3_pmd_flow.c         | 189 +++++
- drivers/net/hinic3/hinic3_pmd_rx.c           |  45 ++
+ drivers/net/hinic3/hinic3_pmd_flow.c         | 189 ++++
+ drivers/net/hinic3/hinic3_pmd_rx.c           |  45 +
  drivers/net/hinic3/hinic3_pmd_rx.h           |  17 +-
  drivers/net/hinic3/meson.build               |   4 +
  15 files changed, 1627 insertions(+), 14 deletions(-)
@@ -1597,7 +1597,7 @@ index f5c64fe..7afdfe5 100644
  static inline uint16_t
  hinic3_ethertype_filter_lookup(struct hinic3_ethertype_filter_list *ethertype_list,
  			uint16_t type)
-@@ -1079,3 +1164,87 @@ enable_fdir_failed:
+@@ -1079,3 +1164,87 @@ int hinic3_flow_add_del_ethertype_filter(struct rte_eth_dev *dev,
  	return ret;
  }
  
