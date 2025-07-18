@@ -1,29 +1,28 @@
-From 79515158e3a661d310be92b11a8f767492b17d96 Mon Sep 17 00:00:00 2001
+From f1e6f55c6c61f5f80b0226579f0d863e3a2c4aa1 Mon Sep 17 00:00:00 2001
 From: liya51 <luckly0822@qq.com>
-Date: Tue, 3 Jun 2025 16:13:06 +0800
-Subject: [PATCH] support flow traffic bifuration
+Date: Fri, 18 Jul 2025 11:40:28 +0800
+Subject: [PATCH 9/9] support flow traffic bifur
 
 ---
  drivers/net/hinic3/base/hinic3_pmd_cmd.h     |   2 +
  drivers/net/hinic3/base/hinic3_pmd_csr.h     |   1 +
- drivers/net/hinic3/base/hinic3_pmd_mbox.c    |  18 +-
- drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c |  63 ++
+ drivers/net/hinic3/base/hinic3_pmd_mbox.c    |  17 +
+ drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c |  64 ++
  drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h |  20 +-
- drivers/net/hinic3/hinic3_pmd_bifur.c        | 993 +++++++++++++++++++++++++++
+ drivers/net/hinic3/hinic3_pmd_bifur.c        | 993 +++++++++++++++++++
  drivers/net/hinic3/hinic3_pmd_bifur.h        |  20 +
- drivers/net/hinic3/hinic3_pmd_ethdev.c       |  45 +-
- drivers/net/hinic3/hinic3_pmd_ethdev.h       |  10 +
- drivers/net/hinic3/hinic3_pmd_fdir.c         | 180 ++++-
- drivers/net/hinic3/hinic3_pmd_fdir.h         |  38 +-
- drivers/net/hinic3/hinic3_pmd_flow.c         | 211 +++++-
- drivers/net/hinic3/hinic3_pmd_rx.c           |  53 +-
+ drivers/net/hinic3/hinic3_pmd_ethdev.c       |  47 +-
+ drivers/net/hinic3/hinic3_pmd_ethdev.h       |  11 +-
+ drivers/net/hinic3/hinic3_pmd_fdir.c         | 176 +++-
+ drivers/net/hinic3/hinic3_pmd_fdir.h         |  37 +-
+ drivers/net/hinic3/hinic3_pmd_flow.c         | 210 +++-
+ drivers/net/hinic3/hinic3_pmd_rx.c           |  50 +-
  drivers/net/hinic3/hinic3_pmd_rx.h           |  17 +-
  drivers/net/hinic3/meson.build               |   4 +
- 16 files changed, 1652 insertions(+), 27 deletions(-)
+ 15 files changed, 1645 insertions(+), 24 deletions(-)
  create mode 100644 drivers/net/hinic3/hinic3_pmd_bifur.c
  create mode 100644 drivers/net/hinic3/hinic3_pmd_bifur.h
 
- struct hinic3_filter_t {
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_cmd.h b/drivers/net/hinic3/base/hinic3_pmd_cmd.h
 index c07720b..86ab82a 100644
 --- a/drivers/net/hinic3/base/hinic3_pmd_cmd.h
@@ -50,7 +49,7 @@ index fa10821..d8cbe61 100644
  #endif
  
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_mbox.c b/drivers/net/hinic3/base/hinic3_pmd_mbox.c
-index ea05e83..0acaaea 100644
+index 89d81df..896762c 100644
 --- a/drivers/net/hinic3/base/hinic3_pmd_mbox.c
 +++ b/drivers/net/hinic3/base/hinic3_pmd_mbox.c
 @@ -28,6 +28,7 @@
@@ -61,11 +60,10 @@ index ea05e83..0acaaea 100644
  
  #define HINIC3_MBOX_INT_SET(val, field)	\
  			(((val) & HINIC3_MBOX_INT_##field##_MASK) << \
-@@ -190,8 +191,11 @@ static void response_for_recv_func_mbox(struct hinic3_mbox *func_to_func,
- 		msg_info.msg_id = recv_mbox->msg_info.msg_id;
+@@ -191,7 +192,11 @@ static void response_for_recv_func_mbox(struct hinic3_mbox *func_to_func,
  		if (err)
  			msg_info.status = HINIC3_MBOX_PF_SEND_ERR;
--
+ 
 +#ifdef HINIC3_TRAFFIC_BIFUR
 +		if (IS_TLP_MBX(src_func_idx) && (hinic3_pcie_itf_id(func_to_func->hwdev) != SPU_HOST_ID))
 +#else 
@@ -74,7 +72,7 @@ index ea05e83..0acaaea 100644
  			send_tlp_mbox_to_func(func_to_func, recv_mbox->mod,
  					      recv_mbox->cmd,
  					      recv_mbox->buf_out, out_size,
-@@ -777,7 +781,11 @@ static int hinic3_mbox_to_func(struct hinic3_mbox *func_to_func,
+@@ -777,7 +782,11 @@ static int hinic3_mbox_to_func(struct hinic3_mbox *func_to_func,
  
  	set_mbox_to_func_event(func_to_func, EVENT_START);
  
@@ -86,7 +84,7 @@ index ea05e83..0acaaea 100644
  		err = send_tlp_mbox_to_func(func_to_func, mod, cmd, buf_in,
  					    in_size, dst_func,
  					    HINIC3_MSG_DIRECT_SEND,
-@@ -873,7 +881,11 @@ static int hinic3_mbox_to_func_no_ack(struct hinic3_hwdev *hwdev, u16 func_idx,
+@@ -871,7 +880,11 @@ static int hinic3_mbox_to_func_no_ack(struct hinic3_hwdev *hwdev, u16 func_idx,
  	if (err)
  		return err;
  
@@ -98,7 +96,7 @@ index ea05e83..0acaaea 100644
  		err = send_tlp_mbox_to_func(func_to_func, mod, cmd,
  					    buf_in, in_size, func_idx,
  					    HINIC3_MSG_DIRECT_SEND,
-@@ -918,7 +930,11 @@ void hinic3_response_mbox_to_mgmt(struct hinic3_hwdev *hwdev,
+@@ -916,7 +929,11 @@ void hinic3_response_mbox_to_mgmt(struct hinic3_hwdev *hwdev,
  	msg_info.status = 0;
  	dst_func = HINIC3_MGMT_SRC_ID;
  
@@ -111,7 +109,7 @@ index ea05e83..0acaaea 100644
  				      in_size, HINIC3_MGMT_SRC_ID,
  				      HINIC3_MSG_RESPONSE, HINIC3_MSG_NO_ACK,
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c
-index 94af5e3..955efa4 100644
+index 94af5e3..8929fdd 100644
 --- a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c
 +++ b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c
 @@ -14,6 +14,9 @@
@@ -124,7 +122,7 @@ index 94af5e3..955efa4 100644
  
  struct vf_msg_handler {
  	u16 cmd;
-@@ -143,6 +146,12 @@ int hinic3_set_mac(void *hwdev, const u8 *mac_addr, u16 vlan_id, u16 func_id)
+@@ -143,6 +146,13 @@ int hinic3_set_mac(void *hwdev, const u8 *mac_addr, u16 vlan_id, u16 func_id)
  	if (!hwdev || !mac_addr)
  		return -EINVAL;
  
@@ -134,10 +132,11 @@ index 94af5e3..955efa4 100644
 +		return 0;
 +	}
 +#endif
++
  	memset(&mac_info, 0, sizeof(mac_info));
  
  	if (vlan_id >= VLAN_N_VID) {
-@@ -185,6 +194,13 @@ int hinic3_del_mac(void *hwdev, const u8 *mac_addr, u16 vlan_id, u16 func_id)
+@@ -185,6 +195,13 @@ int hinic3_del_mac(void *hwdev, const u8 *mac_addr, u16 vlan_id, u16 func_id)
  	if (!hwdev || !mac_addr)
  		return -EINVAL;
  
@@ -151,7 +150,7 @@ index 94af5e3..955efa4 100644
  	if (vlan_id >= VLAN_N_VID) {
  		PMD_DRV_LOG(ERR, "Invalid VLAN number: %d", vlan_id);
  		return -EINVAL;
-@@ -222,6 +238,13 @@ int hinic3_update_mac(void *hwdev, u8 *old_mac, u8 *new_mac, u16 vlan_id,
+@@ -222,6 +239,13 @@ int hinic3_update_mac(void *hwdev, u8 *old_mac, u8 *new_mac, u16 vlan_id,
  	if (!hwdev || !old_mac || !new_mac)
  		return -EINVAL;
  
@@ -165,7 +164,7 @@ index 94af5e3..955efa4 100644
  	if (vlan_id >= VLAN_N_VID) {
  		PMD_DRV_LOG(ERR, "Invalid VLAN number: %d", vlan_id);
  		return -EINVAL;
-@@ -265,6 +288,13 @@ int hinic3_get_default_mac(void *hwdev, u8 *mac_addr, int ether_len)
+@@ -265,6 +289,13 @@ int hinic3_get_default_mac(void *hwdev, u8 *mac_addr, int ether_len)
  	if (!hwdev || !mac_addr)
  		return -EINVAL;
  
@@ -179,7 +178,7 @@ index 94af5e3..955efa4 100644
  	memset(&mac_info, 0, sizeof(mac_info));
  	mac_info.func_id = hinic3_global_func_id(hwdev);
  
-@@ -1382,6 +1412,11 @@ int hinic3_add_tcam_rule(void *hwdev, struct hinic3_tcam_cfg_rule *tcam_rule, u8
+@@ -1382,6 +1413,11 @@ int hinic3_add_tcam_rule(void *hwdev, struct hinic3_tcam_cfg_rule *tcam_rule, u8
  
  	memset(&tcam_cmd, 0, sizeof(struct hinic3_fdir_add_rule));
  	tcam_cmd.func_id = hinic3_global_func_id(hwdev);
@@ -191,7 +190,7 @@ index 94af5e3..955efa4 100644
  	memcpy((void *)&tcam_cmd.rule, (void *)tcam_rule,
  		sizeof(struct hinic3_tcam_cfg_rule));
  	tcam_cmd.type = tcam_rule_type;
-@@ -1624,4 +1659,32 @@ int hinic3_set_link_status_follow(void *hwdev, enum hinic3_link_follow_status st
+@@ -1624,4 +1660,32 @@ int hinic3_set_link_status_follow(void *hwdev, enum hinic3_link_follow_status st
  	}
  
  	return follow.head.status;
@@ -1304,7 +1303,7 @@ index 0000000..84e75e1
 +#endif // _HINIC3_PMD_BIFUR_H_
 \ No newline at end of file
 diff --git a/drivers/net/hinic3/hinic3_pmd_ethdev.c b/drivers/net/hinic3/hinic3_pmd_ethdev.c
-index 05ae637..325e876 100644
+index e128c0b..4c1e945 100644
 --- a/drivers/net/hinic3/hinic3_pmd_ethdev.c
 +++ b/drivers/net/hinic3/hinic3_pmd_ethdev.c
 @@ -14,18 +14,21 @@
@@ -1330,20 +1329,22 @@ index 05ae637..325e876 100644
  
  #define HINIC3_MIN_RX_BUF_SIZE		1024
  
-@@ -3397,6 +3400,12 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
+@@ -3385,6 +3388,14 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
  
  	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
  	memset(nic_dev, 0, sizeof(*nic_dev));
++
 +#ifdef HINIC3_TRAFFIC_BIFUR
 +	if (hinic3_bifur_is_shared_dev(pci_dev)) {
 +		PMD_DRV_LOG(INFO, "It`s a shared vf for flow bifurcation.");
 +		nic_dev->hinic3_function_mode = HINIC3_FUNC_SHARED;
 +	}
 +#endif
++
  	(void)snprintf(nic_dev->dev_name, sizeof(nic_dev->dev_name),
  		 "dbdf-%.4x:%.2x:%.2x.%x",
  		 pci_dev->addr.domain, pci_dev->addr.bus,
-@@ -3631,21 +3640,51 @@ static const struct rte_pci_id pci_id_hinic3_map[] = {
+@@ -3619,21 +3630,51 @@ static const struct rte_pci_id pci_id_hinic3_map[] = {
  	{.vendor_id = 0},
  };
  
@@ -1398,7 +1399,7 @@ index 05ae637..325e876 100644
  	.remove = hinic3_pci_remove,
  };
 diff --git a/drivers/net/hinic3/hinic3_pmd_ethdev.h b/drivers/net/hinic3/hinic3_pmd_ethdev.h
-index d068ee8..be7f94b 100644
+index d068ee8..6837c7c 100644
 --- a/drivers/net/hinic3/hinic3_pmd_ethdev.h
 +++ b/drivers/net/hinic3/hinic3_pmd_ethdev.h
 @@ -7,6 +7,7 @@
@@ -1429,21 +1430,22 @@ index d068ee8..be7f94b 100644
  	u32 rx_mode;
  	u8 rx_queue_list[HINIC3_MAX_QUEUE_NUM];
  	rte_spinlock_t queue_list_lock;
-@@ -169,6 +176,9 @@ struct hinic3_nic_dev {
+@@ -169,7 +176,9 @@ struct hinic3_nic_dev {
  	struct hinic3_tcam_info      tcam;
  	struct hinic3_ethertype_filter_list filter_ethertype_list;
  	struct hinic3_fdir_rule_filter_list filter_fdir_rule_list;
+-
 +#ifdef HINIC3_TRAFFIC_BIFUR
 +	u8 hinic3_function_mode;
 +#endif
- 
  };
  
+ extern const struct rte_flow_ops hinic3_flow_ops;
 diff --git a/drivers/net/hinic3/hinic3_pmd_fdir.c b/drivers/net/hinic3/hinic3_pmd_fdir.c
-index f5c64fe..19eb705 100644
+index f5c64fe..f4e454c 100644
 --- a/drivers/net/hinic3/hinic3_pmd_fdir.c
 +++ b/drivers/net/hinic3/hinic3_pmd_fdir.c
-@@ -22,11 +22,18 @@
+@@ -22,11 +22,17 @@
  #include "base/hinic3_pmd_mgmt.h"
  #include "base/hinic3_pmd_nic_cfg.h"
  #include "hinic3_pmd_ethdev.h"
@@ -1451,7 +1453,6 @@ index f5c64fe..19eb705 100644
 +#ifdef HINIC3_TRAFFIC_BIFUR
 +#include "hinic3_pmd_bifur.h"
 +#endif
-+
  #include "hinic3_pmd_fdir.h"
  
  #define HINIC3_UINT1_MAX          0x1
@@ -1462,7 +1463,7 @@ index f5c64fe..19eb705 100644
  
  #define HINIC3_DEV_PRIVATE_TO_TCAM_INFO(nic_dev) \
  	(&((struct hinic3_nic_dev *)(nic_dev))->tcam)
-@@ -61,12 +68,32 @@ static void tcam_key_calculate(struct hinic3_tcam_key *tcam_key,
+@@ -61,12 +67,33 @@ static void tcam_key_calculate(struct hinic3_tcam_key *tcam_key,
  		HINIC3_TCAM_FLOW_KEY_SIZE);
  }
  
@@ -1492,6 +1493,7 @@ index f5c64fe..19eb705 100644
 +		tcam_key->key_info.bifur_flag = 0;
 +	}
 +#endif
++
  	tcam_key->key_mask.sipv4_h =
  		HINIC3_32_UPPER_16_BITS(rule->key_mask.ipv4.src_ip);
  	tcam_key->key_mask.sipv4_l =
@@ -1529,13 +1531,12 @@ index f5c64fe..19eb705 100644
  	tcam_key->key_mask_ipv6.sipv6_key0 =
  		HINIC3_32_UPPER_16_BITS(rule->key_mask.ipv6.src_ip[0]);
  	tcam_key->key_mask_ipv6.sipv6_key1 =
-@@ -176,16 +224,38 @@ static void hinic3_fdir_tcam_notunnel_init(struct rte_eth_dev *dev,
+@@ -176,16 +224,37 @@ static void hinic3_fdir_tcam_notunnel_init(struct rte_eth_dev *dev,
  	tcam_key->key_info.tunnel_type = HINIC3_FDIR_TUNNEL_MODE_NORMAL;
  
  	tcam_key->key_mask.function_id = HINIC3_UINT15_MAX;
 -	tcam_key->key_info.function_id =
 -		hinic3_global_func_id(nic_dev->hwdev) & HINIC3_UINT15_MAX;
-+
 +#ifdef HINIC3_TRAFFIC_BIFUR
 +	u8 enable;
 +	if (hinic3_get_bifur_enable(nic_dev->hwdev, &enable) != 0) {
@@ -1571,14 +1572,14 @@ index f5c64fe..19eb705 100644
  }
  
  static void hinic3_fdir_tcam_vxlan_ipv4_init(struct hinic3_fdir_filter *rule,
-@@ -425,10 +495,26 @@ static void hinic3_fdir_tcam_info_init(struct rte_eth_dev *dev,
- 		hinic3_fdir_tcam_vxlan_init(dev, rule, tcam_key);
+@@ -426,9 +495,26 @@ static void hinic3_fdir_tcam_info_init(struct rte_eth_dev *dev,
  
  	fdir_tcam_rule->data.qid = rule->rq_index;
--
+ 
 +#ifdef HINIC3_TRAFFIC_BIFUR
 +	fdir_tcam_rule->data.queue_num = rule->queue_num;
 +#endif
++
  	tcam_key_calculate(tcam_key, fdir_tcam_rule);
  }
  
@@ -1595,15 +1596,13 @@ index f5c64fe..19eb705 100644
 +}
 +#endif
 +
-+
  static inline uint16_t
  hinic3_ethertype_filter_lookup(struct hinic3_ethertype_filter_list *ethertype_list,
  			uint16_t type)
-@@ -1079,3 +1165,89 @@ enable_fdir_failed:
+@@ -1079,3 +1165,87 @@ int hinic3_flow_add_del_ethertype_filter(struct rte_eth_dev *dev,
  	return ret;
  }
  
-+
 +#ifdef HINIC3_TRAFFIC_BIFUR
 +int hinic3_flow_query_fdir_filter(struct rte_eth_dev *dev, struct hinic3_fdir_filter *fdir_filter,
 +					__rte_unused u64 *hits, __rte_unused u64 *bytes_count)
@@ -1688,9 +1687,9 @@ index f5c64fe..19eb705 100644
 +	return 0;
 +}
 +#endif
-+
+\ No newline at end of file
 diff --git a/drivers/net/hinic3/hinic3_pmd_fdir.h b/drivers/net/hinic3/hinic3_pmd_fdir.h
-index 481490d..fe37580 100644
+index 481490d..35c2a68 100644
 --- a/drivers/net/hinic3/hinic3_pmd_fdir.h
 +++ b/drivers/net/hinic3/hinic3_pmd_fdir.h
 @@ -14,6 +14,10 @@
@@ -1712,17 +1711,18 @@ index 481490d..fe37580 100644
  };
  
  struct hinic3_fdir_filter {
-@@ -39,6 +44,9 @@ struct hinic3_fdir_filter {
- 	struct hinic3_fdir_rule_key key_mask;
- 	struct hinic3_fdir_rule_key key_spec;
- 	uint32_t rq_index; /* queue assigned when matched */
+@@ -46,7 +51,9 @@ struct hinic3_filter_t {
+ 	enum rte_filter_type filter_type;
+ 	struct rte_eth_ethertype_filter ethertype_filter;
+ 	struct hinic3_fdir_filter fdir_filter;
+-
 +#ifdef HINIC3_TRAFFIC_BIFUR
 +	uint32_t queue_num;
 +#endif
  };
  
- struct hinic3_filter_t {
-@@ -65,7 +73,13 @@ struct hinic3_tcam_key_mem {
+ enum hinic3_fdir_tunnel_mode {
+@@ -65,7 +72,13 @@ struct hinic3_tcam_key_mem {
  	u32 rsvd0 : 16;
  	u32 ip_proto : 8;
  	u32 tunnel_type : 4;
@@ -1736,7 +1736,7 @@ index 481490d..fe37580 100644
  
  	u32 function_id : 15;
  	u32 ip_type : 1;
-@@ -79,7 +93,7 @@ struct hinic3_tcam_key_mem {
+@@ -79,7 +92,7 @@ struct hinic3_tcam_key_mem {
  
  	u32 rsvd3;
  
@@ -1745,7 +1745,7 @@ index 481490d..fe37580 100644
  	u32 dport : 16;
  
  	u32 sport : 16;
-@@ -96,8 +110,14 @@ struct hinic3_tcam_key_mem {
+@@ -96,8 +109,14 @@ struct hinic3_tcam_key_mem {
  
  	u32 vni_l : 16;
  	u32 rsvd7 : 16;
@@ -1760,7 +1760,7 @@ index 481490d..fe37580 100644
  	u32 tunnel_type : 4;
  	u32 ip_proto : 8;
  	u32 rsvd0 : 16;
-@@ -115,7 +135,7 @@ struct hinic3_tcam_key_mem {
+@@ -115,7 +134,7 @@ struct hinic3_tcam_key_mem {
  	u32 rsvd3;
  
  	u32 dport : 16;
@@ -1769,12 +1769,10 @@ index 481490d..fe37580 100644
  
  	u32 rsvd5 : 16;
  	u32 sport : 16;
-@@ -161,8 +181,13 @@ struct hinic3_tcam_key_ipv6_mem {
- 	u32 rsvd0 : 16;
+@@ -162,7 +181,12 @@ struct hinic3_tcam_key_ipv6_mem {
  	u32 ip_proto : 8;
  	u32 tunnel_type : 4;
--	u32 outer_ip_type : 1;
-+		u32 outer_ip_type : 1;
+ 	u32 outer_ip_type : 1;
 +#ifdef HINIC3_TRAFFIC_BIFUR
 +	u32 model : 1;
 +	u32 bifur_flag : 2;
@@ -1784,7 +1782,7 @@ index 481490d..fe37580 100644
  
  	u32 function_id : 15;
  	u32 ip_type : 1;
-@@ -194,8 +219,13 @@ struct hinic3_tcam_key_ipv6_mem {
+@@ -194,8 +218,13 @@ struct hinic3_tcam_key_ipv6_mem {
  
  	u32 dipv6_key7 : 16;
  	u32 rsvd2 : 16;
@@ -1798,7 +1796,7 @@ index 481490d..fe37580 100644
  	u32 outer_ip_type : 1;
  	u32 tunnel_type : 4;
  	u32 ip_proto : 8;
-@@ -391,5 +421,7 @@ int hinic3_flow_add_del_ethertype_filter(struct rte_eth_dev *dev,
+@@ -391,5 +420,7 @@ int hinic3_flow_add_del_ethertype_filter(struct rte_eth_dev *dev,
  void hinic3_free_fdir_filter(struct rte_eth_dev *dev);
  int hinic3_enable_rxq_fdir_filter(struct rte_eth_dev *dev, u32 queue_id, u32 able);
  int hinic3_flow_parse_attr(const struct rte_flow_attr *attr, struct rte_flow_error *error);
@@ -1807,7 +1805,7 @@ index 481490d..fe37580 100644
  
  #endif
 diff --git a/drivers/net/hinic3/hinic3_pmd_flow.c b/drivers/net/hinic3/hinic3_pmd_flow.c
-index 3ccafcd..aba7900 100644
+index 3ccafcd..eb617fd 100644
 --- a/drivers/net/hinic3/hinic3_pmd_flow.c
 +++ b/drivers/net/hinic3/hinic3_pmd_flow.c
 @@ -24,6 +24,16 @@
@@ -1960,7 +1958,7 @@ index 3ccafcd..aba7900 100644
  	default:
  		rte_flow_error_set(error, EINVAL,
  				   HINIC3_FLOW_ERROR_TYPE_ACTION, act,
-@@ -415,6 +530,32 @@ int hinic3_flow_parse_attr(const struct rte_flow_attr *attr,
+@@ -415,6 +530,31 @@ int hinic3_flow_parse_attr(const struct rte_flow_attr *attr,
  	return 0;
  }
  
@@ -1987,13 +1985,12 @@ index 3ccafcd..aba7900 100644
 +
 +	return 0;
 +}
-+
 +#endif
 +
  static int hinic3_flow_fdir_ipv4(const struct rte_flow_item *flow_item,
  	struct hinic3_filter_t *filter, struct rte_flow_error *error)
  {
-@@ -422,6 +563,14 @@ static int hinic3_flow_fdir_ipv4(const struct rte_flow_item *flow_item,
+@@ -422,6 +562,14 @@ static int hinic3_flow_fdir_ipv4(const struct rte_flow_item *flow_item,
  
  	mask_ipv4 = (const struct rte_flow_item_ipv4 *)flow_item->mask;
  	spec_ipv4 = (const struct rte_flow_item_ipv4 *)flow_item->spec;
@@ -2008,7 +2005,7 @@ index 3ccafcd..aba7900 100644
  	if (!mask_ipv4 || !spec_ipv4) {
  		rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ITEM, flow_item,
  			"Invalid fdir filter ipv4 mask or spec");
-@@ -441,8 +590,6 @@ static int hinic3_flow_fdir_ipv4(const struct rte_flow_item *flow_item,
+@@ -441,8 +589,6 @@ static int hinic3_flow_fdir_ipv4(const struct rte_flow_item *flow_item,
  		return -rte_errno;
  	}
  
@@ -2017,7 +2014,7 @@ index 3ccafcd..aba7900 100644
  	filter->fdir_filter.key_mask.ipv4.src_ip = rte_be_to_cpu_32(mask_ipv4->hdr.src_addr);
  	filter->fdir_filter.key_spec.ipv4.src_ip = rte_be_to_cpu_32(spec_ipv4->hdr.src_addr);
  	filter->fdir_filter.key_mask.ipv4.dst_ip = rte_be_to_cpu_32(mask_ipv4->hdr.dst_addr);
-@@ -460,6 +607,14 @@ static int hinic3_flow_fdir_ipv6(const struct rte_flow_item *flow_item,
+@@ -460,6 +606,14 @@ static int hinic3_flow_fdir_ipv6(const struct rte_flow_item *flow_item,
  
  	mask_ipv6 = (const struct rte_flow_item_ipv6 *)flow_item->mask;
  	spec_ipv6 = (const struct rte_flow_item_ipv6 *)flow_item->spec;
@@ -2028,11 +2025,11 @@ index 3ccafcd..aba7900 100644
 +	if (!mask_ipv6 && !spec_ipv6) {
 +		return 0;
 +	}
-+	
++
  	if (!mask_ipv6 || !spec_ipv6) {
  		rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ITEM, flow_item,
  			"Invalid fdir filter ipv6 mask or spec");
-@@ -473,9 +628,6 @@ static int hinic3_flow_fdir_ipv6(const struct rte_flow_item *flow_item,
+@@ -473,9 +627,6 @@ static int hinic3_flow_fdir_ipv6(const struct rte_flow_item *flow_item,
  		return -rte_errno;
  	}
  
@@ -2042,7 +2039,7 @@ index 3ccafcd..aba7900 100644
  	net_addr_to_host(filter->fdir_filter.key_mask.ipv6.src_ip, (const uint32_t *)mask_ipv6->hdr.src_addr, 4);
  	net_addr_to_host(filter->fdir_filter.key_spec.ipv6.src_ip, (const uint32_t *)spec_ipv6->hdr.src_addr, 4);
  	net_addr_to_host(filter->fdir_filter.key_mask.ipv6.dst_ip, (const uint32_t *)mask_ipv6->hdr.dst_addr, 4);
-@@ -570,6 +722,12 @@ static int hinic3_flow_parse_fdir_pattern(__rte_unused struct rte_eth_dev *dev,
+@@ -570,6 +721,12 @@ static int hinic3_flow_parse_fdir_pattern(__rte_unused struct rte_eth_dev *dev,
  		type = flow_item->type;
  		switch (type) {
  		case HINIC3_FLOW_ITEM_TYPE_ETH:
@@ -2055,7 +2052,7 @@ index 3ccafcd..aba7900 100644
  			/* All should be masked. */
  			if (flow_item->spec || flow_item->mask) {
  				rte_flow_error_set(error, EINVAL,
-@@ -577,6 +735,7 @@ static int hinic3_flow_parse_fdir_pattern(__rte_unused struct rte_eth_dev *dev,
+@@ -577,6 +734,7 @@ static int hinic3_flow_parse_fdir_pattern(__rte_unused struct rte_eth_dev *dev,
  					"Not supported by fdir filter, not support mac");
  				return -rte_errno;
  			}
@@ -2063,7 +2060,7 @@ index 3ccafcd..aba7900 100644
  			break;
  
  		case HINIC3_FLOW_ITEM_TYPE_IPV4:
-@@ -1411,9 +1570,51 @@ static int hinic3_flow_flush(struct rte_eth_dev *dev,
+@@ -1411,9 +1569,51 @@ static int hinic3_flow_flush(struct rte_eth_dev *dev,
  	return ret;
  }
  
@@ -2116,7 +2113,7 @@ index 3ccafcd..aba7900 100644
 +#endif
  };
 diff --git a/drivers/net/hinic3/hinic3_pmd_rx.c b/drivers/net/hinic3/hinic3_pmd_rx.c
-index bba25fa..8ec7520 100644
+index bba25fa..21e70d3 100644
 --- a/drivers/net/hinic3/hinic3_pmd_rx.c
 +++ b/drivers/net/hinic3/hinic3_pmd_rx.c
 @@ -15,15 +15,15 @@
@@ -2149,17 +2146,7 @@ index bba25fa..8ec7520 100644
  	return err;
  }
  
-@@ -507,8 +508,7 @@ int hinic3_update_rss_config(struct rte_eth_dev *dev,
- 		goto init_rss_fail;
- 	}
- 
--	err = hinic3_rss_cfg(nic_dev->hwdev, HINIC3_RSS_ENABLE, num_tc,
--			     prio_tc);
-+	err = hinic3_rss_cfg(nic_dev->hwdev, HINIC3_RSS_ENABLE, num_tc, prio_tc);
- 	if (err) {
- 		PMD_DRV_LOG(ERR, "Enable rss failed, err: %d", err);
- 		goto init_rss_fail;
-@@ -798,6 +798,40 @@ static inline uint64_t hinic3_rx_vlan(uint32_t offload_type, uint32_t vlan_len,
+@@ -798,6 +799,40 @@ static inline uint64_t hinic3_rx_vlan(uint32_t offload_type, uint32_t vlan_len,
  	return HINIC3_PKT_RX_VLAN | HINIC3_PKT_RX_VLAN_STRIPPED;
  }
  
@@ -2200,7 +2187,7 @@ index bba25fa..8ec7520 100644
  static uint64_t hinic3_rx_csum(uint32_t status, struct hinic3_rxq *rxq)
  {
  	struct hinic3_nic_dev *nic_dev = rxq->nic_dev;
-@@ -1028,6 +1062,9 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
+@@ -1028,6 +1063,9 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
  			rxm->tso_segsz = pkt_len / lro_num; /*lint !e40 !e63*/
  		}
  
@@ -2257,7 +2244,7 @@ index d03cf22..6eeb997 100644
  	u64 packets;
  	u64 bytes;
 diff --git a/drivers/net/hinic3/meson.build b/drivers/net/hinic3/meson.build
-index 6c802a0..ecbbbf9 100644
+index 0085301..daddef7 100644
 --- a/drivers/net/hinic3/meson.build
 +++ b/drivers/net/hinic3/meson.build
 @@ -15,15 +15,18 @@ endif
@@ -2284,9 +2271,9 @@ index 6c802a0..ecbbbf9 100644
  	'hinic3_pmd_nic_io.c',
  	'hinic3_pmd_fdir.c',
 +	'hinic3_pmd_bifur.c',
- 	'hinic3_pmd_telemetry.c',
  	)
  
+ if arch_subdir == 'arm' and dpdk_conf.get('RTE_ARCH_64')
 -- 
 2.45.1.windows.1
 

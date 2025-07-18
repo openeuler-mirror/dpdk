@@ -1,4 +1,4 @@
-From d885c8ce7b2ea611eced8f98275ad3c25495b9d7 Mon Sep 17 00:00:00 2001
+From 0ffd951b0c44cd2ed310b36b5f7bcd7874545821 Mon Sep 17 00:00:00 2001
 From: liya51 <luckly0822@qq.com>
 Date: Fri, 4 Jul 2025 19:54:52 +0800
 Subject: [PATCH 12/12] support flow traffic bifur for dpdk22.11
@@ -15,18 +15,18 @@ Subject: [PATCH 12/12] support flow traffic bifur for dpdk22.11
  .../net/hinic3/base/hinic3_pmd_nic_event.c    |  32 +-
  drivers/net/hinic3/hinic3_pmd_bifur.c         | 989 ++++++++++++++++++
  drivers/net/hinic3/hinic3_pmd_bifur.h         |  20 +
- drivers/net/hinic3/hinic3_pmd_ethdev.c        | 296 +++---
- drivers/net/hinic3/hinic3_pmd_ethdev.h        |  14 +-
- drivers/net/hinic3/hinic3_pmd_fdir.c          | 205 +++-
+ drivers/net/hinic3/hinic3_pmd_ethdev.c        | 305 +++---
+ drivers/net/hinic3/hinic3_pmd_ethdev.h        |  15 +-
+ drivers/net/hinic3/hinic3_pmd_fdir.c          | 208 +++-
  drivers/net/hinic3/hinic3_pmd_fdir.h          |  36 +-
  drivers/net/hinic3/hinic3_pmd_flow.c          | 219 +++-
  drivers/net/hinic3/hinic3_pmd_flow.h          |   2 +-
  drivers/net/hinic3/hinic3_pmd_rx.c            |  60 +-
  drivers/net/hinic3/hinic3_pmd_rx.h            |  43 +-
- drivers/net/hinic3/hinic3_pmd_tx.c            |   2 +-
+ drivers/net/hinic3/hinic3_pmd_tx.c            |   4 +-
  drivers/net/hinic3/meson.build                |   3 +
  drivers/net/hinic3/mml/hinic3_pmd_mml_ioctl.c |  11 +-
- 22 files changed, 2072 insertions(+), 225 deletions(-)
+ 22 files changed, 2086 insertions(+), 226 deletions(-)
  create mode 100644 drivers/net/hinic3/base/hinic3_base.h
  create mode 100644 drivers/net/hinic3/hinic3_pmd_bifur.c
  create mode 100644 drivers/net/hinic3/hinic3_pmd_bifur.h
@@ -45,7 +45,7 @@ index ea89e19..7c80d4e 100644
  SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_dbg.c
 diff --git a/drivers/net/hinic3/base/hinic3_base.h b/drivers/net/hinic3/base/hinic3_base.h
 new file mode 100644
-index 0000000..1997450
+index 0000000..da0b20c
 --- /dev/null
 +++ b/drivers/net/hinic3/base/hinic3_base.h
 @@ -0,0 +1,225 @@
@@ -63,7 +63,7 @@ index 0000000..1997450
 +#define ETH_LINK_SPEED_100M_HD          RTE_ETH_LINK_SPEED_100M_HD
 +#define ETH_LINK_SPEED_100M             RTE_ETH_LINK_SPEED_100M
 +#define ETH_LINK_SPEED_1G               RTE_ETH_LINK_SPEED_1G
-+#define ETH_LINK_SPEED_2G_5G            RTE_ETH_LINK_SPEED_2G_5G
++#define ETH_LINK_SPEED_2_5G            RTE_ETH_LINK_SPEED_2_5G
 +#define ETH_LINK_SPEED_5G               RTE_ETH_LINK_SPEED_5G
 +#define ETH_LINK_SPEED_10G              RTE_ETH_LINK_SPEED_10G
 +#define ETH_LINK_SPEED_20G              RTE_ETH_LINK_SPEED_20G
@@ -1741,7 +1741,7 @@ index 0000000..84e75e1
 +#endif // _HINIC3_PMD_BIFUR_H_
 \ No newline at end of file
 diff --git a/drivers/net/hinic3/hinic3_pmd_ethdev.c b/drivers/net/hinic3/hinic3_pmd_ethdev.c
-index ece8252..9f00f4b 100644
+index ece8252..5a7ac0f 100644
 --- a/drivers/net/hinic3/hinic3_pmd_ethdev.c
 +++ b/drivers/net/hinic3/hinic3_pmd_ethdev.c
 @@ -14,18 +14,21 @@
@@ -2111,16 +2111,26 @@ index ece8252..9f00f4b 100644
  	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev); /*lint !e507*/
  	int qid;
  
-@@ -1893,7 +1896,7 @@ static void hinic3_dev_close(struct rte_eth_dev *eth_dev)
+@@ -1893,7 +1896,17 @@ static void hinic3_dev_close(struct rte_eth_dev *eth_dev)
  #endif
  {
  	struct hinic3_nic_dev *nic_dev =
 -		HINIC3_RTE_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
 +		HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
++	if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
++		PMD_DRV_LOG(INFO, "close %s in secondary process",
++			eth_dev->data->name);
++#ifdef DPDK_20_11
++		return 0;
++#else
++		return;
++#endif
++	}
++
  #ifdef DPDK_20_11
  	int ret;
  #endif
-@@ -1928,7 +1931,7 @@ static int hinic3_dev_reset(__rte_unused struct rte_eth_dev *dev)
+@@ -1928,7 +1941,7 @@ static int hinic3_dev_reset(__rte_unused struct rte_eth_dev *dev)
  
  static int hinic3_dev_set_mtu(struct rte_eth_dev *dev, uint16_t mtu)
  {
@@ -2129,7 +2139,7 @@ index ece8252..9f00f4b 100644
  	int err = 0;
  
  	PMD_DRV_LOG(INFO, "Set port mtu, port_id: %d, mtu: %d, max_pkt_len: %d",
-@@ -1968,7 +1971,7 @@ static int hinic3_dev_set_mtu(struct rte_eth_dev *dev, uint16_t mtu)
+@@ -1968,7 +1981,7 @@ static int hinic3_dev_set_mtu(struct rte_eth_dev *dev, uint16_t mtu)
  static int hinic3_vlan_filter_set(struct rte_eth_dev *dev,
  				  uint16_t vlan_id, int enable)
  {
@@ -2138,7 +2148,7 @@ index ece8252..9f00f4b 100644
  	int err = 0;
  	u16 func_id;
  
-@@ -2027,14 +2030,14 @@ static int hinic3_vlan_filter_set(struct rte_eth_dev *dev,
+@@ -2027,14 +2040,14 @@ static int hinic3_vlan_filter_set(struct rte_eth_dev *dev,
   */
  static int hinic3_vlan_offload_set(struct rte_eth_dev *dev, int mask)
  {
@@ -2156,7 +2166,7 @@ index ece8252..9f00f4b 100644
  			true : false;
  		err = hinic3_set_vlan_fliter(nic_dev->hwdev, on);
  		if (err) {
-@@ -2050,8 +2053,8 @@ static int hinic3_vlan_offload_set(struct rte_eth_dev *dev, int mask)
+@@ -2050,8 +2063,8 @@ static int hinic3_vlan_offload_set(struct rte_eth_dev *dev, int mask)
  	}
  
  	/* Enable or disable VLAN stripping */
@@ -2167,7 +2177,7 @@ index ece8252..9f00f4b 100644
  		     true : false;
  		err = hinic3_set_rx_vlan_offload(nic_dev->hwdev, on);
  		if (err) {
-@@ -2079,7 +2082,7 @@ static int hinic3_vlan_offload_set(struct rte_eth_dev *dev, int mask)
+@@ -2079,7 +2092,7 @@ static int hinic3_vlan_offload_set(struct rte_eth_dev *dev, int mask)
   */
  static int hinic3_dev_allmulticast_enable(struct rte_eth_dev *dev)
  {
@@ -2176,7 +2186,7 @@ index ece8252..9f00f4b 100644
  	u32 rx_mode;
  	int err;
  
-@@ -2116,7 +2119,7 @@ static int hinic3_dev_allmulticast_enable(struct rte_eth_dev *dev)
+@@ -2116,7 +2129,7 @@ static int hinic3_dev_allmulticast_enable(struct rte_eth_dev *dev)
   */
  static int hinic3_dev_allmulticast_disable(struct rte_eth_dev *dev)
  {
@@ -2185,7 +2195,7 @@ index ece8252..9f00f4b 100644
  	u32 rx_mode;
  	int err;
  
-@@ -2153,11 +2156,11 @@ static int hinic3_dev_allmulticast_disable(struct rte_eth_dev *dev)
+@@ -2153,11 +2166,11 @@ static int hinic3_dev_allmulticast_disable(struct rte_eth_dev *dev)
   */
  static int hinic3_dev_promiscuous_enable(struct rte_eth_dev *dev)
  {
@@ -2199,7 +2209,7 @@ index ece8252..9f00f4b 100644
  		PMD_DRV_LOG(ERR, "nic_dev: %s, port_id: %d, do not support vf promisc: %" PRIu64 "",
  			nic_dev->dev_name, dev->data->port_id, nic_dev->feature_cap);
  		return -ENOTSUP;
-@@ -2197,11 +2200,11 @@ static int hinic3_dev_promiscuous_enable(struct rte_eth_dev *dev)
+@@ -2197,11 +2210,11 @@ static int hinic3_dev_promiscuous_enable(struct rte_eth_dev *dev)
   */
  static int hinic3_dev_promiscuous_disable(struct rte_eth_dev *dev)
  {
@@ -2213,7 +2223,7 @@ index ece8252..9f00f4b 100644
  		PMD_DRV_LOG(ERR, "nic_dev: %s, port_id: %d, do not support vf promisc: %" PRIu64 "",
  			nic_dev->dev_name, dev->data->port_id, nic_dev->feature_cap);
  		return -ENOTSUP;
-@@ -2233,7 +2236,7 @@ static int hinic3_dev_promiscuous_disable(struct rte_eth_dev *dev)
+@@ -2233,7 +2246,7 @@ static int hinic3_dev_promiscuous_disable(struct rte_eth_dev *dev)
  static int hinic3_dev_flow_ctrl_get(struct rte_eth_dev *dev,
  				    struct rte_eth_fc_conf *fc_conf)
  {
@@ -2222,7 +2232,7 @@ index ece8252..9f00f4b 100644
  	struct nic_pause_config nic_pause;
  	int err;
  
-@@ -2256,13 +2259,13 @@ static int hinic3_dev_flow_ctrl_get(struct rte_eth_dev *dev,
+@@ -2256,13 +2269,13 @@ static int hinic3_dev_flow_ctrl_get(struct rte_eth_dev *dev,
  	fc_conf->autoneg = nic_pause.auto_neg;
  
  	if (nic_pause.tx_pause && nic_pause.rx_pause)
@@ -2240,7 +2250,7 @@ index ece8252..9f00f4b 100644
  
  	(void)hinic3_mutex_unlock(&nic_dev->pause_mutuex);
  	return 0;
-@@ -2271,7 +2274,7 @@ static int hinic3_dev_flow_ctrl_get(struct rte_eth_dev *dev,
+@@ -2271,7 +2284,7 @@ static int hinic3_dev_flow_ctrl_get(struct rte_eth_dev *dev,
  static int hinic3_dev_flow_ctrl_set(struct rte_eth_dev *dev,
  				    struct rte_eth_fc_conf *fc_conf)
  {
@@ -2249,7 +2259,7 @@ index ece8252..9f00f4b 100644
  	struct nic_pause_config nic_pause;
  	int err;
  
-@@ -2280,12 +2283,12 @@ static int hinic3_dev_flow_ctrl_set(struct rte_eth_dev *dev,
+@@ -2280,12 +2293,12 @@ static int hinic3_dev_flow_ctrl_set(struct rte_eth_dev *dev,
  		return err;
  
  	memset(&nic_pause, 0, sizeof(nic_pause));
@@ -2266,7 +2276,7 @@ index ece8252..9f00f4b 100644
  		nic_pause.rx_pause = true;
  
  	err = hinic3_set_pause_info(nic_dev->hwdev, nic_pause);
-@@ -2320,7 +2323,7 @@ static int hinic3_dev_flow_ctrl_set(struct rte_eth_dev *dev,
+@@ -2320,7 +2333,7 @@ static int hinic3_dev_flow_ctrl_set(struct rte_eth_dev *dev,
  static int hinic3_rss_hash_update(struct rte_eth_dev *dev,
  				  struct rte_eth_rss_conf *rss_conf)
  {
@@ -2275,7 +2285,7 @@ index ece8252..9f00f4b 100644
  	struct hinic3_rss_type rss_type = {0};
  	u64 rss_hf = rss_conf->rss_hf;
  	int err = 0;
-@@ -2350,16 +2353,16 @@ static int hinic3_rss_hash_update(struct rte_eth_dev *dev,
+@@ -2350,16 +2363,16 @@ static int hinic3_rss_hash_update(struct rte_eth_dev *dev,
  		       (size_t)rss_conf->rss_key_len);
  	}
  
@@ -2302,7 +2312,7 @@ index ece8252..9f00f4b 100644
  
  	err = hinic3_set_rss_type(nic_dev->hwdev, rss_type);
  	if (err)
-@@ -2382,7 +2385,7 @@ static int hinic3_rss_hash_update(struct rte_eth_dev *dev,
+@@ -2382,7 +2395,7 @@ static int hinic3_rss_hash_update(struct rte_eth_dev *dev,
  static int hinic3_rss_conf_get(struct rte_eth_dev *dev,
  			       struct rte_eth_rss_conf *rss_conf)
  {
@@ -2311,11 +2321,10 @@ index ece8252..9f00f4b 100644
  	struct hinic3_rss_type rss_type = {0};
  	int err;
  
-@@ -2410,17 +2413,16 @@ static int hinic3_rss_conf_get(struct rte_eth_dev *dev,
- 	if (err)
+@@ -2411,16 +2424,16 @@ static int hinic3_rss_conf_get(struct rte_eth_dev *dev,
  		return err;
  
--	rss_conf->rss_hf = 0;
+ 	rss_conf->rss_hf = 0;
 -	rss_conf->rss_hf |=  rss_type.ipv4 ? (RTE_ETH_RSS_IPV4 |
 -		RTE_ETH_RSS_FRAG_IPV4 | RTE_ETH_RSS_NONFRAG_IPV4_OTHER) : 0;
 -	rss_conf->rss_hf |=  rss_type.tcp_ipv4 ? RTE_ETH_RSS_NONFRAG_IPV4_TCP : 0;
@@ -2339,7 +2348,7 @@ index ece8252..9f00f4b 100644
  
  	return 0;
  }
-@@ -2442,7 +2444,7 @@ static int hinic3_rss_reta_query(struct rte_eth_dev *dev,
+@@ -2442,7 +2455,7 @@ static int hinic3_rss_reta_query(struct rte_eth_dev *dev,
  				 struct rte_eth_rss_reta_entry64 *reta_conf,
  				 uint16_t reta_size)
  {
@@ -2348,7 +2357,7 @@ index ece8252..9f00f4b 100644
  	u32 indirtbl[HINIC3_RSS_INDIR_SIZE] = {0};
  	u16 idx, shift;
  	u16 i;
-@@ -2466,8 +2468,8 @@ static int hinic3_rss_reta_query(struct rte_eth_dev *dev,
+@@ -2466,8 +2479,8 @@ static int hinic3_rss_reta_query(struct rte_eth_dev *dev,
  	}
  
  	for (i = 0; i < reta_size; i++) {
@@ -2359,7 +2368,7 @@ index ece8252..9f00f4b 100644
  		if (reta_conf[idx].mask & (1ULL << shift))
  			reta_conf[idx].reta[shift] = (uint16_t)indirtbl[i];
  	}
-@@ -2500,7 +2502,7 @@ static int hinic3_rss_reta_update(struct rte_eth_dev *dev,
+@@ -2500,7 +2513,7 @@ static int hinic3_rss_reta_update(struct rte_eth_dev *dev,
  				  struct rte_eth_rss_reta_entry64 *reta_conf,
  				  uint16_t reta_size)
  {
@@ -2368,7 +2377,7 @@ index ece8252..9f00f4b 100644
  	u32 indirtbl[HINIC3_RSS_INDIR_SIZE] = {0};
  	u16 idx, shift;
  	u16 i;
-@@ -2520,8 +2522,8 @@ static int hinic3_rss_reta_update(struct rte_eth_dev *dev,
+@@ -2520,8 +2533,8 @@ static int hinic3_rss_reta_update(struct rte_eth_dev *dev,
  
  	/* Update RSS reta table */
  	for (i = 0; i < reta_size; i++) {
@@ -2379,7 +2388,7 @@ index ece8252..9f00f4b 100644
  		if (reta_conf[idx].mask & (1ULL << shift))
  			indirtbl[i] = reta_conf[idx].reta[shift];
  	}
-@@ -2555,7 +2557,7 @@ static int hinic3_rss_reta_update(struct rte_eth_dev *dev,
+@@ -2555,7 +2568,7 @@ static int hinic3_rss_reta_update(struct rte_eth_dev *dev,
  static int hinic3_dev_stats_get(struct rte_eth_dev *dev,
  				struct rte_eth_stats *stats)
  {
@@ -2388,7 +2397,7 @@ index ece8252..9f00f4b 100644
  	struct hinic3_vport_stats vport_stats;
  	struct hinic3_rxq *rxq = NULL;
  	struct hinic3_txq *txq = NULL;
-@@ -2636,7 +2638,7 @@ static int hinic3_dev_stats_get(struct rte_eth_dev *dev,
+@@ -2636,7 +2649,7 @@ static int hinic3_dev_stats_get(struct rte_eth_dev *dev,
   */
  static int hinic3_dev_stats_reset(struct rte_eth_dev *dev)
  {
@@ -2397,7 +2406,7 @@ index ece8252..9f00f4b 100644
  	struct hinic3_rxq *rxq = NULL;
  	struct hinic3_txq *txq = NULL;
  	int qid;
-@@ -2686,7 +2688,7 @@ static int hinic3_dev_xstats_get(struct rte_eth_dev *dev,
+@@ -2686,7 +2699,7 @@ static int hinic3_dev_xstats_get(struct rte_eth_dev *dev,
  	u32 i;
  	int err, count;
  
@@ -2406,7 +2415,7 @@ index ece8252..9f00f4b 100644
  	count = hinic3_xstats_calc_num(nic_dev);
  	if ((int)n < count)
  		return count;
-@@ -2775,7 +2777,7 @@ static int hinic3_dev_xstats_get(struct rte_eth_dev *dev,
+@@ -2775,7 +2788,7 @@ static int hinic3_dev_xstats_get(struct rte_eth_dev *dev,
   */
  static int hinic3_dev_xstats_reset(struct rte_eth_dev *dev)
  {
@@ -2415,7 +2424,7 @@ index ece8252..9f00f4b 100644
  	int err;
  
  	err = hinic3_dev_stats_reset(dev);
-@@ -2806,7 +2808,7 @@ static int hinic3_dev_xstats_get_names(struct rte_eth_dev *dev,
+@@ -2806,7 +2819,7 @@ static int hinic3_dev_xstats_get_names(struct rte_eth_dev *dev,
  				       struct rte_eth_xstat_name *xstats_names,
  				       __rte_unused unsigned int limit)
  {
@@ -2424,7 +2433,7 @@ index ece8252..9f00f4b 100644
  	int count = 0;
  	u16 i, q_num;
  
-@@ -2857,8 +2859,7 @@ static int hinic3_dev_xstats_get_names(struct rte_eth_dev *dev,
+@@ -2857,8 +2870,7 @@ static int hinic3_dev_xstats_get_names(struct rte_eth_dev *dev,
  	return count;
  }
  
@@ -2434,7 +2443,7 @@ index ece8252..9f00f4b 100644
  {
  	return 0;
  }
-@@ -2894,7 +2895,7 @@ static void hinic3_txq_info_get(struct rte_eth_dev *dev, uint16_t queue_id,
+@@ -2894,7 +2906,7 @@ static void hinic3_txq_info_get(struct rte_eth_dev *dev, uint16_t queue_id,
  static int hinic3_set_mac_addr(struct rte_eth_dev *dev,
  			       struct rte_ether_addr *addr)
  {
@@ -2443,7 +2452,7 @@ index ece8252..9f00f4b 100644
  	char mac_addr[RTE_ETHER_ADDR_FMT_SIZE];
  	u16 func_id;
  	int err;
-@@ -2930,7 +2931,7 @@ static int hinic3_set_mac_addr(struct rte_eth_dev *dev,
+@@ -2930,7 +2942,7 @@ static int hinic3_set_mac_addr(struct rte_eth_dev *dev,
   */
  static void hinic3_mac_addr_remove(struct rte_eth_dev *dev, uint32_t index)
  {
@@ -2452,7 +2461,7 @@ index ece8252..9f00f4b 100644
  	u16 func_id;
  	int err;
  
-@@ -2967,7 +2968,7 @@ static int hinic3_mac_addr_add(struct rte_eth_dev *dev,
+@@ -2967,7 +2979,7 @@ static int hinic3_mac_addr_add(struct rte_eth_dev *dev,
  			       struct rte_ether_addr *mac_addr, uint32_t index,
  			       __rte_unused uint32_t vmdq)
  {
@@ -2461,7 +2470,7 @@ index ece8252..9f00f4b 100644
  	unsigned int i;
  	u16 func_id;
  	int err;
-@@ -3033,7 +3034,7 @@ static int hinic3_set_mc_addr_list(struct rte_eth_dev *dev,
+@@ -3033,7 +3045,7 @@ static int hinic3_set_mc_addr_list(struct rte_eth_dev *dev,
  				   struct rte_ether_addr *mc_addr_set,
  				   uint32_t nb_mc_addr)
  {
@@ -2470,7 +2479,7 @@ index ece8252..9f00f4b 100644
  	char mac_addr[RTE_ETHER_ADDR_FMT_SIZE];
  	u16 func_id;
  	int err;
-@@ -3247,7 +3248,7 @@ static const struct eth_dev_ops hinic3_pmd_vf_ops = {
+@@ -3247,7 +3259,7 @@ static const struct eth_dev_ops hinic3_pmd_vf_ops = {
  static int hinic3_init_mac_table(struct rte_eth_dev *eth_dev)
  {
  	struct hinic3_nic_dev *nic_dev =
@@ -2479,7 +2488,7 @@ index ece8252..9f00f4b 100644
  	u8 addr_bytes[RTE_ETHER_ADDR_LEN];
  	u16 func_id = 0;
  	int err = 0;
-@@ -3284,7 +3285,7 @@ static int hinic3_init_mac_table(struct rte_eth_dev *eth_dev)
+@@ -3284,7 +3296,7 @@ static int hinic3_init_mac_table(struct rte_eth_dev *eth_dev)
  static void hinic3_deinit_mac_addr(struct rte_eth_dev *eth_dev)
  {
  	struct hinic3_nic_dev *nic_dev =
@@ -2488,7 +2497,7 @@ index ece8252..9f00f4b 100644
  	u16 func_id = 0;
  	int err;
  	int i;
-@@ -3402,7 +3403,7 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
+@@ -3402,7 +3414,7 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
  			return -ENOMEM;
  		}
  
@@ -2497,7 +2506,7 @@ index ece8252..9f00f4b 100644
  		if (nic_dev == NULL) {
  			PMD_DRV_LOG(ERR, "nic_dev hwdev is NULL, dev_name: %s", name);
  
-@@ -3418,8 +3419,14 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
+@@ -3418,8 +3430,14 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
  		return 0;
  	}
  
@@ -2513,7 +2522,7 @@ index ece8252..9f00f4b 100644
  	(void)snprintf(nic_dev->dev_name, sizeof(nic_dev->dev_name),
  		 "dbdf-%.4x:%.2x:%.2x.%x",
  		 pci_dev->addr.domain, pci_dev->addr.bus,
-@@ -3627,7 +3634,7 @@ static int hinic3_dev_uninit(struct rte_eth_dev *dev)
+@@ -3627,7 +3645,7 @@ static int hinic3_dev_uninit(struct rte_eth_dev *dev)
  {
  	struct hinic3_nic_dev *nic_dev;
  
@@ -2522,7 +2531,7 @@ index ece8252..9f00f4b 100644
  	hinic3_clear_bit(HINIC3_DEV_INIT, &nic_dev->dev_status);
  
  	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
-@@ -3648,27 +3655,58 @@ static const struct rte_pci_id pci_id_hinic3_map[] = {
+@@ -3648,27 +3666,58 @@ static const struct rte_pci_id pci_id_hinic3_map[] = {
  	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_SPNIC, HINIC3_DEV_ID_VF) },
  #else
  	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI, HINIC3_DEV_ID_STANDARD) },
@@ -2584,7 +2593,7 @@ index ece8252..9f00f4b 100644
  	.remove = hinic3_pci_remove,
  };
 diff --git a/drivers/net/hinic3/hinic3_pmd_ethdev.h b/drivers/net/hinic3/hinic3_pmd_ethdev.h
-index 0314f71..89d77f4 100644
+index 0314f71..4507435 100644
 --- a/drivers/net/hinic3/hinic3_pmd_ethdev.h
 +++ b/drivers/net/hinic3/hinic3_pmd_ethdev.h
 @@ -7,6 +7,7 @@
@@ -2616,16 +2625,17 @@ index 0314f71..89d77f4 100644
  #define DEFAULT_DRV_FEATURE		0x3FFF
  
  TAILQ_HEAD(hinic3_ethertype_filter_list, rte_flow);
-@@ -140,6 +146,8 @@ struct hinic3_nic_dev {
- 	u8 num_rss;
- 	u8 rsvd0;
+@@ -138,7 +144,8 @@ struct hinic3_nic_dev {
  
-+	struct hinic3_rss_type rss_type;
+ 	u16 rss_state;
+ 	u8 num_rss;
+-	u8 rsvd0;
 +
++	struct hinic3_rss_type rss_type;
+ 
  	u32 rx_mode;
  	u8 rx_queue_list[HINIC3_MAX_QUEUE_NUM];
- 	rte_spinlock_t queue_list_lock;
-@@ -169,7 +177,9 @@ struct hinic3_nic_dev {
+@@ -169,7 +176,9 @@ struct hinic3_nic_dev {
  	struct hinic3_tcam_info      tcam;
  	struct hinic3_ethertype_filter_list filter_ethertype_list;
  	struct hinic3_fdir_rule_filter_list filter_fdir_rule_list;
@@ -2637,7 +2647,7 @@ index 0314f71..89d77f4 100644
  
  extern const struct rte_flow_ops hinic3_flow_ops;
 diff --git a/drivers/net/hinic3/hinic3_pmd_fdir.c b/drivers/net/hinic3/hinic3_pmd_fdir.c
-index 1210f47..8207707 100644
+index 1210f47..5c94ead 100644
 --- a/drivers/net/hinic3/hinic3_pmd_fdir.c
 +++ b/drivers/net/hinic3/hinic3_pmd_fdir.c
 @@ -22,11 +22,17 @@
@@ -2735,7 +2745,7 @@ index 1210f47..8207707 100644
  
  	tcam_key->key_mask.sport = rule->key_mask.src_port;
  	tcam_key->key_info.sport = rule->key_spec.src_port;
-@@ -176,16 +224,40 @@ static void hinic3_fdir_tcam_notunnel_init(struct rte_eth_dev *dev,
+@@ -176,16 +224,43 @@ static void hinic3_fdir_tcam_notunnel_init(struct rte_eth_dev *dev,
  	tcam_key->key_info.tunnel_type = HINIC3_FDIR_TUNNEL_MODE_NORMAL;
  
  	tcam_key->key_mask.function_id = HINIC3_UINT15_MAX;
@@ -2758,6 +2768,9 @@ index 1210f47..8207707 100644
 +		tcam_key->key_info.function_id =		
 +			hinic3_global_func_id(nic_dev->hwdev) & HINIC3_UINT15_MAX;
 +	}
++#else
++	tcam_key->key_info.function_id =		
++			hinic3_global_func_id(nic_dev->hwdev) & HINIC3_UINT15_MAX;
 +#endif
  
  	tcam_key->key_mask.ip_proto = rule->key_mask.proto;
@@ -2779,7 +2792,7 @@ index 1210f47..8207707 100644
  }
  
  static void hinic3_fdir_tcam_vxlan_ipv4_init(struct hinic3_fdir_filter *rule,
-@@ -328,7 +400,7 @@ static void hinic3_fdir_tcam_ipv6_vxlan_init(struct rte_eth_dev *dev,
+@@ -328,7 +403,7 @@ static void hinic3_fdir_tcam_ipv6_vxlan_init(struct rte_eth_dev *dev,
  			struct hinic3_fdir_filter *rule,
  			struct hinic3_tcam_key *tcam_key)
  {
@@ -2788,7 +2801,7 @@ index 1210f47..8207707 100644
  
  	tcam_key->key_mask_ipv6.ip_proto = rule->key_mask.proto;
  	tcam_key->key_info_ipv6.ip_proto = rule->key_spec.proto;
-@@ -357,7 +429,7 @@ static void hinic3_fdir_tcam_vxlan_init(struct rte_eth_dev *dev,
+@@ -357,7 +432,7 @@ static void hinic3_fdir_tcam_vxlan_init(struct rte_eth_dev *dev,
  			struct hinic3_fdir_filter *rule,
  			struct hinic3_tcam_key *tcam_key)
  {
@@ -2797,7 +2810,7 @@ index 1210f47..8207707 100644
  
  	if (rule->outer_ip_type == HINIC3_FDIR_IP_TYPE_IPV6) {
  		hinic3_fdir_tcam_ipv6_vxlan_init(dev, rule, tcam_key);
-@@ -425,10 +497,25 @@ static void hinic3_fdir_tcam_info_init(struct rte_eth_dev *dev,
+@@ -425,10 +500,25 @@ static void hinic3_fdir_tcam_info_init(struct rte_eth_dev *dev,
  		hinic3_fdir_tcam_vxlan_init(dev, rule, tcam_key);
  
  	fdir_tcam_rule->data.qid = rule->rq_index;
@@ -2824,7 +2837,7 @@ index 1210f47..8207707 100644
  static inline uint16_t
  hinic3_ethertype_filter_lookup(struct hinic3_ethertype_filter_list *ethertype_list,
  			uint16_t type)
-@@ -507,7 +594,7 @@ hinic3_dynamic_lookup_tcam_filter(struct rte_eth_dev *dev,
+@@ -507,7 +597,7 @@ hinic3_dynamic_lookup_tcam_filter(struct rte_eth_dev *dev,
  		struct hinic3_tcam_filter *tcam_filter,
  		u16 *tcam_index)
  {
@@ -2833,7 +2846,7 @@ index 1210f47..8207707 100644
  	u16 block_cnt = tcam_info->tcam_dynamic_info.dynamic_block_cnt;
  	struct hinic3_tcam_dynamic_block *dynamic_block_ptr = NULL;
  	struct hinic3_tcam_dynamic_block *tmp = NULL;
-@@ -595,7 +682,7 @@ static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
+@@ -595,7 +685,7 @@ static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
  {
  	struct hinic3_tcam_info *tcam_info =
  		HINIC3_DEV_PRIVATE_TO_TCAM_INFO(dev->data->dev_private);
@@ -2842,7 +2855,7 @@ index 1210f47..8207707 100644
  	struct hinic3_tcam_dynamic_block *dynamic_block_ptr = NULL;
  	struct hinic3_tcam_dynamic_block *tmp = NULL;
  	struct hinic3_tcam_filter *tcam_filter;
-@@ -684,7 +771,7 @@ static int hinic3_del_dynamic_tcam_filter(struct rte_eth_dev *dev,
+@@ -684,7 +774,7 @@ static int hinic3_del_dynamic_tcam_filter(struct rte_eth_dev *dev,
  {
  	struct hinic3_tcam_info *tcam_info =
  		HINIC3_DEV_PRIVATE_TO_TCAM_INFO(dev->data->dev_private);
@@ -2851,7 +2864,7 @@ index 1210f47..8207707 100644
  	u16 dynamic_block_id = tcam_filter->dynamic_block_id;
  	struct hinic3_tcam_dynamic_block *tmp = NULL;
  	u32 index = 0;
-@@ -804,7 +891,7 @@ int hinic3_flow_add_del_fdir_filter(struct rte_eth_dev *dev,
+@@ -804,7 +894,7 @@ int hinic3_flow_add_del_fdir_filter(struct rte_eth_dev *dev,
  int hinic3_enable_rxq_fdir_filter(struct rte_eth_dev *dev, u32 queue_id, u32 able)
  {
  	struct hinic3_tcam_info *tcam_info = HINIC3_DEV_PRIVATE_TO_TCAM_INFO(dev->data->dev_private);
@@ -2860,7 +2873,7 @@ index 1210f47..8207707 100644
  	struct hinic3_tcam_filter *it;
  	struct hinic3_tcam_cfg_rule fdir_tcam_rule;
  	int ret;
-@@ -870,7 +957,7 @@ int hinic3_enable_rxq_fdir_filter(struct rte_eth_dev *dev, u32 queue_id, u32 abl
+@@ -870,7 +960,7 @@ int hinic3_enable_rxq_fdir_filter(struct rte_eth_dev *dev, u32 queue_id, u32 abl
  
  void hinic3_free_fdir_filter(struct rte_eth_dev *dev)
  {
@@ -2869,7 +2882,7 @@ index 1210f47..8207707 100644
  
  	(void)hinic3_set_fdir_tcam_rule_filter(nic_dev->hwdev, false);
  
-@@ -880,7 +967,7 @@ void hinic3_free_fdir_filter(struct rte_eth_dev *dev)
+@@ -880,7 +970,7 @@ void hinic3_free_fdir_filter(struct rte_eth_dev *dev)
  static int hinic3_flow_set_arp_filter(struct rte_eth_dev *dev, struct rte_eth_ethertype_filter *ethertype_filter,
  				      bool add)
  {
@@ -2878,7 +2891,7 @@ index 1210f47..8207707 100644
  	int ret;
  
  	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_ARP, ethertype_filter->queue, add);
-@@ -916,7 +1003,7 @@ static int hinic3_flow_set_slow_filter(struct rte_eth_dev *dev,
+@@ -916,7 +1006,7 @@ static int hinic3_flow_set_slow_filter(struct rte_eth_dev *dev,
  				       struct rte_eth_ethertype_filter *ethertype_filter,
  				       bool add)
  {
@@ -2887,7 +2900,7 @@ index 1210f47..8207707 100644
  	int ret;
  
  	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_LACP, ethertype_filter->queue, add);
-@@ -943,7 +1030,7 @@ static int hinic3_flow_set_lldp_filter(struct rte_eth_dev *dev,
+@@ -943,7 +1033,7 @@ static int hinic3_flow_set_lldp_filter(struct rte_eth_dev *dev,
  				       struct rte_eth_ethertype_filter *ethertype_filter,
  				       bool add)
  {
@@ -2896,7 +2909,7 @@ index 1210f47..8207707 100644
  	int ret;
  
  	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_LLDP, ethertype_filter->queue, add);
-@@ -970,7 +1057,7 @@ static int hinic3_flow_add_del_ethertype_filter_rule(struct rte_eth_dev *dev,
+@@ -970,7 +1060,7 @@ static int hinic3_flow_add_del_ethertype_filter_rule(struct rte_eth_dev *dev,
  						     struct rte_eth_ethertype_filter *ethertype_filter,
  						     bool add)
  {
@@ -2905,7 +2918,7 @@ index 1210f47..8207707 100644
  	struct hinic3_ethertype_filter_list *ethertype_list = &nic_dev->filter_ethertype_list;
  
  	if (hinic3_ethertype_filter_lookup(ethertype_list, ethertype_filter->ether_type)) {
-@@ -1040,7 +1127,7 @@ int hinic3_flow_add_del_ethertype_filter(struct rte_eth_dev *dev,
+@@ -1040,7 +1130,7 @@ int hinic3_flow_add_del_ethertype_filter(struct rte_eth_dev *dev,
  					 struct rte_eth_ethertype_filter *ethertype_filter,
  					 bool add)
  {
@@ -2914,7 +2927,7 @@ index 1210f47..8207707 100644
  	int ret;
  
  	ret = hinic3_flow_add_del_ethertype_filter_rule(dev, ethertype_filter, add);
-@@ -1079,3 +1166,87 @@ int hinic3_flow_add_del_ethertype_filter(struct rte_eth_dev *dev,
+@@ -1079,3 +1169,87 @@ int hinic3_flow_add_del_ethertype_filter(struct rte_eth_dev *dev,
  	return ret;
  }
  
@@ -3004,7 +3017,7 @@ index 1210f47..8207707 100644
 +#endif
 \ No newline at end of file
 diff --git a/drivers/net/hinic3/hinic3_pmd_fdir.h b/drivers/net/hinic3/hinic3_pmd_fdir.h
-index 481490d..a8df3ea 100644
+index 481490d..a32bda7 100644
 --- a/drivers/net/hinic3/hinic3_pmd_fdir.h
 +++ b/drivers/net/hinic3/hinic3_pmd_fdir.h
 @@ -14,6 +14,10 @@
@@ -3055,7 +3068,7 @@ index 481490d..a8df3ea 100644
  	u32 rsvd3;
  
 -	u32 rsvd4 : 16;
-+	u32 ether_type : 16
++	u32 ether_type : 16;
  	u32 dport : 16;
  
  	u32 sport : 16;
@@ -3464,7 +3477,7 @@ index 0901d54..9374cd8 100644
 +#endif
  };
 diff --git a/drivers/net/hinic3/hinic3_pmd_flow.h b/drivers/net/hinic3/hinic3_pmd_flow.h
-index 9cf37ea..16e558f 100644
+index 9cf37ea..d1108db 100644
 --- a/drivers/net/hinic3/hinic3_pmd_flow.h
 +++ b/drivers/net/hinic3/hinic3_pmd_flow.h
 @@ -37,7 +37,7 @@
@@ -3472,7 +3485,7 @@ index 9cf37ea..16e558f 100644
  #define HINIC3_FLOW_ITEM_TYPE_GENEVE               RTE_FLOW_ITEM_TYPE_GENEVE
  #define HINIC3_FLOW_ITEM_TYPE_VXLAN_GPE            RTE_FLOW_ITEM_TYPE_VXLAN_GPE
 -#define HINIC3_FLOW_ITEM_TYPE_ARP_RTE_ETH_IPV4         RTE_FLOW_ITEM_TYPE_ARP_RTE_ETH_IPV4
-+#define HINIC3_FLOW_ITEM_TYPE_ARP_RTE_ETH_IPV4     RTE_FLOW_ITEM_TYPE_ARP_RTE_ETH_IPV4
++#define HINIC3_FLOW_ITEM_TYPE_ARP_ETH_IPV4         RTE_FLOW_ITEM_TYPE_ARP_ETH_IPV4
  #define HINIC3_FLOW_ITEM_TYPE_IPV6_EXT             RTE_FLOW_ITEM_TYPE_IPV6_EXT
  #define HINIC3_FLOW_ITEM_TYPE_ICMP6                RTE_FLOW_ITEM_TYPE_ICMP6
  #define HINIC3_FLOW_ITEM_TYPE_ICMP6_ND_NS          RTE_FLOW_ITEM_TYPE_ICMP6_ND_NS
@@ -3656,7 +3669,7 @@ index 4494d4b..6eeb997 100644
  struct hinic3_rxq_stats {
  	u64 packets;
 diff --git a/drivers/net/hinic3/hinic3_pmd_tx.c b/drivers/net/hinic3/hinic3_pmd_tx.c
-index 97e3737..d637c38 100644
+index 97e3737..67c53b6 100644
 --- a/drivers/net/hinic3/hinic3_pmd_tx.c
 +++ b/drivers/net/hinic3/hinic3_pmd_tx.c
 @@ -204,7 +204,7 @@ int hinic3_start_all_sqs(struct rte_eth_dev *eth_dev)
@@ -3668,6 +3681,15 @@ index 97e3737..d637c38 100644
  
  	for (i = 0; i < nic_dev->num_sqs; i++) {
  		txq = eth_dev->data->tx_queues[i];
+@@ -456,7 +456,7 @@ static int hinic3_tso_ip_phdr_cksum(struct rte_mbuf *mbuf) {
+ 	}
+ 
+ 	if (mbuf->ol_flags & HINIC3_PKT_TX_TUNNEL_MASK) {
+-		offset = ip_handler->hdr_size + sizeof(struct rte_udp_hdr) + sizeof(struct rte_vxlan_hdr) + sizeof(struct rte_ether_hdr);
++		offset += ip_handler->hdr_size + sizeof(struct rte_udp_hdr) + sizeof(struct rte_vxlan_hdr) + sizeof(struct rte_ether_hdr);
+ 		ip_hdr = (uint8_t *)(pkt_data + offset);
+ 		version = (* ip_hdr >> 4) & 0x0F;
+ 		if (version == IPV4_VERSION || version == IPV6_VERSION) {
 diff --git a/drivers/net/hinic3/meson.build b/drivers/net/hinic3/meson.build
 index e1b3aa9..16b6df4 100644
 --- a/drivers/net/hinic3/meson.build

@@ -1,7 +1,7 @@
-From e704647c6faa1477793358c7a0f8063e761fda13 Mon Sep 17 00:00:00 2001
+From a13bb949651393c710b30e4c8a1ffb4d906dd7e0 Mon Sep 17 00:00:00 2001
 From: Feifei Wang <wangfeifei40@huawei.com>
 Date: Mon, 17 Mar 2025 18:31:48 +0800
-Subject: [PATCH] vxlan tso support checksum offload
+Subject: [PATCH 4/9] vxlan tso support checksum offload
 
 ---
  drivers/net/hinic3/hinic3_pmd_ethdev.c |  2 +
