@@ -1,14 +1,14 @@
-From 5fb9d8952178edaf84dd92a666e26d17016e5032 Mon Sep 17 00:00:00 2001
+From 2be053aab5b814b4e8797996ae4b103eac812c98 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?=E6=B1=A4=E6=B5=B7=E8=95=B4?= <19855679967@163.com>
 Date: Wed, 9 Jul 2025 16:51:41 +0800
-Subject: [PATCH] 21.11 patch 0005
+Subject: [PATCH 5/6] 21.11 patch 0005
 
 ---
  app/test-pmd/csumonly.c | 88 ++++++++++++++++++++++++++++++++++++++---
  1 file changed, 82 insertions(+), 6 deletions(-)
 
 diff --git a/app/test-pmd/csumonly.c b/app/test-pmd/csumonly.c
-index 2aeea243b6..898591a909 100644
+index 37cddf4..5e0e006 100644
 --- a/app/test-pmd/csumonly.c
 +++ b/app/test-pmd/csumonly.c
 @@ -104,6 +104,64 @@ get_udptcp_checksum(void *l3_hdr, void *l4_hdr, uint16_t ethertype)
@@ -76,7 +76,7 @@ index 2aeea243b6..898591a909 100644
  /* Parse an IPv4 header to fill l3_len, l4_len, and l4_proto */
  static void
  parse_ipv4(struct rte_ipv4_hdr *ipv4_hdr, struct testpmd_offload_info *info)
-@@ -463,6 +521,7 @@ process_inner_cksums(void *l3_hdr, const struct testpmd_offload_info *info,
+@@ -460,6 +518,7 @@ process_inner_cksums(void *l3_hdr, const struct testpmd_offload_info *info,
  	uint64_t tx_offloads)
  {
  	struct rte_ipv4_hdr *ipv4_hdr = l3_hdr;
@@ -84,7 +84,7 @@ index 2aeea243b6..898591a909 100644
  	struct rte_udp_hdr *udp_hdr;
  	struct rte_tcp_hdr *tcp_hdr;
  	struct rte_sctp_hdr *sctp_hdr;
-@@ -498,19 +557,26 @@ process_inner_cksums(void *l3_hdr, const struct testpmd_offload_info *info,
+@@ -495,19 +554,26 @@ process_inner_cksums(void *l3_hdr, const struct testpmd_offload_info *info,
  					rte_ipv4_cksum(ipv4_hdr);
  			}
  		}
@@ -114,7 +114,7 @@ index 2aeea243b6..898591a909 100644
  				udp_hdr->dgram_cksum =
  					get_udptcp_checksum(l3_hdr, udp_hdr,
  						info->ethertype);
-@@ -522,12 +588,22 @@ process_inner_cksums(void *l3_hdr, const struct testpmd_offload_info *info,
+@@ -519,12 +585,22 @@ process_inner_cksums(void *l3_hdr, const struct testpmd_offload_info *info,
  #endif
  	} else if (info->l4_proto == IPPROTO_TCP) {
  		tcp_hdr = (struct rte_tcp_hdr *)((char *)l3_hdr + info->l3_len);

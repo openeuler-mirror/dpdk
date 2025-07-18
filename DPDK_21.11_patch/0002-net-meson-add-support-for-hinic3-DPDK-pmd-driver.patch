@@ -1,7 +1,7 @@
-From 0b8573fef7f281b807f86844109ee6a9da3bf168 Mon Sep 17 00:00:00 2001
+From 98299dedf1a53c8763344b3c853bac4897624b62 Mon Sep 17 00:00:00 2001
 From: Huawei <@huawei.com>
 Date: Tue, 26 Nov 2024 15:36:00 +0800
-Subject: [PATCH 2/2] net/meson: add support for hinic3 DPDK pmd driver
+Subject: [PATCH 2/6] net/meson: add support for hinic3 DPDK pmd driver
 
 Add support for hinic3 DPDK pmd driver to driver/net/meson.build.
 
@@ -11,7 +11,7 @@ Signed-off-by: Huawei <@huawei.com>
  1 file changed, 1 insertion(+)
 
 diff --git a/drivers/net/meson.build b/drivers/net/meson.build
-index 2355d1cde8..f568f45854 100644
+index 2355d1c..f568f45 100644
 --- a/drivers/net/meson.build
 +++ b/drivers/net/meson.build
 @@ -24,6 +24,7 @@ drivers = [
@@ -23,5 +23,5 @@ index 2355d1cde8..f568f45854 100644
          'i40e',
          'iavf',
 -- 
-2.46.0.windows.1
+2.45.1.windows.1
 
