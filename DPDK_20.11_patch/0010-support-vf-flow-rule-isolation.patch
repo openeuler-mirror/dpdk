@@ -1,4 +1,4 @@
-From 63df839299ade6b95f1e1e8fad50b7075c91f79b Mon Sep 17 00:00:00 2001
+From 4757dc54c9e632c0a77562e8d776f22b05f0498b Mon Sep 17 00:00:00 2001
 From: liya51 <luckly0822@qq.com>
 Date: Fri, 18 Jul 2025 11:48:40 +0800
 Subject: [PATCH 10/10] support vf flow rule isolation
@@ -6,9 +6,10 @@ Subject: [PATCH 10/10] support vf flow rule isolation
 ---
  drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c |  5 +++--
  drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h |  3 ++-
- drivers/net/hinic3/hinic3_pmd_fdir.c         | 12 +++++++++---
- drivers/net/hinic3/hinic3_pmd_fdir.h         | 10 ++++++++++
- 4 files changed, 24 insertions(+), 6 deletions(-)
+ drivers/net/hinic3/hinic3_pmd_ethdev.h       |  1 -
+ drivers/net/hinic3/hinic3_pmd_fdir.c         | 16 +++++++++++++---
+ drivers/net/hinic3/hinic3_pmd_fdir.h         | 16 +++++++++++++---
+ 5 files changed, 31 insertions(+), 10 deletions(-)
 
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c
 index 8929fdd..69d66bd 100644
@@ -53,11 +54,31 @@ index 5ab0026..c5c5c19 100644
 -int hinic3_get_bifur_enable(void *hwdev, u8 *enable);
 +int hinic3_get_bifur_enable(void *hwdev, u8 *bifur_en, u8 *iso_en);
  #endif /* _HINIC3_PMD_NIC_CFG_H_ */
+diff --git a/drivers/net/hinic3/hinic3_pmd_ethdev.h b/drivers/net/hinic3/hinic3_pmd_ethdev.h
+index 6837c7c..d22b531 100644
+--- a/drivers/net/hinic3/hinic3_pmd_ethdev.h
++++ b/drivers/net/hinic3/hinic3_pmd_ethdev.h
+@@ -144,7 +144,6 @@ struct hinic3_nic_dev {
+ 
+ 	u16 rss_state;
+ 	u8 num_rss;
+-	u8 rsvd0;
+ 
+ 	struct hinic3_rss_type rss_type;
+ 	u32 rx_mode;
 diff --git a/drivers/net/hinic3/hinic3_pmd_fdir.c b/drivers/net/hinic3/hinic3_pmd_fdir.c
-index f4e454c..879904f 100644
+index f4e454c..4f73730 100644
 --- a/drivers/net/hinic3/hinic3_pmd_fdir.c
 +++ b/drivers/net/hinic3/hinic3_pmd_fdir.c
-@@ -225,12 +225,13 @@ static void hinic3_fdir_tcam_notunnel_init(struct rte_eth_dev *dev,
+@@ -21,6 +21,7 @@
+ #include "base/hinic3_pmd_hwif.h"
+ #include "base/hinic3_pmd_mgmt.h"
+ #include "base/hinic3_pmd_nic_cfg.h"
++#include "base/hinic3_pmd_hw_cfg.h"
+ #include "hinic3_pmd_ethdev.h"
+ #include "hinic3_pmd_csr.h"
+ #ifdef HINIC3_TRAFFIC_BIFUR
+@@ -225,12 +226,13 @@ static void hinic3_fdir_tcam_notunnel_init(struct rte_eth_dev *dev,
  
  	tcam_key->key_mask.function_id = HINIC3_UINT15_MAX;
  #ifdef HINIC3_TRAFFIC_BIFUR
@@ -74,7 +95,7 @@ index f4e454c..879904f 100644
  		tcam_key->key_info.function_id = HINIC3_UINT15_MAX;
  		tcam_key->key_mask.ether_type =  rule->key_mask.ether_type;
  		tcam_key->key_info.ether_type = rule->key_spec.ether_type;
-@@ -238,6 +239,11 @@ static void hinic3_fdir_tcam_notunnel_init(struct rte_eth_dev *dev,
+@@ -238,6 +240,14 @@ static void hinic3_fdir_tcam_notunnel_init(struct rte_eth_dev *dev,
  		tcam_key->key_info.function_id =
  			hinic3_global_func_id(nic_dev->hwdev) & HINIC3_UINT15_MAX;
  	}
@@ -83,13 +104,36 @@ index f4e454c..879904f 100644
 +		tcam_key->key_mask.er_id = HINIC3_UINT4_MAX;
 +		tcam_key->key_info.er_id = er_id;
 +	}
++#else
++	tcam_key->key_info.function_id =
++			hinic3_global_func_id(nic_dev->hwdev) & HINIC3_UINT15_MAX;
  #endif
  
  	tcam_key->key_mask.ip_proto = rule->key_mask.proto;
 diff --git a/drivers/net/hinic3/hinic3_pmd_fdir.h b/drivers/net/hinic3/hinic3_pmd_fdir.h
-index 35c2a68..0e8322f 100644
+index 35c2a68..1276606 100644
 --- a/drivers/net/hinic3/hinic3_pmd_fdir.h
 +++ b/drivers/net/hinic3/hinic3_pmd_fdir.h
+@@ -44,6 +44,9 @@ struct hinic3_fdir_filter {
+ 	struct hinic3_fdir_rule_key key_mask;
+ 	struct hinic3_fdir_rule_key key_spec;
+ 	uint32_t rq_index; /* queue assigned when matched */
++#ifdef HINIC3_TRAFFIC_BIFUR
++	uint32_t queue_num;
++#endif
+ };
+ 
+ struct hinic3_filter_t {
+@@ -51,9 +54,6 @@ struct hinic3_filter_t {
+ 	enum rte_filter_type filter_type;
+ 	struct rte_eth_ethertype_filter ethertype_filter;
+ 	struct hinic3_fdir_filter fdir_filter;
+-#ifdef HINIC3_TRAFFIC_BIFUR
+-	uint32_t queue_num;
+-#endif
+ };
+ 
+ enum hinic3_fdir_tunnel_mode {
 @@ -98,7 +98,12 @@ struct hinic3_tcam_key_mem {
  	u32 sport : 16;
  	u32 rsvd5 : 16;
