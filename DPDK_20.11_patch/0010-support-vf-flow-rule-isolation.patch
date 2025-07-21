@@ -1,4 +1,4 @@
-From 964f34fa8952baedf7191eb1d3f911c4417980bf Mon Sep 17 00:00:00 2001
+From 4757dc54c9e632c0a77562e8d776f22b05f0498b Mon Sep 17 00:00:00 2001
 From: liya51 <luckly0822@qq.com>
 Date: Fri, 18 Jul 2025 11:48:40 +0800
 Subject: [PATCH 10/10] support vf flow rule isolation
@@ -8,8 +8,8 @@ Subject: [PATCH 10/10] support vf flow rule isolation
  drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h |  3 ++-
  drivers/net/hinic3/hinic3_pmd_ethdev.h       |  1 -
  drivers/net/hinic3/hinic3_pmd_fdir.c         | 16 +++++++++++++---
- drivers/net/hinic3/hinic3_pmd_fdir.h         | 10 ++++++++++
- 5 files changed, 28 insertions(+), 7 deletions(-)
+ drivers/net/hinic3/hinic3_pmd_fdir.h         | 16 +++++++++++++---
+ 5 files changed, 31 insertions(+), 10 deletions(-)
 
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c
 index 8929fdd..69d66bd 100644
@@ -111,9 +111,29 @@ index f4e454c..4f73730 100644
  
  	tcam_key->key_mask.ip_proto = rule->key_mask.proto;
 diff --git a/drivers/net/hinic3/hinic3_pmd_fdir.h b/drivers/net/hinic3/hinic3_pmd_fdir.h
-index 35c2a68..0e8322f 100644
+index 35c2a68..1276606 100644
 --- a/drivers/net/hinic3/hinic3_pmd_fdir.h
 +++ b/drivers/net/hinic3/hinic3_pmd_fdir.h
+@@ -44,6 +44,9 @@ struct hinic3_fdir_filter {
+ 	struct hinic3_fdir_rule_key key_mask;
+ 	struct hinic3_fdir_rule_key key_spec;
+ 	uint32_t rq_index; /* queue assigned when matched */
++#ifdef HINIC3_TRAFFIC_BIFUR
++	uint32_t queue_num;
++#endif
+ };
+ 
+ struct hinic3_filter_t {
+@@ -51,9 +54,6 @@ struct hinic3_filter_t {
+ 	enum rte_filter_type filter_type;
+ 	struct rte_eth_ethertype_filter ethertype_filter;
+ 	struct hinic3_fdir_filter fdir_filter;
+-#ifdef HINIC3_TRAFFIC_BIFUR
+-	uint32_t queue_num;
+-#endif
+ };
+ 
+ enum hinic3_fdir_tunnel_mode {
 @@ -98,7 +98,12 @@ struct hinic3_tcam_key_mem {
  	u32 sport : 16;
  	u32 rsvd5 : 16;
