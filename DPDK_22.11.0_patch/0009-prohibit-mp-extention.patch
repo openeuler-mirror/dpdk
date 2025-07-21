@@ -1,0 +1,87 @@
+From 19d0a807f6e848669858bb23dae54b1493aa2108 Mon Sep 17 00:00:00 2001
+From: zry6666 <zhangruiyu2@huawei.com>
+Date: Mon, 21 Jul 2025 21:07:31 +0800
+Subject: [PATCH] prohibit-mp-extention
+
+---
+ .../hinic3/src/common/hinic3_mpool_mgmt/hinic3_mpool.c    | 8 +++++---
+ .../hinic3/src/common/hinic3_mpool_mgmt/hinic3_mpool.h    | 3 ++-
+ .../hinic3/src/hinic3_ufid_map/hinic3_mpool_rte_flow.c    | 4 ++--
+ 3 files changed, 9 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/net/hinic3/src/common/hinic3_mpool_mgmt/hinic3_mpool.c b/drivers/net/hinic3/src/common/hinic3_mpool_mgmt/hinic3_mpool.c
+index 461ccfa3b8..12b3ee0625 100644
+--- a/drivers/net/hinic3/src/common/hinic3_mpool_mgmt/hinic3_mpool.c
++++ b/drivers/net/hinic3/src/common/hinic3_mpool_mgmt/hinic3_mpool.c
+@@ -145,7 +145,9 @@ static void *dpak_mp_alloc_mem_from_blocks(struct dpak_mempool *mp, uint32_t nee
+     }
+ 
+     HINIC3_LOG(WARNING, FLOW, "mempool of ele_size %u no enough memory, start alloc new block", need_size);
+-    (void)dpak_mp_insert_blocks(mp, need_size, mp->per_block_ele_count, module_id);
++    if (mp->is_extend) {
++        (void)dpak_mp_insert_blocks(mp, need_size, mp->per_block_ele_count, module_id);
++    }
+     return NULL;
+ }
+ 
+@@ -276,7 +278,7 @@ void *dpak_mempool_alloc(struct dpak_mempool *mp, enum hinic3_module module_id)
+ }
+ 
+ struct dpak_mempool *hinic3_create_single_mpool(const char *pool_name, uint32_t ele_size, uint32_t ele_num,
+-    enum hinic3_module module_id)
++    enum hinic3_module module_id, bool is_extend)
+ {
+     if (pool_name == NULL) {
+         HINIC3_LOG(ERR, FLOW, "pool_name is NULL.");
+@@ -294,7 +296,7 @@ struct dpak_mempool *hinic3_create_single_mpool(const char *pool_name, uint32_t
+         hinic3_free(pool);
+         return NULL;
+     }
+-
++    pool->is_extend = is_extend;
+     ret = dpak_mempool_create(pool, ele_size, ele_num, module_id);
+     if (ret != 0) {
+         dpak_mempool_destroy(pool);
+diff --git a/drivers/net/hinic3/src/common/hinic3_mpool_mgmt/hinic3_mpool.h b/drivers/net/hinic3/src/common/hinic3_mpool_mgmt/hinic3_mpool.h
+index ad40415f5c..2409f4429d 100644
+--- a/drivers/net/hinic3/src/common/hinic3_mpool_mgmt/hinic3_mpool.h
++++ b/drivers/net/hinic3/src/common/hinic3_mpool_mgmt/hinic3_mpool.h
+@@ -40,13 +40,14 @@ struct dpak_mempool {
+     struct dpak_mp_block *blk_list;
+     pthread_mutex_t lock;
+     bool is_valid;
++    bool is_extend;
+ };
+ 
+ int dpak_mempool_flush(struct dpak_mempool *mp);
+ void dpak_mempool_free(struct dpak_mempool *mp, void *ptr);
+ void dpak_mempool_destroy(struct dpak_mempool *mp);
+ struct dpak_mempool *hinic3_create_single_mpool(const char *pool_name, uint32_t ele_size, uint32_t ele_num,
+-    enum hinic3_module module_id);
++    enum hinic3_module module_id, bool is_extend);
+ void *dpak_mempool_alloc(struct dpak_mempool *mp, enum hinic3_module module_id);
+ void hinic3_show_one_mpool(const struct dpak_mempool *mpool, struct ds *ds, bool is_end);
+ #endif
+diff --git a/drivers/net/hinic3/src/hinic3_ufid_map/hinic3_mpool_rte_flow.c b/drivers/net/hinic3/src/hinic3_ufid_map/hinic3_mpool_rte_flow.c
+index 6469e95dde..cd08680120 100644
+--- a/drivers/net/hinic3/src/hinic3_ufid_map/hinic3_mpool_rte_flow.c
++++ b/drivers/net/hinic3/src/hinic3_ufid_map/hinic3_mpool_rte_flow.c
+@@ -34,13 +34,13 @@ static int hinic3_init_flow_mpool(void)
+     uint32_t max_flow_num = hinic3_max_flow_num_get();
+ 
+     g_mpool_mgmt.rte_flow_mpool = hinic3_create_single_mpool(HINIC3_RTE_FLOW_ELE_MPOOL_NAME, sizeof(struct rte_flow),
+-        max_flow_num * HINIC3_RTE_FLOW_SINGLE_BLOCK_NUM, HINIC3_UFID_MAP);
++        max_flow_num * HINIC3_RTE_FLOW_SINGLE_BLOCK_NUM, HINIC3_UFID_MAP, false);
+     if (g_mpool_mgmt.rte_flow_mpool == NULL) {
+         return -1;
+     }
+ 
+     g_mpool_mgmt.ufid_map_mpool = hinic3_create_single_mpool(HINIC3_UFID_MAP_MPOOL_NAME,
+-        sizeof(struct hinic3_ufid_hmap_node), max_flow_num * HINIC3_RTE_FLOW_SINGLE_BLOCK_NUM, HINIC3_UFID_MAP);
++        sizeof(struct hinic3_ufid_hmap_node), max_flow_num * HINIC3_RTE_FLOW_SINGLE_BLOCK_NUM, HINIC3_UFID_MAP, false);
+     if (g_mpool_mgmt.ufid_map_mpool == NULL) {
+         dpak_mempool_destroy(g_mpool_mgmt.rte_flow_mpool);
+         g_mpool_mgmt.rte_flow_mpool = NULL;
+-- 
+2.47.0.windows.2
+
