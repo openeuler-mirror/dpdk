@@ -1,7 +1,7 @@
-From 4a51cab9f49bcca394888735fd7794636a61f7bc Mon Sep 17 00:00:00 2001
+From caf322062a8caf2ec1e75d7b4d6cc035a4bc79ff Mon Sep 17 00:00:00 2001
 From: xiaobai <chenyi19990512@163.com>
 Date: Tue, 6 May 2025 11:22:51 +0800
-Subject: [PATCH] Support the vf unicast promiscuous function
+Subject: [PATCH 7/9] Support the vf unicast promiscuous function
 
 ---
  drivers/net/hinic3/hinic3_pmd_ethdev.c | 14 ++++++++++++++

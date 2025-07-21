@@ -1,7 +1,7 @@
-From 38b37324a2f6c0b74598b8ea664611ebb8fbdc22 Mon Sep 17 00:00:00 2001
+From 44e0caeba5cfde46557acdb266ebcac0efd8aafd Mon Sep 17 00:00:00 2001
 From: Feifei Wang <wangfeifei40@huawei.com>
 Date: Tue, 1 Apr 2025 15:26:50 +0800
-Subject: [PATCH] normal tso support l4 checksum offload
+Subject: [PATCH 5/9] normal tso support l4 checksum offload
 
 ---
  drivers/net/hinic3/hinic3_pmd_tx.c | 34 +++++++++++++++---------------
