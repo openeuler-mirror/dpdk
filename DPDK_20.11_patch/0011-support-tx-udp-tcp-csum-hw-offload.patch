@@ -1,17 +1,31 @@
-From 38fbaea33486a2bf2a545a7f81ea30d4af585c20 Mon Sep 17 00:00:00 2001
+From 675adc4f0ad8013f0c869a86392af96fb66ac533 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?=E6=B1=A4=E6=B5=B7=E8=95=B4?= <19855679967@163.com>
 Date: Tue, 22 Jul 2025 11:58:54 +0800
-Subject: [PATCH] 0005-support-tx-udp-tcp-csum-hw-offload
+Subject: [PATCH 11/11] 0005-support-tx-udp-tcp-csum-hw-offload
 
 ---
- drivers/net/hinic3/hinic3_pmd_tx.c | 90 ++++++++++++++++++++++++++++++
- 1 file changed, 90 insertions(+)
+ drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h |  2 +-
+ drivers/net/hinic3/hinic3_pmd_tx.c           | 90 ++++++++++++++++++++
+ 2 files changed, 91 insertions(+), 1 deletion(-)
 
+diff --git a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h
+index c5c5c19..a17855d 100644
+--- a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h
++++ b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h
+@@ -884,7 +884,7 @@ struct hinic3_port_flow_bifur_en_cmd {
+ 	u8 flow_bifur_type; /* 0: vf bifur, 2: traffic bifur */
+ 	u8 config_flag;
+ 	u8 iso_en; /* 0 -> off, 1 -> on */
+-	u8 rsvd[3];
++	u8 rsvd[2];
+ };
+ 
+ struct hinic3_fdir_del_rule {
 diff --git a/drivers/net/hinic3/hinic3_pmd_tx.c b/drivers/net/hinic3/hinic3_pmd_tx.c
-index b2199e9dea..6e784de0b5 100644
+index 8cb622c..b03d297 100644
 --- a/drivers/net/hinic3/hinic3_pmd_tx.c
 +++ b/drivers/net/hinic3/hinic3_pmd_tx.c
-@@ -323,6 +323,93 @@ int hinic3_tx_done_cleanup(void *txq, u32 free_cnt)
+@@ -325,6 +325,93 @@ int hinic3_tx_done_cleanup(void *txq, u32 free_cnt)
  	return hinic3_xmit_mbuf_cleanup(tx_queue, try_free_cnt);
  }
  
@@ -105,7 +119,7 @@ index b2199e9dea..6e784de0b5 100644
  /*lint -e40*/
  static int hinic3_tx_offload_pkt_prepare(struct rte_mbuf *mbuf,
  					 u16 *inner_l3_offset)
-@@ -360,6 +447,9 @@ static int hinic3_tx_offload_pkt_prepare(struct rte_mbuf *mbuf,
+@@ -362,6 +449,9 @@ static int hinic3_tx_offload_pkt_prepare(struct rte_mbuf *mbuf,
  		*inner_l3_offset = mbuf->l2_len;
  	}
  
