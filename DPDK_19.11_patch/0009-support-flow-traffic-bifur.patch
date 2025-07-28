@@ -1,9 +1,10 @@
-From f6b64d4d2528f83eadb86fec4147587f8fde3b0f Mon Sep 17 00:00:00 2001
+From 32c6a6702c1a935304778739c34b9042fcc07b9a Mon Sep 17 00:00:00 2001
 From: liya51 <luckly0822@qq.com>
 Date: Fri, 18 Jul 2025 11:40:28 +0800
-Subject: [PATCH 09/11] support flow traffic bifur
+Subject: [PATCH] support flow traffic bifur
 
 ---
+ drivers/net/hinic3/Makefile                  |   4 +
  drivers/net/hinic3/base/hinic3_pmd_cmd.h     |   2 +
  drivers/net/hinic3/base/hinic3_pmd_csr.h     |   1 +
  drivers/net/hinic3/base/hinic3_pmd_mbox.c    |  17 +
@@ -15,14 +16,36 @@ Subject: [PATCH 09/11] support flow traffic bifur
  drivers/net/hinic3/hinic3_pmd_ethdev.h       |  11 +-
  drivers/net/hinic3/hinic3_pmd_fdir.c         | 176 +++-
  drivers/net/hinic3/hinic3_pmd_fdir.h         |  37 +-
- drivers/net/hinic3/hinic3_pmd_flow.c         | 210 +++-
+ drivers/net/hinic3/hinic3_pmd_flow.c         | 209 +++-
  drivers/net/hinic3/hinic3_pmd_rx.c           |  50 +-
  drivers/net/hinic3/hinic3_pmd_rx.h           |  17 +-
  drivers/net/hinic3/meson.build               |   4 +
- 15 files changed, 1645 insertions(+), 24 deletions(-)
+ 16 files changed, 1648 insertions(+), 24 deletions(-)
  create mode 100644 drivers/net/hinic3/hinic3_pmd_bifur.c
  create mode 100644 drivers/net/hinic3/hinic3_pmd_bifur.h
 
+diff --git a/drivers/net/hinic3/Makefile b/drivers/net/hinic3/Makefile
+index ea89e19..bafcc4c 100644
+--- a/drivers/net/hinic3/Makefile
++++ b/drivers/net/hinic3/Makefile
+@@ -44,6 +44,9 @@ CFLAGS += -DOVS_VIRTIO_SWPT
+ CFLAGS += -DHINIC3_XSTAT_MBUF_USE
+ endif
+ 
++CFLAGS += -DHINIC3_TRAFFIC_BIFUR
++CFLAGS += -DDPDK_19_11
++CFLAGS += -DDPDK_19_BIFUR
+ CFLAGS += -Wno-cast-qual
+ CFLAGS += -I$(RTE_SDK)/drivers/net/hinic3/
+ CFLAGS += -I$(RTE_SDK)/drivers/net/hinic3/base
+@@ -79,6 +82,7 @@ VPATH += $(SRCDIR)/mml
+ #
+ # all source are stored in SRCS-y
+ #
++SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_bifur.c
+ SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_eqs.c
+ SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_hwif.c
+ SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_mbox.c
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_cmd.h b/drivers/net/hinic3/base/hinic3_pmd_cmd.h
 index c07720b..86ab82a 100644
 --- a/drivers/net/hinic3/base/hinic3_pmd_cmd.h
@@ -412,7 +435,7 @@ index 0000000..38059fd
 +
 +    ret = write(cdev_fd, msg, msg_len);
 +    if (ret < 0) {
-+        PMD_DRV_LOG(ERR, "Write bifur message error(%d)", strerror(errno));
++        PMD_DRV_LOG(ERR, "Write bifur message error(%s)", strerror(errno));
 +        return ret;
 +    }
 +
@@ -1805,7 +1828,7 @@ index 481490d..35c2a68 100644
  
  #endif
 diff --git a/drivers/net/hinic3/hinic3_pmd_flow.c b/drivers/net/hinic3/hinic3_pmd_flow.c
-index 3ccafcd..eb617fd 100644
+index 3ccafcd..f1eea18 100644
 --- a/drivers/net/hinic3/hinic3_pmd_flow.c
 +++ b/drivers/net/hinic3/hinic3_pmd_flow.c
 @@ -24,6 +24,16 @@
@@ -1859,7 +1882,7 @@ index 3ccafcd..eb617fd 100644
 +	const struct rte_flow_action_rss *act_r, const struct rte_flow_action *act, struct rte_flow_error *error)
 +{
 +	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
-+	int i;
++	uint32_t i;
 +
 +	if (act_r->queue_num == 0) {
 +		rte_flow_error_set(error,
@@ -1892,18 +1915,17 @@ index 3ccafcd..eb617fd 100644
  static int hinic3_flow_parse_action(struct rte_eth_dev *dev,
  			    const struct rte_flow_action *actions,
  			    struct rte_flow_error *error,
-@@ -373,6 +443,18 @@ static int hinic3_flow_parse_action(struct rte_eth_dev *dev,
+@@ -373,6 +443,17 @@ static int hinic3_flow_parse_action(struct rte_eth_dev *dev,
  	const struct rte_flow_action_queue *act_q;
  	const struct rte_flow_action *act = actions;
  
 +#ifdef HINIC3_TRAFFIC_BIFUR
 +	const struct rte_flow_action_rss *act_r;
-+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 +	struct rte_pci_device *pci_dev = NULL;
 +	pci_dev = RTE_ETH_DEV_TO_PCI(dev);
-+	int i;
++	uint32_t i;
 +
-+	for (i = 0; i < HINIC3_QUEUE_MAX; i ++) {
++	for (i = 0; i < HINIC3_QUEUE_MAX; i++) {
 +		rte_bit_relaxed_clear32(i, &filter->fdir_filter.rq_index);
 +	}
 +#endif
@@ -1911,7 +1933,7 @@ index 3ccafcd..eb617fd 100644
  	/* skip the first void item */
  	while (act->type == RTE_FLOW_ACTION_TYPE_VOID)
  		act++;
-@@ -382,6 +464,9 @@ static int hinic3_flow_parse_action(struct rte_eth_dev *dev,
+@@ -382,6 +463,9 @@ static int hinic3_flow_parse_action(struct rte_eth_dev *dev,
  		act_q =
  		(const struct rte_flow_action_queue *)act->conf;
  		filter->fdir_filter.rq_index = act_q->index;
@@ -1921,7 +1943,7 @@ index 3ccafcd..eb617fd 100644
  		if (filter->fdir_filter.rq_index >=
  			dev->data->nb_rx_queues) {
  			rte_flow_error_set(error, EINVAL,
-@@ -390,6 +475,36 @@ static int hinic3_flow_parse_action(struct rte_eth_dev *dev,
+@@ -390,6 +474,36 @@ static int hinic3_flow_parse_action(struct rte_eth_dev *dev,
  			return -rte_errno;
  		}
  		break;
@@ -1958,7 +1980,7 @@ index 3ccafcd..eb617fd 100644
  	default:
  		rte_flow_error_set(error, EINVAL,
  				   HINIC3_FLOW_ERROR_TYPE_ACTION, act,
-@@ -415,6 +530,31 @@ int hinic3_flow_parse_attr(const struct rte_flow_attr *attr,
+@@ -415,6 +529,31 @@ int hinic3_flow_parse_attr(const struct rte_flow_attr *attr,
  	return 0;
  }
  
@@ -1990,7 +2012,7 @@ index 3ccafcd..eb617fd 100644
  static int hinic3_flow_fdir_ipv4(const struct rte_flow_item *flow_item,
  	struct hinic3_filter_t *filter, struct rte_flow_error *error)
  {
-@@ -422,6 +562,14 @@ static int hinic3_flow_fdir_ipv4(const struct rte_flow_item *flow_item,
+@@ -422,6 +561,14 @@ static int hinic3_flow_fdir_ipv4(const struct rte_flow_item *flow_item,
  
  	mask_ipv4 = (const struct rte_flow_item_ipv4 *)flow_item->mask;
  	spec_ipv4 = (const struct rte_flow_item_ipv4 *)flow_item->spec;
@@ -2005,7 +2027,7 @@ index 3ccafcd..eb617fd 100644
  	if (!mask_ipv4 || !spec_ipv4) {
  		rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ITEM, flow_item,
  			"Invalid fdir filter ipv4 mask or spec");
-@@ -441,8 +589,6 @@ static int hinic3_flow_fdir_ipv4(const struct rte_flow_item *flow_item,
+@@ -441,8 +588,6 @@ static int hinic3_flow_fdir_ipv4(const struct rte_flow_item *flow_item,
  		return -rte_errno;
  	}
  
@@ -2014,7 +2036,7 @@ index 3ccafcd..eb617fd 100644
  	filter->fdir_filter.key_mask.ipv4.src_ip = rte_be_to_cpu_32(mask_ipv4->hdr.src_addr);
  	filter->fdir_filter.key_spec.ipv4.src_ip = rte_be_to_cpu_32(spec_ipv4->hdr.src_addr);
  	filter->fdir_filter.key_mask.ipv4.dst_ip = rte_be_to_cpu_32(mask_ipv4->hdr.dst_addr);
-@@ -460,6 +606,14 @@ static int hinic3_flow_fdir_ipv6(const struct rte_flow_item *flow_item,
+@@ -460,6 +605,14 @@ static int hinic3_flow_fdir_ipv6(const struct rte_flow_item *flow_item,
  
  	mask_ipv6 = (const struct rte_flow_item_ipv6 *)flow_item->mask;
  	spec_ipv6 = (const struct rte_flow_item_ipv6 *)flow_item->spec;
@@ -2029,7 +2051,7 @@ index 3ccafcd..eb617fd 100644
  	if (!mask_ipv6 || !spec_ipv6) {
  		rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ITEM, flow_item,
  			"Invalid fdir filter ipv6 mask or spec");
-@@ -473,9 +627,6 @@ static int hinic3_flow_fdir_ipv6(const struct rte_flow_item *flow_item,
+@@ -473,9 +626,6 @@ static int hinic3_flow_fdir_ipv6(const struct rte_flow_item *flow_item,
  		return -rte_errno;
  	}
  
@@ -2039,7 +2061,7 @@ index 3ccafcd..eb617fd 100644
  	net_addr_to_host(filter->fdir_filter.key_mask.ipv6.src_ip, (const uint32_t *)mask_ipv6->hdr.src_addr, 4);
  	net_addr_to_host(filter->fdir_filter.key_spec.ipv6.src_ip, (const uint32_t *)spec_ipv6->hdr.src_addr, 4);
  	net_addr_to_host(filter->fdir_filter.key_mask.ipv6.dst_ip, (const uint32_t *)mask_ipv6->hdr.dst_addr, 4);
-@@ -570,6 +721,12 @@ static int hinic3_flow_parse_fdir_pattern(__rte_unused struct rte_eth_dev *dev,
+@@ -570,6 +720,12 @@ static int hinic3_flow_parse_fdir_pattern(__rte_unused struct rte_eth_dev *dev,
  		type = flow_item->type;
  		switch (type) {
  		case HINIC3_FLOW_ITEM_TYPE_ETH:
@@ -2052,7 +2074,7 @@ index 3ccafcd..eb617fd 100644
  			/* All should be masked. */
  			if (flow_item->spec || flow_item->mask) {
  				rte_flow_error_set(error, EINVAL,
-@@ -577,6 +734,7 @@ static int hinic3_flow_parse_fdir_pattern(__rte_unused struct rte_eth_dev *dev,
+@@ -577,6 +733,7 @@ static int hinic3_flow_parse_fdir_pattern(__rte_unused struct rte_eth_dev *dev,
  					"Not supported by fdir filter, not support mac");
  				return -rte_errno;
  			}
@@ -2060,7 +2082,7 @@ index 3ccafcd..eb617fd 100644
  			break;
  
  		case HINIC3_FLOW_ITEM_TYPE_IPV4:
-@@ -1411,9 +1569,51 @@ static int hinic3_flow_flush(struct rte_eth_dev *dev,
+@@ -1411,9 +1568,51 @@ static int hinic3_flow_flush(struct rte_eth_dev *dev,
  	return ret;
  }
  

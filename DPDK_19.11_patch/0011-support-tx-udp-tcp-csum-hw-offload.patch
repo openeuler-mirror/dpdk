@@ -1,10 +1,9 @@
-From e1b9c8771f28bd4295554efda3b9db1cd863e92b Mon Sep 17 00:00:00 2001
-From: =?UTF-8?q?=E6=B1=A4=E6=B5=B7=E8=95=B4?= <19855679967@163.com>
+From 863473098383fe88e9e536b99803c94dd72d3bf9 Mon Sep 17 00:00:00 2001
+From: tanghaiyun <19855679967@163.com>
 Date: Tue, 22 Jul 2025 11:58:54 +0800
-Subject: [PATCH 11/11] support-tx-udp-tcp-csum-hw-offload
+Subject: [PATCH] support tx udp tcp csum hw offload
 
 ---
- drivers/net/hinic3/Makefile                   |  1 +
  drivers/net/hinic3/base/hinic3_compat.h       | 10 +--
  drivers/net/hinic3/base/hinic3_pmd_hwdev.c    |  4 -
  drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h  |  2 +-
@@ -14,20 +13,8 @@ Subject: [PATCH 11/11] support-tx-udp-tcp-csum-hw-offload
  drivers/net/hinic3/hinic3_pmd_flow.c          | 32 ++++++-
  drivers/net/hinic3/hinic3_pmd_tx.c            | 90 +++++++++++++++++++
  drivers/net/hinic3/meson.build                | 12 +--
- 10 files changed, 149 insertions(+), 101 deletions(-)
+ 9 files changed, 148 insertions(+), 101 deletions(-)
 
-diff --git a/drivers/net/hinic3/Makefile b/drivers/net/hinic3/Makefile
-index ea89e19..ae98bed 100644
---- a/drivers/net/hinic3/Makefile
-+++ b/drivers/net/hinic3/Makefile
-@@ -44,6 +44,7 @@ CFLAGS += -DOVS_VIRTIO_SWPT
- CFLAGS += -DHINIC3_XSTAT_MBUF_USE
- endif
- 
-+CFLAGS += -DHINIC3_TRAFFIC_BIFUR
- CFLAGS += -Wno-cast-qual
- CFLAGS += -I$(RTE_SDK)/drivers/net/hinic3/
- CFLAGS += -I$(RTE_SDK)/drivers/net/hinic3/base
 diff --git a/drivers/net/hinic3/base/hinic3_compat.h b/drivers/net/hinic3/base/hinic3_compat.h
 index 0a98a60..5483a51 100644
 --- a/drivers/net/hinic3/base/hinic3_compat.h
