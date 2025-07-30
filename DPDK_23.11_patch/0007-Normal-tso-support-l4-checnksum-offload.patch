@@ -69,7 +69,7 @@ index dfac1d1..97e3737 100644
 -		if (unlikely(l4_proto != IPPROTO_TCP && l4_proto != IPPROTO_UDP)) {
 -			PMD_DRV_LOG(INFO, "not support inner l4 proto(%u) by vxlan checksum", l4_proto);
 +	if (mbuf->ol_flags & HINIC3_PKT_TX_TUNNEL_MASK) {
-+		offset = ip_handler->hdr_size + sizeof(struct rte_udp_hdr) + sizeof(struct rte_vxlan_hdr) + sizeof(struct rte_ether_hdr);
++		offset += ip_handler->hdr_size + sizeof(struct rte_udp_hdr) + sizeof(struct rte_vxlan_hdr) + sizeof(struct rte_ether_hdr);
 +		ip_hdr = (uint8_t *)(pkt_data + offset);
 +		version = (* ip_hdr >> 4) & 0x0F;
 +		if (version == IPV4_VERSION || version == IPV6_VERSION) {
