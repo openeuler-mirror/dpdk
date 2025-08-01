@@ -1,0 +1,189 @@
+From 93e7fae1cb6138a0cc668df9dffe27d797479317 Mon Sep 17 00:00:00 2001
+From: liya51 <luckly0822@qq.com>
+Date: Fri, 1 Aug 2025 10:58:07 +0800
+Subject: [PATCH 7/7] fix flow flush error and vf err id
+
+---
+ drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c |  4 +-
+ drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h |  2 +-
+ drivers/net/hinic3/hinic3_pmd_fdir.c         | 61 ++++++++++++--------
+ drivers/net/hinic3/hinic3_pmd_fdir.h         |  5 ++
+ 4 files changed, 45 insertions(+), 27 deletions(-)
+
+diff --git a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c
+index 69d66bd..0d9caa0 100644
+--- a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c
++++ b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c
+@@ -1662,7 +1662,7 @@ int hinic3_set_link_status_follow(void *hwdev, enum hinic3_link_follow_status st
+ 	return follow.head.status;
+ }
+ 
+-int hinic3_get_bifur_enable(void *hwdev, u8 *bifur_en, u8 *iso_en)
++int hinic3_get_bifur_enable(void *hwdev, u8 *bifur_en, u8 *bifur_type)
+ {
+ 	struct hinic3_port_flow_bifur_en_cmd bifur_cmd;
+ 	u16 out_size = sizeof(bifur_cmd);
+@@ -1686,7 +1686,7 @@ int hinic3_get_bifur_enable(void *hwdev, u8 *bifur_en, u8 *iso_en)
+ 	}
+ 
+ 	*bifur_en = bifur_cmd.flow_bifur_en;
+-	*iso_en = bifur_cmd.iso_en;
++	*bifur_type = bifur_cmd.flow_bifur_type;
+ 
+ 	return 0;
+ }
+\ No newline at end of file
+diff --git a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h
+index ff8f028..df8e571 100644
+--- a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h
++++ b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h
+@@ -1534,5 +1534,5 @@ int hinic3_set_fdir_ethertype_filter(void *hwdev, u8 pkt_type, u16 queue_id, u8
+ 
+ int hinic3_set_link_status_follow(void *hwdev, enum hinic3_link_follow_status status);
+ 
+-int hinic3_get_bifur_enable(void *hwdev, u8 *bifur_en, u8 *iso_en);
++int hinic3_get_bifur_enable(void *hwdev, u8 *bifur_en, u8 *bifur_type);
+ #endif /* _HINIC3_PMD_NIC_CFG_H_ */
+diff --git a/drivers/net/hinic3/hinic3_pmd_fdir.c b/drivers/net/hinic3/hinic3_pmd_fdir.c
+index 4c6c467..04ddd54 100644
+--- a/drivers/net/hinic3/hinic3_pmd_fdir.c
++++ b/drivers/net/hinic3/hinic3_pmd_fdir.c
+@@ -35,6 +35,8 @@
+ #define HINIC3_UINT15_MAX         0x7fff
+ #define BIFUR_EN                  0x2
+ 
++#define HINIC3_INVAILD_INDEX	  -1
++
+ #define HINIC3_DEV_PRIVATE_TO_TCAM_INFO(nic_dev) \
+ 	(&((struct hinic3_nic_dev *)(nic_dev))->tcam)
+ 
+@@ -227,10 +229,10 @@ static void hinic3_fdir_tcam_notunnel_init(struct rte_eth_dev *dev,
+ 	tcam_key->key_mask.function_id = HINIC3_UINT15_MAX;
+ 
+ #ifdef HINIC3_TRAFFIC_BIFUR
+-	u8 bifur_en, iso_en;
++	u8 bifur_en, bifur_type;
+ 	u8 er_id = nic_dev->hwdev->cfg_mgmt->svc_cap.er_id;
+ 
+-	if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &iso_en) != 0) {
++	if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &bifur_type) != 0) {
+ 		PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable status failed.");
+ 	} 
+ 	
+@@ -238,15 +240,14 @@ static void hinic3_fdir_tcam_notunnel_init(struct rte_eth_dev *dev,
+ 		tcam_key->key_info.function_id = HINIC3_UINT15_MAX;
+ 		tcam_key->key_mask.ether_type =  rule->key_mask.ether_type;
+ 		tcam_key->key_info.ether_type = rule->key_spec.ether_type;
++		if (bifur_type == 0) {
++			tcam_key->key_mask.er_id = HINIC3_UINT4_MAX;
++			tcam_key->key_info.er_id = er_id;
++		}
+ 	} else {
+ 		tcam_key->key_info.function_id =
+ 			hinic3_global_func_id(nic_dev->hwdev) & HINIC3_UINT15_MAX;
+ 	}
+-
+-	if (iso_en) {
+-		tcam_key->key_mask.er_id = HINIC3_UINT4_MAX;
+-		tcam_key->key_info.er_id = er_id;
+-	}
+ #else
+ 	tcam_key->key_info.function_id =
+ 			hinic3_global_func_id(nic_dev->hwdev) & HINIC3_UINT15_MAX;
+@@ -543,14 +544,22 @@ hinic3_ethertype_filter_lookup(struct hinic3_ethertype_filter_list *ethertype_li
+ 
+ static inline struct hinic3_tcam_filter *
+ hinic3_tcam_filter_lookup(struct hinic3_tcam_filter_list *filter_list,
+-			struct hinic3_tcam_key *key)
++			struct hinic3_tcam_key *key, u8 action_type, u16 tcam_index)
+ {
+ 	struct hinic3_tcam_filter *it;
+ 
+-	TAILQ_FOREACH(it, filter_list, entries) {
+-		if (memcmp(key, &it->tcam_key,
+-			sizeof(struct hinic3_tcam_key)) == 0) {
+-			return it;
++	if (action_type == HINIC3_ACTION_ADD) {
++		TAILQ_FOREACH(it, filter_list, entries) {
++			if (memcmp(key, &it->tcam_key,
++				sizeof(struct hinic3_tcam_key)) == 0) {
++				return it;
++			}
++		}
++	} else {
++		TAILQ_FOREACH(it, filter_list, entries) {
++			if ((it->index + HINIC3_PKT_TCAM_DYNAMIC_INDEX_START(it->dynamic_block_id)) == tcam_index) {
++				return it;
++			}
+ 		}
+ 	}
+ 
+@@ -865,18 +874,14 @@ int hinic3_flow_add_del_fdir_filter(struct rte_eth_dev *dev,
+ 	hinic3_fdir_tcam_info_init(dev, fdir_filter,
+ 			&tcam_key, &fdir_tcam_rule);
+ 
+-	tcam_filter = hinic3_tcam_filter_lookup(&tcam_info->tcam_list,
+-						&tcam_key);
+-	if (tcam_filter != NULL && add) {
+-		PMD_DRV_LOG(ERR, "Filter exists.");
+-		return -EEXIST;
+-	}
+-	if (tcam_filter == NULL && !add) {
+-		PMD_DRV_LOG(ERR, "Filter doesn't exist.");
+-		return -ENOENT;
+-	}
+-
+ 	if (add) {
++		tcam_filter = hinic3_tcam_filter_lookup(&tcam_info->tcam_list,
++						&tcam_key, HINIC3_ACTION_ADD, HINIC3_INVAILD_INDEX);
++		if (tcam_filter != NULL) {
++			PMD_DRV_LOG(ERR, "Filter exists.");
++			return -EEXIST;
++		}
++
+ 		ret = hinic3_add_tcam_filter(dev, &tcam_key,
+ 				&fdir_tcam_rule);
+ 		if (ret)
+@@ -884,6 +889,13 @@ int hinic3_flow_add_del_fdir_filter(struct rte_eth_dev *dev,
+ 
+ 		fdir_filter->tcam_index = (int)(fdir_tcam_rule.index);
+ 	} else {
++		tcam_filter = hinic3_tcam_filter_lookup(&tcam_info->tcam_list,
++						&tcam_key, HINIC3_ACTION_NOT_ADD, fdir_filter->tcam_index);
++		if (tcam_filter == NULL) {
++			PMD_DRV_LOG(ERR, "Filter doesn't exist.");
++			return -ENOENT;
++		}
++
+ 		PMD_DRV_LOG(INFO, "begin to del tcam filter");
+ 		ret = hinic3_del_tcam_filter(dev, tcam_filter);
+ 		if (ret)
+@@ -1186,7 +1198,8 @@ int hinic3_flow_query_fdir_filter(struct rte_eth_dev *dev, struct hinic3_fdir_fi
+ 
+ 	memset((void *)&tcam_key, 0, sizeof(struct hinic3_tcam_key));
+ 	hinic3_fdir_tcam_key_get(dev, fdir_filter, &tcam_key);
+-	tcam_filter = hinic3_tcam_filter_lookup(&tcam_info->tcam_list, &tcam_key);
++	tcam_filter = hinic3_tcam_filter_lookup(&tcam_info->tcam_list, &tcam_key,
++							HINIC3_ACTION_NOT_ADD, fdir_filter->tcam_index);
+ 	if (tcam_filter == NULL) {
+ 		PMD_DRV_LOG(ERR, "Filter doesn't exist.");
+ 		return -EINVAL;
+diff --git a/drivers/net/hinic3/hinic3_pmd_fdir.h b/drivers/net/hinic3/hinic3_pmd_fdir.h
+index 6976577..fa6a6a7 100644
+--- a/drivers/net/hinic3/hinic3_pmd_fdir.h
++++ b/drivers/net/hinic3/hinic3_pmd_fdir.h
+@@ -57,6 +57,11 @@ struct hinic3_filter_t {
+ 
+ };
+ 
++enum hinic3_action_type {
++	HINIC3_ACTION_ADD,
++	HINIC3_ACTION_NOT_ADD,
++};
++
+ enum hinic3_fdir_tunnel_mode {
+ 	HINIC3_FDIR_TUNNEL_MODE_NORMAL	    = 0,
+ 	HINIC3_FDIR_TUNNEL_MODE_VXLAN	    = 1,
+-- 
+2.45.1.windows.1
+
