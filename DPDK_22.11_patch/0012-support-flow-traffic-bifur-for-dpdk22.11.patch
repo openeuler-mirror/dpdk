@@ -1,7 +1,7 @@
-From 0ffd951b0c44cd2ed310b36b5f7bcd7874545821 Mon Sep 17 00:00:00 2001
-From: liya51 <luckly0822@qq.com>
-Date: Fri, 4 Jul 2025 19:54:52 +0800
-Subject: [PATCH 12/12] support flow traffic bifur for dpdk22.11
+From d65f2a8d3ac032412210b54b0017666da9cc5da3 Mon Sep 17 00:00:00 2001
+From: Huawei <@huawei.com>
+Date: Tue, 5 Aug 2025 17:32:52 +0800
+Subject: [PATCH] support flow traffic bifur for dpdk22.11
 
 ---
  drivers/net/hinic3/Makefile                   |   1 +
@@ -23,10 +23,10 @@ Subject: [PATCH 12/12] support flow traffic bifur for dpdk22.11
  drivers/net/hinic3/hinic3_pmd_flow.h          |   2 +-
  drivers/net/hinic3/hinic3_pmd_rx.c            |  60 +-
  drivers/net/hinic3/hinic3_pmd_rx.h            |  43 +-
- drivers/net/hinic3/hinic3_pmd_tx.c            |   4 +-
+ drivers/net/hinic3/hinic3_pmd_tx.c            |   2 +-
  drivers/net/hinic3/meson.build                |   3 +
  drivers/net/hinic3/mml/hinic3_pmd_mml_ioctl.c |  11 +-
- 22 files changed, 2086 insertions(+), 226 deletions(-)
+ 22 files changed, 2085 insertions(+), 225 deletions(-)
  create mode 100644 drivers/net/hinic3/base/hinic3_base.h
  create mode 100644 drivers/net/hinic3/hinic3_pmd_bifur.c
  create mode 100644 drivers/net/hinic3/hinic3_pmd_bifur.h
@@ -3669,7 +3669,7 @@ index 4494d4b..6eeb997 100644
  struct hinic3_rxq_stats {
  	u64 packets;
 diff --git a/drivers/net/hinic3/hinic3_pmd_tx.c b/drivers/net/hinic3/hinic3_pmd_tx.c
-index 97e3737..67c53b6 100644
+index dc3605d..67c53b6 100644
 --- a/drivers/net/hinic3/hinic3_pmd_tx.c
 +++ b/drivers/net/hinic3/hinic3_pmd_tx.c
 @@ -204,7 +204,7 @@ int hinic3_start_all_sqs(struct rte_eth_dev *eth_dev)
@@ -3681,15 +3681,6 @@ index 97e3737..67c53b6 100644
  
  	for (i = 0; i < nic_dev->num_sqs; i++) {
  		txq = eth_dev->data->tx_queues[i];
-@@ -456,7 +456,7 @@ static int hinic3_tso_ip_phdr_cksum(struct rte_mbuf *mbuf) {
- 	}
- 
- 	if (mbuf->ol_flags & HINIC3_PKT_TX_TUNNEL_MASK) {
--		offset = ip_handler->hdr_size + sizeof(struct rte_udp_hdr) + sizeof(struct rte_vxlan_hdr) + sizeof(struct rte_ether_hdr);
-+		offset += ip_handler->hdr_size + sizeof(struct rte_udp_hdr) + sizeof(struct rte_vxlan_hdr) + sizeof(struct rte_ether_hdr);
- 		ip_hdr = (uint8_t *)(pkt_data + offset);
- 		version = (* ip_hdr >> 4) & 0x0F;
- 		if (version == IPV4_VERSION || version == IPV6_VERSION) {
 diff --git a/drivers/net/hinic3/meson.build b/drivers/net/hinic3/meson.build
 index e1b3aa9..16b6df4 100644
 --- a/drivers/net/hinic3/meson.build
