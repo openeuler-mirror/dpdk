@@ -1,0 +1,569 @@
+From c2f267e79cc4e8163c61c4234dd50171ab874cc9 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?=E6=B6=82=E5=B1=B1=E6=B3=A2=E6=B3=A2?=
+ <yuhaobo3@h-partners.com>
+Date: Wed, 6 Aug 2025 17:12:00 +0800
+Subject: [PATCH] virtual-upcall-qos-fix
+
+---
+ .../hinic3_iface_global.c                     |   3 +-
+ .../hinic3_driver_adapter/hiovs/hiovs_api.h   |   3 +-
+ .../hinic3_ports/hinic3_queue/hinic3_queue.c  |  23 +-
+ .../hinic3_queue/hinic3_virtual_queue.c       |   8 +-
+ .../hinic3_ports/hinic3_vdev/hinic3_vdev.c    |   9 +-
+ .../hinic3_vf/hinic3_vf_controller.c          | 210 +++++++-----------
+ .../hinic3_vf/hinic3_vf_controller.h          |  11 -
+ 7 files changed, 106 insertions(+), 161 deletions(-)
+
+diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global.c b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global.c
+index 00c8459f27..cb001042bb 100644
+--- a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global.c
++++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global.c
+@@ -654,7 +654,8 @@ static void hinic3_lib_arg_init(struct rte_mempool *mempool, uint32_t data_room_
+     arg->vport_tx_depth = hinic3_vport_tx_depth();
+     arg->ext_cb_flag = 1;
+     arg->ext_mp_flag = 1;
+-    arg->rsvd0[0] = 1;
++    arg->mega_flow_mode = 1;
++    arg->clean_qos = 1;
+ }
+ 
+ static int hinic3_global_init(struct rte_mempool *mempool, uint32_t data_room_size)
+diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hiovs/hiovs_api.h b/drivers/net/hinic3/src/hinic3_driver_adapter/hiovs/hiovs_api.h
+index 53758e9266..4ef2c2f6ba 100644
+--- a/drivers/net/hinic3/src/hinic3_driver_adapter/hiovs/hiovs_api.h
++++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hiovs/hiovs_api.h
+@@ -225,7 +225,8 @@ struct hiovs_lib_arg {
+     enum tag_hiovs_install_mode mode;   /**< hiovs lib only support HIOVS_DPDK_MODE */
+     uint8_t ext_cb_flag;                /**< extend callback flag */
+     uint8_t ext_mp_flag;                /**< whether use external mempool */
+-    uint8_t rsvd0[2];
++    uint8_t mega_flow_mode;             /**< hiovs lib supports HWOFF_MEGA_FLOW_MODE_CLOUD and HWOFF_MEGA_FLOW_MODE_COMPUTE*/
++    uint8_t clean_qos;                  /**< hiovs lib clean qos */
+     void *mempool;                      /**< packet memory pool */
+     uint32_t role;                      /**< for hot replacement: 0-INVALID, 1-OLD, 2-NEW.
+                                              Set this paramenter to OLD when the lib is started for the first time.
+diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_queue/hinic3_queue.c b/drivers/net/hinic3/src/hinic3_ports/hinic3_queue/hinic3_queue.c
+index a7a0a12f54..f3362993f2 100644
+--- a/drivers/net/hinic3/src/hinic3_ports/hinic3_queue/hinic3_queue.c
++++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_queue/hinic3_queue.c
+@@ -69,6 +69,9 @@ hinic3_alloc_queues_to_port(struct hinic3_upcall_queue *upcall_queue, uint8_t up
+         return -EINVAL;
+     }
+ 
++    if (g_virtual_queue_mode_enabled == false)
++        return 0;
++
+     int ret = -EPERM;
+     struct hinic3_virtual_queue *virtual_queues[MAX_RX_QUEUE_PER_VPORT] = {0};
+     struct hinic3_queue *queue_array =
+@@ -78,18 +81,13 @@ hinic3_alloc_queues_to_port(struct hinic3_upcall_queue *upcall_queue, uint8_t up
+         return -ENOMEM;
+     }
+ 
+-    if (g_virtual_queue_mode_enabled == false)
+-        return 0;
+-    else {
+-        ret = hinic3_take_virtual_queue_to_vf(upcall_queue_num,
+-            upcall_queue->upcall_queue_id, virtual_queues, MAX_RX_QUEUE_PER_VPORT);
+-        if (ret != 0)
+-            return ret;
+-
+-        for (int i = 0; i < upcall_queue_num; ++i) {
+-            queue_array[i].variant.virtual_queue = virtual_queues[i];
+-            upcall_queue->rx_queues[i] = &queue_array[i];
+-        }
++    ret = hinic3_take_virtual_queue_to_vf(upcall_queue_num,
++        upcall_queue->upcall_queue_id, virtual_queues, MAX_RX_QUEUE_PER_VPORT);
++    if (ret != 0)
++        return ret;
++    for (int i = 0; i < upcall_queue_num; ++i) {
++        queue_array[i].variant.virtual_queue = virtual_queues[i];
++        upcall_queue->rx_queues[i] = &queue_array[i];
+     }
+ 
+     return 0;
+@@ -109,6 +107,7 @@ void hinic3_free_queues_from_port(struct hinic3_upcall_queue *upcall_queue, uint
+         for (int i = 0; i < upcall_queue_num; ++i) {
+             queue = upcall_queue->rx_queues[i];
+             hinic3_take_virtual_queue_back_manager(queue->variant.virtual_queue);
++            queue->variant.virtual_queue = NULL;
+             upcall_queue->rx_queues[i] = NULL;
+         }
+     }
+diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_queue/hinic3_virtual_queue.c b/drivers/net/hinic3/src/hinic3_ports/hinic3_queue/hinic3_virtual_queue.c
+index dd83f585c3..834b5294d9 100644
+--- a/drivers/net/hinic3/src/hinic3_ports/hinic3_queue/hinic3_virtual_queue.c
++++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_queue/hinic3_virtual_queue.c
+@@ -219,15 +219,13 @@ hinic3_take_virtual_queue_to_vf(uint8_t upcall_queue_num, uint16_t upcall_queue_
+ void
+ hinic3_take_virtual_queue_back_manager(struct hinic3_virtual_queue *virtual_queue)
+ {
+-    if (virtual_queue->ring != NULL) {
+-        rte_ring_free(virtual_queue->ring);
+-        virtual_queue->ring = NULL;
+-    }
++    if (virtual_queue == NULL)
++        return;
++
+     virtual_queue->queue_info = NULL;
+     hinic3_list_init(&virtual_queue->node);
+     hinic3_list_insert(
+         &g_virtual_queue_manager.virtual_queue_groups[virtual_queue->virtual_queue_group_index], &virtual_queue->node);
+-    virtual_queue = NULL;
+ }
+ 
+ int
+diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_vdev/hinic3_vdev.c b/drivers/net/hinic3/src/hinic3_ports/hinic3_vdev/hinic3_vdev.c
+index 54367c76ad..013cacb12a 100644
+--- a/drivers/net/hinic3/src/hinic3_ports/hinic3_vdev/hinic3_vdev.c
++++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_vdev/hinic3_vdev.c
+@@ -67,13 +67,6 @@ hinic3_vf_dev_ops_construct(void)
+     if (edev_ops == NULL)
+         return;
+ 
+-    if (hinic3_get_virtual_queue_mode_enabled() == true) {
+-        edev_ops->rx_queue_setup = hinic3_vf_virtual_rx_queue_setup;
+-        edev_ops->rx_queue_release = hinic3_vf_virtual_rx_queue_release;
+-    } else {
+-        edev_ops->rx_queue_setup = hinic3_vf_rx_queue_setup;
+-        edev_ops->rx_queue_release = hinic3_vf_rx_queue_release;
+-    }
+     edev_ops->dev_configure = hinic3_vf_dev_configure;
+     edev_ops->dev_start = hinic3_vf_dev_start;
+     edev_ops->dev_stop = hinic3_vf_dev_stop;
+@@ -88,6 +81,8 @@ hinic3_vf_dev_ops_construct(void)
+     edev_ops->xstats_get_names = hinic3_vf_dev_xstats_get_names;
+     edev_ops->link_update = hinic3_vf_link_update;
+     edev_ops->mtu_set = hinic3_vf_dev_set_mtu;
++    edev_ops->rx_queue_setup = hinic3_vf_rx_queue_setup;
++    edev_ops->rx_queue_release = hinic3_vf_rx_queue_release;
+     edev_ops->tx_queue_setup = hinic3_vf_tx_queue_setup;
+     edev_ops->tx_queue_release = hinic3_vf_tx_queue_release;
+     edev_ops->flow_ops_get = hinic3_vf_dev_flow_ops_get;
+diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_controller.c b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_controller.c
+index b5a7664ce3..98fc68480d 100644
+--- a/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_controller.c
++++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_controller.c
+@@ -211,45 +211,12 @@ static int hinic3_vf_dynamic_port_add(struct hinic3_vf_dev *vf_dev)
+     uint16_t virtio_queue_depth;
+     bool is_virtio_queue_depth_set;
+ 
+-    if (vf_dev->vport_id != HINIC3_PORT_ID_INVALID) {
++    if (vf_dev->vport_id != HINIC3_PORT_ID_INVALID)
+         return 0;
+-    }
+-
+-    hinic3_smap_init(&args);
+-
+-    virtio_queue_depth = hinic3_virtio_queue_depth();
+-
+-    is_virtio_queue_depth_set = hinic3_check_virtio_queue_depth_set();
+-    if (is_virtio_queue_depth_set) {
+-        hinic3_smap_add_format(HINIC3_PORTS, &args, HINIC3_PORT_QUEUE_DEPTH, "%u", virtio_queue_depth);
+-    }
+-
+-    hinic3_smap_add_format(HINIC3_PORTS, &args, HINIC3_PORT_PCI_ADDR, "%" PRIuPTR, (uintptr_t)&vf_dev->pci_addr);
+-    hinic3_smap_add_format(HINIC3_PORTS, &args, HINIC3_PORT_BLOCK_SIZE, "%u", vf_dev->max_queue_num);
+-    hinic3_smap_add_format(HINIC3_PORTS, &args, HINIC3_PORT_UPCALL_QUEUE_NUM, "%u", vf_dev->n_upcall_queue);
+-
+-    ret = hinic3_port_mgmt_add_dynamic(&vf_dev->vport_id, &args);
+-    if (ret != 0) {
+-        HINIC3_LOG(ERR, VPORT, "failed to add dynamic port of the vf!");
+-    }
+-
+-    hinic3_smap_destroy(&args);
+-
+-    return ret;
+-}
+-
+-static int hinic3_vf_virtual_queue_port_add(struct hinic3_vf_dev *vf_dev)
+-{
+-    int ret;
+-    struct smap args;
+-
+-    if (vf_dev->vport_id != HINIC3_PORT_ID_INVALID) {
+-        return 0;
+-    }
+ 
+     ret = hinic3_alloc_queues_to_port(&vf_dev->upcall_queue, vf_dev->n_upcall_queue);
+     if (ret != 0) {
+-        HINIC3_LOG(ERR, VPORT, "failed to alloc virtual queue to vf");
++        HINIC3_LOG(ERR, VPORT, "failed to alloc queues to vf in dynamic port add!\n");
+         return ret;
+     }
+ 
+@@ -257,13 +224,15 @@ static int hinic3_vf_virtual_queue_port_add(struct hinic3_vf_dev *vf_dev)
+     hinic3_smap_add_format(HINIC3_PORTS, &args, HINIC3_PORT_PCI_ADDR, "%" PRIuPTR, (uintptr_t)&vf_dev->pci_addr);
+     hinic3_smap_add_format(HINIC3_PORTS, &args, HINIC3_PORT_BLOCK_SIZE, "%u", vf_dev->max_queue_num);
+     hinic3_smap_add_format(HINIC3_PORTS, &args, HINIC3_PORT_UPCALL_QUEUE_NUM, "%u", vf_dev->n_upcall_queue);
+-    hinic3_smap_add_format(
+-        HINIC3_PORTS, &args, HINIC3_PORT_UPCALL_QUEUE_MAP, "%" PRIuPTR, (uintptr_t)vf_dev->upcall_queue.upcall_queue_id);
++    if (hinic3_get_virtual_queue_mode_enabled() == true) {
++        hinic3_smap_add_format(
++            HINIC3_PORTS, &args, HINIC3_PORT_UPCALL_QUEUE_MAP, "%" PRIuPTR, (uintptr_t)vf_dev->upcall_queue.upcall_queue_id);
++    }
+ 
+     ret = hinic3_port_mgmt_add_dynamic(&vf_dev->vport_id, &args);
+     if (ret != 0) {
+         hinic3_free_queues_from_port(&vf_dev->upcall_queue, vf_dev->n_upcall_queue);
+-        HINIC3_LOG(ERR, VPORT, "failed to add virtual queue port of the vf!\n");
++        HINIC3_LOG(ERR, VPORT, "failed to add dynamic port of the vf!\n");
+     }
+ 
+     hinic3_smap_destroy(&args);
+@@ -308,25 +277,11 @@ static void hinic3_clear_vf_port_info(struct hinic3_vf_dev *vf_dev)
+ 
+ static void hinic3_vf_dev_del(struct rte_eth_dev *dev)
+ {
+-    struct rte_eth_dev_data *data = dev->data;
+     struct hinic3_vf_dev *vf_dev = hinic3_ethdev_get_vf_private(dev);
+-    uint16_t nb_tx_queues = data->nb_tx_queues;
+-    uint16_t nb_rx_queues = data->nb_rx_queues;
+-
+-    for (uint16_t index = 0; index < nb_tx_queues; index++) {
+-        hinic3_vf_tx_queue_release(dev, index);
+-    }
+-
+-    for (uint16_t index = 0; index < nb_rx_queues; index++) {
+-        if (hinic3_get_virtual_queue_mode_enabled() == true) {
+-            hinic3_vf_virtual_rx_queue_release(dev, index);
+-        } else {
+-            hinic3_vf_rx_queue_release(dev, index);
+-        }
+-    }
+-    hinic3_free_queues_from_port(&vf_dev->upcall_queue, vf_dev->n_upcall_queue);
+ 
+     if (vf_dev->vport_id != HINIC3_PORT_ID_INVALID) {
++        /* 端口删除前，返还队列资源 */
++        hinic3_free_queues_from_port(&vf_dev->upcall_queue, vf_dev->n_upcall_queue);
+         /* 端口删除前，清理端口信息 */
+         hinic3_clear_vf_port_info(vf_dev);
+         /* 端口删除前，清理抓包信息 */
+@@ -337,14 +292,12 @@ static void hinic3_vf_dev_del(struct rte_eth_dev *dev)
+         mgmt_vf_virtio_queue(vf_dev->max_queue_num, true);
+         hinic3_ifindex_port_remove(vf_dev->vport_id);
+         vf_dev->vport_id = HINIC3_PORT_ID_INVALID;
+-
++        vf_dev->dpdk_port_id = INVALID_DPDK_PORT_ID;
+         int ret =
+             hinic3_hwpt_flavor_set_phy_dev_refcnt(&vf_dev->pci_addr, HWPT_FLAVOR_REFCNT_UNUSED);
+         if (ret != 0) {
+             HINIC3_LOG(ERR, VPORT, "failed to reset flavor of the vport");
+         }
+-
+-        vf_dev->dpdk_port_id = INVALID_DPDK_PORT_ID;
+     }
+ }
+ 
+@@ -417,11 +370,7 @@ static int hinic3_vf_dev_add(struct rte_eth_dev *dev)
+         (void)hinic3_vf_get_used_status((const struct hinic3_vf_dev*)vf_dev, &is_used);
+     }
+ 
+-    if (hinic3_get_virtual_queue_mode_enabled() == true) {
+-        ret = hinic3_vf_virtual_queue_port_add(vf_dev);
+-    } else {
+-        ret = hinic3_vf_dynamic_port_add(vf_dev);
+-    }
++    ret = hinic3_vf_dynamic_port_add(vf_dev);
+     if (ret != 0) {
+         if ((ret == ENOMEM) && is_used) {
+             HINIC3_LOG(ERR, VPORT,
+@@ -435,8 +384,9 @@ static int hinic3_vf_dev_add(struct rte_eth_dev *dev)
+         goto clean;
+     }
+ 
+-    HINIC3_LOG(INFO, VPORT, "hinic3 vf port add success,port_id: %u, upcall_queue: %u\n",
+-        vf_dev->vport_id, vf_dev->n_upcall_queue);
++    HINIC3_LOG(INFO, VPORT, "id:%" PRIu16 "vport pci is %.4x:%.2x:%.2x.%x, upcall queue:%" PRIu8 ", virtio queue:%" PRIu32 ", vdpa feature:%#llx",
++        vf_dev->vport_id, vf_dev->pci_addr.domain, vf_dev->pci_addr.bus, vf_dev->pci_addr.devid, vf_dev->pci_addr.function,
++        vf_dev->n_upcall_queue, vf_dev->max_queue_num, hinic3_vdpa_feature_get());
+     return 0;
+ 
+ clean:
+@@ -578,6 +528,14 @@ int hinic3_vf_dev_close(struct rte_eth_dev *dev)
+ 
+     struct rte_eth_dev_data *data = dev->data;
+ 
++    for (uint16_t index = 0; index < data->nb_tx_queues; ++index) {
++        hinic3_vf_tx_queue_release(dev, index);
++    }
++
++    for (uint16_t index = 0; index < data->nb_rx_queues; ++index) {
++        hinic3_vf_rx_queue_release(dev, index);
++    }
++
+     if (data->mac_addrs != NULL) {
+         hinic3_rte_free(data->mac_addrs);
+         data->mac_addrs = NULL;
+@@ -587,21 +545,7 @@ int hinic3_vf_dev_close(struct rte_eth_dev *dev)
+     return 0;
+ }
+ 
+-void hinic3_vf_rx_queue_release_dpdk2011(void *rxq)
+-{
+-    if (rxq != NULL) {
+-        hinic3_rte_free(rxq);
+-    }
+-}
+-
+-void hinic3_vf_tx_queue_release_dpdk2011(void *txq)
+-{
+-    if (txq != NULL) {
+-        hinic3_rte_free(txq);
+-    }
+-}
+-
+-void hinic3_vf_rx_queue_release(struct rte_eth_dev *dev, uint16_t queue_id)
++void hinic3_vf_standard_rx_queue_release(struct rte_eth_dev *dev, uint16_t queue_id)
+ {
+     if (hinic3_is_ethdev_valid(dev) == false) {
+         return;
+@@ -673,7 +617,7 @@ static int hinic3_vf_rx_queue_setup_check(struct rte_eth_dev *dev, uint16_t idx,
+     struct rte_eth_dev_data *data = dev->data;
+     bool is_open_ovs = hinic3_check_masked_to_exact_switch();
+     if (vport_rx_depth != desc && !is_open_ovs) {
+-        HINIC3_LOG(ERR, BOND, "vport_rx_depth differences. desc is %u, vport_rx_depth is %u", desc, vport_rx_depth);
++        HINIC3_LOG(ERR, VPORT, "vport_rx_depth differences. desc is %u, vport_rx_depth is %u", desc, vport_rx_depth);
+         return -EINVAL;
+     }
+ 
+@@ -690,7 +634,7 @@ static int hinic3_vf_rx_queue_setup_check(struct rte_eth_dev *dev, uint16_t idx,
+     return 0;
+ }
+ 
+-int hinic3_vf_rx_queue_setup(struct rte_eth_dev *dev, uint16_t idx, uint16_t desc __rte_unused, unsigned int socket_id,
++int hinic3_vf_standard_rx_queue_setup(struct rte_eth_dev *dev, uint16_t idx, uint16_t desc __rte_unused, unsigned int socket_id,
+     const struct rte_eth_rxconf *conf __rte_unused, struct rte_mempool *mp)
+ {
+     int ret = hinic3_vf_rx_queue_setup_check(dev, idx, desc, mp);
+@@ -790,6 +734,13 @@ int hinic3_vf_tx_queue_setup(struct rte_eth_dev *dev, uint16_t idx, uint16_t des
+ static int hinic3_vf_info_update(struct hinic3_vf_dev *vf_dev)
+ {
+     int ret;
++    ret = hinic3_eth_get_upcall_queue_map(vf_dev->vport_id, vf_dev->n_upcall_queue,
++        vf_dev->upcall_queue.upcall_queue_id);
++    if (ret != 0) {
++        HINIC3_LOG(ERR, VPORT, "hinic3_eth_get_upcall_queue_map error");
++        return -EPERM;
++    }
++
+     ret = hinic3_port_mgmt_set_usage_state(vf_dev->vport_id, HINIC3_SET_VF_STATE_UP);
+     if (ret != 0) {
+         HINIC3_LOG(ERR, VPORT, "port mgmt set vf state up err, ret is %d", ret);
+@@ -813,26 +764,6 @@ static int hinic3_vf_dev_set_ifindex(struct hinic3_vf_dev *dev, struct rte_eth_d
+     return ret;
+ }
+ 
+-static int hinic3_set_vf_dev(struct hinic3_vf_dev *vf_dev, struct rte_eth_dev_data *data)
+-{
+-    int ret;
+-
+-    ret = hinic3_eth_get_upcall_queue_map(vf_dev->vport_id, vf_dev->n_upcall_queue,
+-        vf_dev->upcall_queue.upcall_queue_id);
+-    if (ret != 0) {
+-        HINIC3_LOG(ERR, VPORT, "hinic3_eth_get_upcall_queue_map error");
+-        return -EPERM;
+-    }
+-
+-    ret = hinic3_vf_dev_set_ifindex(vf_dev, data);
+-    if (ret != 0) {
+-        HINIC3_LOG(ERR, VPORT, "hinic3_vf_dev_set_ifindex error");
+-        return -EPERM;
+-    }
+-
+-    return 0;
+-}
+-
+ static int hinic3_vf_dev_configure_check(struct rte_eth_dev *dev)
+ {
+     if (hinic3_is_ethdev_valid(dev) == false) {
+@@ -845,6 +776,11 @@ static int hinic3_vf_dev_configure_check(struct rte_eth_dev *dev)
+         return -EPERM;
+     }
+ 
++    if (data->nb_rx_queues == 0) {
++        HINIC3_LOG(ERR, VPORT, "number of rx queue can't be zero!");
++        return -EPERM;
++    }
++
+     return 0;
+ }
+ 
+@@ -860,7 +796,6 @@ static int hinic3_check_vf_upcall_queue(struct hinic3_vf_dev *vf_dev)
+         vf_dev->n_upcall_queue = hinic3_get_upcall_queue_num();
+     }
+ 
+-    /* 软件模拟upcall队列模式下不可使用共享upcall队列 */
+     if (hinic3_get_virtual_queue_mode_enabled() == true) {
+         if (vf_dev->n_upcall_queue > MAX_RX_QUEUE_PER_VPORT) {
+             HINIC3_LOG(ERR, VPORT, "vf upcall queue(%u) cant be greater than (%u)",
+@@ -882,50 +817,41 @@ int hinic3_vf_dev_configure(struct rte_eth_dev *dev)
+ 
+     struct hinic3_vf_dev *vf_dev = hinic3_ethdev_get_vf_private(dev);
+     struct rte_eth_dev_data *data = dev->data;
+-    uint64_t vdpa_feature = hinic3_vdpa_feature_get();
+ 
+     vf_dev->dev = dev;
+     if (data->nb_rx_queues != vf_dev->n_upcall_queue) {
+-        if (data->nb_rx_queues == 0) {
+-            HINIC3_LOG(ERR, VPORT, "number of rx queue can't be zero!");
+-            return -EPERM;
+-        }
+-        if (hinic3_get_virtual_queue_mode_enabled() == false) {
+-            hinic3_vf_dev_del(dev);
+-        }
+-        vf_dev->n_upcall_queue = data->nb_rx_queues;
++        hinic3_vf_dev_del(dev);
+     }
+ 
++    vf_dev->n_upcall_queue = data->nb_rx_queues;
++    vf_dev->n_txq = data->nb_tx_queues;
+     ret = hinic3_check_vf_upcall_queue(vf_dev);
+-    if (ret != 0) {
++    if (ret != 0)
+         return -EPERM;
+-    }
+ 
+-    vf_dev->n_txq = data->nb_tx_queues;
+     if (vf_dev->vport_id == HINIC3_PORT_ID_INVALID) {
+         ret = hinic3_vf_dev_add(dev);
+         if (ret != 0) {
+             return ret;
+         }
+-        HINIC3_LOG(INFO, VPORT, "vport pci is %.4x:%.2x:%.2x.%x, maxqueue is %u, vdpa feature: %#llx",
+-            vf_dev->pci_addr.domain, vf_dev->pci_addr.bus, vf_dev->pci_addr.devid,
+-            vf_dev->pci_addr.function, vf_dev->max_queue_num, vdpa_feature);
+ 
+-        ret = hinic3_set_vf_dev(vf_dev, data);
++        ret = hinic3_vf_dev_set_ifindex(vf_dev, data);
+         if (ret != 0) {
+-            hinic3_vf_dev_del(dev);
+-            return -EPERM;
++            HINIC3_LOG(ERR, VPORT, "hinic3_vf_dev_set_ifindex error");
++            goto clean;
+         }
+     }
+ 
+     ret = hinic3_vf_info_update(vf_dev);
+     if (ret != 0) {
+         HINIC3_LOG(ERR, VPORT, "vf port info set update err, ret is %d", ret);
+-        hinic3_vf_dev_del(dev);
+-        return ret;
++        goto clean;
+     }
+ 
+     return 0;
++clean:
++    hinic3_vf_dev_del(dev);
++    return ret;
+ }
+ 
+ int hinic3_vf_link_update(struct rte_eth_dev *dev, int wait_to_complete __rte_unused)
+@@ -1252,7 +1178,7 @@ static int hinic3_virtual_queue_setup(
+     return 0;
+ }
+ 
+-int hinic3_vf_virtual_rx_queue_setup(struct rte_eth_dev *dev, uint16_t idx, uint16_t desc,
++static int hinic3_vf_virtual_rx_queue_setup(struct rte_eth_dev *dev, uint16_t idx, uint16_t desc,
+     unsigned int socket_id, const struct rte_eth_rxconf *conf __rte_unused, struct rte_mempool *mp)
+ {
+     int ret = hinic3_vf_virtual_rx_queue_setup_check(dev, idx, mp);
+@@ -1289,7 +1215,7 @@ int hinic3_vf_virtual_rx_queue_setup(struct rte_eth_dev *dev, uint16_t idx, uint
+     return 0;
+ }
+ 
+-void hinic3_vf_virtual_rx_queue_release(struct rte_eth_dev *dev, uint16_t queue_id)
++static void hinic3_vf_virtual_rx_queue_release(struct rte_eth_dev *dev, uint16_t queue_id)
+ {
+     if (hinic3_is_ethdev_valid(dev) == false) {
+         return;
+@@ -1300,6 +1226,7 @@ void hinic3_vf_virtual_rx_queue_release(struct rte_eth_dev *dev, uint16_t queue_
+     struct hinic3_queue *rxq = NULL;
+     struct hinic3_virtual_queue *virtual_rxq = NULL;
+     struct hinic3_physical_queue *physical_rxq = NULL;
++    struct rte_mbuf *pkt = NULL;
+ 
+     if (queue_id >= data->nb_rx_queues) {
+         HINIC3_LOG(ERR, VPORT, "queue index invalid, max queue is:%u.\n", data->nb_rx_queues);
+@@ -1310,6 +1237,11 @@ void hinic3_vf_virtual_rx_queue_release(struct rte_eth_dev *dev, uint16_t queue_
+     virtual_rxq = rxq->variant.virtual_queue;
+     physical_rxq = virtual_rxq->physical_queue;
+ 
++    if (physical_rxq->virtual_queue_valid_cnt == 0) {
++        return;
++    }
++
++    rte_spinlock_lock(&physical_rxq->physical_queue_lock);
+     physical_rxq->is_virtual_queue_valids[virtual_rxq->virtual_queue_group_index] = false;
+     physical_rxq->virtual_queue_valid_cnt -= 1;
+     if (vf_dev->upcall_queue.is_queue_valid[queue_id] == true && physical_rxq->virtual_queue_valid_cnt == 0) {
+@@ -1319,7 +1251,37 @@ void hinic3_vf_virtual_rx_queue_release(struct rte_eth_dev *dev, uint16_t queue_
+         physical_rxq->hiovs_queue_id = INVALID_UPCALL_QUEUE_ID;
+         physical_rxq->mp = NULL;
+     }
++    /* 加锁防止软件队列环释放过程中被共享的端口分发入队 */
++    if (virtual_rxq->ring != NULL) {
++        while (rte_ring_count(virtual_rxq->ring) != 0)   {
++            rte_ring_dequeue_burst(virtual_rxq->ring, (void **)&pkt, 1, NULL);
++            rte_pktmbuf_free(pkt);
++            pkt = NULL;
++        }
++        rte_ring_free(virtual_rxq->ring);
++        virtual_rxq->ring = NULL;
++    }
++    rte_spinlock_unlock(&physical_rxq->physical_queue_lock);
+ 
+     vf_dev->upcall_queue.is_queue_valid[queue_id] = false;
+     data->rx_queues[queue_id] = NULL;
+ }
++
++int hinic3_vf_rx_queue_setup(struct rte_eth_dev *dev, uint16_t idx, uint16_t desc, unsigned int socket_id,
++    const struct rte_eth_rxconf *conf __rte_unused, struct rte_mempool *mp)
++{
++    if (hinic3_get_virtual_queue_mode_enabled() == false) {
++        return hinic3_vf_standard_rx_queue_setup(dev, idx, desc, socket_id, conf, mp);
++    } else {
++        return hinic3_vf_virtual_rx_queue_setup(dev, idx, desc, socket_id, conf, mp);
++    }
++}
++
++void hinic3_vf_rx_queue_release(struct rte_eth_dev *dev, uint16_t queue_id)
++{
++    if (hinic3_get_virtual_queue_mode_enabled() == false) {
++        return hinic3_vf_standard_rx_queue_release(dev, queue_id);
++    } else {
++        return hinic3_vf_virtual_rx_queue_release(dev, queue_id);
++    }
++}
+\ No newline at end of file
+diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_controller.h b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_controller.h
+index cc5b2d28cd..11c71a686a 100644
+--- a/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_controller.h
++++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_controller.h
+@@ -153,11 +153,6 @@ int hinic3_vf_link_update(struct rte_eth_dev *dev, int wait_to_complete);
+ /* 设置设备的mtu */
+ int hinic3_vf_dev_set_mtu(struct rte_eth_dev *dev, uint16_t mtu);
+ 
+-/* 释放设备的rx队列 */
+-void hinic3_vf_rx_queue_release_dpdk2011(void *rxq);
+-/* 释放设备的tx队列 */
+-void hinic3_vf_tx_queue_release_dpdk2011(void *txq);
+-
+ /* 释放设备的rx队列 */
+ void hinic3_vf_rx_queue_release(struct rte_eth_dev *dev, uint16_t queue_id);
+ /* 释放设备的tx队列 */
+@@ -184,11 +179,5 @@ int hinic3_init_pci_list(struct hovs_phy_dev_info *dev, struct hinic3_vf_dev *vf
+ uint32_t hinic3_get_max_queue_num(void);
+ uint8_t hinic3_get_upcall_queue_num(void);
+ 
+-/* 设置设备的软件rx队列 */
+-int hinic3_vf_virtual_rx_queue_setup(struct rte_eth_dev *dev, uint16_t idx, uint16_t desc,
+-    unsigned int socket_id, const struct rte_eth_rxconf *conf, struct rte_mempool *mp);
+-/* 释放设备的软件rx队列 */
+-void hinic3_vf_virtual_rx_queue_release(struct rte_eth_dev *dev, uint16_t queue_id);
+-
+ struct hinic3_vf_dev *hinic3_ethdev_get_vf_private(struct rte_eth_dev *dev);
+ #endif
+-- 
+2.28.0.windows.1
+
