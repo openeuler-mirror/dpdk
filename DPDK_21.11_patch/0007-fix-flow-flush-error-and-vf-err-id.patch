@@ -1,51 +1,15 @@
-From 93e7fae1cb6138a0cc668df9dffe27d797479317 Mon Sep 17 00:00:00 2001
+From 81b766ceac02f4a33f9dda9162804764bd7b19d6 Mon Sep 17 00:00:00 2001
 From: liya51 <luckly0822@qq.com>
 Date: Fri, 1 Aug 2025 10:58:07 +0800
 Subject: [PATCH 7/7] fix flow flush error and vf err id
 
 ---
- drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c |  4 +-
- drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h |  2 +-
- drivers/net/hinic3/hinic3_pmd_fdir.c         | 61 ++++++++++++--------
- drivers/net/hinic3/hinic3_pmd_fdir.h         |  5 ++
- 4 files changed, 45 insertions(+), 27 deletions(-)
+ drivers/net/hinic3/hinic3_pmd_fdir.c | 49 ++++++++++++++++++----------
+ drivers/net/hinic3/hinic3_pmd_fdir.h |  5 +++
+ 2 files changed, 36 insertions(+), 18 deletions(-)
 
-diff --git a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c
-index 69d66bd..0d9caa0 100644
---- a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c
-+++ b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c
-@@ -1662,7 +1662,7 @@ int hinic3_set_link_status_follow(void *hwdev, enum hinic3_link_follow_status st
- 	return follow.head.status;
- }
- 
--int hinic3_get_bifur_enable(void *hwdev, u8 *bifur_en, u8 *iso_en)
-+int hinic3_get_bifur_enable(void *hwdev, u8 *bifur_en, u8 *bifur_type)
- {
- 	struct hinic3_port_flow_bifur_en_cmd bifur_cmd;
- 	u16 out_size = sizeof(bifur_cmd);
-@@ -1686,7 +1686,7 @@ int hinic3_get_bifur_enable(void *hwdev, u8 *bifur_en, u8 *iso_en)
- 	}
- 
- 	*bifur_en = bifur_cmd.flow_bifur_en;
--	*iso_en = bifur_cmd.iso_en;
-+	*bifur_type = bifur_cmd.flow_bifur_type;
- 
- 	return 0;
- }
-\ No newline at end of file
-diff --git a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h
-index ff8f028..df8e571 100644
---- a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h
-+++ b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h
-@@ -1534,5 +1534,5 @@ int hinic3_set_fdir_ethertype_filter(void *hwdev, u8 pkt_type, u16 queue_id, u8
- 
- int hinic3_set_link_status_follow(void *hwdev, enum hinic3_link_follow_status status);
- 
--int hinic3_get_bifur_enable(void *hwdev, u8 *bifur_en, u8 *iso_en);
-+int hinic3_get_bifur_enable(void *hwdev, u8 *bifur_en, u8 *bifur_type);
- #endif /* _HINIC3_PMD_NIC_CFG_H_ */
 diff --git a/drivers/net/hinic3/hinic3_pmd_fdir.c b/drivers/net/hinic3/hinic3_pmd_fdir.c
-index 4c6c467..04ddd54 100644
+index 4c6c467..0dca90f 100644
 --- a/drivers/net/hinic3/hinic3_pmd_fdir.c
 +++ b/drivers/net/hinic3/hinic3_pmd_fdir.c
 @@ -35,6 +35,8 @@
@@ -57,39 +21,14 @@ index 4c6c467..04ddd54 100644
  #define HINIC3_DEV_PRIVATE_TO_TCAM_INFO(nic_dev) \
  	(&((struct hinic3_nic_dev *)(nic_dev))->tcam)
  
-@@ -227,10 +229,10 @@ static void hinic3_fdir_tcam_notunnel_init(struct rte_eth_dev *dev,
- 	tcam_key->key_mask.function_id = HINIC3_UINT15_MAX;
- 
- #ifdef HINIC3_TRAFFIC_BIFUR
--	u8 bifur_en, iso_en;
-+	u8 bifur_en, bifur_type;
- 	u8 er_id = nic_dev->hwdev->cfg_mgmt->svc_cap.er_id;
- 
--	if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &iso_en) != 0) {
-+	if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &bifur_type) != 0) {
- 		PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable status failed.");
- 	} 
- 	
-@@ -238,15 +240,14 @@ static void hinic3_fdir_tcam_notunnel_init(struct rte_eth_dev *dev,
- 		tcam_key->key_info.function_id = HINIC3_UINT15_MAX;
- 		tcam_key->key_mask.ether_type =  rule->key_mask.ether_type;
- 		tcam_key->key_info.ether_type = rule->key_spec.ether_type;
-+		if (bifur_type == 0) {
-+			tcam_key->key_mask.er_id = HINIC3_UINT4_MAX;
-+			tcam_key->key_info.er_id = er_id;
-+		}
- 	} else {
+@@ -242,7 +244,6 @@ static void hinic3_fdir_tcam_notunnel_init(struct rte_eth_dev *dev,
  		tcam_key->key_info.function_id =
  			hinic3_global_func_id(nic_dev->hwdev) & HINIC3_UINT15_MAX;
  	}
 -
--	if (iso_en) {
--		tcam_key->key_mask.er_id = HINIC3_UINT4_MAX;
--		tcam_key->key_info.er_id = er_id;
--	}
- #else
- 	tcam_key->key_info.function_id =
- 			hinic3_global_func_id(nic_dev->hwdev) & HINIC3_UINT15_MAX;
+ 	if (iso_en) {
+ 		tcam_key->key_mask.er_id = HINIC3_UINT4_MAX;
+ 		tcam_key->key_info.er_id = er_id;
 @@ -543,14 +544,22 @@ hinic3_ethertype_filter_lookup(struct hinic3_ethertype_filter_list *ethertype_li
  
  static inline struct hinic3_tcam_filter *
