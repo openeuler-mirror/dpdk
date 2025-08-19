@@ -11,9 +11,30 @@
 #include "base/hinic3_pmd_mgmt.h"
 #include "base/hinic3_pmd_nic_cfg.h"
 #include "hinic3_pmd_nic_io.h"
+#include "hinic3_pmd_dcb.h"
 #include "hinic3_pmd_ethdev.h"
 #include "hinic3_pmd_tx.h"
 #include "hinic3_pmd_rx.h"
+
+#define RQ_CQE_OFFOLAD_TYPE_TUNNEL_PKT_FORMAT_SHIFT 8
+#define RQ_CQE_OFFOLAD_TYPE_TUNNEL_PKT_FORMAT_MASK 0x7U
+
+#define RQ_CQE_OFFOLAD_TYPE_GET(val, member) \
+        (((val) >> RQ_CQE_OFFOLAD_TYPE_##member##_SHIFT) & \
+        RQ_CQE_OFFOLAD_TYPE_##member##_MASK)
+
+#define HINIC3_GET_RX_TUNNEL_PKT_FORMAT(offload_type) \
+        RQ_CQE_OFFOLAD_TYPE_GET(offload_type, TUNNEL_PKT_FORMAT)
+
+enum HINIC3_RX_TUNNEL_PKT_FORMAT {
+	HINIC3_RX_TUNNEL_PKT_FORMAT_NOT_TUNNEL = 0u,
+	HINIC3_RX_TUNNEL_PKT_FORMAT_VXLAN = 1u,
+	HINIC3_RX_TUNNEL_PKT_FORMAT_NVGRE = 2u,
+	HINIC3_RX_TUNNEL_PKT_FORMAT_FC = 3u,
+	HINIC3_RX_TUNNEL_PKT_FORMAT_GPE = 4u,
+	HINIC3_RX_TUNNEL_PKT_FORMAT_GENEVE = 5u,
+	HINIC3_RX_TUNNEL_PKT_FORMAT_NSH = 6u,
+};
 
 /**
  * Get receive queue wqe
@@ -376,7 +397,7 @@ static int hinic3_init_rss_key(struct hinic3_nic_dev *nic_dev,
 void hinic3_add_rq_to_rx_queue_list(struct hinic3_nic_dev *nic_dev,
 				    u16 queue_id)
 {
-	u8 rss_queue_count = nic_dev->num_rss;
+	u16 rss_queue_count = nic_dev->num_rss;
 
 	RTE_ASSERT(rss_queue_count <= (RTE_DIM(nic_dev->rx_queue_list) - 1));
 
@@ -392,7 +413,7 @@ void hinic3_init_rx_queue_list(struct hinic3_nic_dev *nic_dev)
 static void hinic3_fill_indir_tbl(struct hinic3_nic_dev *nic_dev,
 				  u32 *indir_tbl)
 {
-	u8 rss_queue_count = nic_dev->num_rss;
+	u16 rss_queue_count = nic_dev->num_rss;
 	int i = 0;
 	int j;
 
@@ -453,6 +474,7 @@ static int hinic3_init_rss_type(struct hinic3_nic_dev *nic_dev,
 	rss_type.udp_ipv6 = (rss_hf & ETH_RSS_NONFRAG_IPV6_UDP) ? 1 : 0;
 
 	err = hinic3_set_rss_type(nic_dev->hwdev, rss_type);
+	nic_dev->rss_type = rss_type;
 	return err;
 }
 
@@ -497,8 +519,7 @@ int hinic3_update_rss_config(struct rte_eth_dev *dev,
 		goto init_rss_fail;
 	}
 
-	err = hinic3_rss_cfg(nic_dev->hwdev, HINIC3_RSS_ENABLE, num_tc,
-			     prio_tc);
+	err = hinic3_rss_cfg(nic_dev->hwdev, HINIC3_RSS_ENABLE, num_tc, prio_tc);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Enable rss failed, err: %d", err);
 		goto init_rss_fail;
@@ -533,12 +554,12 @@ static u8 hinic3_find_queue_pos_by_rq_id(u8 *queues, u8 queues_count,
 void hinic3_remove_rq_from_rx_queue_list(struct hinic3_nic_dev *nic_dev,
 					 u16 queue_id)
 {
-	u8 queue_pos;
-	u8 rss_queue_count = nic_dev->num_rss;
+	u16 queue_pos;
+	u16 rss_queue_count = nic_dev->num_rss;
 
 	queue_pos = hinic3_find_queue_pos_by_rq_id(nic_dev->rx_queue_list,
 						   rss_queue_count,
-						   (u8)queue_id);
+						   (u16)queue_id);
 	/* If queue was not at the end of the list,
 	 * shift started queues up queue array list
 	 */
@@ -788,6 +809,38 @@ static inline uint64_t hinic3_rx_vlan(uint32_t offload_type, uint32_t vlan_len,
 	return HINIC3_PKT_RX_VLAN | HINIC3_PKT_RX_VLAN_STRIPPED;
 }
 
+#ifdef HINIC3_TRAFFIC_BIFUR
+static int hinic3_rx_packet_type(u32 offload_type)
+{
+	u32 l3_type = 0, l4_type = 0;
+	/* l3 */
+	switch(HINIC3_GET_RX_IP_TYPE(offload_type)) {
+		case HINIC3_RX_CQE_L3_IPV4:
+			l3_type = RTE_PTYPE_L3_IPV4;
+			break;
+		case HINIC3_RX_CQE_L3_IPV6:
+			l3_type = RTE_PTYPE_L3_IPV6;
+			break;
+		default:
+			break;
+	}
+
+	/* l4 */
+	switch(HINIC3_GET_RX_PKT_TYPE(offload_type)) {
+		case HINIC3_RX_CQE_L4_TCP:
+			l4_type = RTE_PTYPE_L4_TCP;
+			break;
+		case HINIC3_RX_CQE_L4_UDP:
+			l4_type = RTE_PTYPE_L4_UDP;
+			break;
+		default:
+			break;
+	}
+
+	return l3_type | l4_type;
+}
+#endif
+
 static uint64_t hinic3_rx_csum(uint32_t status, struct hinic3_rxq *rxq)
 {
 	struct hinic3_nic_dev *nic_dev = rxq->nic_dev;
@@ -906,7 +959,8 @@ int hinic3_start_all_rqs(struct rte_eth_dev *eth_dev)
 		eth_dev->data->rx_queue_state[i] = RTE_ETH_QUEUE_STATE_STARTED;
 	}
 
-	if (nic_dev->rss_state == HINIC3_RSS_ENABLE) {
+	if (nic_dev->rss_state == HINIC3_RSS_ENABLE &&
+	    nic_dev->dcb->dcb_on == 0) {
 		err = hinic3_refill_indir_rqid(rxq);
 		if (err) {
 			PMD_DRV_LOG(ERR, "Refill rq to indrect table failed, eth_dev:%s, queue_idx:%d err:%d\n",
@@ -935,7 +989,7 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 	volatile struct hinic3_rq_cqe *rx_cqe = NULL;
 	struct rte_mbuf *rxm = NULL;
 	u16 sw_ci, rx_buf_len, wqebb_cnt = 0, pkts = 0;
-	u32 status, pkt_len, vlan_len, offload_type, lro_num;
+	u32 status, pkt_len, vlan_len, offload_type, pkt_fmt, lro_num;
 	u64 rx_bytes = 0;
 	u32 hash_value ;
 
@@ -1002,7 +1056,24 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 		rxm->ol_flags |= hinic3_rx_vlan(offload_type, vlan_len,
 						&rxm->vlan_tci);
 
-		/* 6. RSS */
+		/* 6. Packet ptype */
+		pkt_fmt = HINIC3_GET_RX_TUNNEL_PKT_FORMAT(offload_type);
+		switch (pkt_fmt) {
+			case HINIC3_RX_TUNNEL_PKT_FORMAT_NOT_TUNNEL:
+				break;
+			case HINIC3_RX_TUNNEL_PKT_FORMAT_VXLAN:
+				rxm->packet_type = RTE_PTYPE_TUNNEL_VXLAN;
+				break;
+			case HINIC3_RX_TUNNEL_PKT_FORMAT_GENEVE:
+				rxm->packet_type = RTE_PTYPE_TUNNEL_GENEVE;
+				break;
+
+			default:
+				rxm->packet_type = RTE_PTYPE_UNKNOWN;
+		} 
+
+
+		/* 7. RSS */
 		hash_value = hinic3_hw_cpu32(rx_cqe->hash_val);
 		rxm->ol_flags |= hinic3_rx_rss_hash(offload_type, hash_value,
 						    &rxm->hash.rss);
@@ -1013,6 +1084,9 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 			rxm->tso_segsz = pkt_len / lro_num; /*lint !e40 !e63*/
 		}
 
+#ifdef HINIC3_TRAFFIC_BIFUR
+		rxm->packet_type = hinic3_rx_packet_type(offload_type);
+#endif
 		rx_cqe->status = 0;
 
 		rx_bytes += pkt_len;

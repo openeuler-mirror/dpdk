@@ -144,7 +144,7 @@
 
 #define HINIC3_GET_REG_ADDR(reg)	((reg) & (HINIC3_REGS_FLAG_MAKS))
 
-#define HINIC3_IS_VF_DEV(pdev)	((pdev)->id.device_id == HINIC3_DEV_ID_VF)
+#define HINIC3_IS_VF_DEV(pdev) ((pdev)->id.device_id == HINIC3_DEV_ID_VF)
 
 u32 hinic3_hwif_read_reg(struct hinic3_hwif *hwif, u32 reg)
 {

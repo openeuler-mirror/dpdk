@@ -54,6 +54,7 @@ struct service_cap {
 
 	u8 flexq_en;
 	u8 cos_valid_bitmap;
+	u8 port_cos_valid_bitmap;
 	u16 max_vf; /* max VF number that PF supported */
 
 	struct nic_service_cap nic_cap; /* NIC capability */

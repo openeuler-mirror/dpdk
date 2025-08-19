@@ -5,6 +5,9 @@
 #ifndef _HINIC3_PMD_CMD_H_
 #define _HINIC3_PMD_CMD_H_
 
+#define NIC_RSS_INDIR_SIZE      256
+#define NIC_RSS_KEY_SIZE        40
+
 #define NIC_RSS_TEMP_ID_TO_CTX_LT_IDX(tmp_id)	tmp_id
 /* Begin of one temp tbl */
 #define NIC_RSS_TEMP_ID_TO_INDIR_LT_IDX(tmp_id)	((tmp_id) << 4)
@@ -119,8 +122,15 @@ enum hinic3_nic_cmd {
 
 	HINIC3_NIC_CMD_VF_COS,
 	HINIC3_NIC_CMD_SETUP_COS_MAPPING,
-	HINIC3_NIC_CMD_SET_ETS,
+	HINIC3_NIC_CMD_SET_ETS = 106,
 	HINIC3_NIC_CMD_SET_PFC,
+	HINIC3_NIC_CMD_QOS_ETS, /**< Set QoS ETS @see > hinic3_cmd_ets_cfg */
+	HINIC3_NIC_CMD_QOS_PFC, /**< Set QoS PFC @see > hinic3_cmd_set_pfc */
+	HINIC3_NIC_CMD_QOS_DCB_STATE, /**< Get QoS DCB state @see > hinic3_cmd_set_dcb_state */
+	HINIC3_NIC_CMD_QOS_PORT_CFG, /**< Get QoS port cfg @see > hinic3_cmd_qos_port_cfg */
+	HINIC3_NIC_CMD_QOS_MAP_CFG, /**< Get QoS map cfg @see > hinic3_cmd_qos_map_cfg */
+
+    HINIC3_NIC_CMD_SET_PORT_FLOW_BIFUR_ENABLE = 117,
 
 	/* MISC */
 	HINIC3_NIC_CMD_BIOS_CFG = 120,

@@ -564,6 +564,7 @@ static int aeq_elem_handler(struct hinic3_eq *eq, u32 aeqe_desc,
 	event = EQ_ELEM_DESC_GET(aeqe_desc, TYPE);
 	if (EQ_ELEM_DESC_GET(aeqe_desc, SRC)) {
 		/* SW event uses only the first 8B */
+		
 		memcpy(data, aeqe_pos->aeqe_data, HINIC3_AEQE_DATA_SIZE); /*lint !e746*/
 		hinic3_be32_to_cpu(data, HINIC3_AEQE_DATA_SIZE);
 		/* Just support HINIC3_STATELESS_EVENT */
@@ -618,7 +619,6 @@ int hinic3_aeq_poll_msg(struct hinic3_eq *eq, u32 timeout, void *param)
 		end = jiffies + msecs_to_jiffies(timeout);
 		do {
 			aeqe_pos = GET_CURR_AEQ_ELEM(eq);
-			rte_rmb();
 
 			/* Data in HW is in Big endian Format */
 			aeqe_desc = be32_to_cpu(aeqe_pos->desc);
@@ -630,6 +630,12 @@ int hinic3_aeq_poll_msg(struct hinic3_eq *eq, u32 timeout, void *param)
 			if (EQ_ELEM_DESC_GET(aeqe_desc, WRAPPED)
 				!= eq->wrapped) {
 				err = 0;
+				/*
+			 	 * Barrier is to prevent the CPU from
+			 	 * loading the wrong memory content
+			 	 * before HW updating wrapped bit.
+			 	 */
+				rte_rmb();
 				break;
 			}
 
@@ -667,4 +673,61 @@ void hinic3_dev_handle_aeq_event(struct hinic3_hwdev *hwdev, void *param)
 	hinic3_misx_intr_clear_resend_bit(hwdev, aeq->eq_irq.msix_entry_idx,
 					 MSIX_RESEND_TIMER_CLEAR);
 	(void)hinic3_aeq_poll_msg(aeq, 0, param);
+}
+
+void hinic3_dump_aeq_mbox_info(struct hinic3_hwdev *hwdev)
+{
+	struct save_mbox_info *save_mbox = NULL;
+	struct hinic3_eq *aeq = NULL;
+	struct hinic3_aeq_elem *aeqe_pos = NULL;
+	struct rte_pci_device *pci_dev = NULL;
+	u8 i, pos;
+	u8 src, size, wrapped, seq_id, seg_len, msg_id, mod;
+	u8 data[HINIC3_AEQE_DATA_SIZE];
+	u16 src_func_idx, cmd;
+	u32 aeqe_desc;
+	u64 mbox_header;
+	enum hinic3_aeq_type event;
+
+	pci_dev = hwdev->pci_dev;
+	save_mbox = hwdev->func_to_func->save_mbox;
+	aeq = &hwdev->aeqs->aeq[HINIC3_MBOX_RSP_MSG_AEQ];
+
+	PMD_DRV_LOG(ERR, "Sending the latest mbox messages:");
+	for (i = 0; i < HINIC3_MBOX_SAVE_NUM; i++) {
+		pos = (hwdev->func_to_func->save_mbox->start + i) % HINIC3_MBOX_SAVE_NUM;
+		PMD_DRV_LOG(ERR, "send_msg_id: %u, cmd: %u, mod: %u, port: %u, func id: %u, bus: %u, devid: %u",
+			save_mbox->send_info[pos].send_msg_id, save_mbox->send_info[pos].cmd,
+			save_mbox->send_info[pos].mod, save_mbox->send_info[pos].port,
+			save_mbox->send_info[pos].func_id, save_mbox->send_info[pos].bus,
+			save_mbox->send_info[pos].devid);
+	}
+
+	PMD_DRV_LOG(ERR, "dump aeqe info:");
+	PMD_DRV_LOG(ERR, "port: %u, eq cid: %u, func id: %u, bus: %u, devid: %u, wrapped: %u",
+		hwdev->port_id, aeq->cons_idx, pci_dev->addr.function, pci_dev->addr.bus, pci_dev->addr.devid,
+		aeq->wrapped);
+	for (i = 0; i < aeq->eq_len; i++) {
+		/* Parsing the data field. */
+		aeqe_pos = GET_AEQ_ELEM(aeq, i);
+		aeqe_desc = be32_to_cpu(aeqe_pos->desc);
+		memcpy(data, aeqe_pos->aeqe_data, HINIC3_AEQE_DATA_SIZE);
+		hinic3_be32_to_cpu(data, HINIC3_AEQE_DATA_SIZE);
+		mbox_header = *((u64 *)data);
+		seq_id = HINIC3_MSG_HEADER_GET(mbox_header, SEQID);
+		seg_len = HINIC3_MSG_HEADER_GET(mbox_header, SEG_LEN);
+		src_func_idx = HINIC3_MSG_HEADER_GET(mbox_header, SRC_GLB_FUNC_IDX);
+		msg_id = HINIC3_MSG_HEADER_GET(mbox_header, MSG_ID);
+		mod = HINIC3_MSG_HEADER_GET(mbox_header, MODULE);
+		cmd = HINIC3_MSG_HEADER_GET(mbox_header, CMD);
+		/* Parsing the desc field. */
+		event = EQ_ELEM_DESC_GET(aeqe_desc, TYPE);
+		src = EQ_ELEM_DESC_GET(aeqe_desc, SRC);
+		size = EQ_ELEM_DESC_GET(aeqe_desc, SIZE);
+		wrapped = EQ_ELEM_DESC_GET(aeqe_desc, WRAPPED);
+
+		PMD_DRV_LOG(ERR, "index: %d, msg_id: %u, mod: %u, cmd: %u, seq_id: %u, seg_len: %u,"
+			"src_func_idx: %u, event: %u, src: %u, size: %u, wrapped: %u", i, msg_id, mod, cmd, seq_id,
+			seg_len, src_func_idx, event, src, size, wrapped);
+	}
 }

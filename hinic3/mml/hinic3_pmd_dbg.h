@@ -7,39 +7,39 @@
 
 /*******************nic_tool******************/
 struct hinic3_tx_hw_page {
-    u64 *phy_addr;
-    u64 *map_addr;
+	u64 *phy_addr;
+	u64 *map_addr;
 };
 
 struct hinic3_dbg_sq_info {
-    u16 q_id;
-    u16 pi;
-    u16 ci; /* sw_ci */
-    u16 fi; /* hw_ci */
+	u16 q_id;
+	u16 pi;
+	u16 ci; /* sw_ci */
+	u16 fi; /* hw_ci */
 
-    u32 q_depth;
-    u16 weqbb_size;
+	u32 q_depth;
+	u16 weqbb_size;
 
-    volatile u16 *ci_addr;
-    u64 cla_addr;
+	volatile u16 *ci_addr;
+	u64 cla_addr;
 
-    struct hinic3_tx_hw_page db_addr;
-    u32 pg_idx;
+	struct hinic3_tx_hw_page db_addr;
+	u32 pg_idx;
 };
 
 struct hinic3_dbg_rq_info {
-    u16 q_id;
-    u16 hw_pi;
-    u16 ci; /* sw_ci */
-    u16 sw_pi;
-    u16 wqebb_size;
-    u16 q_depth;
-    u16 buf_len;
+	u16 q_id;
+	u16 hw_pi;
+	u16 ci; /* sw_ci */
+	u16 sw_pi;
+	u16 wqebb_size;
+	u16 q_depth;
+	u16 buf_len;
 
-    void *ci_wqe_page_addr;
-    void *ci_cla_tbl_addr;
-    u16 msix_idx;
-    u32 msix_vector;
+	void *ci_wqe_page_addr;
+	void *ci_cla_tbl_addr;
+	u16 msix_idx;
+	u32 msix_vector;
 };
 /*******************nic_tool******************/
 

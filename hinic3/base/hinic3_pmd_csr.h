@@ -12,6 +12,7 @@
 #else
 #define PCI_VENDOR_ID_HUAWEI			0x19e5
 #define HINIC3_DEV_ID_STANDARD			0x0222
+#define HINIC3_DEV_ID_DPU			0x0224
 #define HINIC3_DEV_ID_VF			0x375F
 #endif
 

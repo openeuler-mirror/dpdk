@@ -2,9 +2,9 @@
 # Copyright(c) 2021 Huawei Technologies Co., Ltd
 
 if not is_linux
-        build = false
-        reason = 'only supported on Linux'
-        subdir_done()
+	build = false
+	reason = 'only supported on Linux'
+	subdir_done()
 endif
 
 if arch_subdir != 'x86' and arch_subdir != 'arm' or not dpdk_conf.get('RTE_ARCH_64')
@@ -21,9 +21,20 @@ cflags += ['-fstack-protector-strong']
 dpdk_version = meson.project_version()
 if dpdk_version.substring(0,2) == '20'
 	cflags += ['-DDPDK_20_11']
+	cflags += ['-DDPDK_20_BIFUR']
 elif dpdk_version.substring(0,2) == '21'
 	cflags += ['-DDPDK_20_11']
 	cflags += ['-DDPDK_21_11']
+	cflags += ['-DDPDK_21_BIFUR']
+elif dpdk_version.substring(0,2) == '22'
+	cflags += ['-DDPDK_20_11']
+	cflags += ['-DDPDK_21_11']
+	cflags += ['-DDPDK_22_BIFUR']
+	cflags += ['-DDPDK_22_11']
+elif dpdk_version.substring(0,2) == '23'
+	cflags += ['-DDPDK_20_11']
+	cflags += ['-DDPDK_21_11']
+	cflags += ['-DDPDK_22_11']
 endif
 
 subdir('base')
@@ -37,12 +48,16 @@ sources = files(
  	'hinic3_pmd_flow.c',
 	'hinic3_pmd_nic_io.c',
 	'hinic3_pmd_fdir.c',
-	)
+	'hinic3_pmd_bifur.c',
+	'hinic3_pmd_dcb.c',
+	'hinic3_pmd_tm.c',
+	'hinic3_pmd_telemetry.c',
+)
 
 if arch_subdir == 'arm' and dpdk_conf.get('RTE_ARCH_64')
-cflags  += ['-D__ARM64_NEON__']
+	cflags  += ['-D__ARM64_NEON__']
 else
-cflags += ['-D__X86_64_SSE__']
+	cflags += ['-D__X86_64_SSE__']
 endif
 
 includes += include_directories('base')
