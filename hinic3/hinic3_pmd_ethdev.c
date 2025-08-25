@@ -2889,8 +2889,14 @@ static int hinic3_dev_xstats_get_names(struct rte_eth_dev *dev,
 	return count;
 }
 
-static const uint32_t *hinic3_dev_supported_ptypes_get(
-					__rte_unused struct rte_eth_dev *dev)
+#ifdef DPDK_24_11
+static const uint32_t *
+hinic3_dev_supported_ptypes_get(__rte_unused struct rte_eth_dev *dev,
+				__rte_unused size_t *no_of_elements)
+#else
+static const uint32_t *
+hinic3_dev_supported_ptypes_get(__rte_unused struct rte_eth_dev *dev)
+#endif
 {
 	return 0;
 }

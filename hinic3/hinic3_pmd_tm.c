@@ -163,8 +163,12 @@ hinic3_tm_capabilities_get(struct rte_eth_dev *dev,
 
 static int
 hinic3_tm_shaper_profile_param_check(struct rte_eth_dev *dev,
-				  struct rte_tm_shaper_params *profile,
-				  struct rte_tm_error *error)
+#ifdef DPDK_24_11
+				     const struct rte_tm_shaper_params *profile,
+#else
+				     struct rte_tm_shaper_params *profile,
+#endif
+				     struct rte_tm_error *error)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_ets *ets = nic_dev->ets;
@@ -241,8 +245,12 @@ hinic3_tm_shaper_profile_search(struct rte_eth_dev *dev,
  */
 static int
 hinic3_tm_shaper_profile_add(struct rte_eth_dev *dev, uint32_t shaper_profile_id,
-			  struct rte_tm_shaper_params *profile,
-			  struct rte_tm_error *error)
+#ifdef DPDK_24_11
+			     const struct rte_tm_shaper_params *profile,
+#else
+			     struct rte_tm_shaper_params *profile,
+#endif
+			     struct rte_tm_error *error)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_ets *ets = nic_dev->ets;
@@ -364,8 +372,12 @@ hinic3_tm_node_search(struct rte_eth_dev *dev, uint32_t node_id,
 
 static int
 hinic3_tm_nonleaf_node_param_check(struct rte_eth_dev *dev,
-				struct rte_tm_node_params *params,
-				struct rte_tm_error *error)
+#ifdef DPDK_24_11
+				   const struct rte_tm_shaper_params *profile,
+#else
+				   struct rte_tm_shaper_params *profile,
+#endif
+				   struct rte_tm_error *error)
 {
 	struct hinic3_tm_shaper_profile *shaper_profile;
 
@@ -397,8 +409,12 @@ hinic3_tm_nonleaf_node_param_check(struct rte_eth_dev *dev,
 
 static int
 hinic3_tm_leaf_node_param_check(struct rte_eth_dev *dev __rte_unused,
-			     struct rte_tm_node_params *params,
-			     struct rte_tm_error *error)
+#ifdef DPDK_24_11
+				const struct rte_tm_shaper_params *profile,
+#else
+				struct rte_tm_shaper_params *profile,
+#endif
+				struct rte_tm_error *error)
 
 {
 	if (params->shaper_profile_id != RTE_TM_SHAPER_PROFILE_ID_NONE) {
@@ -440,9 +456,13 @@ hinic3_tm_leaf_node_param_check(struct rte_eth_dev *dev __rte_unused,
 
 static int
 hinic3_tm_node_param_check(struct rte_eth_dev *dev, uint32_t node_id,
-			uint32_t priority, uint32_t weight,
-			struct rte_tm_node_params *params,
-			struct rte_tm_error *error)
+			   uint32_t priority, uint32_t weight,
+#ifdef DPDK_24_11
+			   const struct rte_tm_shaper_params *params,
+#else
+			   struct rte_tm_shaper_params *params,
+#endif
+			   struct rte_tm_error *error)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_ets *ets = nic_dev->ets;
@@ -492,8 +512,13 @@ hinic3_tm_node_param_check(struct rte_eth_dev *dev, uint32_t node_id,
 
 static int
 hinic3_tm_port_node_add(struct rte_eth_dev *dev, uint32_t node_id,
-		     uint32_t level_id, struct rte_tm_node_params *params,
-		     struct rte_tm_error *error)
+			uint32_t level_id,
+#ifdef DPDK_24_11
+			const struct rte_tm_node_params *params,
+#else
+			struct rte_tm_node_params *params,
+#endif
+			struct rte_tm_error *error)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_ets *ets = nic_dev->ets;
@@ -541,9 +566,13 @@ hinic3_tm_port_node_add(struct rte_eth_dev *dev, uint32_t node_id,
 
 static int
 hinic3_tm_tc_node_add(struct rte_eth_dev *dev, uint32_t node_id, uint32_t weight,
-		   uint32_t level_id, struct hinic3_tm_node *parent_node,
-		   struct rte_tm_node_params *params,
-		   struct rte_tm_error *error)
+		      uint32_t level_id, struct hinic3_tm_node *parent_node,
+#ifdef DPDK_24_11
+		      const struct rte_tm_node_params *params,
+#else
+		      struct rte_tm_node_params *params,
+#endif
+		      struct rte_tm_error *error)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_ets *ets = nic_dev->ets;
@@ -594,9 +623,13 @@ hinic3_tm_tc_node_add(struct rte_eth_dev *dev, uint32_t node_id, uint32_t weight
 
 static int
 hinic3_tm_cos_node_add(struct rte_eth_dev *dev, uint32_t node_id, uint32_t weight,
-		    uint32_t level_id, struct hinic3_tm_node *parent_node,
-		    struct rte_tm_node_params *params,
-		    struct rte_tm_error *error)
+		       uint32_t level_id, struct hinic3_tm_node *parent_node,
+#ifdef DPDK_24_11
+		       const struct rte_tm_node_params *params,
+#else
+		       struct rte_tm_node_params *params,
+#endif
+		       struct rte_tm_error *error)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_ets *ets = nic_dev->ets;
@@ -646,10 +679,14 @@ hinic3_tm_cos_node_add(struct rte_eth_dev *dev, uint32_t node_id, uint32_t weigh
 
 static int
 hinic3_tm_queue_node_add(struct rte_eth_dev *dev, uint32_t node_id,
-		      uint32_t weight, uint32_t level_id,
-		      struct hinic3_tm_node *parent_node,
-		      struct rte_tm_node_params *params,
-		      struct rte_tm_error *error)
+			 uint32_t weight, uint32_t level_id,
+			 struct hinic3_tm_node *parent_node,
+#ifdef DPDK_24_11
+			 const struct rte_tm_node_params *params,
+#else
+			 struct rte_tm_node_params *params,
+#endif
+			 struct rte_tm_error *error)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_ets *ets = nic_dev->ets;
@@ -696,9 +733,14 @@ hinic3_tm_queue_node_add(struct rte_eth_dev *dev, uint32_t node_id,
  */
 static int
 hinic3_tm_node_add(struct rte_eth_dev *dev, uint32_t node_id,
-		uint32_t parent_node_id, uint32_t priority, uint32_t weight,
-		uint32_t level_id, struct rte_tm_node_params *params,
-		struct rte_tm_error *error)
+		   uint32_t parent_node_id, uint32_t priority, uint32_t weight,
+		   uint32_t level_id,
+#ifdef DPDK_24_11
+		   const struct rte_tm_node_params *params,
+#else
+		   struct rte_tm_node_params *params,
+#endif
+		   struct rte_tm_error *error)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_ets *ets = nic_dev->ets;
