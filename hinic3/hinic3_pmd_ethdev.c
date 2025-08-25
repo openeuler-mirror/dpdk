@@ -2371,13 +2371,13 @@ static int hinic3_rss_hash_update(struct rte_eth_dev *dev,
 	}
 
 	if (rss_conf->rss_key) {
-		err = hinic3_rss_set_hash_key(nic_dev->hwdev, nic_dev->rss_key,
+		err = hinic3_rss_set_hash_key(nic_dev->hwdev, rss_conf->rss_key,
 					      HINIC3_RSS_KEY_SIZE);
 		if (err) {
 			PMD_DRV_LOG(ERR, "Set RSS hash key failed");
 			return err;
 		}
-		memcpy((void *)nic_dev->rss_key, (void *)rss_conf->rss_key, /*lint !e746*/
+		memcpy((void *)nic_dev->rss_key, (void *)rss_conf->rss_key,
 		       (size_t)rss_conf->rss_key_len);
 	}
 
