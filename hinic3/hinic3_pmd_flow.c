@@ -648,10 +648,17 @@ static int hinic3_flow_fdir_ipv6(const struct rte_flow_item *flow_item,
 		return -rte_errno;
 	}
 
+	#ifdef DPDK_24_11
+	net_addr_to_host(filter->fdir_filter.key_mask.ipv6.src_ip, (const uint32_t *)mask_ipv6->hdr.src_addr.a, 4);
+	net_addr_to_host(filter->fdir_filter.key_spec.ipv6.src_ip, (const uint32_t *)spec_ipv6->hdr.src_addr.a, 4);
+	net_addr_to_host(filter->fdir_filter.key_mask.ipv6.dst_ip, (const uint32_t *)mask_ipv6->hdr.dst_addr.a, 4);
+	net_addr_to_host(filter->fdir_filter.key_spec.ipv6.dst_ip, (const uint32_t *)spec_ipv6->hdr.dst_addr.a, 4);
+	#else
 	net_addr_to_host(filter->fdir_filter.key_mask.ipv6.src_ip, (const uint32_t *)mask_ipv6->hdr.src_addr, 4);
 	net_addr_to_host(filter->fdir_filter.key_spec.ipv6.src_ip, (const uint32_t *)spec_ipv6->hdr.src_addr, 4);
 	net_addr_to_host(filter->fdir_filter.key_mask.ipv6.dst_ip, (const uint32_t *)mask_ipv6->hdr.dst_addr, 4);
 	net_addr_to_host(filter->fdir_filter.key_spec.ipv6.dst_ip, (const uint32_t *)spec_ipv6->hdr.dst_addr, 4);
+	#endif
 	filter->fdir_filter.key_mask.proto = mask_ipv6->hdr.proto;
 	filter->fdir_filter.key_spec.proto = spec_ipv6->hdr.proto;
 
@@ -1068,6 +1075,16 @@ static int hinic3_flow_fdir_tunnel_ipv6(struct rte_flow_error *error,
 			return -rte_errno;
 		}
 
+		#ifdef DPDK_24_11
+		net_addr_to_host(filter->fdir_filter.key_mask.ipv6.src_ip,
+			(const uint32_t *)mask_ipv6->hdr.src_addr.a, 4);
+		net_addr_to_host(filter->fdir_filter.key_spec.ipv6.src_ip,
+			(const uint32_t *)spec_ipv6->hdr.src_addr.a, 4);
+		net_addr_to_host(filter->fdir_filter.key_mask.ipv6.dst_ip,
+			(const uint32_t *)mask_ipv6->hdr.dst_addr.a, 4);
+		net_addr_to_host(filter->fdir_filter.key_spec.ipv6.dst_ip,
+			(const uint32_t *)spec_ipv6->hdr.dst_addr.a, 4);
+		#else
 		net_addr_to_host(filter->fdir_filter.key_mask.ipv6.src_ip,
 			(const uint32_t *)mask_ipv6->hdr.src_addr, 4);
 		net_addr_to_host(filter->fdir_filter.key_spec.ipv6.src_ip,
@@ -1076,6 +1093,7 @@ static int hinic3_flow_fdir_tunnel_ipv6(struct rte_flow_error *error,
 			(const uint32_t *)mask_ipv6->hdr.dst_addr, 4);
 		net_addr_to_host(filter->fdir_filter.key_spec.ipv6.dst_ip,
 			(const uint32_t *)spec_ipv6->hdr.dst_addr, 4);
+		#endif
 	} else {
 		filter->fdir_filter.ip_type = HINIC3_FDIR_IP_TYPE_IPV6;
 
@@ -1095,6 +1113,16 @@ static int hinic3_flow_fdir_tunnel_ipv6(struct rte_flow_error *error,
 			return -rte_errno;
 		}
 
+		#ifdef DPDK_24_11
+		net_addr_to_host(filter->fdir_filter.key_mask.inner_ipv6.src_ip,
+			(const uint32_t *)mask_ipv6->hdr.src_addr.a, 4);
+		net_addr_to_host(filter->fdir_filter.key_spec.inner_ipv6.src_ip,
+			(const uint32_t *)spec_ipv6->hdr.src_addr.a, 4);
+		net_addr_to_host(filter->fdir_filter.key_mask.inner_ipv6.dst_ip,
+			(const uint32_t *)mask_ipv6->hdr.dst_addr.a, 4);
+		net_addr_to_host(filter->fdir_filter.key_spec.inner_ipv6.dst_ip,
+			(const uint32_t *)spec_ipv6->hdr.dst_addr.a, 4);
+		#else
 		net_addr_to_host(filter->fdir_filter.key_mask.inner_ipv6.src_ip,
 			(const uint32_t *)mask_ipv6->hdr.src_addr, 4);
 		net_addr_to_host(filter->fdir_filter.key_spec.inner_ipv6.src_ip,
@@ -1103,6 +1131,7 @@ static int hinic3_flow_fdir_tunnel_ipv6(struct rte_flow_error *error,
 			(const uint32_t *)mask_ipv6->hdr.dst_addr, 4);
 		net_addr_to_host(filter->fdir_filter.key_spec.inner_ipv6.dst_ip,
 			(const uint32_t *)spec_ipv6->hdr.dst_addr, 4);
+		#endif
 
 		filter->fdir_filter.key_mask.proto = mask_ipv6->hdr.proto;
 		filter->fdir_filter.key_spec.proto = spec_ipv6->hdr.proto;

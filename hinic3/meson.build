@@ -8,9 +8,9 @@ if not is_linux
 endif
 
 if arch_subdir != 'x86' and arch_subdir != 'arm' or not dpdk_conf.get('RTE_ARCH_64')
-        build = false
-        reason = 'only supported on x86_64 and aarch64'
-        subdir_done()
+	build = false
+	reason = 'only supported on x86_64 and aarch64'
+	subdir_done()
 endif
 
 cflags += ['-DHW_CONVERT_ENDIAN']
@@ -35,6 +35,16 @@ elif dpdk_version.substring(0,2) == '23'
 	cflags += ['-DDPDK_20_11']
 	cflags += ['-DDPDK_21_11']
 	cflags += ['-DDPDK_22_11']
+elif dpdk_version.substring(0,2) == '24'
+	cflags += ['-DDPDK_20_11']
+	cflags += ['-DDPDK_21_11']
+	cflags += ['-DDPDK_22_11']
+	cflags += ['-DDPDK_24_11']
+elif dpdk_version.substring(0,2) == '25'
+	cflags += ['-DDPDK_20_11']
+	cflags += ['-DDPDK_21_11']
+	cflags += ['-DDPDK_22_11']
+	cflags += ['-DDPDK_24_11']
 endif
 
 subdir('base')

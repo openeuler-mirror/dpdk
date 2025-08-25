@@ -7,7 +7,7 @@
 - 选择DPDK21.11.9(LTS)
 - 上传服务器后解压(解压后：dpdk-stable-21.11.9)
 ```
-    tar -xvf dpdk-21.11.9.tar.xz
+    tar -xf dpdk-21.11.9.tar.xz
 ```
 
 # hinic3源码安装 （与dpdk-stable-21.11.9同一层目录）
@@ -19,21 +19,26 @@
 
 **git方式：**  git clone https://gitee.com/openeuler/dpdk.git -b hinic3
 
-**本地初始化：**
+**添加hinic3 pmd到DPDK（需要依赖git）：**
 ```
-    cd dpdk-stable-21.11.9
-    git log
-    git init
-    git add .
-    git commit -m "init"
+    sh install.sh ../dpdk-stable-21.11.9
     git log
 ```
 
-**打patch到dpdk源码：**
+**编译release（需要依赖gcc，DPDK>=20 需要依赖 meson ninja）：**
 ```
-    git am ../dpdk/DPDK_21.11_patch/00*
+    sh install.sh ../dpdk-stable-21.11.9 build
 ```
+
+**编译debug：**
+```
+    sh install.sh ../dpdk-stable-21.11.9 debug
+```
+
 - 解释：
-  - 0001-*-*.patch 作用是将pmd源码添加到dpdk-stable-21.11.9/drivers/net/hinic3 目录中。
-  - 0002_*_*.patch 作用是添加'hinic3'到dpdk-stable-21.11.9/drivers/net/meson.build编译文件中。
-  - 其他patch 是pmd驱动的其他特性。
+    - 安装脚本会自动修改 dpdk 源码中的编译文件。每次执行前都会重新拷贝 hinic3 pmd 到源码目录，并清除构建缓存目录
+    - 构建脚本会自动判断 dpdk 版本，使用不同的方式编译：
+        - dpdk=19: make
+        - dpdk>=20: meson + ninja
+    - 构建脚本会自动判断当前dpdk目录是否为git仓，不是则初始化
+    - build/debug 模式前总是会自动执行一次安装操作

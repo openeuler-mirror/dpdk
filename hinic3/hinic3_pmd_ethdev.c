@@ -2371,13 +2371,13 @@ static int hinic3_rss_hash_update(struct rte_eth_dev *dev,
 	}
 
 	if (rss_conf->rss_key) {
-		err = hinic3_rss_set_hash_key(nic_dev->hwdev, nic_dev->rss_key,
+		err = hinic3_rss_set_hash_key(nic_dev->hwdev, rss_conf->rss_key,
 					      HINIC3_RSS_KEY_SIZE);
 		if (err) {
 			PMD_DRV_LOG(ERR, "Set RSS hash key failed");
 			return err;
 		}
-		memcpy((void *)nic_dev->rss_key, (void *)rss_conf->rss_key, /*lint !e746*/
+		memcpy((void *)nic_dev->rss_key, (void *)rss_conf->rss_key,
 		       (size_t)rss_conf->rss_key_len);
 	}
 
@@ -2889,8 +2889,14 @@ static int hinic3_dev_xstats_get_names(struct rte_eth_dev *dev,
 	return count;
 }
 
-static const uint32_t *hinic3_dev_supported_ptypes_get(
-					__rte_unused struct rte_eth_dev *dev)
+#ifdef DPDK_24_11
+static const uint32_t *
+hinic3_dev_supported_ptypes_get(__rte_unused struct rte_eth_dev *dev,
+				__rte_unused size_t *no_of_elements)
+#else
+static const uint32_t *
+hinic3_dev_supported_ptypes_get(__rte_unused struct rte_eth_dev *dev)
+#endif
 {
 	return 0;
 }
