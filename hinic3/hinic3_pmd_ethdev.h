@@ -7,7 +7,9 @@
 
 #include <rte_ethdev.h>
 #include <rte_ethdev_core.h>
+#include "base/hinic3_pmd_nic_cfg.h"
 #include "hinic3_pmd_fdir.h"
+#include "hinic3_pmd_tm.h"
 
 #ifdef GLOBAL_VERSION_STR
 #define HINIC3_PMD_DRV_VERSION GLOBAL_VERSION_STR
@@ -37,7 +39,9 @@
 #define HINIC3_PKT_RX_RSS_HASH           RTE_MBUF_F_RX_RSS_HASH
 #define HINIC3_PKT_TX_TUNNEL_MASK        RTE_MBUF_F_TX_TUNNEL_MASK
 #define HINIC3_PKT_TX_TUNNEL_VXLAN       RTE_MBUF_F_TX_TUNNEL_VXLAN
+#define HINIC3_PKT_TX_TUNNEL_GENEVE      RTE_MBUF_F_TX_TUNNEL_GENEVE
 #define HINIC3_PKT_TX_OUTER_IP_CKSUM     RTE_MBUF_F_TX_OUTER_IP_CKSUM
+#define HINIC3_PKT_TX_OUTER_UDP_CKSUM    RTE_MBUF_F_TX_OUTER_UDP_CKSUM
 #define HINIC3_PKT_TX_OUTER_IPV6         RTE_MBUF_F_TX_OUTER_IPV6
 #define HINIC3_PKT_RX_LRO                RTE_MBUF_F_RX_LRO
 #define HINIC3_PKT_TX_L4_NO_CKSUM        RTE_MBUF_F_TX_L4_NO_CKSUM
@@ -63,7 +67,9 @@
 #define HINIC3_PKT_RX_RSS_HASH           PKT_RX_RSS_HASH
 #define HINIC3_PKT_TX_TUNNEL_MASK        PKT_TX_TUNNEL_MASK
 #define HINIC3_PKT_TX_TUNNEL_VXLAN       PKT_TX_TUNNEL_VXLAN
+#define HINIC3_PKT_TX_TUNNEL_GENEVE	  PKT_TX_TUNNEL_GENEVE
 #define HINIC3_PKT_TX_OUTER_IP_CKSUM     PKT_TX_OUTER_IP_CKSUM
+#define HINIC3_PKT_TX_OUTER_UDP_CKSUM    PKT_TX_OUTER_UDP_CKSUM
 #define HINIC3_PKT_TX_OUTER_IPV6         PKT_TX_OUTER_IPV6
 #define HINIC3_PKT_RX_LRO                PKT_RX_LRO
 #define HINIC3_PKT_TX_L4_NO_CKSUM        PKT_TX_L4_NO_CKSUM
@@ -81,7 +87,7 @@
 
 #define HINIC3_UINT32_BIT_SIZE           (CHAR_BIT * sizeof(uint32_t))
 #define HINIC3_VFTA_SIZE                 (4096 / HINIC3_UINT32_BIT_SIZE)
-#define HINIC3_MAX_QUEUE_NUM             64
+#define HINIC3_MAX_QUEUE_NUM             256
 
 #define HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev) \
 	((struct hinic3_nic_dev *)(dev)->data->dev_private)
@@ -114,6 +120,11 @@ enum nic_feature_cap {
     NIC_F_ALLMULTI = BIT(13),
 };
 
+enum hinic3_function_mode {
+	HINIC3_FUNC_EXCLUSIVE = 0,
+	HINIC3_FUNC_SHARED,
+};
+
 #define DEFAULT_DRV_FEATURE		0x3FFF
 
 TAILQ_HEAD(hinic3_ethertype_filter_list, rte_flow);
@@ -135,8 +146,9 @@ struct hinic3_nic_dev {
 	u16 mtu_size;
 
 	u16 rss_state;
-	u8 num_rss;
-	u8 rsvd0;
+	u16 num_rss;
+	
+	struct hinic3_rss_type rss_type;
 
 	u32 rx_mode;
 	u8 rx_queue_list[HINIC3_MAX_QUEUE_NUM];
@@ -146,6 +158,8 @@ struct hinic3_nic_dev {
 
 	u32 default_cos;
 	u32 rx_csum_en;
+
+	struct hinic3_dcb *dcb;
 
 	u8 rss_key[HINIC3_RSS_KEY_SIZE];
 
@@ -164,10 +178,13 @@ struct hinic3_nic_dev {
 
 	u16 tcam_rule_nums;
 	u16 ethertype_rule_nums;
-	struct hinic3_tcam_info      tcam;
+	struct hinic3_tcam_info tcam;
 	struct hinic3_ethertype_filter_list filter_ethertype_list;
 	struct hinic3_fdir_rule_filter_list filter_fdir_rule_list;
-
+#ifdef HINIC3_TRAFFIC_BIFUR
+	u8 hinic3_function_mode;
+#endif
+	struct hinic3_ets *ets;
 };
 
 extern const struct rte_flow_ops hinic3_flow_ops;
@@ -175,5 +192,7 @@ extern const struct rte_flow_ops hinic3_flow_ops;
 int hinic3_dev_rx_queue_intr_enable(struct rte_eth_dev *dev, uint16_t queue_id);
 int hinic3_dev_rx_queue_intr_disable(struct rte_eth_dev *dev,
 				     uint16_t queue_id);
+void hinic3_dev_info_get(struct rte_eth_dev_info *info,
+			 struct hinic3_nic_dev *nic_dev);
 
 #endif /* _HINIC3_PMD_ETHDEV_H_ */

@@ -15,6 +15,10 @@
 #include "hinic3_pmd_nic_cfg.h"
 #include "hinic3_pmd_hw_cfg.h"
 
+#ifdef HINIC3_TRAFFIC_BIFUR
+#include "hinic3_pmd_bifur.h"
+#endif
+
 struct vf_msg_handler {
 	u16 cmd;
 };
@@ -143,6 +147,13 @@ int hinic3_set_mac(void *hwdev, const u8 *mac_addr, u16 vlan_id, u16 func_id)
 	if (!hwdev || !mac_addr)
 		return -EINVAL;
 
+#ifdef HINIC3_TRAFFIC_BIFUR
+	if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
+		PMD_DRV_LOG(WARNING, "Share mode vf do not support change mac");
+		return 0;
+	}
+#endif
+
 	memset(&mac_info, 0, sizeof(mac_info));
 
 	if (vlan_id >= VLAN_N_VID) {
@@ -185,6 +196,13 @@ int hinic3_del_mac(void *hwdev, const u8 *mac_addr, u16 vlan_id, u16 func_id)
 	if (!hwdev || !mac_addr)
 		return -EINVAL;
 
+#ifdef HINIC3_TRAFFIC_BIFUR
+	if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
+		PMD_DRV_LOG(WARNING, "Share mode vf do not support change mac");
+		return 0;
+	}
+#endif
+
 	if (vlan_id >= VLAN_N_VID) {
 		PMD_DRV_LOG(ERR, "Invalid VLAN number: %d", vlan_id);
 		return -EINVAL;
@@ -221,6 +239,13 @@ int hinic3_update_mac(void *hwdev, u8 *old_mac, u8 *new_mac, u16 vlan_id,
 
 	if (!hwdev || !old_mac || !new_mac)
 		return -EINVAL;
+
+#ifdef HINIC3_TRAFFIC_BIFUR
+	if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
+		PMD_DRV_LOG(WARNING, "Share mode vf do not support change mac");
+		return 0;
+	}
+#endif
 
 	if (vlan_id >= VLAN_N_VID) {
 		PMD_DRV_LOG(ERR, "Invalid VLAN number: %d", vlan_id);
@@ -264,6 +289,13 @@ int hinic3_get_default_mac(void *hwdev, u8 *mac_addr, int ether_len)
 
 	if (!hwdev || !mac_addr)
 		return -EINVAL;
+
+#ifdef HINIC3_TRAFFIC_BIFUR
+	if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
+		return hinic3_bifur_get_default_mac(((struct hinic3_hwdev *)hwdev)->pci_dev,
+			mac_addr, ether_len);
+	}
+#endif
 
 	memset(&mac_info, 0, sizeof(mac_info));
 	mac_info.func_id = hinic3_global_func_id(hwdev);
@@ -1382,6 +1414,10 @@ int hinic3_add_tcam_rule(void *hwdev, struct hinic3_tcam_cfg_rule *tcam_rule, u8
 
 	memset(&tcam_cmd, 0, sizeof(struct hinic3_fdir_add_rule));
 	tcam_cmd.func_id = hinic3_global_func_id(hwdev);
+#ifdef HINIC3_TRAFFIC_BIFUR
+	/* Process of enabling group ext_info in the MPU */
+	tcam_cmd.bifur_rss_en = 1; 
+#endif
 	memcpy((void *)&tcam_cmd.rule, (void *)tcam_rule,
 		sizeof(struct hinic3_tcam_cfg_rule));
 	tcam_cmd.type = tcam_rule_type;
@@ -1624,4 +1660,198 @@ int hinic3_set_link_status_follow(void *hwdev, enum hinic3_link_follow_status st
 	}
 
 	return follow.head.status;
+}
+
+int
+hinic3_sync_dcb_state(void *hwdev, u8 op_code, u8 state)
+{
+	struct hinic3_cmd_set_dcb_state dcb_state;
+	u16 out_size = sizeof(dcb_state);
+	int err;
+
+	if (!hwdev)
+		return -EINVAL;
+
+	memset(&dcb_state, 0, sizeof(dcb_state));
+
+	dcb_state.op_code = op_code;
+	dcb_state.state = state;
+	dcb_state.func_id = hinic3_global_func_id(hwdev);
+
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_QOS_DCB_STATE,
+				     &dcb_state, sizeof(dcb_state), &dcb_state,
+				     &out_size);
+	if (err || dcb_state.head.status || !out_size) {
+		PMD_DRV_LOG(ERR,
+			    "Failed to set dcb state, err: %d, status: 0x%x, "
+			    "out size: 0x%x",
+			    err, dcb_state.head.status, out_size);
+		return -EFAULT;
+	}
+	return 0;
+}
+
+int
+hinic3_sync_qos_map(void *hwdev, struct hinic3_dcb_config *dcb_cfg)
+{
+	struct hinic3_cmd_qos_map_cfg qos_cfg;
+	u16 out_size = sizeof(qos_cfg);
+	u8 i;
+	int err;
+
+	if (!hwdev)
+		return -EINVAL;
+
+	memset(&qos_cfg, 0, sizeof(qos_cfg));
+	qos_cfg.op_code = CMD_QOS_OP_GET;
+	qos_cfg.cfg_bitmap |= CMD_QOS_MAP_PCP2COS;
+	qos_cfg.cfg_bitmap |= CMD_QOS_MAP_DSCP2COS;
+
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_QOS_MAP_CFG,
+				     &qos_cfg, sizeof(qos_cfg), &qos_cfg,
+				     &out_size);
+	if (err || qos_cfg.head.status || !out_size) {
+		PMD_DRV_LOG(ERR,
+			    "Failed to set qos, err: %d, status: 0x%x, "
+			    "out size: 0x%x",
+			    err, qos_cfg.head.status, out_size);
+		return -EFAULT;
+	}
+
+	for (i = 0; i < NIC_DCB_UP_MAX; i++)
+		dcb_cfg->pcp2cos[i] = qos_cfg.pcp2cos[i];
+	for (i = 0; i < NIC_DCB_IP_PRI_MAX; i++)
+		dcb_cfg->dscp2cos[i] = qos_cfg.dscp2cos[i];
+
+	return 0;
+}
+
+int
+hinic3_set_qos_port_trust(void *hwdev, u8 trust)
+{
+	struct hinic3_cmd_qos_port_cfg port_cfg;
+	u16 out_size = sizeof(port_cfg);
+	int err;
+
+	if (!hwdev)
+		return -EINVAL;
+
+	memset(&port_cfg, 0, sizeof(port_cfg));
+	port_cfg.port_id = hinic3_physical_port_id(hwdev);
+	port_cfg.op_code = CMD_QOS_OP_SET;
+	port_cfg.cfg_bitmap |= CMD_QOS_PORT_TRUST;
+	port_cfg.trust = trust;
+
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_QOS_PORT_CFG, &port_cfg,
+				     sizeof(port_cfg), &port_cfg, &out_size);
+
+	if (err || port_cfg.head.status || !out_size) {
+		PMD_DRV_LOG(
+			ERR,
+			"Failed to set qos port trust, err: %d, status: 0x%x, "
+			"out size: 0x%x",
+			err, port_cfg.head.status, out_size);
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
+int
+hinic3_set_tm_config_tc_rate(void *hwdev, u8 tc_no, u8 rate)
+{
+	struct hinic3_cmd_ets_cfg ets;
+	u16 out_size = sizeof(ets);
+	int err;
+
+	if (!hwdev)
+		return -EINVAL;
+
+	memset(&ets, 0, sizeof(ets));
+	ets.port_id = hinic3_physical_port_id(hwdev);
+	ets.op_code = CMD_QOS_OP_GET;
+
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_QOS_ETS, &ets,
+				     sizeof(ets), &ets, &out_size);
+	if (err || ets.head.status || !out_size) {
+		PMD_DRV_LOG(ERR,
+			    "Failed to get tc rate, err: %d, status: 0x%x, "
+			    "out size: 0x%x",
+			    err, ets.head.status, out_size);
+		return err;
+	}
+
+	ets.op_code = CMD_QOS_OP_SET;
+	ets.cfg_bitmap |= CMD_QOS_ETS_TC_RATELIMIT;
+	ets.rate_limit[tc_no] = rate;
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_QOS_ETS, &ets,
+				     sizeof(ets), &ets, &out_size);
+	if (err || ets.head.status || !out_size)
+		PMD_DRV_LOG(ERR,
+			    "Failed to set tc rate, err: %d, status: 0x%x, "
+			    "out size: 0x%x",
+			    err, ets.head.status, out_size);
+
+	return err;
+}
+
+int
+hinic3_set_tm_hierarchy_do_commit(void *hwdev, u8 *cos_tc, u8 *tc_bw,
+			       u8 *rate_limit)
+{
+	struct hinic3_cmd_ets_cfg ets;
+	u16 out_size = sizeof(ets);
+	int err;
+
+	if (!hwdev)
+		return -EINVAL;
+
+	memset(&ets, 0, sizeof(ets));
+	ets.port_id = hinic3_physical_port_id(hwdev);
+	ets.op_code = CMD_QOS_OP_SET;
+	ets.cfg_bitmap |= CMD_QOS_ETS_COS_TC | CMD_QOS_ETS_TC_BW |
+			  CMD_QOS_ETS_TC_RATELIMIT;
+
+	memcpy(ets.cos_tc, cos_tc, NIC_DCB_COS_MAX);
+	memcpy(ets.tc_bw, tc_bw, NIC_DCB_TC_MAX);
+	memcpy(ets.rate_limit, rate_limit, NIC_DCB_TC_MAX);
+
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_QOS_ETS, &ets,
+				     sizeof(ets), &ets, &out_size);
+	if (err || ets.head.status || !out_size)
+		PMD_DRV_LOG(ERR,
+			    "Failed to config ets, err: %d, status: 0x%x, "
+			    "out size: 0x%x",
+			    err, ets.head.status, out_size);
+
+	return err;
+}
+
+int hinic3_get_bifur_enable(void *hwdev, u8 *bifur_en, u8 *iso_en)
+{
+    struct hinic3_port_flow_bifur_en_cmd bifur_cmd;
+    u16 out_size = sizeof(bifur_cmd);
+    int err;
+ 
+    if (!hwdev)
+        return -EINVAL;
+ 
+    memset(&bifur_cmd, 0, sizeof(struct hinic3_port_flow_bifur_en_cmd));
+    bifur_cmd.port_id = hinic3_physical_port_id(hwdev);
+    bifur_cmd.config_flag = PORT_BIFUR_CMD_GET;
+ 
+    err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_SET_PORT_FLOW_BIFUR_ENABLE,
+            &bifur_cmd, sizeof(bifur_cmd),
+            &bifur_cmd, &out_size);
+    if (err || bifur_cmd.msg_head.status || !out_size) {
+        PMD_DRV_LOG(ERR,
+            "get bifur status failed, err: %d, status: 0x%x, out size: 0x%x",
+            err, bifur_cmd.msg_head.status, out_size);
+        return -EIO;
+    }
+
+	*bifur_en = bifur_cmd.flow_bifur_en;
+    *iso_en = bifur_cmd.iso_en;
+ 
+    return 0;
 }

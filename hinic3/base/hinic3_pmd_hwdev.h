@@ -101,9 +101,9 @@ struct hinic3_board_info {
 	u8 board_id;
 	u32 cfg_addr;
 	u32 service_en_bitmap;
-    u8 scenes_id;
-    u8 cfg_template_id;
-    u16 rsvd0;
+	u8 scenes_id;
+	u8 cfg_template_id;
+	u16 rsvd0;
 };
 
 struct hinic3_hwdev {

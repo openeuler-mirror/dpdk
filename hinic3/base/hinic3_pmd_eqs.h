@@ -99,4 +99,6 @@ int hinic3_aeq_poll_msg(struct hinic3_eq *eq, u32 timeout, void *param);
 
 void hinic3_dev_handle_aeq_event(struct hinic3_hwdev *hwdev, void *param);
 
+void hinic3_dump_aeq_mbox_info(struct hinic3_hwdev *hwdev);
+
 #endif /* _HINIC3_PMD_EQS_H_ */

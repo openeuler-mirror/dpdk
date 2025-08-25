@@ -29,6 +29,9 @@
 #include <rte_log.h>
 #include <rte_config.h>
 #include <rte_io.h>
+#ifdef DPDK_22_11
+#include "hinic3_base.h"
+#endif
 
 typedef uint8_t   u8;
 typedef int8_t    s8;

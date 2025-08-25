@@ -69,6 +69,30 @@
 #define ETH_SPEED_NUM_200G    200000 /* < 200 Gbps */
 #endif
 
+#define NIC_VF_DCB_COS_MAX 0x4
+#define NIC_DCB_COS_MAX	   0x8
+#define NIC_DCB_UP_MAX	   0x8
+#define NIC_DCB_TC_MAX	   0x8
+#define NIC_DCB_PG_MAX	   0x8
+#define NIC_DCB_TSA_SP	   0x0
+#define NIC_DCB_TSA_CBS	   0x1
+#define NIC_DCB_TSA_ETS	   0x2
+#define NIC_DCB_DSCP_NUM   0x8
+#define NIC_DCB_IP_PRI_MAX 0x40
+
+#define CMD_QOS_OP_SET 1
+#define CMD_QOS_OP_GET 0
+
+#define CMD_QOS_ETS_COS_TC	 BIT(0)
+#define CMD_QOS_ETS_TC_BW	 BIT(1)
+#define CMD_QOS_ETS_COS_PRIO	 BIT(2)
+#define CMD_QOS_ETS_COS_BW	 BIT(3)
+#define CMD_QOS_ETS_TC_PRIO	 BIT(4)
+#define CMD_QOS_ETS_TC_RATELIMIT BIT(5)
+
+#define PCP_MAX_UP	  8
+#define DSCP_MAC_UP	  64
+
 struct hinic3_rss_type {
 	u8 tcp_ipv6_ext;
 	u8 ipv6_ext;
@@ -86,6 +110,20 @@ enum hinic3_rss_hash_type {
 	HINIC3_RSS_HASH_ENGINE_TYPE_MAX,
 };
 
+struct hinic3_dcb_config {
+	u8 trust; /* pcp, dscp */
+	u8 default_cos;
+	u8 pcp_user_cos_num;
+	u8 pcp_valid_cos_map;
+	u8 dscp_user_cos_num;
+	u8 dscp_valid_cos_map;
+	u8 pcp2cos[PCP_MAX_UP];
+	u8 dscp2cos[DSCP_MAC_UP];
+
+	u8 cos_qp_offset[NIC_DCB_COS_MAX];
+	u8 cos_qp_num[NIC_DCB_COS_MAX];
+};
+
 #define MAX_FEATURE_QWORD	4
 struct hinic3_cmd_feature_nego {
 	struct mgmt_msg_head msg_head;
@@ -94,6 +132,52 @@ struct hinic3_cmd_feature_nego {
 	u8 opcode; /* 1: set, 0: get */
 	u8 rsvd;
 	u64 s_feature[MAX_FEATURE_QWORD];
+};
+
+#define CMD_QOS_PORT_TRUST   BIT(0)
+#define CMD_QOS_PORT_DFT_COS BIT(1)
+struct hinic3_cmd_qos_port_cfg {
+	struct mgmt_msg_head head;
+
+	u8 port_id;
+	u8 op_code;    /* 0 - get, 1 - set */
+	u8 cfg_bitmap; /* bit0 - trust, bit1 - dft_cos */
+	u8 rsvd0;
+
+	u8 trust;
+	u8 dft_cos;
+	u8 rsvd1[18];
+};
+
+#define MAP_COS_MAX_NUM	     8
+#define CMD_QOS_MAP_PCP2COS  BIT(0)
+#define CMD_QOS_MAP_DSCP2COS BIT(1)
+struct hinic3_cmd_qos_map_cfg {
+	struct mgmt_msg_head head;
+
+	u8 op_code;
+	/* bit0 - pcp2cos, bit1 - dscp2cos */
+	u8 cfg_bitmap; 
+	u16 rsvd0;
+	/* Must be configured in sets of 8. */
+	u8 pcp2cos[8]; 
+	/* 
+	 * When configuring dscp2cos, if cos value is set to 0xFF,
+	 * MPU will ignore configuration of this dscp priority.
+	 * Allow configure multiple dscp2-to-cos mappings at once.
+	 */
+	u8 dscp2cos[64];
+	u32 rsvd1[4];
+};
+
+struct hinic3_cmd_set_dcb_state {
+	struct mgmt_msg_head head;
+
+	u16 func_id;
+	u8 op_code;    /* 0 - get dcb state, 1 - set dcb state */
+	u8 state;      /* 0 - disable, 1 - enable dcb */
+	u8 port_state; /* 0 - disable, 1 - enable dcb */
+	u8 rsvd[7];
 };
 
 /* Structures for port info */
@@ -252,7 +336,7 @@ struct hinic3_ppa_cfg_flush_cmd {
     struct mgmt_msg_head msg_head;
 
     u16 rsvd0;
-    u8 flush_en; // 0:flush done 1:in flush operation
+    u8 flush_en; /* 0:flush done 1:in flush operation */
     u8 rsvd1;
 };
 
@@ -328,6 +412,16 @@ struct hinic3_cmd_pause_config {
 	u8 rsvd2[5];
 };
 
+struct hinic3_cmd_pfc_config {
+       struct mgmt_msg_head msg_head;
+
+       u8 port_id;
+       u8 op_code;  /* 0: get 1: set pfc_en 2: set pfc_bitmap 3: set all */
+       u8 pfc_en;   /* pfc_en and pfc_bitmap must set at same time. */
+       u8 pfc_bitmap;
+       u8 rsvd[4];
+};
+
 struct hinic3_vport_state {
 	struct mgmt_msg_head msg_head;
 
@@ -340,14 +434,19 @@ struct hinic3_vport_state {
 #define MAG_CMD_PORT_DISABLE  0x0
 #define MAG_CMD_TX_ENABLE     0x1
 #define MAG_CMD_RX_ENABLE     0x2
-/* the physical port is disable only when all pf of the port are set to down, if any pf is enable, the port is enable */
+/* 
+ * The physical port is disable only when all pf of the port are set to down,
+ * if any pf is enable, the port is enable.
+ */
 struct mag_cmd_set_port_enable {
 	struct mgmt_msg_head head;
 
-	u16 function_id;  /* function_id should not more than the max support pf_id(32) */
+	/* function_id should not more than the max support pf_id(32). */
+	u16 function_id;
 	u16 rsvd0;
 
-	u8 state;  /* bitmap bit0:tx_en bit1:rx_en */
+	/* bitmap bit0:tx_en bit1:rx_en. */
+	u8 state;
 	u8 rsvd1[3];
 };
 
@@ -820,7 +919,7 @@ struct hinic3_dcb_state {
 	u8 default_cos;
 	u8 trust;
 	u8 rsvd1;
-	u8 up_cos[HINIC3_DCB_UP_MAX];
+	u8 pcp2cos[HINIC3_DCB_UP_MAX];
 	u8 dscp2cos[64];
 	u32 rsvd2[7];
 };
@@ -840,7 +939,7 @@ struct hinic3_cmd_register_vf {
 
 struct hinic3_tcam_result {
 	u32 qid;
-	u32 rsvd;
+	u32 queue_num;
 };
 
 #define HINIC3_TCAM_FLOW_KEY_SIZE	44
@@ -863,13 +962,28 @@ struct hinic3_tcam_cfg_rule {
 #define TCAM_RULE_FDIR_TYPE 0
 #define TCAM_RULE_PPA_TYPE  1
 
+enum hinic3_port_flow_bifur_cmd_type {
+    PORT_BIFUR_CMD_SET,
+	PORT_BIFUR_CMD_GET,
+};
+
 struct hinic3_fdir_add_rule {
 	struct mgmt_msg_head msg_head;
 
 	u16 func_id;
 	u8 type;
-	u8 rsvd;
+	u8 bifur_rss_en;
 	struct hinic3_tcam_cfg_rule rule;
+};
+
+struct hinic3_port_flow_bifur_en_cmd {
+    struct mgmt_msg_head msg_head;
+    u16 port_id;
+    u8 flow_bifur_en;
+    u8 flow_bifur_type; /* 0->vf bifur, 2->traffic bifur */
+    u8 config_flag; /* 0-> set, 1-> get */
+    u8 iso_en; /* 0 -> off, 1 -> on */
+    u8 rsvd[2];
 };
 
 struct hinic3_fdir_del_rule {
@@ -943,6 +1057,29 @@ struct mag_cmd_set_link_follow {
     u16 rsvd0;
     u8 follow;
     u8 rsvd1[3];
+};
+
+struct hinic3_cmd_ets_cfg {
+	struct mgmt_msg_head head;
+ 
+	u8 port_id;
+	u8 op_code; /* 1 - set, 0 - get */
+	/*
+	 * bit0 - cos_tc
+	 * bit1 - tc_bw
+	 * bit2 - cos_prio
+	 * bit3 - cos_bw
+	 * bit4 - tc_prio
+	 */
+	u8 cfg_bitmap;
+	u8 rsvd;
+ 
+	u8 cos_tc[NIC_DCB_COS_MAX];
+	u8 tc_bw[NIC_DCB_TC_MAX];
+	u8 cos_prio[NIC_DCB_COS_MAX]; /* 0 - DWRR, 1 - STRICT */
+	u8 cos_bw[NIC_DCB_COS_MAX];
+	u8 tc_prio[NIC_DCB_TC_MAX]; /* 0 - DWRR, 1 - STRICT */
+	u8 rate_limit[NIC_DCB_TC_MAX];
 };
 
 int l2nic_msg_to_mgmt_sync(void *hwdev, u16 cmd, void *buf_in, u16 in_size,
@@ -1518,4 +1655,16 @@ int hinic3_set_feature_to_hw(void *hwdev, u64 *s_feature, u16 size);
 int hinic3_set_fdir_ethertype_filter(void *hwdev, u8 pkt_type, u16 queue_id, u8 en);
 
 int hinic3_set_link_status_follow(void *hwdev, enum hinic3_link_follow_status status);
+int hinic3_sync_dcb_state(void *hwdev, u8 op_code, u8 state);
+int hinic3_sync_qos_map(void *hwdev, struct hinic3_dcb_config *dcb_cfg);
+
+int hinic3_set_qos_port_trust(void *hwdev, u8 trust);
+
+int hinic3_set_tm_config_tc_rate(void *hwdev, u8 tc_no, u8 rate);
+
+int hinic3_set_tm_hierarchy_do_commit(void *hwdev, u8 *cos_tc, u8 *tc_bw,
+				   u8 *rate_limit);
+
+int hinic3_get_bifur_enable(void *hwdev, u8 *bifur_enable, u8 *iso_enable);
+
 #endif /* _HINIC3_PMD_NIC_CFG_H_ */

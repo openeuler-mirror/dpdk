@@ -14,18 +14,23 @@
 #include "base/hinic3_pmd_csr.h"
 #include "base/hinic3_pmd_wq.h"
 #include "base/hinic3_pmd_eqs.h"
+#include "base/hinic3_pmd_cmd.h"
 #include "base/hinic3_pmd_cmdq.h"
 #include "base/hinic3_pmd_hwdev.h"
 #include "base/hinic3_pmd_hwif.h"
 #include "base/hinic3_pmd_hw_cfg.h"
 #include "base/hinic3_pmd_hw_comm.h"
-#include "base/hinic3_pmd_nic_cfg.h"
 #include "base/hinic3_pmd_nic_event.h"
 #include "mml/hinic3_pmd_mml_lib.h"
 #include "hinic3_pmd_nic_io.h"
 #include "hinic3_pmd_tx.h"
 #include "hinic3_pmd_rx.h"
 #include "hinic3_pmd_ethdev.h"
+#include "hinic3_pmd_dcb.h"
+#include "hinic3_pmd_tm.h"
+#ifdef HINIC3_TRAFFIC_BIFUR
+#include "hinic3_pmd_bifur.h"
+#endif
 
 #define HINIC3_MIN_RX_BUF_SIZE		1024
 
@@ -57,7 +62,6 @@
 #endif
 /* Driver-specific log messages type */
 int hinic3_logtype;
-
 enum hinic3_rx_mod {
 	HINIC3_RX_MODE_UC = 1 << 0,
 	HINIC3_RX_MODE_MC = 1 << 1,
@@ -326,7 +330,7 @@ static int hinic3_dev_configure(struct rte_eth_dev *dev)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 
-	nic_dev->num_sqs =  dev->data->nb_tx_queues;
+	nic_dev->num_sqs = dev->data->nb_tx_queues;
 	nic_dev->num_rqs = dev->data->nb_rx_queues;
 
 	if (nic_dev->num_sqs > nic_dev->max_sqs ||
@@ -355,13 +359,36 @@ static int hinic3_dev_configure(struct rte_eth_dev *dev)
 	/* Clear fdir filter */
 	hinic3_free_fdir_filter(dev);
 
+	if (dev->data->dev_conf.txmode.mq_mode == ETH_MQ_TX_DCB) {
+		int err;
+		u8 cos_num = hinic3_get_dev_user_cos_num(nic_dev);
+		err = hinic3_setup_cos(nic_dev, cos_num);
+		if (err) {
+			PMD_DRV_LOG(ERR, "hinic3 setup failed, errno %d", err);
+			return err;
+		}
+
+		err = hinic3_tm_conf_update(dev);
+		if (err) {
+			PMD_DRV_LOG(ERR, "failed to update tm conf, errno %d",
+				    err);
+			return err;
+		}
+	}
+
 	return 0;
 }
 
-static void hinic3_dev_info_get(struct rte_eth_dev_info *info, struct hinic3_nic_dev *nic_dev)
+void hinic3_dev_info_get(struct rte_eth_dev_info *info, struct hinic3_nic_dev *nic_dev)
 {
-	info->max_rx_queues  = nic_dev->max_rqs;
-	info->max_tx_queues  = nic_dev->max_sqs;
+	if (nic_dev->dcb->dcb_on != 0) {
+		info->max_rx_queues  = nic_dev->num_rqs;
+		info->max_tx_queues  = nic_dev->num_sqs;
+	} else {
+		info->max_rx_queues  = nic_dev->max_rqs;
+		info->max_tx_queues  = nic_dev->max_sqs;
+	}
+
 	info->min_rx_bufsize = HINIC3_MIN_RX_BUF_SIZE;
 	info->max_rx_pktlen  = HINIC3_MAX_JUMBO_FRAME_SIZE;
 	info->max_mac_addrs  = HINIC3_MAX_UC_MAC_ADDRS;
@@ -390,6 +417,8 @@ static void hinic3_dev_info_get(struct rte_eth_dev_info *info, struct hinic3_nic
 				DEV_TX_OFFLOAD_TCP_CKSUM |
 				DEV_TX_OFFLOAD_SCTP_CKSUM |
 				DEV_TX_OFFLOAD_OUTER_IPV4_CKSUM |
+				DEV_TX_OFFLOAD_OUTER_UDP_CKSUM |
+				DEV_TX_OFFLOAD_VXLAN_TNL_TSO |
 				DEV_TX_OFFLOAD_TCP_TSO |
 				DEV_TX_OFFLOAD_MULTI_SEGS;
 
@@ -906,7 +935,10 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	txq->wqebb_size = (u16)BIT(txq->wqebb_shift);
 	txq->tx_free_thresh = tx_free_thresh;
 	txq->owner = 1;
-	txq->cos = nic_dev->default_cos;
+	if (nic_dev->dcb->dcb_on)
+		txq->cos = nic_dev->dcb->txq_cos[qid];
+	else
+		txq->cos = nic_dev->default_cos;
 
 	ci_mz = hinic3_dma_zone_reserve(dev, "hinic3_sq_ci", qid,
 					 HINIC3_CI_Q_ADDR_SIZE,
@@ -1308,6 +1340,14 @@ static int hinic3_set_rxtx_configure(struct rte_eth_dev *dev)
 			PMD_DRV_LOG(ERR, "Set rss config failed, err: %d", err);
 			return err;
 		}
+
+		if (nic_dev->dcb->dcb_on) {
+			err = hinic3_dcb_rss_init(nic_dev, nic_dev->dcb->dcb_on);
+			if (err) {
+				PMD_DRV_LOG(ERR, "Set dcb rss config failed, err: %d", err);
+				return err;
+			}
+		}
 	}
 
 	err = hinic3_set_vlan(dev, dev_conf);
@@ -1672,6 +1712,8 @@ static int hinic3_dev_start(struct rte_eth_dev *eth_dev)
 		goto en_port_fail;
 	}
 
+	hinic3_tm_dev_start_proc(eth_dev);
+
 	/* Update eth_dev link status */
 	if (eth_dev->data->dev_conf.intr_conf.lsc != 0)
 		(void)hinic3_link_update(eth_dev, 0);
@@ -1764,6 +1806,11 @@ static void hinic3_dev_stop(struct rte_eth_dev *dev)
 		return 0;
 #endif
 	}
+	
+	if (nic_dev->dcb->dcb_on)
+		hinic3_sync_dcb_state(nic_dev->hwdev, 1, 0);
+	
+	hinic3_tm_dev_stop_proc(dev);
 
 	/* Stop phy port and vport */
 	err = hinic3_set_port_enable(nic_dev->hwdev, false);
@@ -2141,6 +2188,12 @@ static int hinic3_dev_promiscuous_enable(struct rte_eth_dev *dev)
 	u32 rx_mode;
 	int err;
 
+	if (!(nic_dev->feature_cap & NIC_F_PROMISC)) {
+		PMD_DRV_LOG(ERR, "nic_dev: %s, port_id: %d, do not support vf promisc: %" PRIu64 "",
+			nic_dev->dev_name, dev->data->port_id, nic_dev->feature_cap);
+		return -ENOTSUP;
+	}
+
 	err = hinic3_mutex_lock(&nic_dev->rx_mode_mutex);
 	if (err)
 		return err;
@@ -2178,6 +2231,12 @@ static int hinic3_dev_promiscuous_disable(struct rte_eth_dev *dev)
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	u32 rx_mode;
 	int err;
+
+	if (!(nic_dev->feature_cap & NIC_F_PROMISC)) {
+		PMD_DRV_LOG(ERR, "nic_dev: %s, port_id: %d, do not support vf promisc: %" PRIu64 "",
+			nic_dev->dev_name, dev->data->port_id, nic_dev->feature_cap);
+		return -ENOTSUP;
+	}
 
 	err = hinic3_mutex_lock(&nic_dev->rx_mode_mutex);
 	if (err)
@@ -2361,7 +2420,8 @@ static int hinic3_rss_conf_get(struct rte_eth_dev *dev,
 	if (!rss_conf)
 		return -EINVAL;
 
-	if (nic_dev->rss_state == HINIC3_RSS_DISABLE) {
+	if (nic_dev->rss_state == HINIC3_RSS_DISABLE &&
+	    nic_dev->dcb->dcb_on == 0) {
 		rss_conf->rss_hf = 0;
 		PMD_DRV_LOG(INFO, "RSS is not enabled");
 		return 0;
@@ -3155,6 +3215,8 @@ static const struct eth_dev_ops hinic3_pmd_ops = {
 	.flow_ops_get                  = hinic3_dev_filter_ctrl,
 #endif
 	.get_reg                       = hinic3_get_reg,
+	.get_dcb_info                  = hinic3_get_dcb_info,
+	.tm_ops_get                    = hinic3_tm_ops_get,
 };
 
 static const struct eth_dev_ops hinic3_pmd_vf_ops = {
@@ -3182,6 +3244,8 @@ static const struct eth_dev_ops hinic3_pmd_vf_ops = {
 	.vlan_offload_set              = hinic3_vlan_offload_set,
 	.allmulticast_enable           = hinic3_dev_allmulticast_enable,
 	.allmulticast_disable          = hinic3_dev_allmulticast_disable,
+	.promiscuous_enable            = hinic3_dev_promiscuous_enable,
+	.promiscuous_disable           = hinic3_dev_promiscuous_disable,
 	.rss_hash_update               = hinic3_rss_hash_update,
 	.rss_hash_conf_get             = hinic3_rss_conf_get,
 	.reta_update                   = hinic3_rss_reta_update,
@@ -3203,6 +3267,8 @@ static const struct eth_dev_ops hinic3_pmd_vf_ops = {
 #else
 	.flow_ops_get                  = hinic3_dev_filter_ctrl,
 #endif
+	.get_dcb_info                  = hinic3_get_dcb_info,
+	.tm_ops_get                    = hinic3_tm_ops_get,
 };
 
 /**
@@ -3229,7 +3295,8 @@ static int hinic3_init_mac_table(struct rte_eth_dev *eth_dev)
 
 	rte_ether_addr_copy((struct rte_ether_addr *)addr_bytes,
 			    &eth_dev->data->mac_addrs[0]);
-	if (rte_is_zero_ether_addr(&eth_dev->data->mac_addrs[0]))
+	if (rte_is_zero_ether_addr(&eth_dev->data->mac_addrs[0]) ||
+		rte_is_broadcast_ether_addr(&eth_dev->data->mac_addrs[0]))
 		rte_eth_random_addr(eth_dev->data->mac_addrs[0].addr_bytes);
 
 	func_id = hinic3_global_func_id(nic_dev->hwdev);
@@ -3369,6 +3436,13 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
 	memset(nic_dev, 0, sizeof(*nic_dev));
+#ifdef HINIC3_TRAFFIC_BIFUR
+	if (hinic3_bifur_is_shared_dev(pci_dev)) {
+		PMD_DRV_LOG(INFO, "It`s a shared vf for flow bifurcation");
+		/* HINIC3_FUNC_EXCLUSIVE is default value. */
+		nic_dev->hinic3_function_mode = HINIC3_FUNC_SHARED;
+	}
+#endif
 	(void)snprintf(nic_dev->dev_name, sizeof(nic_dev->dev_name),
 		 "dbdf-%.4x:%.2x:%.2x.%x",
 		 pci_dev->addr.domain, pci_dev->addr.bus,
@@ -3511,6 +3585,13 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 	 */
 	eth_dev->data->dev_flags |= RTE_ETH_DEV_AUTOFILL_QUEUE_XSTATS;
 #endif
+	err = hinic3_dcb_init(nic_dev);
+	if (err) {
+		PMD_DRV_LOG(ERR, "Failed to init dcb: %d", err);
+		goto enable_intr_fail;
+	}
+
+	hinic3_tm_conf_init(eth_dev);
 
 	return 0;
 
@@ -3597,27 +3678,54 @@ static const struct rte_pci_id pci_id_hinic3_map[] = {
 	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_SPNIC, HINIC3_DEV_ID_VF) },
 #else
 	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI, HINIC3_DEV_ID_STANDARD) },
+	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI, HINIC3_DEV_ID_DPU) },
 	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI, HINIC3_DEV_ID_VF) },
 #endif
-
 	{.vendor_id = 0},
 };
 
+#ifdef HINIC3_TRAFFIC_BIFUR
+static int hinic3_pci_probe(struct rte_pci_driver *pci_drv,
+			    struct rte_pci_device *pci_dev)
+#else
 static int hinic3_pci_probe(__rte_unused struct rte_pci_driver *pci_drv,
 			    struct rte_pci_device *pci_dev)
+#endif
 {
-	return rte_eth_dev_pci_generic_probe(pci_dev,
+	int ret = 0;
+	struct rte_pci_device *work_pci_dev = pci_dev;
+#ifdef HINIC3_TRAFFIC_BIFUR
+	enum BIFUR_ACTION bifur_action = BIFUR_CONTINUE;
+	ret = hinic3_bifur_pre_probe(pci_drv, pci_dev, &work_pci_dev, &bifur_action);
+	if (ret != 0 || bifur_action == BIFUR_DONE) {
+		return ret;
+	}
+#endif
+	ret = rte_eth_dev_pci_generic_probe(work_pci_dev,
 		sizeof(struct hinic3_nic_dev), hinic3_dev_init);
+	return ret;
 }
 
 static int hinic3_pci_remove(struct rte_pci_device *pci_dev)
 {
-	return rte_eth_dev_pci_generic_remove(pci_dev, hinic3_dev_uninit);
+	int ret;
+	ret = rte_eth_dev_pci_generic_remove(pci_dev, hinic3_dev_uninit);
+	if (ret != 0) {
+		PMD_DRV_LOG(ERR, "hinic3_pci_remove: rte remove failed!");
+	}
+#ifdef HINIC3_TRAFFIC_BIFUR
+	hinic3_bifur_post_remove(pci_dev);
+#endif
+	return ret;
 }
 
 static struct rte_pci_driver rte_hinic3_pmd = {
 	.id_table = pci_id_hinic3_map,
+#ifdef HINIC3_TRAFFIC_BIFUR
+	.drv_flags = RTE_PCI_DRV_INTR_LSC,
+#else
 	.drv_flags = RTE_PCI_DRV_NEED_MAPPING | RTE_PCI_DRV_INTR_LSC,
+#endif
 	.probe = hinic3_pci_probe,
 	.remove = hinic3_pci_remove,
 };

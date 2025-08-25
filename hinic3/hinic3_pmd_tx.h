@@ -313,6 +313,30 @@ struct hinic3_txq {
 #endif
 } __rte_cache_aligned;
 
+#define IPV4_VERSION 4
+#define IPV6_VERSION 6
+#define FIXED_EXT_HDR_LEN  8
+#define UNIT_BYTES_U  8
+#define UNIT_BYTES_AH  4
+#define IPV6_MAX_EXT_HDRS 9
+
+enum ip_version_index {
+    IPV4_INDEX = 0,
+    IPV6_INDEX = 1,
+    IP_INDEX_INVALID
+};
+
+typedef struct {
+	uint16_t (*cksum_func)(const void *hdr, uint64_t ol_flags);
+	void (*get_len_proto)(const void *hdr, uint16_t *hdr_len, uint8_t *proto);
+	uint16_t hdr_len;
+} hinic3_ip_cs_handler_t;
+
+typedef struct {
+	uint8_t next_hdr;
+	uint8_t len;
+} hinic3_ipv6_ext_hdr;
+
 void hinic3_flush_txqs(struct hinic3_nic_dev *nic_dev);
 
 void hinic3_free_txq_mbufs(struct hinic3_txq *txq);

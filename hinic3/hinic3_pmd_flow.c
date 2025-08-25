@@ -24,6 +24,16 @@
 #include "hinic3_pmd_fdir.h"
 #include "hinic3_pmd_flow.h"
 
+#ifdef HINIC3_TRAFFIC_BIFUR
+#include <rte_bitops.h>
+#include "hinic3_pmd_rx.h"
+#include "base/hinic3_pmd_csr.h"
+#include "hinic3_pmd_bifur.h"
+
+#define HINIC3_QUEUE_MAX          16
+#define HINIC3_QUEUE_ALLOW_NUM    32
+#endif
+
 #define HINIC3_UINT8_MAX          0xff
 
 static enum rte_flow_item_type pattern_ipv4_icmp[] = {
@@ -365,6 +375,66 @@ static hinic3_parse_filter_t hinic3_find_parse_filter_func(
 	return parse_filter;
 }
 
+#ifdef HINIC3_TRAFFIC_BIFUR
+static int hinic3_flow_set_rss_action_config(struct rte_eth_dev *dev, const struct rte_flow_action *actions,
+	struct rte_flow_error *error)
+{
+	struct rte_flow_action_rss *act_r = NULL;
+	struct rte_eth_rss_conf rss_conf = { 0 };
+	int ret;
+	u8 hash[HINIC3_RSS_KEY_SIZE] = {0};
+
+	act_r = (struct rte_flow_action_rss *)actions->conf;
+	rss_conf.rss_hf = act_r->func;
+	rte_memcpy(hash, act_r->key, act_r->key_len);
+	rss_conf.rss_key = hash;
+	rss_conf.rss_key_len = act_r->key_len;
+	ret = hinic3_update_rss_config(dev, &rss_conf);
+	if (ret) {
+		rte_flow_error_set(error,
+				EINVAL, HINIC3_FLOW_ERROR_TYPE_HANDLE,
+				NULL, "Failed to create hash filter for RSS configuration.");
+	}
+
+	return ret;
+}
+
+static int hinic3_check_rss_queues(struct rte_eth_dev *dev, const struct rte_pci_device *pci_dev,
+	const struct rte_flow_action_rss *act_r, const struct rte_flow_action *act, struct rte_flow_error *error)
+{
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+	int i;
+ 
+	if (act_r->queue_num == 0) {
+		rte_flow_error_set(error, EINVAL,
+			HINIC3_FLOW_ERROR_TYPE_ACTION,
+			act, "Invalid action queue number.");
+		return -rte_errno;
+	}
+ 
+	for (i = 0; i < act_r->queue_num; i++) {
+		if ((pci_dev->id.device_id == HINIC3_DEV_ID_DPU && act_r->queue[i] >= HINIC3_QUEUE_MAX) ||
+			(hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev) && act_r->queue[i] >= HINIC3_QUEUE_ALLOW_NUM) ||
+			(act_r->queue[i] >= dev->data->nb_rx_queues)) {
+			rte_flow_error_set(error, EINVAL,
+						HINIC3_FLOW_ERROR_TYPE_ACTION,
+						act, "Invalid action queue id.");
+			return -rte_errno;
+		}
+	}
+ 
+	if ((hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev) && act_r->queue_num > HINIC3_QUEUE_ALLOW_NUM) ||
+			(pci_dev->id.device_id == HINIC3_DEV_ID_DPU && act_r->queue_num > HINIC3_QUEUE_MAX)) {
+			rte_flow_error_set(error, EINVAL,
+					   HINIC3_FLOW_ERROR_TYPE_ACTION,
+					   act, "Invalid action queue number.");
+			return -rte_errno;
+	}
+ 
+	return 0;
+}
+#endif
+
 static int hinic3_flow_parse_action(struct rte_eth_dev *dev,
 			    const struct rte_flow_action *actions,
 			    struct rte_flow_error *error,
@@ -372,7 +442,17 @@ static int hinic3_flow_parse_action(struct rte_eth_dev *dev,
 {
 	const struct rte_flow_action_queue *act_q;
 	const struct rte_flow_action *act = actions;
+#ifdef HINIC3_TRAFFIC_BIFUR
+	const struct rte_flow_action_rss *act_r;
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+	struct rte_pci_device *pci_dev = NULL;
+	pci_dev = RTE_ETH_DEV_TO_PCI(dev);
+	int i;
 
+	for (i = 0; i < HINIC3_QUEUE_MAX; i++) {
+		rte_bit_relaxed_clear32(i, &filter->fdir_filter.rq_index);
+	}
+#endif
 	/* skip the first void item */
 	while (act->type == RTE_FLOW_ACTION_TYPE_VOID)
 		act++;
@@ -382,6 +462,9 @@ static int hinic3_flow_parse_action(struct rte_eth_dev *dev,
 		act_q =
 		(const struct rte_flow_action_queue *)act->conf;
 		filter->fdir_filter.rq_index = act_q->index;
+#ifdef HINIC3_TRAFFIC_BIFUR
+		filter->fdir_filter.queue_num = 1;
+#endif
 		if (filter->fdir_filter.rq_index >=
 			dev->data->nb_rx_queues) {
 			rte_flow_error_set(error, EINVAL,
@@ -390,6 +473,34 @@ static int hinic3_flow_parse_action(struct rte_eth_dev *dev,
 			return -rte_errno;
 		}
 		break;
+/* RSS process */
+#ifdef HINIC3_TRAFFIC_BIFUR
+	case RTE_FLOW_ACTION_TYPE_RSS:
+		act_r =
+		(const struct rte_flow_action_rss *)act->conf;
+		int err = hinic3_check_rss_queues(dev, pci_dev, act_r, act, error);
+		if (err) {
+			return err;
+		}
+		if (act_r->queue_num > 1) {
+			for (i = 0; i < act_r->queue_num; i++) {
+				if (rte_bit_relaxed_get32(act_r->queue[i], &filter->fdir_filter.rq_index) != 0) {
+					rte_flow_error_set(error, EINVAL,
+							   HINIC3_FLOW_ERROR_TYPE_ACTION, act,
+							   "Duplicate action queue numbers.");
+					return -rte_errno;
+				}
+				rte_bit_relaxed_set32(act_r->queue[i], &filter->fdir_filter.rq_index);
+			}
+		} else {
+			filter->fdir_filter.rq_index = act_r->queue[0];
+		}
+		filter->fdir_filter.queue_num = act_r->queue_num;
+		if (act_r->key) {
+			return hinic3_flow_set_rss_action_config(dev, actions, error);
+		}
+		break;
+#endif
 	default:
 		rte_flow_error_set(error, EINVAL,
 				   HINIC3_FLOW_ERROR_TYPE_ACTION, act,
@@ -404,16 +515,69 @@ static int hinic3_flow_parse_action(struct rte_eth_dev *dev,
 int hinic3_flow_parse_attr(const struct rte_flow_attr *attr,
 		     struct rte_flow_error *error)
 {
-	/* Not supported */
-	if (!attr->ingress || attr->egress || attr->priority || attr->group) {
-		rte_flow_error_set(error, EINVAL,
-				   HINIC3_FLOW_ERROR_TYPE_UNSPECIFIED,
-				   attr, "Only support ingress.");
-		return -rte_errno;
-	}
+    /** Not supported egress */
+    if (attr->egress) {
+        rte_flow_error_set(error, EINVAL,
+                    HINIC3_FLOW_ERROR_TYPE_ATTR_EGRESS,
+                    attr, "Not support egress.");
+        return -rte_errno;
+    }
+
+    /** Not supported priority */
+    if (attr->priority) {
+        rte_flow_error_set(error, EINVAL,
+                    HINIC3_FLOW_ERROR_TYPE_ATTR_PRIORITY,
+                    attr, "Not support priority.");
+        return -rte_errno;
+    }
+
+    /** Not supported group */
+    if (attr->group) {
+        rte_flow_error_set(error, EINVAL,
+                    HINIC3_FLOW_ERROR_TYPE_ATTR_GROUP,
+                    attr, "Not support group.");
+        return -rte_errno;
+    }
+
+    /** Parse attr ingress */
+    if (!attr->ingress) {
+        rte_flow_error_set(error, EINVAL,
+                   HINIC3_FLOW_ERROR_TYPE_ATTR_INGRESS,
+                   attr, "Only support ingress.");
+        return -rte_errno;
+    }
 
 	return 0;
 }
+
+#ifdef HINIC3_TRAFFIC_BIFUR
+static int hinic3_flow_fdir_eth(const struct rte_flow_item *flow_item,
+	struct hinic3_filter_t *filter, struct rte_flow_error *error)
+{
+	const struct rte_flow_item_eth *ether_spec, *ether_mask;
+	ether_spec = (const struct rte_flow_item_eth *)flow_item->spec;
+	ether_mask = (const struct rte_flow_item_eth *)flow_item->mask;
+	if (!ether_spec || !ether_mask)
+		return 0;
+
+	/*
+		* Mask bits of source MAC address must be full of 0.
+		* Mask bits of destination MAC address must be full 0.
+		*/
+	if (!rte_is_zero_ether_addr(&ether_mask->src) ||
+		(!rte_is_zero_ether_addr(&ether_mask->dst))) {
+		rte_flow_error_set(error, EINVAL,
+				HINIC3_FLOW_ERROR_TYPE_ITEM, flow_item,
+				"Invalid ether address mask");
+		return -rte_errno;
+	}
+
+	filter->fdir_filter.key_mask.ether_type = (u16)rte_be_to_cpu_16(ether_mask->type);
+	filter->fdir_filter.key_spec.ether_type = (u16)rte_be_to_cpu_16(ether_spec->type);
+
+	return 0;
+}
+#endif
 
 static int hinic3_flow_fdir_ipv4(const struct rte_flow_item *flow_item,
 	struct hinic3_filter_t *filter, struct rte_flow_error *error)
@@ -422,16 +586,21 @@ static int hinic3_flow_fdir_ipv4(const struct rte_flow_item *flow_item,
 
 	mask_ipv4 = (const struct rte_flow_item_ipv4 *)flow_item->mask;
 	spec_ipv4 = (const struct rte_flow_item_ipv4 *)flow_item->spec;
+
+	filter->fdir_filter.ip_type = HINIC3_FDIR_IP_TYPE_IPV4;
+	filter->fdir_filter.tunnel_type = HINIC3_FDIR_TUNNEL_MODE_NORMAL;
+
+	/* When both L3 mask and spec are empty, return 0, then proceed to evaluate L4. */
+	if (!mask_ipv4 && !spec_ipv4)
+		return 0;
+
 	if (!mask_ipv4 || !spec_ipv4) {
 		rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ITEM, flow_item,
 			"Invalid fdir filter ipv4 mask or spec");
 		return -rte_errno;
 	}
-	
-	/*
-	* Only support src address , dst addresses, proto,
-	* others should be masked.
-	*/
+
+	/* Only support src address, dst addresses, proto, others should be masked. */
 	if (mask_ipv4->hdr.version_ihl || mask_ipv4->hdr.type_of_service ||
 	    mask_ipv4->hdr.total_length || mask_ipv4->hdr.packet_id ||
 	    mask_ipv4->hdr.fragment_offset || mask_ipv4->hdr.time_to_live ||
@@ -441,8 +610,6 @@ static int hinic3_flow_fdir_ipv4(const struct rte_flow_item *flow_item,
 		return -rte_errno;
 	}
 
-	filter->fdir_filter.ip_type = HINIC3_FDIR_IP_TYPE_IPV4;
-	filter->fdir_filter.tunnel_type = HINIC3_FDIR_TUNNEL_MODE_NORMAL;
 	filter->fdir_filter.key_mask.ipv4.src_ip = rte_be_to_cpu_32(mask_ipv4->hdr.src_addr);
 	filter->fdir_filter.key_spec.ipv4.src_ip = rte_be_to_cpu_32(spec_ipv4->hdr.src_addr);
 	filter->fdir_filter.key_mask.ipv4.dst_ip = rte_be_to_cpu_32(mask_ipv4->hdr.dst_addr);
@@ -460,21 +627,26 @@ static int hinic3_flow_fdir_ipv6(const struct rte_flow_item *flow_item,
 
 	mask_ipv6 = (const struct rte_flow_item_ipv6 *)flow_item->mask;
 	spec_ipv6 = (const struct rte_flow_item_ipv6 *)flow_item->spec;
+
+	filter->fdir_filter.ip_type = HINIC3_FDIR_IP_TYPE_IPV6;
+	filter->fdir_filter.tunnel_type = HINIC3_FDIR_TUNNEL_MODE_NORMAL;
+
+	/* When both L3 mask and spec are empty, return 0, then proceed to evaluate L4. */
+	if (!mask_ipv6 && !spec_ipv6)
+		return 0;
+
 	if (!mask_ipv6 || !spec_ipv6) {
 		rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ITEM, flow_item,
 			"Invalid fdir filter ipv6 mask or spec");
 		return -rte_errno;
 	}
-	
-	/* Only support dst addresses, src addresses, proto */
+
+	/* Only support dst addresses, src addresses, proto. */
 	if (mask_ipv6->hdr.vtc_flow || mask_ipv6->hdr.payload_len || mask_ipv6->hdr.hop_limits) {
 		rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ITEM, flow_item,
 			"Not supported by fdir filter, ipv6 only support src ip,dst ip, proto");
 		return -rte_errno;
 	}
-
-	filter->fdir_filter.ip_type = HINIC3_FDIR_IP_TYPE_IPV6;
-	filter->fdir_filter.tunnel_type = HINIC3_FDIR_TUNNEL_MODE_NORMAL;
 
 	net_addr_to_host(filter->fdir_filter.key_mask.ipv6.src_ip, (const uint32_t *)mask_ipv6->hdr.src_addr, 4);
 	net_addr_to_host(filter->fdir_filter.key_spec.ipv6.src_ip, (const uint32_t *)spec_ipv6->hdr.src_addr, 4);
@@ -570,6 +742,11 @@ static int hinic3_flow_parse_fdir_pattern(__rte_unused struct rte_eth_dev *dev,
 		type = flow_item->type;
 		switch (type) {
 		case HINIC3_FLOW_ITEM_TYPE_ETH:
+#ifdef HINIC3_TRAFFIC_BIFUR
+			err = hinic3_flow_fdir_eth(flow_item, filter, error);
+			if (err != 0)
+				return -rte_errno;
+#else
 			/* All should be masked. */
 			if (flow_item->spec || flow_item->mask) {
 				rte_flow_error_set(error, EINVAL,
@@ -577,6 +754,7 @@ static int hinic3_flow_parse_fdir_pattern(__rte_unused struct rte_eth_dev *dev,
 					"Not supported by fdir filter, not support mac");
 				return -rte_errno;
 			}
+#endif
 			break;
 
 		case HINIC3_FLOW_ITEM_TYPE_IPV4:
@@ -1143,7 +1321,6 @@ static int hinic3_flow_parse_fdir_vxlan_filter(struct rte_eth_dev *dev,
 	return 0;
 }
 
-
 static int hinic3_flow_parse(struct rte_eth_dev *dev,
 				const struct rte_flow_attr *attr,
 				const struct rte_flow_item pattern[],
@@ -1155,12 +1332,26 @@ static int hinic3_flow_parse(struct rte_eth_dev *dev,
 	uint32_t pattern_num = 0;
 	int ret = 0;
 
-	if (!pattern || !actions || !attr) {
+    if (!pattern) {
 		rte_flow_error_set(error, EINVAL,
 				   HINIC3_FLOW_ERROR_TYPE_UNSPECIFIED,
-				   NULL, "NULL param.");
+				   NULL, "Pattern is NULL.");
 		return -rte_errno;
 	}
+
+    if (!actions) {
+        rte_flow_error_set(error, EINVAL,
+                    HINIC3_FLOW_ERROR_TYPE_ACTION,
+                    NULL, "Actions is NULL.");
+        return -rte_errno;
+    }
+
+    if (!attr) {
+        rte_flow_error_set(error, EINVAL,
+                    HINIC3_FLOW_ERROR_TYPE_ATTR,
+                    NULL, "Attr is NULL.");
+        return -rte_errno;
+    }
 
 	while ((pattern + pattern_num)->type != HINIC3_FLOW_ITEM_TYPE_END) {
 		pattern_num++;
@@ -1229,8 +1420,9 @@ static struct rte_flow *hinic3_flow_create(struct rte_eth_dev *dev,
 
 	ret = hinic3_flow_parse(dev, attr, pattern, actions, error,
 			filter_rules);
-	if (ret < 0)
+	if (ret < 0) {
 		goto free_flow;
+	}
 
 	switch (filter_rules->filter_type) {
 	case RTE_ETH_FILTER_ETHERTYPE:
@@ -1271,7 +1463,6 @@ static struct rte_flow *hinic3_flow_create(struct rte_eth_dev *dev,
 				   NULL, "Unsupport filter type.");
 		goto free_flow;
 	}
-
 	return flow;
 
 free_flow:
@@ -1411,9 +1602,51 @@ static int hinic3_flow_flush(struct rte_eth_dev *dev,
 	return ret;
 }
 
+#ifdef HINIC3_TRAFFIC_BIFUR
+static int hinic3_flow_query(struct rte_eth_dev *dev, struct rte_flow *flow,
+					__rte_unused const struct rte_flow_action *actions,
+					void *data, struct rte_flow_error *error)
+{
+	int ret = -EINVAL;
+	enum rte_filter_type filter_type;
+	struct hinic3_filter_t *filter_rules = NULL;
+	struct rte_flow_query_count *flow_count = NULL;
+
+	if (!flow || !data) {
+		PMD_DRV_LOG(ERR, "Invalid flow parameter!");
+		return -EPERM;
+	}
+
+	flow_count = (struct rte_flow_query_count *)data;
+	filter_type = flow->filter_type;
+	switch (filter_type) {
+		case RTE_ETH_FILTER_ETHERTYPE:
+			PMD_DRV_LOG(ERR, "Ethertype type %d, current not to process", filter_type);
+			break;
+		case RTE_ETH_FILTER_FDIR:
+			filter_rules = (struct hinic3_filter_t *)flow->rule;
+			ret = hinic3_flow_query_fdir_filter(dev, &filter_rules->fdir_filter, &flow_count->hits, &flow_count->bytes);
+			break;
+		default:
+			PMD_DRV_LOG(ERR, "Filter type %d not support to query", filter_type);
+			ret = -EINVAL;
+			break;
+	}
+	
+	if (ret) {
+		rte_flow_error_set(error, -ret, HINIC3_FLOW_ERROR_TYPE_HANDLE, NULL, "Failed to query flow.");
+    }
+
+    return ret;
+}
+#endif
+
 const struct rte_flow_ops hinic3_flow_ops = {
 	.validate = hinic3_flow_validate,
 	.create = hinic3_flow_create,
 	.destroy = hinic3_flow_destroy,
 	.flush = hinic3_flow_flush,
+#ifdef HINIC3_TRAFFIC_BIFUR
+	.query = hinic3_flow_query,
+#endif
 };

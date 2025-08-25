@@ -14,6 +14,10 @@
 #define HINIC3_PKT_TCAM_DYNAMIC_INDEX_START(block_index)  \
 		(HINIC3_TCAM_DYNAMIC_BLOCK_SIZE * (block_index))
 
+#ifdef HINIC3_TRAFFIC_BIFUR
+#define HINIC3_RSS_QUEUE_BUF 128
+#endif
+
 struct rte_flow {
 	TAILQ_ENTRY(rte_flow) node;
 	enum rte_filter_type filter_type;
@@ -29,6 +33,7 @@ struct hinic3_fdir_rule_key {
 	uint16_t src_port;
 	uint16_t dst_port;
 	uint8_t proto;
+	uint16_t ether_type;
 };
 
 struct hinic3_fdir_filter {
@@ -39,6 +44,9 @@ struct hinic3_fdir_filter {
 	struct hinic3_fdir_rule_key key_mask;
 	struct hinic3_fdir_rule_key key_spec;
 	uint32_t rq_index; /* queue assigned when matched */
+#ifdef HINIC3_TRAFFIC_BIFUR
+	uint32_t queue_num;
+#endif
 };
 
 struct hinic3_filter_t {
@@ -47,6 +55,11 @@ struct hinic3_filter_t {
 	struct rte_eth_ethertype_filter ethertype_filter;
 	struct hinic3_fdir_filter fdir_filter;
 
+};
+
+enum hinic3_action_type {
+    HINIC3_ACTION_ADD,
+    HINIC3_ACTION_NOT_ADD,
 };
 
 enum hinic3_fdir_tunnel_mode {
@@ -65,7 +78,13 @@ struct hinic3_tcam_key_mem {
 	u32 rsvd0 : 16;
 	u32 ip_proto : 8;
 	u32 tunnel_type : 4;
+#ifdef HINIC3_TRAFFIC_BIFUR
+	u32 model : 1;
+	u32 bifur_flag : 2;
+	u32 rsvd1 : 1;
+#else
 	u32 rsvd1 : 4;
+#endif
 
 	u32 function_id : 15;
 	u32 ip_type : 1;
@@ -79,13 +98,17 @@ struct hinic3_tcam_key_mem {
 
 	u32 rsvd3;
 
-	u32 rsvd4 : 16;
+	u32 ether_type : 16;
 	u32 dport : 16;
 
 	u32 sport : 16;
 	u32 rsvd5 : 16;
-
-	u32 rsvd6 : 16;
+#ifdef HINIC3_TRAFFIC_BIFUR
+    u32 rsvd6 : 12;
+    u32 er_id : 4;
+#else
+    u32 rsvd6 : 16;
+#endif
 	u32 outer_sipv4_h : 16;
 
 	u32 outer_sipv4_l : 16;
@@ -97,7 +120,13 @@ struct hinic3_tcam_key_mem {
 	u32 vni_l : 16;
 	u32 rsvd7 : 16;
 #else
+#ifdef HINIC3_TRAFFIC_BIFUR
+	u32 rsvd1 : 1;
+	u32 bifur_flag : 2;
+	u32 model : 1;
+#else
 	u32 rsvd1 : 4;
+#endif
 	u32 tunnel_type : 4;
 	u32 ip_proto : 8;
 	u32 rsvd0 : 16;
@@ -115,13 +144,18 @@ struct hinic3_tcam_key_mem {
 	u32 rsvd3;
 
 	u32 dport : 16;
-	u32 rsvd4 : 16;
+	u32 ether_type : 16;
 
 	u32 rsvd5 : 16;
 	u32 sport : 16;
 
 	u32 outer_sipv4_h : 16;
-	u32 rsvd6 : 16;
+#ifdef HINIC3_TRAFFIC_BIFUR
+    u32 er_id : 4;
+    u32 rsvd6 : 12;
+#else
+    u32 rsvd6 : 16;
+#endif
 
 	u32 outer_dipv4_h : 16;
 	u32 outer_sipv4_l : 16;
@@ -162,7 +196,12 @@ struct hinic3_tcam_key_ipv6_mem {
 	u32 ip_proto : 8;
 	u32 tunnel_type : 4;
 	u32 outer_ip_type : 1;
+#ifdef HINIC3_TRAFFIC_BIFUR
+	u32 model : 1;
+	u32 bifur_flag : 2;
+#else
 	u32 rsvd1 : 3;
+#endif
 
 	u32 function_id : 15;
 	u32 ip_type : 1;
@@ -195,7 +234,12 @@ struct hinic3_tcam_key_ipv6_mem {
 	u32 dipv6_key7 : 16;
 	u32 rsvd2 : 16;
 #else
+#ifdef HINIC3_TRAFFIC_BIFUR
+	u32 bifur_flag : 2;
+	u32 model : 1;
+#else
 	u32 rsvd1 : 3;
+#endif
 	u32 outer_ip_type : 1;
 	u32 tunnel_type : 4;
 	u32 ip_proto : 8;
@@ -391,5 +435,8 @@ int hinic3_flow_add_del_ethertype_filter(struct rte_eth_dev *dev,
 void hinic3_free_fdir_filter(struct rte_eth_dev *dev);
 int hinic3_enable_rxq_fdir_filter(struct rte_eth_dev *dev, u32 queue_id, u32 able);
 int hinic3_flow_parse_attr(const struct rte_flow_attr *attr, struct rte_flow_error *error);
+
+int hinic3_flow_query_fdir_filter(struct rte_eth_dev *dev, struct hinic3_fdir_filter *fdir_filter,
+					__rte_unused u64 *hits, __rte_unused u64 *bytes_count);
 
 #endif
