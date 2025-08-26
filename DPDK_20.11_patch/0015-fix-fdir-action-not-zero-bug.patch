@@ -1,0 +1,67 @@
+From f973c94c5ea8e522b337dfc55fc31556d85ad499 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?=E6=B1=A4=E6=B5=B7=E8=95=B4?= <19855679967@163.com>
+Date: Tue, 26 Aug 2025 16:02:53 +0800
+Subject: [PATCH] fix fdir action not zero bug
+
+---
+ drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c | 9 ++++++++-
+ drivers/net/hinic3/hinic3_pmd_fdir.c         | 9 ++++++++-
+ 2 files changed, 16 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c
+index 888347fff3..6775d80820 100644
+--- a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c
++++ b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c
+@@ -14,6 +14,7 @@
+ #include "hinic3_pmd_cmdq.h"
+ #include "hinic3_pmd_nic_cfg.h"
+ #include "hinic3_pmd_hw_cfg.h"
++#include "hinic3_pmd_ethdev.h"
+ #ifdef HINIC3_TRAFFIC_BIFUR
+ #include "hinic3_pmd_bifur.h"
+ #endif
+@@ -1415,7 +1416,13 @@ int hinic3_add_tcam_rule(void *hwdev, struct hinic3_tcam_cfg_rule *tcam_rule, u8
+ 	tcam_cmd.func_id = hinic3_global_func_id(hwdev);
+ 
+ #ifdef HINIC3_TRAFFIC_BIFUR
+-	tcam_cmd.bifur_rss_en = 1;	
++	u8 bifur_en, iso_en;
++	if (hinic3_get_bifur_enable(hwdev, &bifur_en, &iso_en) != 0) {
++		PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable status failed.");
++	}
++	if (bifur_en) {
++		tcam_cmd.bifur_rss_en = 1;
++	}	
+ #endif
+ 
+ 	memcpy((void *)&tcam_cmd.rule, (void *)tcam_rule,
+diff --git a/drivers/net/hinic3/hinic3_pmd_fdir.c b/drivers/net/hinic3/hinic3_pmd_fdir.c
+index 57965668ff..a1aef1d8ce 100644
+--- a/drivers/net/hinic3/hinic3_pmd_fdir.c
++++ b/drivers/net/hinic3/hinic3_pmd_fdir.c
+@@ -501,6 +501,7 @@ static void hinic3_fdir_tcam_info_init(struct rte_eth_dev *dev,
+ 			struct hinic3_tcam_key *tcam_key,
+ 			struct hinic3_tcam_cfg_rule *fdir_tcam_rule)
+ {
++	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+ 	if (rule->tunnel_type == HINIC3_FDIR_TUNNEL_MODE_NORMAL)
+ 		hinic3_fdir_tcam_notunnel_init(dev, rule, tcam_key);
+ 	else
+@@ -509,7 +510,13 @@ static void hinic3_fdir_tcam_info_init(struct rte_eth_dev *dev,
+ 	fdir_tcam_rule->data.qid = rule->rq_index;
+ 
+ #ifdef HINIC3_TRAFFIC_BIFUR
+-	fdir_tcam_rule->data.queue_num = rule->queue_num;
++	u8 bifur_en, iso_en;
++	if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &iso_en) != 0) {
++		PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable status failed.");
++	}
++	if (bifur_en) {
++		fdir_tcam_rule->data.queue_num = rule->queue_num;
++	}
+ #endif
+ 
+ 	tcam_key_calculate(tcam_key, fdir_tcam_rule);
+-- 
+2.45.1.windows.1
+
