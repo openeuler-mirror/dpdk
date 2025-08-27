@@ -1164,10 +1164,8 @@ static int hinic3_cmdq_set_rss_type(void *hwdev, struct hinic3_rss_type rss_type
 	ctx |= HINIC3_RSS_TYPE_SET(1, VALID) |
 	       HINIC3_RSS_TYPE_SET(rss_type.ipv4, IPV4) |
 	       HINIC3_RSS_TYPE_SET(rss_type.ipv6, IPV6) |
-	       HINIC3_RSS_TYPE_SET(rss_type.ipv6_ext, IPV6_EXT) |
 	       HINIC3_RSS_TYPE_SET(rss_type.tcp_ipv4, TCP_IPV4) |
 	       HINIC3_RSS_TYPE_SET(rss_type.tcp_ipv6, TCP_IPV6) |
-	       HINIC3_RSS_TYPE_SET(rss_type.tcp_ipv6_ext, TCP_IPV6_EXT) |
 	       HINIC3_RSS_TYPE_SET(rss_type.udp_ipv4, UDP_IPV4) |
 	       HINIC3_RSS_TYPE_SET(rss_type.udp_ipv6, UDP_IPV6);
 
@@ -1207,10 +1205,8 @@ static int hinic3_mgmt_set_rss_type(void *hwdev, struct hinic3_rss_type rss_type
 	ctx |= HINIC3_RSS_TYPE_SET(1, VALID) |
 	       HINIC3_RSS_TYPE_SET(rss_type.ipv4, IPV4) |
 	       HINIC3_RSS_TYPE_SET(rss_type.ipv6, IPV6) |
-	       HINIC3_RSS_TYPE_SET(rss_type.ipv6_ext, IPV6_EXT) |
 	       HINIC3_RSS_TYPE_SET(rss_type.tcp_ipv4, TCP_IPV4) |
 	       HINIC3_RSS_TYPE_SET(rss_type.tcp_ipv6, TCP_IPV6) |
-	       HINIC3_RSS_TYPE_SET(rss_type.tcp_ipv6_ext, TCP_IPV6_EXT) |
 	       HINIC3_RSS_TYPE_SET(rss_type.udp_ipv4, UDP_IPV4) |
 	       HINIC3_RSS_TYPE_SET(rss_type.udp_ipv6, UDP_IPV6);
 	ctx_tbl.context = ctx;
@@ -1261,11 +1257,8 @@ int hinic3_get_rss_type(void *hwdev, struct hinic3_rss_type *rss_type)
 
 	rss_type->ipv4	       = HINIC3_RSS_TYPE_GET(ctx_tbl.context, IPV4);
 	rss_type->ipv6	       = HINIC3_RSS_TYPE_GET(ctx_tbl.context, IPV6);
-	rss_type->ipv6_ext     = HINIC3_RSS_TYPE_GET(ctx_tbl.context, IPV6_EXT);
 	rss_type->tcp_ipv4     = HINIC3_RSS_TYPE_GET(ctx_tbl.context, TCP_IPV4);
 	rss_type->tcp_ipv6     = HINIC3_RSS_TYPE_GET(ctx_tbl.context, TCP_IPV6);
-	rss_type->tcp_ipv6_ext = HINIC3_RSS_TYPE_GET(ctx_tbl.context,
-						     TCP_IPV6_EXT);
 	rss_type->udp_ipv4     = HINIC3_RSS_TYPE_GET(ctx_tbl.context, UDP_IPV4);
 	rss_type->udp_ipv6     = HINIC3_RSS_TYPE_GET(ctx_tbl.context, UDP_IPV6);
 

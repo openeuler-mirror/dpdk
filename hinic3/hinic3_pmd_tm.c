@@ -373,9 +373,9 @@ hinic3_tm_node_search(struct rte_eth_dev *dev, uint32_t node_id,
 static int
 hinic3_tm_nonleaf_node_param_check(struct rte_eth_dev *dev,
 #ifdef DPDK_24_11
-				   const struct rte_tm_shaper_params *profile,
+				   const struct rte_tm_node_params *params,
 #else
-				   struct rte_tm_shaper_params *profile,
+				   struct rte_tm_node_params *params,
 #endif
 				   struct rte_tm_error *error)
 {
@@ -410,9 +410,9 @@ hinic3_tm_nonleaf_node_param_check(struct rte_eth_dev *dev,
 static int
 hinic3_tm_leaf_node_param_check(struct rte_eth_dev *dev __rte_unused,
 #ifdef DPDK_24_11
-				const struct rte_tm_shaper_params *profile,
+				const struct rte_tm_node_params *params,
 #else
-				struct rte_tm_shaper_params *profile,
+				struct rte_tm_node_params *params,
 #endif
 				struct rte_tm_error *error)
 
@@ -458,9 +458,9 @@ static int
 hinic3_tm_node_param_check(struct rte_eth_dev *dev, uint32_t node_id,
 			   uint32_t priority, uint32_t weight,
 #ifdef DPDK_24_11
-			   const struct rte_tm_shaper_params *params,
+			   const struct rte_tm_node_params *params,
 #else
-			   struct rte_tm_shaper_params *params,
+			   struct rte_tm_node_params *params,
 #endif
 			   struct rte_tm_error *error)
 {

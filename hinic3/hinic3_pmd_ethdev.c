@@ -2386,9 +2386,7 @@ static int hinic3_rss_hash_update(struct rte_eth_dev *dev,
 	rss_type.tcp_ipv4 = (rss_hf & ETH_RSS_NONFRAG_IPV4_TCP) ? 1 : 0;
 	rss_type.ipv6 = (rss_hf & (ETH_RSS_IPV6 | ETH_RSS_FRAG_IPV6 |
 		ETH_RSS_NONFRAG_IPV6_OTHER)) ? 1 : 0;
-	rss_type.ipv6_ext = (rss_hf & ETH_RSS_IPV6_EX) ? 1 : 0;
 	rss_type.tcp_ipv6 = (rss_hf & ETH_RSS_NONFRAG_IPV6_TCP) ? 1 : 0;
-	rss_type.tcp_ipv6_ext = (rss_hf & ETH_RSS_IPV6_TCP_EX) ? 1 : 0;
 	rss_type.udp_ipv4 = (rss_hf & ETH_RSS_NONFRAG_IPV4_UDP) ? 1 : 0;
 	rss_type.udp_ipv6 = (rss_hf & ETH_RSS_NONFRAG_IPV6_UDP) ? 1 : 0;
 
@@ -2448,9 +2446,7 @@ static int hinic3_rss_conf_get(struct rte_eth_dev *dev,
 	rss_conf->rss_hf |=  rss_type.tcp_ipv4 ? ETH_RSS_NONFRAG_IPV4_TCP : 0;
 	rss_conf->rss_hf |=  rss_type.ipv6 ? (ETH_RSS_IPV6 |
 		ETH_RSS_FRAG_IPV6 | ETH_RSS_NONFRAG_IPV6_OTHER) : 0;
-	rss_conf->rss_hf |=  rss_type.ipv6_ext ? ETH_RSS_IPV6_EX : 0;
 	rss_conf->rss_hf |=  rss_type.tcp_ipv6 ? ETH_RSS_NONFRAG_IPV6_TCP : 0;
-	rss_conf->rss_hf |=  rss_type.tcp_ipv6_ext ? ETH_RSS_IPV6_TCP_EX : 0;
 	rss_conf->rss_hf |=  rss_type.udp_ipv4 ? ETH_RSS_NONFRAG_IPV4_UDP : 0;
 	rss_conf->rss_hf |=  rss_type.udp_ipv6 ? ETH_RSS_NONFRAG_IPV6_UDP : 0;
 
