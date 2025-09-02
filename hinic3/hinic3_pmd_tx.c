@@ -442,6 +442,22 @@ static hinic3_ip_cs_handler_t g_ip_cs_handlers[] = {
 	}
 };
 
+static bool hinic3_vxlan_out_udp_cksum_needed(hinic3_ip_cs_handler_t *ip_handler, uint8_t *pkt_data,
+	struct rte_mbuf *mbuf) {
+	struct rte_udp_hdr *udp_hdr = NULL;
+	uint8_t proto;
+
+	ip_handler->get_len_proto(pkt_data, &(ip_handler->hdr_len), &proto);
+	if (proto == IPPROTO_UDP) {
+		udp_hdr = (struct rte_udp_hdr*)(pkt_data + ip_handler->hdr_len);
+		if (udp_hdr->dgram_cksum == 0x0 && ((mbuf->ol_flags & HINIC3_PKT_TX_OUTER_UDP_CKSUM) == 0)) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
 static uint8_t hinic3_ip_phdr_cksum(hinic3_ip_cs_handler_t *ip_handler, uint8_t *pkt_data, struct rte_mbuf *mbuf)
 {
 	struct rte_tcp_hdr *tcp_hdr = NULL;
@@ -500,10 +516,12 @@ static int hinic3_vxlan_tso_ip_phdr_cksum(struct rte_mbuf *mbuf) {
 
 	/* Outer UDP pseudo-header checksum calculation. */
 	ip_handler = &g_ip_cs_handlers[ver_index];
-	l4_proto = hinic3_ip_phdr_cksum(ip_handler, ip_hdr, mbuf);
-	if (unlikely(l4_proto != IPPROTO_UDP)) {
-		PMD_DRV_LOG(INFO, "not support outer l4 proto(%u) by vxlan checksum", l4_proto);
-		return 0;
+	if (hinic3_vxlan_out_udp_cksum_needed(ip_handler, ip_hdr, mbuf)) {
+		l4_proto = hinic3_ip_phdr_cksum(ip_handler, ip_hdr, mbuf);
+		if (unlikely(l4_proto != IPPROTO_UDP)) {
+			PMD_DRV_LOG(INFO, "not support outer l4 proto(%u) by vxlan checksum", l4_proto);
+			return 0;
+		}
 	}
 
 	offset += ip_handler->hdr_len + sizeof(struct rte_udp_hdr) + sizeof(struct rte_vxlan_hdr) +
