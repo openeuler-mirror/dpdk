@@ -635,9 +635,11 @@ static int send_tlp_mbox_seg(struct hinic3_mbox *func_to_func, u64 header,
 static void hinic3_record_mbox_info(struct hinic3_mbox *func_to_func, enum hinic3_mod_type mod, u16 cmd, u8 msg_id)
 {
 	struct rte_pci_device *pci_dev = NULL;
+	struct rte_eth_dev *eth_dev = NULL;
 	struct mbox_send_info send_mbox;
 
-	pci_dev = func_to_func->hwdev->pci_dev;
+	eth_dev = &rte_eth_devices[func_to_func->hwdev->port_id];
+	pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
 	send_mbox.cmd = cmd;
 	send_mbox.mod = mod;
 	send_mbox.port = func_to_func->hwdev->port_id;

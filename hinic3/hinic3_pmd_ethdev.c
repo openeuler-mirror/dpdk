@@ -667,6 +667,13 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 
+	/*Queue depth must be equal to queue 0*/
+	if (qid != 0 && (nb_desc != nic_dev->rxqs[0]->q_depth)) {
+		PMD_DRV_LOG(WARNING, "rxq%u depth:%u is not equal to queue0 depth:%u.\n",
+			qid, nb_desc, nic_dev->rxqs[0]->q_depth);
+		nb_desc = nic_dev->rxqs[0]->q_depth;
+	}
+
 	/* Queue depth must be power of 2, otherwise will be aligned up */
 	rq_depth = (nb_desc & (nb_desc - 1)) ?
 		((u16)(1U << (ilog2(nb_desc) + 1))) : nb_desc;
@@ -878,6 +885,13 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	hwdev = nic_dev->hwdev;
+
+	/*Queue depth must be equal to queue 0*/
+	if (qid != 0 && (nb_desc != nic_dev->txqs[0]->q_depth)) {
+		PMD_DRV_LOG(WARNING, "txq%u depth:%u is not equal to queue0 depth:%u.\n",
+			qid, nb_desc, nic_dev->txqs[0]->q_depth);
+		nb_desc = nic_dev->txqs[0]->q_depth;
+	}
 
 	/* Queue depth must be power of 2, otherwise will be aligned up */
 	sq_depth = (nb_desc & (nb_desc - 1)) ?
@@ -1925,6 +1939,15 @@ static void hinic3_dev_close(struct rte_eth_dev *eth_dev)
 {
 	struct hinic3_nic_dev *nic_dev =
 		HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
+
+	if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
+#ifdef DPDK_20_11
+	return 0;
+#else
+	return;
+#endif
+	}
+
 #ifdef DPDK_20_11
 	int ret;
 #endif
@@ -3432,6 +3455,26 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 	if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
 		PMD_DRV_LOG(INFO, "Initialize %s in secondary process",
 			    eth_dev->data->name);
+
+		char name[RTE_ETH_NAME_MAX_LEN];
+		snprintf(name, sizeof(name), "%s", eth_dev->data->name);
+		eth_dev = rte_eth_dev_attach_secondary(name);
+		if (eth_dev == NULL) {
+			PMD_DRV_LOG(ERR, "can not attach rte ethdev, dev_name: %s", name);
+			return -ENOMEM;
+		}
+
+		nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
+		if (nic_dev == NULL) {
+			PMD_DRV_LOG(ERR, "nic_dev hwdev is NULL, dev_name: %s", name);
+			return -ENOMEM;
+		}
+
+		if (HINIC3_FUNC_TYPE(nic_dev->hwdev) == TYPE_VF) {
+			eth_dev->dev_ops = &hinic3_pmd_vf_ops;
+		} else {
+			eth_dev->dev_ops = &hinic3_pmd_ops;
+		}
 
 		return 0;
 	}
