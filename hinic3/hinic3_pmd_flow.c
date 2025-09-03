@@ -385,7 +385,7 @@ static int hinic3_flow_set_rss_action_config(struct rte_eth_dev *dev, const stru
 	u8 hash[HINIC3_RSS_KEY_SIZE] = {0};
 
 	act_r = (struct rte_flow_action_rss *)actions->conf;
-	rss_conf.rss_hf = act_r->func;
+	rss_conf.rss_hf = act_r->types;
 	rte_memcpy(hash, act_r->key, act_r->key_len);
 	rss_conf.rss_key = hash;
 	rss_conf.rss_key_len = act_r->key_len;
