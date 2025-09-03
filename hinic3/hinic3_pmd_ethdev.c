@@ -1925,6 +1925,15 @@ static void hinic3_dev_close(struct rte_eth_dev *eth_dev)
 {
 	struct hinic3_nic_dev *nic_dev =
 		HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
+
+	if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
+#ifdef DPDK_20_11
+	return 0;
+#else
+	return;
+#endif
+	}
+
 #ifdef DPDK_20_11
 	int ret;
 #endif
@@ -3432,6 +3441,26 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 	if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
 		PMD_DRV_LOG(INFO, "Initialize %s in secondary process",
 			    eth_dev->data->name);
+
+		char name[RTE_ETH_NAME_MAX_LEN];
+		snprintf(name, sizeof(name), "%s", eth_dev->data->name);
+		eth_dev = rte_eth_dev_attach_secondary(name);
+		if (eth_dev == NULL) {
+			PMD_DRV_LOG(ERR, "can not attach rte ethdev, dev_name: %s", name);
+			return -ENOMEM;
+		}
+
+		nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
+		if (nic_dev == NULL) {
+			PMD_DRV_LOG(ERR, "nic_dev hwdev is NULL, dev_name: %s", name);
+			return -ENOMEM;
+		}
+
+		if (HINIC3_FUNC_TYPE(nic_dev->hwdev) == TYPE_VF) {
+			eth_dev->dev_ops = &hinic3_pmd_vf_ops;
+		} else {
+			eth_dev->dev_ops = &hinic3_pmd_ops;
+		}
 
 		return 0;
 	}
