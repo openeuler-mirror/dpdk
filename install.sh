@@ -125,9 +125,14 @@ build() {
 		fi
 		# release
 		make install T=$build_dir $extra_cflags -j
+		echo ""
 		ls -lh $build_dir/lib/librte_pmd_hinic3*
 		ls -lh $build_dir/app/*testpmd
-		echo "Run like this: ./$build_dir/app/testpmd -a 0000:01:00.0 -l 0-8 -- --nb-cores=8 --rxq=8 --txq=8 -i"
+		echo ""
+		echo "Use your device's PCI address in place of <BDF> and run:"
+		echo ""
+		echo "export LD_LIBRARY_PATH=$PWD/$stable_dir/arm64-armv8a-linuxapp-gcc/lib:\$LD_LIBRARY_PATH"
+		echo "$DPDK_PATH/$build_dir/app/testpmd -w 0000:01:00.0 -d $DPDK_PATH/$build_dir/lib/librte_pmd_hinic3.so -l 0-8 -- --nb-cores=8 --rxq=8 --txq=8 -i"
 	else
 		echo "执行 Meson 构建方式"
 		rm -rf $build_dir
@@ -143,10 +148,14 @@ build() {
 		fi
 		meson $build_dir $meson_flags -Dbuildtype=$build_type
 		ninja -C $build_dir
+		echo ""
 		ls -lh $build_dir/drivers/librte_net_hinic3.so
 		ls -lh $build_dir/drivers/librte_net_hinic3.a
 		ls -lh $build_dir/app/*testpmd
-		echo "Run like this: ./$build_dir/app/dpdk-testpmd -a 0000:01:00.0 -l 0-8 -- --nb-cores=8 --rxq=8 --txq=8 -i"
+		echo ""
+		echo "Use your device's PCI address in place of <BDF> and run:"
+		echo ""
+		echo "$DPDK_PATH/$build_dir/app/dpdk-testpmd -a 0000:01:00.0 -l 0-8 -- --nb-cores=8 --rxq=8 --txq=8 -i"
 	fi
 }
 

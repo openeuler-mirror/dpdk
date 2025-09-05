@@ -32,7 +32,7 @@ dpdk-devbind.py -b vfio-pci $NIC_PCI
 
 # 要测试的版本列表 (压缩包名)
 VERSIONS=(
-	# "dpdk-19.11.14.tar.xz"
+	"dpdk-19.11.14.tar.xz"
 	"dpdk-20.11.10.tar.xz"
 	"dpdk-21.11.9.tar.xz"
 	"dpdk-22.11.9.tar.xz"
@@ -58,7 +58,8 @@ for pkg in "${VERSIONS[@]}"; do
 
 	if [[ "$pkg" == dpdk-19.11.* ]]; then
 		export LD_LIBRARY_PATH=$PWD/$stable_dir/arm64-armv8a-linuxapp-gcc/lib:$LD_LIBRARY_PATH
-		testpmd_cmd="$stable_dir/arm64-armv8a-linuxapp-gcc/app/testpmd -w $NIC_PCI -l 0-8 -- --nb-cores=8 --rxq=8 --txq=8 -i"
+		hinic3_pmd="$stable_dir/arm64-armv8a-linuxapp-gcc/lib/librte_pmd_hinic3.so"
+		testpmd_cmd="$stable_dir/arm64-armv8a-linuxapp-gcc/app/testpmd -d $hinic3_pmd -w $NIC_PCI -l 0-8 -- --nb-cores=8 --rxq=8 --txq=8 -i"
 	else
 		testpmd_cmd="$stable_dir/build/app/dpdk-testpmd -a $NIC_PCI -l 0-8 -- --nb-cores=8 --rxq=8 --txq=8 -i"
 	fi

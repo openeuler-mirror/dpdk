@@ -45,8 +45,8 @@ git clone https://gitee.com/openeuler/dpdk.git -b hinic3 dpdk-hinic3
 
 ---
 
-### 4. 安装 hinic3 PMD 到 DPDK
-进入 dpdk-hinic3 目录，执行：
+## 4. 安装 hinic3 PMD 到 DPDK
+进入 dpdk-hinic3 目录，以下二选一执行
 ```bash
 # 直接安装
 sh install.sh ../dpdk-stable-21.11.9
@@ -58,9 +58,11 @@ sh install.sh ../dpdk-stable-21.11.9 bifur
 ---
 
 ## 5. 编译
+以下二选一执行
 ```bash
 # 直接编译
 sh install.sh ../dpdk-stable-21.11.9 build
+
 # 如果是 DPU 场景编译
 sh install.sh ../dpdk-stable-21.11.9 build generic
 ```
