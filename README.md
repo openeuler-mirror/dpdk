@@ -1,44 +1,95 @@
 # OpenEuler开源仓patch使用简介
 
-**以OpenEuler开源仓 DPDK 21.11 patch为例**
+本文以 **DPDK 21.11** 为例，介绍如何在 DPDK 中集成并编译 `hinic3` PMD。
 
-# DPDK下载
-**下载链接：** https://core.dpdk.org/download/
-- 选择DPDK21.11.9(LTS)
-- 上传服务器后解压(解压后：dpdk-stable-21.11.9)
-```
-    tar -xf dpdk-21.11.9.tar.xz
-```
+当前支持的 DPDK 版本：**19 ~ 25**
 
-# hinic3源码安装 （与dpdk-stable-21.11.9同一层目录）
+---
 
-**下载地址：** https://gitee.com/openeuler/dpdk/tree/hinic3
-- 上传服务器解压(解压后：dpdk)
+## 1. 环境准备
 
-或
+- 系统依赖：
+  - `yum install -y gcc libatomic python3-devel meson ninja-build python3-pyelftools libibverbs numactl numactl-devel`
 
-**git方式：**  git clone https://gitee.com/openeuler/dpdk.git -b hinic3
+- 软件版本：
+  - DPDK：19.11 (LTS) 及以上版本
+  - hinic3：本仓库提供
 
-**添加hinic3 pmd到DPDK（需要依赖git）：**
-```
-    sh install.sh ../dpdk-stable-21.11.9
-    git log
-```
+---
 
-**编译release（需要依赖gcc，DPDK>=20 需要依赖 meson ninja）：**
-```
-    sh install.sh ../dpdk-stable-21.11.9 build
+## 2. 下载 DPDK
+
+官方源码下载地址： [https://core.dpdk.org/download/](https://core.dpdk.org/download/)
+
+例如下载 **DPDK 21.11.9**：
+```bash
+wget https://fast.dpdk.org/rel/dpdk-21.11.9.tar.xz
+tar -xf dpdk-21.11.9.tar.xz
+# 解压后目录名：dpdk-stable-21.11.9
 ```
 
-**编译debug：**
+---
+
+## 3. 获取 hinic3 源码
+方法一：直接下载
+```bash
+wget https://gitee.com/openeuler/dpdk/repository/archive/hinic3.zip
+unzip dpdk-hinic3.zip
+# 解压后目录名：dpdk-hinic3
 ```
-    sh install.sh ../dpdk-stable-21.11.9 debug
+方法二：Git 克隆
+```bash
+git clone https://gitee.com/openeuler/dpdk.git -b hinic3 dpdk-hinic3
+# 默认目录名是dpdk，这里指定为了：dpdk-hinic3
 ```
 
-- 解释：
-    - 安装脚本会自动修改 dpdk 源码中的编译文件。每次执行前都会重新拷贝 hinic3 pmd 到源码目录，并清除构建缓存目录
-    - 构建脚本会自动判断 dpdk 版本，使用不同的方式编译：
-        - dpdk=19: make
-        - dpdk>=20: meson + ninja
-    - 构建脚本会自动判断当前dpdk目录是否为git仓，不是则初始化
-    - build/debug 模式前总是会自动执行一次安装操作
+---
+
+### 4. 安装 hinic3 PMD 到 DPDK
+进入 dpdk-hinic3 目录，执行：
+```bash
+# 直接安装
+sh install.sh ../dpdk-stable-21.11.9
+
+# 如果需要支持 bifur 安装
+sh install.sh ../dpdk-stable-21.11.9 bifur
+```
+
+---
+
+## 5. 编译
+```bash
+# 直接编译
+sh install.sh ../dpdk-stable-21.11.9 build
+# 如果是 DPU 场景编译
+sh install.sh ../dpdk-stable-21.11.9 build generic
+```
+
+---
+
+## 6. 构建脚本说明 
+- 自动检测目标 DPDK 目录是否为 Git 仓库：
+  - 否 -> 自动初始化 Git。
+- 自动判断 DPDK 版本：
+  - **DPDK 19.x** 使用 `make` 编译
+  - **DPDK ≥ 20.x** 使用 `meson + ninja` 编译
+
+---
+
+## 7. 快速示例
+```bash
+# 安装依赖
+yum install -y gcc libatomic python3-devel meson ninja-build python3-pyelftools libibverbs numactl numactl-devel
+
+# 下载并解压 DPDK
+wget https://fast.dpdk.org/rel/dpdk-21.11.9.tar.xz
+tar -xf dpdk-21.11.9.tar.xz
+
+# 获取 hinic3
+git clone https://gitee.com/openeuler/dpdk.git -b hinic3 dpdk-hinic3
+
+# 安装并编译
+cd dpdk-hinic3
+sh install.sh ../dpdk-stable-21.11.9
+sh install.sh ../dpdk-stable-21.11.9 build
+```
