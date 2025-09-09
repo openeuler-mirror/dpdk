@@ -412,10 +412,15 @@ static inline void hinic3_calculate_checksum(struct rte_mbuf *mbuf,
 	return;
 }
 
-static int hinic3_tx_offload_pkt_prepare(struct rte_mbuf *mbuf,
-					 u16 *inner_l3_offset)
+static int
+hinic3_tx_offload_pkt_prepare(struct rte_mbuf *mbuf, u16 *inner_l3_offset)
 {
 	uint64_t ol_flags = mbuf->ol_flags;
+
+	/* Tunnel flag should be deleted in outer gre checksum */
+	if (ol_flags & HINIC3_PKT_TX_TUNNEL_GRE) {
+		ol_flags &= ~ HINIC3_PKT_TX_TUNNEL_MASK;
+	}
 
 	/* Vxlan and Geneve offload */
 	if ((ol_flags & HINIC3_PKT_TX_TUNNEL_MASK) &&
@@ -588,8 +593,9 @@ static int hinic3_vxlan_tso_ip_phdr_cksum(struct rte_mbuf *mbuf) {
 	eth_hdr = (struct rte_ether_hdr *)pkt_data;
 	offset += sizeof(struct rte_ether_hdr);
 	ether_type = eth_hdr->ether_type;
-	while (ether_type == rte_cpu_to_be_16(RTE_ETHER_TYPE_VLAN) || ether_type == rte_cpu_to_be_16(RTE_ETHER_TYPE_QINQ)) {
-		vlan_hdr = (struct rte_vlan_hdr *)(pkt_data + offset);
+	while (ether_type == rte_cpu_to_be_16(RTE_ETHER_TYPE_VLAN) ||
+	       ether_type == rte_cpu_to_be_16(RTE_ETHER_TYPE_QINQ)) {
+		vlan_hdr   = (struct rte_vlan_hdr *)(pkt_data + offset);
 		ether_type = vlan_hdr->eth_proto;
 		offset += sizeof(struct rte_vlan_hdr);
 	}

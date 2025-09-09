@@ -685,7 +685,7 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 
-	/*Queue depth must be equal to queue 0*/
+	/* Queue depth must be equal to queue 0 */
 	if (qid != 0 && (nb_desc != nic_dev->rxqs[0]->q_depth)) {
 		PMD_DRV_LOG(WARNING, "rxq%u depth:%u is not equal to queue0 depth:%u.\n",
 			qid, nb_desc, nic_dev->rxqs[0]->q_depth);
@@ -904,7 +904,7 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	hwdev = nic_dev->hwdev;
 
-	/*Queue depth must be equal to queue 0*/
+	/* Queue depth must be equal to queue 0 */
 	if (qid != 0 && (nb_desc != nic_dev->txqs[0]->q_depth)) {
 		PMD_DRV_LOG(WARNING, "txq%u depth:%u is not equal to queue0 depth:%u.\n",
 			qid, nb_desc, nic_dev->txqs[0]->q_depth);
