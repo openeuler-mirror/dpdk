@@ -59,9 +59,9 @@ for pkg in "${VERSIONS[@]}"; do
 	if [[ "$pkg" == dpdk-19.11.* ]]; then
 		export LD_LIBRARY_PATH=$PWD/$stable_dir/arm64-armv8a-linuxapp-gcc/lib:$LD_LIBRARY_PATH
 		hinic3_pmd="$stable_dir/arm64-armv8a-linuxapp-gcc/lib/librte_pmd_hinic3.so"
-		testpmd_cmd="$stable_dir/arm64-armv8a-linuxapp-gcc/app/testpmd -d $hinic3_pmd -w $NIC_PCI -l 0-8 -- --nb-cores=8 --rxq=8 --txq=8 -i -a"
+		testpmd_cmd="$stable_dir/arm64-armv8a-linuxapp-gcc/app/testpmd -d $hinic3_pmd -w $NIC_PCI -l 0-8 -- --nb-cores=8 --rxq=8 --txq=8 -i -a --forward-mode=txonly"
 	else
-		testpmd_cmd="$stable_dir/build/app/dpdk-testpmd -a $NIC_PCI -l 0-8 -- --nb-cores=8 --rxq=8 --txq=8 -i -a"
+		testpmd_cmd="$stable_dir/build/app/dpdk-testpmd -a $NIC_PCI -l 0-8 -- --nb-cores=8 --rxq=8 --txq=8 -i -a --forward-mode=txonly"
 	fi
 
 	# 运行并自动退出

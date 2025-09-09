@@ -499,10 +499,11 @@ hinic3_fdir_tcam_vxlan_geneve_init(struct rte_eth_dev *	      dev,
 		hinic3_fdir_tcam_vxlan_geneve_ipv6_init(rule, tcam_key);
 }
 
-static void hinic3_fdir_tcam_info_init(struct rte_eth_dev *dev,
-			struct hinic3_fdir_filter *rule,
-			struct hinic3_tcam_key *tcam_key,
-			struct hinic3_tcam_cfg_rule *fdir_tcam_rule)
+static void
+hinic3_fdir_tcam_info_init(struct rte_eth_dev	       *dev,
+			   struct hinic3_fdir_filter   *rule,
+			   struct hinic3_tcam_key      *tcam_key,
+			   struct hinic3_tcam_cfg_rule *fdir_tcam_rule)
 {
 	if (rule->tunnel_type == HINIC3_FDIR_TUNNEL_MODE_NORMAL)
 		hinic3_fdir_tcam_notunnel_init(dev, rule, tcam_key);
@@ -511,7 +512,14 @@ static void hinic3_fdir_tcam_info_init(struct rte_eth_dev *dev,
 
 	fdir_tcam_rule->data.qid = rule->rq_index;
 #ifdef HINIC3_TRAFFIC_BIFUR
-	fdir_tcam_rule->data.queue_num = rule->queue_num;
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+	u8 bifur_en, iso_en;
+
+	if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &iso_en) != 0)
+		PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable status failed.");
+
+	if (bifur_en)
+		fdir_tcam_rule->data.queue_num = rule->queue_num;
 #endif
 	tcam_key_calculate(tcam_key, fdir_tcam_rule);
 }
