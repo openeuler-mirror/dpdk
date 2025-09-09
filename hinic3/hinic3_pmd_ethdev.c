@@ -73,6 +73,24 @@ enum hinic3_rx_mod {
 #define HINIC3_DEFAULT_RX_MODE	(HINIC3_RX_MODE_UC | HINIC3_RX_MODE_MC | \
 				HINIC3_RX_MODE_BC)
 
+static const struct rte_pci_id pci_id_hinic3_map[] = {
+	{RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI,  HINIC3_DEV_ID_STANDARD)},
+	{RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI,  HINIC3_DEV_ID_DPU)},
+	{RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI,  HINIC3_DEV_ID_VF)},
+
+	{RTE_PCI_DEVICE(PCI_VENDOR_ID_BD,      HINIC3_DEV_ID_STANDARD)},
+	{RTE_PCI_DEVICE(PCI_VENDOR_ID_BD,      HINIC3_DEV_ID_DPU)},
+	{RTE_PCI_DEVICE(PCI_VENDOR_ID_BD,      HINIC3_DEV_ID_VF)},
+
+	{RTE_PCI_DEVICE(PCI_VENDOR_ID_SPNIC,   SPNIC_DEV_ID_STANDARD)},
+	{RTE_PCI_DEVICE(PCI_VENDOR_ID_SPNIC,   SPNIC_DEV_ID_VF)},
+
+	{RTE_PCI_DEVICE(PCI_VENDOR_ID_CTCHNIC, CTCHNIC_DEV_ID_PF)},
+	{RTE_PCI_DEVICE(PCI_VENDOR_ID_CTCHNIC, CTCHNIC_DEV_ID_VF)},
+
+	{.vendor_id = 0},
+};
+
 struct hinic3_xstats_name_off {
 	char name[RTE_ETH_XSTATS_NAME_SIZE];
 	u32  offset;
@@ -3488,6 +3506,8 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 		nic_dev->hinic3_function_mode = HINIC3_FUNC_SHARED;
 	}
 #endif
+	nic_dev->id_table = pci_id_hinic3_map;
+
 	(void)snprintf(nic_dev->dev_name, sizeof(nic_dev->dev_name),
 		 "dbdf-%.4x:%.2x:%.2x.%x",
 		 pci_dev->addr.domain, pci_dev->addr.bus,
@@ -3717,18 +3737,6 @@ static int hinic3_dev_uninit(struct rte_eth_dev *dev)
 #endif
 }
 
-static const struct rte_pci_id pci_id_hinic3_map[] = {
-#ifdef CONFIG_SP_VID_DID
-	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_SPNIC, HINIC3_DEV_ID_STANDARD) },
-	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_SPNIC, HINIC3_DEV_ID_VF) },
-#else
-	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI, HINIC3_DEV_ID_STANDARD) },
-	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI, HINIC3_DEV_ID_DPU) },
-	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI, HINIC3_DEV_ID_VF) },
-#endif
-	{.vendor_id = 0},
-};
-
 #ifdef HINIC3_TRAFFIC_BIFUR
 static int hinic3_pci_probe(struct rte_pci_driver *pci_drv,
 			    struct rte_pci_device *pci_dev)
@@ -3784,4 +3792,3 @@ RTE_INIT(hinic3_init_log)
 	if (hinic3_logtype >= 0)
 		rte_log_set_level(hinic3_logtype, RTE_LOG_INFO);
 }
-

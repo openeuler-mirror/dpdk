@@ -155,6 +155,22 @@ hinic3_msg_handle(struct rte_eth_dev *dev, struct msg_module *nt_msg)
 	return err;
 }
 
+static inline bool
+hinic3_pci_dev_supported(const struct rte_eth_dev *eth_dev)
+{
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
+	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
+	const struct rte_pci_id *id_table = nic_dev->id_table;
+
+	for (int i = 0; id_table[i].vendor_id != 0; i++) {
+		if (pci_dev->id.vendor_id == id_table[i].vendor_id &&
+		    pci_dev->id.device_id == id_table[i].device_id)
+			return true;
+	}
+
+	return false;
+}
+
 static struct rte_eth_dev *
 get_eth_dev_by_pci_addr(char *pci_addr, __rte_unused int len)
 {
@@ -172,24 +188,14 @@ get_eth_dev_by_pci_addr(char *pci_addr, __rte_unused int len)
 
 	for (i = 0; i < RTE_MAX_ETHPORTS; i++) {
 		eth_dev = &rte_eth_devices[i];
-		if (eth_dev->state != RTE_ETH_DEV_ATTACHED) {
+		if (eth_dev->state != RTE_ETH_DEV_ATTACHED)
 			continue;
-		}
 
-		pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);	      //lint !e507 !e737
-#ifdef CONFIG_SP_VID_DID
-		if ((pci_dev->id.vendor_id == PCI_VENDOR_ID_SPNIC) &&
-		    (pci_dev->id.device_id == HINIC3_DEV_ID_STANDARD ||
-		     pci_dev->id.device_id == HINIC3_DEV_ID_VF) &&
-#else
-		if ((pci_dev->id.vendor_id == PCI_VENDOR_ID_HUAWEI) &&
-		    (pci_dev->id.device_id == HINIC3_DEV_ID_STANDARD ||
-		     pci_dev->id.device_id == HINIC3_DEV_ID_DPU ||
-		     pci_dev->id.device_id == HINIC3_DEV_ID_VF) &&
-#endif
-		    (pci_dev->addr.bus == bus) &&
-		    (pci_dev->addr.devid == devid) &&
-		    (pci_dev->addr.function == function)) {
+		pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
+		if (hinic3_pci_dev_supported(eth_dev) &&
+		    pci_dev->addr.bus == bus &&
+		    pci_dev->addr.devid == devid &&
+		    pci_dev->addr.function == function) {
 			return eth_dev;
 		}
 	}
