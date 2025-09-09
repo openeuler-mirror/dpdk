@@ -325,7 +325,93 @@ int hinic3_tx_done_cleanup(void *txq, u32 free_cnt)
 	return hinic3_xmit_mbuf_cleanup(tx_queue, try_free_cnt);
 }
 
-/*lint -e40*/
+static inline void hinic3_calculate_tcp_checksum(struct rte_mbuf *mbuf,
+					u16 inner_l3_offset)
+{
+	struct rte_ipv4_hdr *ipv4_hdr;
+	struct rte_ipv6_hdr *ipv6_hdr;
+	struct rte_tcp_hdr *tcp_hdr;
+	uint64_t ol_flags = mbuf->ol_flags;
+
+	if (ol_flags & HINIC3_PKT_TX_IPV4) {
+		ipv4_hdr = rte_pktmbuf_mtod_offset(mbuf, struct rte_ipv4_hdr *,
+							inner_l3_offset);
+
+		if (ol_flags & HINIC3_PKT_TX_IP_CKSUM)
+			ipv4_hdr->hdr_checksum = 0;
+
+		tcp_hdr = (struct rte_tcp_hdr *)((char *)ipv4_hdr +
+						mbuf->l3_len);
+		tcp_hdr->cksum = rte_ipv4_phdr_cksum(ipv4_hdr, ol_flags);
+	} else {
+		ipv6_hdr = rte_pktmbuf_mtod_offset(mbuf, struct rte_ipv6_hdr *,
+							inner_l3_offset);
+		tcp_hdr = rte_pktmbuf_mtod_offset(mbuf, struct rte_tcp_hdr *,
+							(inner_l3_offset +
+							mbuf->l3_len));
+		tcp_hdr->cksum = rte_ipv6_phdr_cksum(ipv6_hdr, ol_flags);
+	}
+
+	return;
+}
+
+static inline void hinic3_calculate_udp_checksum(struct rte_mbuf *mbuf,
+					u16 inner_l3_offset)
+{
+	struct rte_ipv4_hdr *ipv4_hdr;
+	struct rte_ipv6_hdr *ipv6_hdr;
+	struct rte_udp_hdr *udp_hdr;
+	uint64_t ol_flags = mbuf->ol_flags;
+
+	if (ol_flags & HINIC3_PKT_TX_IPV4) {
+		ipv4_hdr = rte_pktmbuf_mtod_offset(mbuf, struct rte_ipv4_hdr *,
+							inner_l3_offset);
+
+		if (ol_flags & HINIC3_PKT_TX_IP_CKSUM)
+			ipv4_hdr->hdr_checksum = 0;
+
+		udp_hdr = (struct rte_udp_hdr *)((char *)ipv4_hdr +
+						mbuf->l3_len);
+		udp_hdr->dgram_cksum = rte_ipv4_phdr_cksum(ipv4_hdr, ol_flags);
+	} else {
+		ipv6_hdr = rte_pktmbuf_mtod_offset(mbuf, struct rte_ipv6_hdr *,
+							inner_l3_offset);
+		udp_hdr = rte_pktmbuf_mtod_offset(mbuf, struct rte_udp_hdr *,
+							(inner_l3_offset +
+							mbuf->l3_len));
+		udp_hdr->dgram_cksum = rte_ipv6_phdr_cksum(ipv6_hdr, ol_flags);
+	}
+
+	return;
+}
+
+static inline void hinic3_calculate_checksum(struct rte_mbuf *mbuf,
+					u16 inner_l3_offset)
+{
+	uint64_t ol_flags = mbuf->ol_flags;
+
+	switch (ol_flags & HINIC3_PKT_TX_L4_MASK) {
+		case HINIC3_PKT_TX_UDP_CKSUM:
+			hinic3_calculate_udp_checksum(mbuf, inner_l3_offset);
+			break;
+
+		case HINIC3_PKT_TX_TCP_CKSUM:
+			hinic3_calculate_tcp_checksum(mbuf, inner_l3_offset);
+			break;
+
+		case HINIC3_PKT_TX_SCTP_CKSUM:
+			/* Sctp csum no need to calculate pseudo-header */
+			break;
+
+		default:
+			if (ol_flags & HINIC3_PKT_TX_TCP_SEG)
+				hinic3_calculate_tcp_checksum(mbuf, inner_l3_offset);
+			break;
+	}
+
+	return;
+}
+
 static int hinic3_tx_offload_pkt_prepare(struct rte_mbuf *mbuf,
 					 u16 *inner_l3_offset)
 {
@@ -362,9 +448,11 @@ static int hinic3_tx_offload_pkt_prepare(struct rte_mbuf *mbuf,
 		*inner_l3_offset = mbuf->l2_len;
 	}
 
+	/* Process the pseudo-header checksum */
+	hinic3_calculate_checksum(mbuf, *inner_l3_offset);
+
 	return 0;
 }
-/*lint +e40*/
 
 /**
  * Set vlan offload info
