@@ -581,7 +581,9 @@ static inline uint8_t hinic3_check_ip_version(uint8_t version)
 	}
 }
 
-static int hinic3_vxlan_tso_ip_phdr_cksum(struct rte_mbuf *mbuf) {
+static void
+hinic3_tso_ip_phdr_cksum(struct rte_mbuf *mbuf)
+{
 	struct rte_ether_hdr *eth_hdr = NULL;
 	struct rte_vlan_hdr *vlan_hdr = NULL;
 	uint8_t *ip_hdr = NULL;
@@ -604,38 +606,42 @@ static int hinic3_vxlan_tso_ip_phdr_cksum(struct rte_mbuf *mbuf) {
 	version = (*ip_hdr >> 4) & 0x0F;
 	ver_index = hinic3_check_ip_version(version);
 	if (ver_index == IP_INDEX_INVALID) {
-		PMD_DRV_LOG(INFO, "not support outer l3 version(%u) by vxlan checksum", version);
-		return 0;
+		PMD_DRV_LOG(INFO, "not support l3 version(%u) by tso checksum", version);
+		return;
 	}
 
 	/* Outer UDP pseudo-header checksum calculation. */
 	ip_handler = &g_ip_cs_handlers[ver_index];
 	if (hinic3_vxlan_out_udp_cksum_needed(ip_handler, ip_hdr, mbuf)) {
 		l4_proto = hinic3_ip_phdr_cksum(ip_handler, ip_hdr, mbuf);
-		if (unlikely(l4_proto != IPPROTO_UDP)) {
-			PMD_DRV_LOG(INFO, "not support outer l4 proto(%u) by vxlan checksum", l4_proto);
-			return 0;
+		if (unlikely((mbuf->ol_flags & HINIC3_PKT_TX_TUNNEL_MASK) && (l4_proto != IPPROTO_UDP))) {
+			PMD_DRV_LOG(INFO, "not support outer l4 proto(%u) by tso checksum", l4_proto);
+			return;
 		}
 	}
 
-	offset += ip_handler->hdr_len + sizeof(struct rte_udp_hdr) + sizeof(struct rte_vxlan_hdr) +
-		sizeof(struct rte_ether_hdr);
-	ip_hdr = (uint8_t *)(pkt_data + offset);
-	version = (*ip_hdr >> 4) & 0x0F;
-	ver_index = hinic3_check_ip_version(version);
-	if (ver_index == IP_INDEX_INVALID) {
-		PMD_DRV_LOG(INFO, "not support inner l3 version(%u) by vxlan checksum", version);
-		return 0;
+	/* If it is tunnel packet, then process inner layer */
+	if (mbuf->ol_flags & HINIC3_PKT_TX_TUNNEL_MASK) {
+		offset += ip_handler->hdr_len + sizeof(struct rte_udp_hdr) +
+		          sizeof(struct rte_vxlan_hdr) + sizeof(struct rte_ether_hdr);
+		ip_hdr = (uint8_t *)(pkt_data + offset);
+		version = (*ip_hdr >> 4) & 0x0F;
+		ver_index = hinic3_check_ip_version(version);
+		if (ver_index == IP_INDEX_INVALID) {
+			PMD_DRV_LOG(INFO, "not support inner l3 version(%u) by vxlan checksum", version);
+			return;
+		}
+
+		/* Inner TCP pseudo-header checksum calculation. */
+		ip_handler = &g_ip_cs_handlers[ver_index];
+		l4_proto = hinic3_ip_phdr_cksum(ip_handler, ip_hdr, mbuf);
+		if (unlikely(l4_proto != IPPROTO_TCP)) {
+			PMD_DRV_LOG(INFO, "not support inner l4 proto(%u) by vxlan checksum", l4_proto);
+			return;
+		}
 	}
 
-	/* Inner TCP pseudo-header checksum calculation. */
-	ip_handler = &g_ip_cs_handlers[ver_index];
-	l4_proto = hinic3_ip_phdr_cksum(ip_handler, ip_hdr, mbuf);
-	if (unlikely(l4_proto != IPPROTO_TCP)) {
-		PMD_DRV_LOG(INFO, "not support inner l4 proto(%u) by vxlan checksum", l4_proto);
-	}
-
-	return 0;
+	return;
 }
 
 static int hinic3_set_tx_offload(struct rte_mbuf *mbuf,
@@ -682,11 +688,7 @@ static int hinic3_set_tx_offload(struct rte_mbuf *mbuf,
 		 * In VXLAN TSO scene, checksum of pseudo header in inner/outer L4 layers
 		 * must not include length of L4, should be set to zero.
 		 */
-		if (ol_flags & HINIC3_PKT_TX_TUNNEL_VXLAN) {
-			if(unlikely(hinic3_vxlan_tso_ip_phdr_cksum(mbuf))) {
-				return -EINVAL;
-			};
-		}
+		hinic3_tso_ip_phdr_cksum(mbuf);
 	} else {
 		if (ol_flags & HINIC3_PKT_TX_IP_CKSUM)
 			task->pkt_info0 |= SQ_TASK_INFO0_SET(1U, INNER_L3_EN);
