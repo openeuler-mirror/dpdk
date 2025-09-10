@@ -419,7 +419,7 @@ static int hinic3_tx_offload_pkt_prepare(struct rte_mbuf *mbuf,
 
 	/* Vxlan and Geneve offload */
 	if ((ol_flags & HINIC3_PKT_TX_TUNNEL_MASK) &&
-		(!((ol_flags & HINIC3_PKT_TX_TUNNEL_VXLAN) || (ol_flags & HINIC3_PKT_TX_TUNNEL_GENEVE))))
+		!(ol_flags & (HINIC3_PKT_TX_TUNNEL_VXLAN | HINIC3_PKT_TX_TUNNEL_GENEVE)))
 		return -EINVAL;
 
 #ifdef RTE_LIBRTE_ETHDEV_DEBUG
@@ -702,7 +702,7 @@ static int hinic3_set_tx_offload(struct rte_mbuf *mbuf,
 		}
 	}
 
-	/* For vxlan, also can support PKT_TX_TUNNEL_GENEVE, etc */
+	/* For vxlan, also can support PKT_TX_TUNNEL_GENEVE/GRE, etc */
 	switch (ol_flags & HINIC3_PKT_TX_TUNNEL_MASK) {
 	case HINIC3_PKT_TX_TUNNEL_VXLAN:
 		task->pkt_info0 |= SQ_TASK_INFO0_SET(1U, TUNNEL_FLAG);
