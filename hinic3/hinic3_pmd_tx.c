@@ -402,7 +402,6 @@ static inline void hinic3_calculate_checksum(struct rte_mbuf *mbuf,
 		case HINIC3_PKT_TX_SCTP_CKSUM:
 			/* Sctp csum no need to calculate pseudo-header */
 			break;
-
 		default:
 			if (ol_flags & HINIC3_PKT_TX_TCP_SEG)
 				hinic3_calculate_tcp_checksum(mbuf, inner_l3_offset);
@@ -698,12 +697,9 @@ static int hinic3_set_tx_offload(struct rte_mbuf *mbuf,
 		case HINIC3_PKT_TX_UDP_CKSUM:
 		case HINIC3_PKT_TX_SCTP_CKSUM:
 			task->pkt_info0 |= SQ_TASK_INFO0_SET(1U, INNER_L4_EN);
-
 			break;
-
 		case HINIC3_PKT_TX_L4_NO_CKSUM:
 			break;
-
 		default:
 			PMD_DRV_LOG(INFO, "not support pkt type");
 			return -EINVAL;
@@ -720,7 +716,6 @@ static int hinic3_set_tx_offload(struct rte_mbuf *mbuf,
 		break;
 	case 0:
 		break;
-
 	default:
 		/* For non UDP/GRE tunneling, drop the tunnel packet */
 		PMD_DRV_LOG(INFO, "not support tunnel pkt type");

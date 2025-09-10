@@ -623,7 +623,7 @@ struct mag_phy_port_stats {
 	u64 mac_rx_pfc_pri7_pkt_num;
 	u64 mac_rx_control_pkt_num;
 	u64 mac_rx_sym_err_pkt_num;
-	u64 mac_rx_fcs_err_pkt_num;
+	u64 rx_crc_errors;
 	u64 mac_rx_send_app_good_pkt_num;
 	u64 mac_rx_send_app_bad_pkt_num;
 	u64 mac_rx_unfilter_pkt_num;

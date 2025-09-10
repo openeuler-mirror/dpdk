@@ -214,7 +214,7 @@ static const struct hinic3_xstats_name_off hinic3_phyport_stats_strings[] = {
 	HINIC3_PORT_STAT(mac_rx_pfc_pri7_pkt_num),
 	HINIC3_PORT_STAT(mac_rx_control_pkt_num),
 	HINIC3_PORT_STAT(mac_rx_sym_err_pkt_num),
-	HINIC3_PORT_STAT(mac_rx_fcs_err_pkt_num),
+	HINIC3_PORT_STAT(rx_crc_errors),
 	HINIC3_PORT_STAT(mac_rx_send_app_good_pkt_num),
 	HINIC3_PORT_STAT(mac_rx_send_app_bad_pkt_num),
 	HINIC3_PORT_STAT(mac_rx_unfilter_pkt_num)
