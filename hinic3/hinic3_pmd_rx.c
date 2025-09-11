@@ -1070,7 +1070,6 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 				rxm->packet_type = RTE_PTYPE_UNKNOWN;
 		} 
 
-
 		/* 7. RSS */
 		hash_value = hinic3_hw_cpu32(rx_cqe->hash_val);
 		rxm->ol_flags |= hinic3_rx_rss_hash(offload_type, hash_value,
@@ -1119,4 +1118,3 @@ out:
 
 	return pkts;
 }
-

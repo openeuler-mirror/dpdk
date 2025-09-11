@@ -58,19 +58,24 @@ struct hinic3_filter_t {
 };
 
 enum hinic3_action_type {
-    HINIC3_ACTION_ADD,
-    HINIC3_ACTION_NOT_ADD,
+	HINIC3_ACTION_ADD,
+	HINIC3_ACTION_NOT_ADD,
 };
 
 enum hinic3_fdir_tunnel_mode {
-	HINIC3_FDIR_TUNNEL_MODE_NORMAL	    = 0,
-	HINIC3_FDIR_TUNNEL_MODE_VXLAN	    = 1,
+	HINIC3_FDIR_TUNNEL_MODE_NORMAL = 0,
+	HINIC3_FDIR_TUNNEL_MODE_VXLAN  = 1,
+	HINIC3_FDIR_TUNNEL_MODE_NVGRE  = 2,
+	HINIC3_FDIR_TUNNEL_MODE_FC     = 3,
+	HINIC3_FDIR_TUNNEL_MODE_GPE    = 4,
+	HINIC3_FDIR_TUNNEL_MODE_GENEVE = 5,
+	HINIC3_FDIR_TUNNEL_MODE_NSH    = 6,
 };
 
 enum hinic3_fdir_ip_type {
-	HINIC3_FDIR_IP_TYPE_IPV4	    = 0,
-	HINIC3_FDIR_IP_TYPE_IPV6	    = 1,
-	HINIC3_FDIR_IP_TYPE_ANY	    = 2,
+	HINIC3_FDIR_IP_TYPE_IPV4 = 0,
+	HINIC3_FDIR_IP_TYPE_IPV6 = 1,
+	HINIC3_FDIR_IP_TYPE_ANY	 = 2,
 };
 
 struct hinic3_tcam_key_mem {
@@ -104,10 +109,10 @@ struct hinic3_tcam_key_mem {
 	u32 sport : 16;
 	u32 rsvd5 : 16;
 #ifdef HINIC3_TRAFFIC_BIFUR
-    u32 rsvd6 : 12;
-    u32 er_id : 4;
+	u32 rsvd6 : 12;
+	u32 er_id : 4;
 #else
-    u32 rsvd6 : 16;
+	u32 rsvd6 : 16;
 #endif
 	u32 outer_sipv4_h : 16;
 
@@ -151,10 +156,10 @@ struct hinic3_tcam_key_mem {
 
 	u32 outer_sipv4_h : 16;
 #ifdef HINIC3_TRAFFIC_BIFUR
-    u32 er_id : 4;
-    u32 rsvd6 : 12;
+	u32 er_id : 4;
+	u32 rsvd6 : 12;
 #else
-    u32 rsvd6 : 16;
+	u32 rsvd6 : 16;
 #endif
 
 	u32 outer_dipv4_h : 16;

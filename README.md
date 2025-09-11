@@ -49,10 +49,15 @@ git clone https://gitee.com/openeuler/dpdk.git -b hinic3 dpdk-hinic3
 进入 dpdk-hinic3 目录，以下二选一执行
 ```bash
 # 直接安装
-sh install.sh ../dpdk-stable-21.11.9
+sh install.sh ../dpdk-stable-21.11.9 install
 
 # 如果需要支持 bifur 安装
-sh install.sh ../dpdk-stable-21.11.9 bifur
+sh install.sh ../dpdk-stable-21.11.9 install bifur
+```
+
+如果是 BPNIC 需要再执行
+```bash
+sh install.sh ../dpdk-stable-21.11.9 replace $nic_name
 ```
 
 ---
@@ -92,6 +97,6 @@ git clone https://gitee.com/openeuler/dpdk.git -b hinic3 dpdk-hinic3
 
 # 安装并编译
 cd dpdk-hinic3
-sh install.sh ../dpdk-stable-21.11.9
+sh install.sh ../dpdk-stable-21.11.9 install
 sh install.sh ../dpdk-stable-21.11.9 build
 ```
