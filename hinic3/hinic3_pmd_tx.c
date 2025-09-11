@@ -521,6 +521,33 @@ static void hinic3_get_ipv6_len_proto(const void *hdr, uint16_t *hdr_len, uint8_
 	}
 }
 
+static uint16_t
+hinic3_ipv6_phdr_cksum(const struct rte_ipv6_hdr *ipv6_hdr, uint64_t ol_flags)
+{
+	uint32_t   sum;
+	uint8_t	   proto;
+	uint16_t   l3_len;
+	rte_be32_t l4_len;
+	rte_be32_t l4_proto;
+
+	hinic3_get_ipv6_len_proto((const void *)ipv6_hdr, &l3_len, &proto);
+	l4_proto = rte_cpu_to_be_16(proto);
+	if (ol_flags & HINIC3_PKT_TX_TCP_SEG)
+		l4_len = 0;
+	else
+		l4_len = rte_cpu_to_be_16(rte_be_to_cpu_16(ipv6_hdr->payload_len) - l3_len + sizeof(*ipv6_hdr));
+
+#ifdef DPDK_24_11
+	sum = __rte_raw_cksum(ipv6_hdr->src_addr.a, sizeof(ipv6_hdr->src_addr.a) + sizeof(ipv6_hdr->dst_addr.a), 0);
+#else
+	sum = __rte_raw_cksum(ipv6_hdr->src_addr, sizeof(ipv6_hdr->src_addr) + sizeof(ipv6_hdr->dst_addr), 0);
+#endif
+	sum = __rte_raw_cksum(&l4_len, sizeof(l4_len), sum);
+	sum = __rte_raw_cksum(&l4_proto, sizeof(l4_proto), sum);
+
+	return __rte_raw_cksum_reduce(sum);
+}
+
 static hinic3_ip_cs_handler_t g_ip_cs_handlers[] = {
 	[IPV4_INDEX] = {
 		.cksum_func = (uint16_t (*)(const void *, uint64_t))rte_ipv4_phdr_cksum,
@@ -528,7 +555,7 @@ static hinic3_ip_cs_handler_t g_ip_cs_handlers[] = {
 		.hdr_len = sizeof(struct rte_ipv4_hdr),
 	},
 	[IPV6_INDEX] = {
-		.cksum_func = (uint16_t (*)(const void *, uint64_t))rte_ipv6_phdr_cksum,
+		.cksum_func = (uint16_t (*)(const void *, uint64_t))hinic3_ipv6_phdr_cksum,
 		.get_len_proto = hinic3_get_ipv6_len_proto,
 		.hdr_len = sizeof(struct rte_ipv6_hdr),
 	}
