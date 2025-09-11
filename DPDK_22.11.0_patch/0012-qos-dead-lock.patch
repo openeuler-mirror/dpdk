@@ -1,0 +1,27 @@
+From a43865eac5d8faf64179e647628f577e2bc15c8f Mon Sep 17 00:00:00 2001
+From: yuan-chuxiang <690654847@qq.com>
+Date: Thu, 11 Sep 2025 15:43:08 +0800
+Subject: [PATCH] qos dead lock
+
+---
+ drivers/net/hinic3/src/hinic3_qos/multilevel_qos/hinic3_mtr.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/net/hinic3/src/hinic3_qos/multilevel_qos/hinic3_mtr.c b/drivers/net/hinic3/src/hinic3_qos/multilevel_qos/hinic3_mtr.c
+index 4bf2fb767b..a60e9b1350 100644
+--- a/drivers/net/hinic3/src/hinic3_qos/multilevel_qos/hinic3_mtr.c
++++ b/drivers/net/hinic3/src/hinic3_qos/multilevel_qos/hinic3_mtr.c
+@@ -78,9 +78,9 @@ void hinic3_group_info_unlock(uint16_t group_id)
+ 
+ static void hinic3_meter_mutex_all_lock(void)
+ {
+-    hinic3_meter_list_lock();
+     hinic3_mtr_policy_list_lock();
+     hinic3_mtr_profile_list_lock();
++    hinic3_meter_list_lock();
+ }
+ 
+ static void hinic3_meter_mutex_all_unlock(void)
+-- 
+2.45.1.windows.1
+
