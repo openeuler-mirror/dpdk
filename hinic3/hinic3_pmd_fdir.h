@@ -58,8 +58,8 @@ struct hinic3_filter_t {
 };
 
 enum hinic3_action_type {
-    HINIC3_ACTION_ADD,
-    HINIC3_ACTION_NOT_ADD,
+	HINIC3_ACTION_ADD,
+	HINIC3_ACTION_NOT_ADD,
 };
 
 enum hinic3_fdir_tunnel_mode {
