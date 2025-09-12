@@ -116,8 +116,7 @@ hinic3_dcb_alloc(struct hinic3_nic_dev *nic_dev)
 		return -EFAULT;
 	}
 
-	nic_dev->ets =
-		rte_zmalloc("ets", sizeof(struct hinic3_ets), 0);
+	nic_dev->ets = rte_zmalloc("ets", sizeof(struct hinic3_ets), 0);
 	if (!nic_dev->ets) {
 		PMD_DRV_LOG(ERR, "Failed to create ets.");
 		return -EFAULT;
@@ -190,13 +189,6 @@ init_default_dcb_cfg(struct hinic3_nic_dev *nic_dev,
 	return 0;
 }
 
-static void
-hinic3_dcb_free(struct hinic3_nic_dev *nic_dev)
-{
-	rte_free(nic_dev->dcb);
-	nic_dev->dcb = NULL;
-}
-
 static int
 hinic3_dcb_init_tm(struct hinic3_nic_dev *nic_dev)
 {
@@ -229,43 +221,12 @@ hinic3_dcb_init_tm(struct hinic3_nic_dev *nic_dev)
 int
 hinic3_dcb_init(struct hinic3_nic_dev *nic_dev)
 {
-	struct hinic3_dcb_config *hw_dcb_cfg = NULL;
 	int err;
 
 	err = hinic3_dcb_alloc(nic_dev);
 	if (err != 0) {
 		PMD_DRV_LOG(ERR, "Dcb alloc failed.");
 		return err;
-	}
-
-	u8 dcb_en = nic_dev->dcb->dcb_on;
-	hw_dcb_cfg = &nic_dev->dcb->hw_dcb_cfg;
-
-	err = init_default_dcb_cfg(nic_dev, hw_dcb_cfg);
-	if (err) {
-		PMD_DRV_LOG(ERR, "Initialize dcb configuration failed");
-		hinic3_dcb_free(nic_dev);
-		return err;
-	}
-
-	memcpy(&nic_dev->dcb->wanted_dcb_cfg, hw_dcb_cfg,
-	       sizeof(struct hinic3_dcb_config));
-
-	PMD_DRV_LOG(INFO, "Support num cos %u, default cos %u",
-		    nic_dev->dcb->cos_config_num_max, hw_dcb_cfg->default_cos);
-
-	err = hinic3_dcb_init_tm(nic_dev);
-	if (err != 0) {
-		PMD_DRV_LOG(ERR, "Dcb init tm configuration failed.");
-		return err;
-	}
-
-	if (dcb_en) {
-		err = hinic3_sync_dcb_state(nic_dev->hwdev, 1, dcb_en);
-		if (err) {
-			PMD_DRV_LOG(ERR, "Set dcb state failed");
-			return err;
-		}
 	}
 
 	return 0;
@@ -541,8 +502,28 @@ hinic3_configure_dcb_hw(struct hinic3_nic_dev *nic_dev, u8 dcb_en)
 {
 	int err;
 	u8 user_cos_num = hinic3_get_dev_user_cos_num(nic_dev);
+	struct hinic3_dcb_config *hw_dcb_cfg = &nic_dev->dcb->hw_dcb_cfg;
 
-	err = hinic3_sync_dcb_state(nic_dev->hwdev, 1, dcb_en);
+	err = init_default_dcb_cfg(nic_dev, hw_dcb_cfg);
+	if (err) {
+		PMD_DRV_LOG(ERR, "Initialize dcb configuration failed");
+		nic_dev->dcb->dcb_on = 0;
+		return err;
+	}
+
+	memcpy(&nic_dev->dcb->wanted_dcb_cfg, hw_dcb_cfg,
+	       sizeof(struct hinic3_dcb_config));
+
+	PMD_DRV_LOG(INFO, "Support num cos %u, default cos %u",
+		    nic_dev->dcb->cos_config_num_max, hw_dcb_cfg->default_cos);
+
+	err = hinic3_dcb_init_tm(nic_dev);
+	if (err != 0) {
+		PMD_DRV_LOG(ERR, "Dcb init tm configuration failed.");
+		return err;
+	}
+
+	err = hinic3_sync_dcb_state(nic_dev->hwdev, CMD_QOS_OP_SET, dcb_en);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Set dcb state failed");
 		return err;
