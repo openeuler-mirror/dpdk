@@ -1,0 +1,39 @@
+From dd828f000b812b0fc2210257d238cefe49809c62 Mon Sep 17 00:00:00 2001
+From: UPUPLiang <huangzhengliang4@huawei.com>
+Date: Tue, 16 Sep 2025 16:19:02 +0800
+Subject: [PATCH] fix init agent config
+
+---
+ .../src/hinic3_init/comm/hinic3_parse_agent_config.c     | 9 ---------
+ 1 file changed, 9 deletions(-)
+
+diff --git a/drivers/net/hinic3/src/hinic3_init/comm/hinic3_parse_agent_config.c b/drivers/net/hinic3/src/hinic3_init/comm/hinic3_parse_agent_config.c
+index d423dc364e..bcc2c4df63 100644
+--- a/drivers/net/hinic3/src/hinic3_init/comm/hinic3_parse_agent_config.c
++++ b/drivers/net/hinic3/src/hinic3_init/comm/hinic3_parse_agent_config.c
+@@ -512,14 +512,6 @@ static void hinic3_parse_meminfo_feature(struct rte_cfgfile *inifile)
+     }
+ }
+ 
+-static void hinic3_init_agent_config_arg(void)
+-{
+-    g_agent_config_init_arg.bond_rx_depth = HINIC3_DEFAULT_BOND_DEPTH_OVS;
+-    g_agent_config_init_arg.bond_tx_depth = HINIC3_DEFAULT_BOND_DEPTH_OVS;
+-    g_agent_config_init_arg.vport_rx_depth = HINIC3_DEFAULT_VPORT_DEPTH_OVS;
+-    g_agent_config_init_arg.vport_tx_depth = HINIC3_DEFAULT_VPORT_DEPTH_OVS;
+-}
+-
+ static void hinic3_check_config(void)
+ {
+     if (g_agent_config_init_arg.offload_thread_num == HINIC3_OFFLOAD_THREAD_INVALID_NUM) {
+@@ -553,7 +545,6 @@ static int hinic3_parse_value_from_cfg(struct rte_cfgfile *inifile)
+     }
+     hinic3_set_config_value();
+     hinic3_check_config();
+-    hinic3_init_agent_config_arg();
+ 
+     // 在hinic3_get_agent_value_from_config中解析参数会有超大函数门禁不过问题，所以在这里解析
+     is_virtio_queue_depth_set = hinic3_check_virtio_queue_depth_set();
+-- 
+2.45.1.windows.1
+
