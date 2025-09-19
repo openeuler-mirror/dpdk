@@ -47,7 +47,8 @@ hinic3_telemetry_info(const char *cmd, const char *params, struct rte_tel_data *
 	struct rte_tel_data *func_data = NULL;
 	struct hinic3_nic_dev *nic_dev = NULL;
 	struct mbox_cnt_info mbox_cnt;
-	u8 n_ports, i, err;
+	uint32_t i;
+	uint8_t n_ports, err;
 
 	memset(&mbox_cnt, 0, sizeof(struct mbox_cnt_info));
 

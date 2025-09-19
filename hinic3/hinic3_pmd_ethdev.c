@@ -399,12 +399,12 @@ static int hinic3_dev_configure(struct rte_eth_dev *dev)
 
 void hinic3_dev_info_get(struct rte_eth_dev_info *info, struct hinic3_nic_dev *nic_dev)
 {
-	if (nic_dev->dcb->dcb_on != 0) {
-		info->max_rx_queues  = nic_dev->num_rqs;
-		info->max_tx_queues  = nic_dev->num_sqs;
+	if (nic_dev->dcb->dcb_on) {
+		info->max_rx_queues = nic_dev->num_rqs;
+		info->max_tx_queues = nic_dev->num_sqs;
 	} else {
-		info->max_rx_queues  = nic_dev->max_rqs;
-		info->max_tx_queues  = nic_dev->max_sqs;
+		info->max_rx_queues = nic_dev->max_rqs;
+		info->max_tx_queues = nic_dev->max_sqs;
 	}
 
 	info->min_rx_bufsize = HINIC3_MIN_RX_BUF_SIZE;

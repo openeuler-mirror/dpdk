@@ -3,6 +3,32 @@ set -e
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 
+# 适配低版本 meson
+function meson_build_adapt() {
+	MESON_FILE="./drivers/net/hinic3/meson.build"
+
+	# 删除原有 dpdk_version 判断整个段落
+	sed -i '/^dpdk_version = meson.project_version()/,/^endif$/d' $MESON_FILE
+
+	# 定义不同版本的 cflags
+	declare -A FLAGS
+	FLAGS[20]="-DDPDK_20_11 -DDPDK_20_BIFUR"
+	FLAGS[21]="-DDPDK_20_11 -DDPDK_21_11 -DDPDK_21_BIFUR"
+	FLAGS[22]="-DDPDK_20_11 -DDPDK_21_11 -DDPDK_22_11 -DDPDK_22_BIFUR"
+	FLAGS[23]="-DDPDK_20_11 -DDPDK_21_11 -DDPDK_22_11"
+	FLAGS[24]="-DDPDK_20_11 -DDPDK_21_11 -DDPDK_22_11 -DDPDK_24_11"
+	FLAGS[25]="-DDPDK_20_11 -DDPDK_21_11 -DDPDK_22_11 -DDPDK_24_11"
+
+	# 如果有对应的 flags 就写入 meson.build
+	for flag in ${FLAGS[$DPDK_MAJOR]}; do
+		line="cflags += ['$flag']"
+		# 判读不存在执行
+		if ! grep -Fq "$line" "$MESON_FILE"; then
+			sed -i "/cflags += \['-fstack-protector-strong'\]/a $line" "$MESON_FILE"
+		fi
+	done
+}
+
 install() {
 	install_type="$1" # 可为空或 bifur
 
@@ -33,6 +59,8 @@ install() {
 		echo "添加 'hinic3' 到 meson.build"
 		sed -i "/'hinic'/a\\	'hinic3'," "./drivers/net/meson.build"
 	fi
+
+	meson_build_adapt
 
 	# dpdk>=22
 	if [ "$DPDK_MAJOR" -ge 22 ]; then
@@ -97,7 +125,7 @@ replace() {
 	# 保存到 tmp 目录
 	mkdir -p $SCRIPT_DIR/tmp
 	tmp_file="$SCRIPT_DIR/tmp/pmd_name.txt"
-	echo "$pmd_name" > "$tmp_file"
+	echo "$pmd_name" >"$tmp_file"
 
 	stashed=0
 	# 判断工作区是否有未提交的更改（包括暂存区和未跟踪文件）
@@ -167,7 +195,7 @@ build() {
 	if [ -f "$tmp_file" ]; then
 		pmd_name=$(cat "$tmp_file")
 	else
-		pmd_name="hinic3"  # 默认值
+		pmd_name="hinic3" # 默认值
 	fi
 
 	# dpdk=19 用 Makefile

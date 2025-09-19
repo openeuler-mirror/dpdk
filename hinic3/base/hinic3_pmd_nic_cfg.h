@@ -157,10 +157,10 @@ struct hinic3_cmd_qos_map_cfg {
 
 	u8 op_code;
 	/* bit0 - pcp2cos, bit1 - dscp2cos */
-	u8 cfg_bitmap; 
-	u16 rsvd0;
+	u8 cfg_bitmap;
+	u16 func_id;
 	/* Must be configured in sets of 8. */
-	u8 pcp2cos[8]; 
+	u8 pcp2cos[8];
 	/* 
 	 * When configuring dscp2cos, if cos value is set to 0xFF,
 	 * MPU will ignore configuration of this dscp priority.
