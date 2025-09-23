@@ -1627,7 +1627,7 @@ diff -ruN dumpcap/main.c knet_dumpcap/main.c
 +        pcap_t *pcap;
 +
 +        pcap = pcap_open_dead_with_tstamp_precision(DLT_EN10MB, snaplen,
-+                                                    PCAP_TSTAMP_PRECISION_NANO);
++                                                    PCAP_TSTAMP_PRECISION_MICRO);
 +        if (pcap == NULL)
 +            rte_exit(EXIT_FAILURE, "pcap_open_dead failed\n");
 +
