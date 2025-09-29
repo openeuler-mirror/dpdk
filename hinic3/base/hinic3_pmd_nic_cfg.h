@@ -1665,6 +1665,4 @@ int hinic3_set_tm_config_tc_rate(void *hwdev, u8 tc_no, u8 rate);
 int hinic3_set_tm_hierarchy_do_commit(void *hwdev, u8 *cos_tc, u8 *tc_bw,
 				   u8 *rate_limit);
 
-int hinic3_get_bifur_enable(void *hwdev, u8 *bifur_enable, u8 *iso_enable);
-
 #endif /* _HINIC3_PMD_NIC_CFG_H_ */

@@ -1409,13 +1409,7 @@ int hinic3_add_tcam_rule(void *hwdev, struct hinic3_tcam_cfg_rule *tcam_rule, u8
 	tcam_cmd.func_id = hinic3_global_func_id(hwdev);
 #ifdef HINIC3_TRAFFIC_BIFUR
 	/* Process of enabling group ext_info in the MPU */
-	u8 bifur_en, iso_en;
-
-	if (hinic3_get_bifur_enable(hwdev, &bifur_en, &iso_en) != 0)
-		PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable status failed.");
-
-	if (bifur_en)
-		tcam_cmd.bifur_rss_en = 1;
+	tcam_cmd.bifur_rss_en = 1;
 #endif
 	memcpy((void *)&tcam_cmd.rule, (void *)tcam_rule,
 		sizeof(struct hinic3_tcam_cfg_rule));
@@ -1824,32 +1818,4 @@ hinic3_set_tm_hierarchy_do_commit(void *hwdev, u8 *cos_tc, u8 *tc_bw,
 			    err, ets.head.status, out_size);
 
 	return err;
-}
-
-int
-hinic3_get_bifur_enable(void *hwdev, u8 *bifur_en, u8 *iso_en)
-{
-	struct hinic3_port_flow_bifur_en_cmd bifur_cmd;
-	u16 out_size = sizeof(bifur_cmd);
-	int err;
-
-	if (!hwdev)
-		return -EINVAL;
-
-	memset(&bifur_cmd, 0, sizeof(struct hinic3_port_flow_bifur_en_cmd));
-	bifur_cmd.port_id     = hinic3_physical_port_id(hwdev);
-	bifur_cmd.config_flag = PORT_BIFUR_CMD_GET;
-
-	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_SET_PORT_FLOW_BIFUR_ENABLE, &bifur_cmd,
-				     sizeof(bifur_cmd), &bifur_cmd, &out_size);
-	if (err || bifur_cmd.msg_head.status || !out_size) {
-		PMD_DRV_LOG(ERR, "get bifur status failed, err: %d, status: 0x%x, out size: 0x%x",
-			    err, bifur_cmd.msg_head.status, out_size);
-		return -EIO;
-	}
-
-	*bifur_en = bifur_cmd.flow_bifur_en;
-	*iso_en	  = bifur_cmd.iso_en;
-
-	return 0;
 }

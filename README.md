@@ -1,6 +1,6 @@
 # OpenEuler 开源仓 `hinic3` PMD 使用简介
 
-本文以 **DPDK 21.11** 为例，介绍如何在 DPDK 中集成并编译 `hinic3` PMD。
+本文以 **DPDK 22.11** 为例，介绍如何在 DPDK 中集成并编译 `hinic3` PMD。
 
 PMD 已归一到本项目的 hinic3 目录中，使用方式由原先的每个版本单独打 patch，变为了使用 `install.sh` 脚本自动安装 hinic3 到源码目录中。原先 patch 使用方式参考 `README.patch.md`
 
@@ -15,23 +15,23 @@ PMD 已归一到本项目的 hinic3 目录中，使用方式由原先的每个�
 
 ### 1.2 下载 DPDK
 
-DPDK 官方源码包下载链接可在 [https://core.dpdk.org/download/](https://core.dpdk.org/download/) 获取，例如下载 **DPDK 21.11.9**：
+DPDK 官方源码包下载链接可在 [https://core.dpdk.org/download/](https://core.dpdk.org/download/) 获取，例如下载 **DPDK 22.11.9**：
 ```bash
-wget https://fast.dpdk.org/rel/dpdk-21.11.9.tar.xz
-tar -xf dpdk-21.11.9.tar.xz
-# 解压后目录名：dpdk-stable-21.11.9
+wget https://fast.dpdk.org/rel/dpdk-22.11.9.tar.xz
+tar -xf dpdk-22.11.9.tar.xz
+# 解压后目录名：dpdk-stable-22.11.9
 ```
 
 ### 1.3 获取 hinic3 PMD 源码
 方法一：直接下载
 ```bash
-wget https://gitee.com/openeuler/dpdk/repository/archive/hinic3.zip
-unzip dpdk-hinic3.zip
-# 解压后目录名：dpdk-hinic3
+wget https://gitee.com/openeuler/dpdk/repository/archive/baidu.zip
+unzip dpdk-baidu.zip
+# 解压后目录名：dpdk-baidu
 ```
 方法二：Git 克隆
 ```bash
-git clone https://gitee.com/openeuler/dpdk.git -b hinic3 dpdk-hinic3
+git clone https://gitee.com/openeuler/dpdk.git -b baidu dpdk-hinic3
 # 默认目录名是dpdk，这里指定为了：dpdk-hinic3
 ```
 
@@ -41,15 +41,15 @@ git clone https://gitee.com/openeuler/dpdk.git -b hinic3 dpdk-hinic3
 进入 dpdk-hinic3 目录，以下按需二选一执行
 ```bash
 # 直接安装
-sh install.sh ../dpdk-stable-21.11.9 install
+sh install.sh ../dpdk-stable-22.11.9 install
 
 # 如果需要使用分流功能
-sh install.sh ../dpdk-stable-21.11.9 install bifur
+sh install.sh ../dpdk-stable-22.11.9 install bifur
 ```
 
-如果是 BPNIC 需要再执行
+BAIDU rename 需要再执行
 ```bash
-sh install.sh ../dpdk-stable-21.11.9 replace $nic_name
+sh install.sh ../dpdk-stable-22.11.9 replace baidu
 ```
 
 安装脚本会自动检测目标 DPDK 目录是否为 Git 仓库，如果不是，会自动初始化 Git。
@@ -60,10 +60,10 @@ sh install.sh ../dpdk-stable-21.11.9 replace $nic_name
 以下按需二选一执行
 ```bash
 # 直接编译
-sh install.sh ../dpdk-stable-21.11.9 build
+sh install.sh ../dpdk-stable-22.11.9 build
 
 # 如果是 DPU 场景编译
-sh install.sh ../dpdk-stable-21.11.9 build generic
+sh install.sh ../dpdk-stable-22.11.9 build generic
 ```
 
 安装脚本会自动判断 DPDK 版本：
@@ -79,28 +79,17 @@ sh install.sh ../dpdk-stable-21.11.9 build generic
 yum install -y gcc libatomic python3-devel meson ninja-build python3-pyelftools libibverbs numactl numactl-devel
 
 # 下载并解压 DPDK
-wget https://fast.dpdk.org/rel/dpdk-21.11.9.tar.xz
-tar -xf dpdk-21.11.9.tar.xz
+wget https://fast.dpdk.org/rel/dpdk-22.11.9.tar.xz
+tar -xf dpdk-22.11.9.tar.xz
 
 # 获取 hinic3 PMD
-git clone https://gitee.com/openeuler/dpdk.git -b hinic3 dpdk-hinic3
+git clone https://gitee.com/openeuler/dpdk.git -b baidu dpdk-hinic3
 cd dpdk-hinic3
 ```
 
-### SP200&SP600 网卡
+### 安装编译
 ```bash
-sh install.sh ../dpdk-stable-21.11.9 install
-sh install.sh ../dpdk-stable-21.11.9 build
-```
-
-### SP600 标准网卡 分流场景
-```bash
-sh install.sh ../dpdk-stable-21.11.9 install bifur
-sh install.sh ../dpdk-stable-21.11.9 build
-```
-
-### SP900 DPU卡
-```bash
-sh install.sh ../dpdk-stable-21.11.9 install bifur
-sh install.sh ../dpdk-stable-21.11.9 build generic
+sh install.sh ../dpdk-stable-22.11.9 install bifur
+sh install.sh ../dpdk-stable-22.11.9 replace baidu
+sh install.sh ../dpdk-stable-22.11.9 build generic
 ```

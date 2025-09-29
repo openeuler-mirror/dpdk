@@ -229,25 +229,16 @@ static void hinic3_fdir_tcam_notunnel_init(struct rte_eth_dev *dev,
 
 	tcam_key->key_mask.function_id = HINIC3_UINT15_MAX;
 #ifdef HINIC3_TRAFFIC_BIFUR
-    u8 bifur_en, iso_en;
-    u8 er_id = nic_dev->hwdev->cfg_mgmt->svc_cap.er_id;
-    if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &iso_en) != 0) {
-        PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable staus failed!");
-    }
-
-    if (bifur_en) {
+	struct rte_pci_device *pci_dev = NULL;
+	pci_dev = RTE_ETH_DEV_TO_PCI(dev);
+	if (pci_dev->id.device_id == HINIC3_DEV_ID_DPU || hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev)) {
 		tcam_key->key_info.function_id = HINIC3_UINT15_MAX;
 		tcam_key->key_mask.ether_type = rule->key_mask.ether_type;
 		tcam_key->key_info.ether_type = rule->key_spec.ether_type;
-    } else {
-        tcam_key->key_info.function_id =
-            hinic3_global_func_id(nic_dev->hwdev) & HINIC3_UINT15_MAX;
-    }
-
-    if (iso_en) {
-        tcam_key->key_mask.er_id = HINIC3_UINT4_MAX;
-        tcam_key->key_info.er_id = er_id;
-    }
+	} else {
+		tcam_key->key_info.function_id =
+			hinic3_global_func_id(nic_dev->hwdev) & HINIC3_UINT15_MAX;
+	}
 #else
 	tcam_key->key_info.function_id =
 		hinic3_global_func_id(nic_dev->hwdev) & HINIC3_UINT15_MAX;
@@ -512,14 +503,7 @@ hinic3_fdir_tcam_info_init(struct rte_eth_dev	       *dev,
 
 	fdir_tcam_rule->data.qid = rule->rq_index;
 #ifdef HINIC3_TRAFFIC_BIFUR
-	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
-	u8 bifur_en, iso_en;
-
-	if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &iso_en) != 0)
-		PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable status failed.");
-
-	if (bifur_en)
-		fdir_tcam_rule->data.queue_num = rule->queue_num;
+	fdir_tcam_rule->data.queue_num = rule->queue_num;
 #endif
 	tcam_key_calculate(tcam_key, fdir_tcam_rule);
 }
