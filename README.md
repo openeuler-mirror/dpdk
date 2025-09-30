@@ -1,37 +1,95 @@
-# dpdk
+# OpenEuler 开源仓 `hinic3` PMD 使用简介
 
-#### 介绍
-DPDK is the Data Plane Development Kit that consists of libraries to accelerate packet processing workloads.
+本文以 **DPDK 22.11** 为例，介绍如何在 DPDK 中集成并编译 `hinic3` PMD。
 
-#### 软件架构
-软件架构说明
+PMD 已归一到本项目的 hinic3 目录中，使用方式由原先的每个版本单独打 patch，变为了使用 `install.sh` 脚本自动安装 hinic3 到源码目录中。原先 patch 使用方式参考 `README.patch.md`
 
+- 当前 `hinic3` PMD 支持的 DPDK 版本：**19.11 ~ 25**
+- 分流功能支持的 DPDK 版本：**20.11 ~ 22.11**
 
-#### 安装教程
+---
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+## 1. 环境准备
+### 1.1 安装编译依赖
+`yum install -y gcc libatomic python3-devel meson ninja-build python3-pyelftools libibverbs numactl numactl-devel`
 
-#### 使用说明
+### 1.2 下载 DPDK
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+DPDK 官方源码包下载链接可在 [https://core.dpdk.org/download/](https://core.dpdk.org/download/) 获取，例如下载 **DPDK 22.11.9**：
+```bash
+wget https://fast.dpdk.org/rel/dpdk-22.11.9.tar.xz
+tar -xf dpdk-22.11.9.tar.xz
+# 解压后目录名：dpdk-stable-22.11.9
+```
 
-#### 参与贡献
+### 1.3 获取 hinic3 PMD 源码
+方法一：直接下载
+```bash
+wget https://gitee.com/openeuler/dpdk/repository/archive/baidu.zip
+unzip dpdk-baidu.zip
+# 解压后目录名：dpdk-baidu
+```
+方法二：Git 克隆
+```bash
+git clone https://gitee.com/openeuler/dpdk.git -b baidu dpdk-hinic3
+# 默认目录名是dpdk，这里指定为了：dpdk-hinic3
+```
 
-1.  Fork 本仓库
-2.  新建 Feat_xxx 分支
-3.  提交代码
-4.  新建 Pull Request
+---
 
+## 2. 安装 hinic3 PMD 到 DPDK
+进入 dpdk-hinic3 目录，以下按需二选一执行
+```bash
+# 直接安装
+sh install.sh ../dpdk-stable-22.11.9 install
 
-#### 特技
+# 如果需要使用分流功能
+sh install.sh ../dpdk-stable-22.11.9 install bifur
+```
 
-1.  使用 Readme\_XXX.md 来支持不同的语言，例如 Readme\_en.md, Readme\_zh.md
-2.  Gitee 官方博客 [blog.gitee.com](https://blog.gitee.com)
-3.  你可以 [https://gitee.com/explore](https://gitee.com/explore) 这个地址来了解 Gitee 上的优秀开源项目
-4.  [GVP](https://gitee.com/gvp) 全称是 Gitee 最有价值开源项目，是综合评定出的优秀开源项目
-5.  Gitee 官方提供的使用手册 [https://gitee.com/help](https://gitee.com/help)
-6.  Gitee 封面人物是一档用来展示 Gitee 会员风采的栏目 [https://gitee.com/gitee-stars/](https://gitee.com/gitee-stars/)
+BAIDU rename 需要再执行
+```bash
+sh install.sh ../dpdk-stable-22.11.9 replace baidu
+```
+
+安装脚本会自动检测目标 DPDK 目录是否为 Git 仓库，如果不是，会自动初始化 Git。
+
+---
+
+## 3. 编译
+以下按需二选一执行
+```bash
+# 直接编译
+sh install.sh ../dpdk-stable-22.11.9 build
+
+# 如果是 DPU 场景编译
+sh install.sh ../dpdk-stable-22.11.9 build generic
+```
+
+安装脚本会自动判断 DPDK 版本：
+  - **DPDK 19.11** 使用 `make` 编译
+  - **DPDK ≥ 20.11** 使用 `meson + ninja` 编译
+
+---
+
+## 4. 快速示例
+### 依赖下载
+```bash
+# 安装 DPDK 依赖
+yum install -y gcc libatomic python3-devel meson ninja-build python3-pyelftools libibverbs numactl numactl-devel
+
+# 下载并解压 DPDK
+wget https://fast.dpdk.org/rel/dpdk-22.11.9.tar.xz
+tar -xf dpdk-22.11.9.tar.xz
+
+# 获取 hinic3 PMD
+git clone https://gitee.com/openeuler/dpdk.git -b baidu dpdk-hinic3
+cd dpdk-hinic3
+```
+
+### 安装编译
+```bash
+sh install.sh ../dpdk-stable-22.11.9 install bifur
+sh install.sh ../dpdk-stable-22.11.9 replace baidu
+sh install.sh ../dpdk-stable-22.11.9 build generic
+```
