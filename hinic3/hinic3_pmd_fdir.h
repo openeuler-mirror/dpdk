@@ -33,6 +33,7 @@ struct hinic3_fdir_rule_key {
 	uint16_t src_port;
 	uint16_t dst_port;
 	uint8_t proto;
+	uint8_t vlan_flag;
 	uint16_t ether_type;
 };
 
@@ -99,7 +100,8 @@ struct hinic3_tcam_key_mem {
 	u32 dipv4_h : 16;
 
 	u32 dipv4_l : 16;
-	u32 rsvd2 : 16;
+	u32 vlan_flag : 1;
+	u32 rsvd2 : 15;
 
 	u32 rsvd3;
 
@@ -143,7 +145,8 @@ struct hinic3_tcam_key_mem {
 	u32 dipv4_h : 16;
 	u32 sipv4_l : 16;
 
-	u32 rsvd2 : 16;
+	u32 rsvd2 : 15;
+	u32 vlan_flag : 1;
 	u32 dipv4_l : 16;
 
 	u32 rsvd3;
@@ -202,10 +205,11 @@ struct hinic3_tcam_key_ipv6_mem {
 	u32 tunnel_type : 4;
 	u32 outer_ip_type : 1;
 #ifdef HINIC3_TRAFFIC_BIFUR
-	u32 model : 1;
+	u32	vlan_flag : 1;
 	u32 bifur_flag : 2;
 #else
-	u32 rsvd1 : 3;
+	u32 vlan_flag : 1;
+	u32 rsvd1 : 2;
 #endif
 
 	u32 function_id : 15;
@@ -241,9 +245,10 @@ struct hinic3_tcam_key_ipv6_mem {
 #else
 #ifdef HINIC3_TRAFFIC_BIFUR
 	u32 bifur_flag : 2;
-	u32 model : 1;
+	u32 vlan_flag : 1;
 #else
-	u32 rsvd1 : 3;
+	u32 rsvd1 : 2;
+	u32 vlan_flag : 1;
 #endif
 	u32 outer_ip_type : 1;
 	u32 tunnel_type : 4;
