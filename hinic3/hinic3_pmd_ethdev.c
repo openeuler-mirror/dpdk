@@ -2044,7 +2044,7 @@ static int hinic3_vlan_filter_set(struct rte_eth_dev *dev,
 	int err = 0;
 	u16 func_id;
 
-	if (vlan_id >= RTE_ETHER_MAX_VLAN_ID)
+	if (vlan_id > RTE_ETHER_MAX_VLAN_ID)
 		return -EINVAL;
 
 	if (vlan_id == 0)
