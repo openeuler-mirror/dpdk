@@ -417,6 +417,7 @@ hinic3_fdir_tcam_ipv6_vxlan_geneve_init(struct rte_eth_dev *	   dev,
 					struct hinic3_tcam_key *   tcam_key)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+	u8 bifur_en, iso_en;
 
 	tcam_key->key_mask_ipv6.ip_proto = rule->key_mask.proto;
 	tcam_key->key_info_ipv6.ip_proto = rule->key_spec.proto;
@@ -428,8 +429,20 @@ hinic3_fdir_tcam_ipv6_vxlan_geneve_init(struct rte_eth_dev *	   dev,
 	tcam_key->key_info_ipv6.outer_ip_type = HINIC3_FDIR_IP_TYPE_IPV6;
 
 	tcam_key->key_mask_ipv6.function_id = HINIC3_UINT15_MAX;
-	tcam_key->key_info_ipv6.function_id =
-		hinic3_global_func_id(nic_dev->hwdev) & HINIC3_UINT15_MAX;
+	tcam_key->key_mask_ipv6.vlan_flag = 1;
+
+    if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &iso_en) != 0) {
+        PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable staus failed!");
+    }
+
+	if (bifur_en) {
+		tcam_key->key_info_ipv6.vlan_flag = 1;
+		tcam_key->key_info_ipv6.function_id = HINIC3_UINT15_MAX;
+	} else {
+		tcam_key->key_info_ipv6.vlan_flag = 0;
+		tcam_key->key_info_ipv6.function_id =
+			hinic3_global_func_id(nic_dev->hwdev) & HINIC3_UINT15_MAX;
+	}
 
 	tcam_key->key_mask_ipv6.dport = rule->key_mask.dst_port;
 	tcam_key->key_info_ipv6.dport = rule->key_spec.dst_port;
@@ -447,6 +460,7 @@ hinic3_fdir_tcam_vxlan_geneve_init(struct rte_eth_dev *	      dev,
 				   struct hinic3_tcam_key *   tcam_key)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+	u8 bifur_en, iso_en;
 
 	if (rule->outer_ip_type == HINIC3_FDIR_IP_TYPE_IPV6) {
 		hinic3_fdir_tcam_ipv6_vxlan_geneve_init(dev, rule, tcam_key);
@@ -492,9 +506,21 @@ hinic3_fdir_tcam_vxlan_geneve_init(struct rte_eth_dev *	      dev,
 	tcam_key->key_mask.tunnel_type = HINIC3_UINT4_MAX;
 	tcam_key->key_info.tunnel_type = rule->tunnel_type;
 
+	tcam_key->key_mask.vlan_flag = 1;
 	tcam_key->key_mask.function_id = HINIC3_UINT15_MAX;
-	tcam_key->key_info.function_id =
-		hinic3_global_func_id(nic_dev->hwdev) & HINIC3_UINT15_MAX;
+
+    if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &iso_en) != 0) {
+        PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable staus failed!");
+    }
+
+	if (bifur_en) {
+		tcam_key->key_info.vlan_flag = 1;
+		tcam_key->key_info.function_id = HINIC3_UINT15_MAX;
+	} else {
+		tcam_key->key_info.vlan_flag = 0;
+		tcam_key->key_info.function_id =
+			hinic3_global_func_id(nic_dev->hwdev) & HINIC3_UINT15_MAX;
+	}
 
 	if (rule->ip_type == HINIC3_FDIR_IP_TYPE_IPV4)
 		hinic3_fdir_tcam_vxlan_geneve_ipv4_init(rule, tcam_key);

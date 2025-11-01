@@ -365,6 +365,7 @@ static enum rte_flow_item_type pattern_ipv6_vxlan_udp[] = {
 	HINIC3_FLOW_ITEM_TYPE_END,
 };
 
+
 static enum rte_flow_item_type pattern_ipv6_geneve_udp[] = {
 	HINIC3_FLOW_ITEM_TYPE_ETH,
 	HINIC3_FLOW_ITEM_TYPE_IPV6,
