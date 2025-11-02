@@ -21,15 +21,12 @@ cflags += ['-fstack-protector-strong']
 dpdk_version = meson.project_version()
 if dpdk_version.substring(0,2) == '20'
 	cflags += ['-DDPDK_20_11']
-	cflags += ['-DDPDK_20_BIFUR']
 elif dpdk_version.substring(0,2) == '21'
 	cflags += ['-DDPDK_20_11']
 	cflags += ['-DDPDK_21_11']
-	cflags += ['-DDPDK_21_BIFUR']
 elif dpdk_version.substring(0,2) == '22'
 	cflags += ['-DDPDK_20_11']
 	cflags += ['-DDPDK_21_11']
-	cflags += ['-DDPDK_22_BIFUR']
 	cflags += ['-DDPDK_22_11']
 elif dpdk_version.substring(0,2) == '23'
 	cflags += ['-DDPDK_20_11']
