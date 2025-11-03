@@ -52,6 +52,7 @@ CFLAGS += -I$(RTE_SDK)/drivers/net/hinic3/mml
 LDLIBS += -lrte_eal -lrte_mbuf -lrte_mempool -lrte_ring
 LDLIBS += -lrte_ethdev -lrte_net -lrte_hash
 LDLIBS += -lrte_bus_pci
+LDLIBS += -lrte_pci
 LDLIBS += -lpthread
 
 EXPORT_MAP := rte_pmd_hinic3_version.map
@@ -79,6 +80,7 @@ VPATH += $(SRCDIR)/mml
 #
 # all source are stored in SRCS-y
 #
+SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_bifur.c
 SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_eqs.c
 SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_hwif.c
 SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_mbox.c

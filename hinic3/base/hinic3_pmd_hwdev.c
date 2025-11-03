@@ -81,13 +81,9 @@ struct mgmt_event_handle {
 	mgmt_event_cb proc;
 };
 
-#ifdef DPDK_20_11
-#define RTE_KDRV_VFIO RTE_PCI_KDRV_VFIO
-#endif
-
 bool hinic3_is_vfio_iommu_enable(const struct rte_eth_dev *rte_dev)
 {
-	return ((RTE_ETH_DEV_TO_PCI(rte_dev)->kdrv == RTE_KDRV_VFIO) && /*lint !e507*/
+	return ((RTE_ETH_DEV_TO_PCI(rte_dev)->kdrv == RTE_PCI_KDRV_VFIO) && /*lint !e507*/
 		(rte_vfio_noiommu_is_enabled() != 1));
 }
 

@@ -25,7 +25,38 @@
 #include "hinic3_pmd_flow.h"
 
 #ifdef HINIC3_TRAFFIC_BIFUR
+#ifdef DPDK_20_11
 #include <rte_bitops.h>
+#else
+#define RTE_BIT32(nr) (UINT32_C(1) << (nr))
+
+static inline uint32_t
+rte_bit_relaxed_get32(unsigned int nr, volatile uint32_t *addr)
+{
+	RTE_ASSERT(nr < 32);
+
+	uint32_t mask = UINT32_C(1) << nr;
+	return (*addr) & mask;
+}
+
+static inline void
+rte_bit_relaxed_set32(unsigned int nr, volatile uint32_t *addr)
+{
+	RTE_ASSERT(nr < 32);
+
+	uint32_t mask = RTE_BIT32(nr);
+	*addr = (*addr) | mask;
+}
+
+static inline void
+rte_bit_relaxed_clear32(unsigned int nr, volatile uint32_t *addr)
+{
+	RTE_ASSERT(nr < 32);
+
+	uint32_t mask = RTE_BIT32(nr);
+	*addr = (*addr) & (~mask);
+}
+#endif
 #include "hinic3_pmd_rx.h"
 #include "base/hinic3_pmd_csr.h"
 #include "hinic3_pmd_bifur.h"
@@ -556,7 +587,7 @@ hinic3_check_rss_queues(struct rte_eth_dev		 *dev,
 			struct rte_flow_error		 *error)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
-	int i;
+	uint32_t i;
  
 	if (act_r->queue_num == 0) {
 		rte_flow_error_set(error, EINVAL,
@@ -598,10 +629,9 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 	const struct rte_flow_action *act = actions;
 #ifdef HINIC3_TRAFFIC_BIFUR
 	const struct rte_flow_action_rss *act_r;
-	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct rte_pci_device *pci_dev = NULL;
 	pci_dev = RTE_ETH_DEV_TO_PCI(dev);
-	int i;
+	uint32_t i;
 
 	for (i = 0; i < HINIC3_QUEUE_MAX; i++) {
 		rte_bit_relaxed_clear32(i, &filter->fdir_filter.rq_index);

@@ -12,9 +12,9 @@ function meson_build_adapt() {
 
 	# 定义不同版本的 cflags
 	declare -A FLAGS
-	FLAGS[20]="-DDPDK_20_11 -DDPDK_20_BIFUR"
-	FLAGS[21]="-DDPDK_20_11 -DDPDK_21_11 -DDPDK_21_BIFUR"
-	FLAGS[22]="-DDPDK_20_11 -DDPDK_21_11 -DDPDK_22_11 -DDPDK_22_BIFUR"
+	FLAGS[20]="-DDPDK_20_11"
+	FLAGS[21]="-DDPDK_20_11 -DDPDK_21_11"
+	FLAGS[22]="-DDPDK_20_11 -DDPDK_21_11 -DDPDK_22_11"
 	FLAGS[23]="-DDPDK_20_11 -DDPDK_21_11 -DDPDK_22_11"
 	FLAGS[24]="-DDPDK_20_11 -DDPDK_21_11 -DDPDK_22_11 -DDPDK_24_11"
 	FLAGS[25]="-DDPDK_20_11 -DDPDK_21_11 -DDPDK_22_11 -DDPDK_24_11"
@@ -29,8 +29,25 @@ function meson_build_adapt() {
 	done
 }
 
-install() {
-	install_type="$1" # 可为空或 bifur
+# 检查并配置 git 用户信息
+check_git() {
+	# 检查是否安装了 git
+	if ! command -v git >/dev/null 2>&1; then
+		echo "错误：未检测到 git,请先安装。"
+		exit 1
+	fi
+
+	# 如果 user.name 未配置，则设置为 root
+	if [ -z "$(git config --global user.name)" ]; then
+		echo "Git user.name 未配置，正在设置为 root ..."
+		git config --global user.name "root"
+	fi
+	# 如果 user.email 未配置，则设置为 root@localhost.localdomain
+	if [ -z "$(git config --global user.email)" ]; then
+		echo "Git user.email 未配置，正在设置为 root@localhost.localdomain ..."
+		git config --global user.email "root@localhost.localdomain"
+	fi
+	echo "Git 用户配置检查完成。"
 
 	# 检查 DPDK 目录是否是 git 仓库
 	if [ ! -d ".git" ]; then
@@ -39,6 +56,12 @@ install() {
 		git add .
 		git commit -m "DPDK init"
 	fi
+}
+
+install() {
+	install_type="$1" # 可为空或 bifur
+
+	check_git
 
 	stashed=0
 	# 判断工作区是否有未提交的更改（包括暂存区和未跟踪文件）
@@ -72,10 +95,18 @@ install() {
 	if [ "$install_type" == "bifur" ]; then
 		meson_file="./drivers/net/hinic3/meson.build"
 		if ! grep -Fq "cflags += ['-DHINIC3_TRAFFIC_BIFUR']" "$meson_file"; then
-			echo "为 hinic3 添加 -DHINIC3_TRAFFIC_BIFUR cflag"
+			echo "为 $meson_file 添加 -DHINIC3_TRAFFIC_BIFUR cflag"
 			sed -i "/cflags += \['-fstack-protector-strong'\]/a cflags += ['-DHINIC3_TRAFFIC_BIFUR']" "$meson_file"
 		else
-			echo "已存在 -DHINIC3_TRAFFIC_BIFUR"
+			echo "$meson_file 已存在 -DHINIC3_TRAFFIC_BIFUR"
+		fi
+
+		make_file="./drivers/net/hinic3/Makefile"
+		if ! grep -Fq "CFLAGS += -DHINIC3_TRAFFIC_BIFUR" "$make_file"; then
+			echo "为 $make_file 添加 -DHINIC3_TRAFFIC_BIFUR cflag"
+			sed -i "/CFLAGS += -Wno-cast-qual/a CFLAGS += -DHINIC3_TRAFFIC_BIFUR" "$make_file"
+		else
+			echo "$make_file 已存在 -DHINIC3_TRAFFIC_BIFUR"
 		fi
 	fi
 

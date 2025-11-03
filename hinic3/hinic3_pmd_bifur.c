@@ -11,10 +11,14 @@
 #include <fcntl.h>
 #include <errno.h>
 
-#if defined(DPDK_21_BIFUR) || defined(DPDK_20_BIFUR)
-#include <rte_bus.h>
-#else
+#ifdef DPDK_22_11
 #include <bus_driver.h>
+#else
+#include <rte_bus.h>
+#endif
+
+#ifndef DPDK_20_11
+#include <rte_string_fns.h>
 #endif
 
 #ifndef DPDK_21_11
@@ -193,7 +197,7 @@ hinic3_bifur_pci_map_device(struct rte_pci_device *dev)
 {
 	int ret = 0;
 	ret = rte_pci_map_device(dev);
-#if defined(DPDK_21_BIFUR) || defined(DPDK_22_BIFUR)
+#ifdef DPDK_21_11
 	if (ret != 0) {
 		rte_intr_instance_free(dev->vfio_req_intr_handle);
 		dev->vfio_req_intr_handle = NULL;
@@ -682,7 +686,7 @@ hinic3_bifur_work_pci_pre_probe(struct rte_pci_driver *dr, struct rte_pci_device
 				    iova_mode == RTE_IOVA_PA ? "PA" : "VA");
 			return -EINVAL;
 		}
-#if defined(DPDK_21_BIFUR) || defined(DPDK_22_BIFUR)
+#ifdef DPDK_21_11
 		dev->intr_handle = rte_intr_instance_alloc(RTE_INTR_INSTANCE_F_PRIVATE);
 		if (dev->intr_handle == NULL) {
 			PMD_DRV_LOG(ERR, "Failed to create interrupt instance for %s", dev->device.name);

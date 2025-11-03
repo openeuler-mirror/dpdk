@@ -5,13 +5,13 @@
 PMD 已归一到本项目的 hinic3 目录中，使用方式由原先的每个版本单独打 patch，变为了使用 `install.sh` 脚本自动安装 hinic3 到源码目录中。原先 patch 使用方式参考 `README.patch.md`
 
 - 当前 `hinic3` PMD 支持的 DPDK 版本：**19.11 ~ 25**
-- 分流功能支持的 DPDK 版本：**20.11 ~ 22.11**
+- 分流功能支持的 DPDK 版本：**19.11 ~ 22.11**
 
 ---
 
 ## 1. 环境准备
 ### 1.1 安装编译依赖
-`yum install -y gcc libatomic python3-devel meson ninja-build python3-pyelftools libibverbs numactl numactl-devel`
+`yum install -y git gcc libatomic python3-devel meson ninja-build python3-pyelftools libibverbs numactl numactl-devel`
 
 ### 1.2 下载 DPDK
 
@@ -76,7 +76,7 @@ sh install.sh ../dpdk-stable-21.11.9 build generic
 ### 依赖下载
 ```bash
 # 安装 DPDK 依赖
-yum install -y gcc libatomic python3-devel meson ninja-build python3-pyelftools libibverbs numactl numactl-devel
+yum install -y git gcc libatomic python3-devel meson ninja-build python3-pyelftools libibverbs numactl numactl-devel
 
 # 下载并解压 DPDK
 wget https://fast.dpdk.org/rel/dpdk-21.11.9.tar.xz
