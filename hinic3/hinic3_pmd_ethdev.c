@@ -426,7 +426,8 @@ void hinic3_dev_info_get(struct rte_eth_dev_info *info, struct hinic3_nic_dev *n
 				DEV_RX_OFFLOAD_JUMBO_FRAME |
 #endif
 				DEV_RX_OFFLOAD_TCP_LRO |
-				DEV_RX_OFFLOAD_RSS_HASH;
+				DEV_RX_OFFLOAD_RSS_HASH |
+				DEV_RX_OFFLOAD_QINQ_STRIP;
 
 	info->tx_queue_offload_capa = 0;
 	info->tx_offload_capa = DEV_TX_OFFLOAD_VLAN_INSERT |
@@ -438,7 +439,8 @@ void hinic3_dev_info_get(struct rte_eth_dev_info *info, struct hinic3_nic_dev *n
 				DEV_TX_OFFLOAD_OUTER_UDP_CKSUM |
 				DEV_TX_OFFLOAD_VXLAN_TNL_TSO |
 				DEV_TX_OFFLOAD_TCP_TSO |
-				DEV_TX_OFFLOAD_MULTI_SEGS;
+				DEV_TX_OFFLOAD_MULTI_SEGS |
+				DEV_TX_OFFLOAD_QINQ_INSERT;
 
 	info->hash_key_size = HINIC3_RSS_KEY_SIZE;
 	info->reta_size = HINIC3_RSS_INDIR_SIZE;
