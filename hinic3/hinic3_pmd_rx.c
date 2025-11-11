@@ -34,6 +34,7 @@ enum HINIC3_RX_TUNNEL_PKT_FORMAT {
 	HINIC3_RX_TUNNEL_PKT_FORMAT_GPE = 4u,
 	HINIC3_RX_TUNNEL_PKT_FORMAT_GENEVE = 5u,
 	HINIC3_RX_TUNNEL_PKT_FORMAT_NSH = 6u,
+	HINIC3_RX_TUNNEL_PKT_FORMAT_IPIP = 7u,
 };
 
 /**
@@ -1065,7 +1066,9 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 			case HINIC3_RX_TUNNEL_PKT_FORMAT_GENEVE:
 				rxm->packet_type = RTE_PTYPE_TUNNEL_GENEVE;
 				break;
-
+			case HINIC3_RX_TUNNEL_PKT_FORMAT_IPIP:
+				rxm->packet_type = RTE_PTYPE_TUNNEL_IP;
+				break;
 			default:
 				rxm->packet_type = RTE_PTYPE_UNKNOWN;
 		} 
@@ -1082,7 +1085,7 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 		}
 
 #ifdef HINIC3_TRAFFIC_BIFUR
-		rxm->packet_type = hinic3_rx_packet_type(offload_type);
+		rxm->packet_type |= hinic3_rx_packet_type(offload_type);
 #endif
 		rx_cqe->status = 0;
 
