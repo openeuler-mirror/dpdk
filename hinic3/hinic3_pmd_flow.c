@@ -606,6 +606,130 @@ static enum rte_flow_item_type pattern_ipv4_gpe[] = {
 	HINIC3_FLOW_ITEM_TYPE_END,
 };
 
+static enum rte_flow_item_type pattern_ipv4_ipv4[] = {
+	HINIC3_FLOW_ITEM_TYPE_ETH,
+	HINIC3_FLOW_ITEM_TYPE_IPV4,
+	HINIC3_FLOW_ITEM_TYPE_IPV4,
+	HINIC3_FLOW_ITEM_TYPE_END,
+};
+ 
+static enum rte_flow_item_type pattern_ipv4_ipv4_udp[] = {
+	HINIC3_FLOW_ITEM_TYPE_ETH,
+	HINIC3_FLOW_ITEM_TYPE_IPV4,
+	HINIC3_FLOW_ITEM_TYPE_IPV4,
+	HINIC3_FLOW_ITEM_TYPE_UDP,
+	HINIC3_FLOW_ITEM_TYPE_END,
+};
+ 
+static enum rte_flow_item_type pattern_ipv4_ipv4_tcp[] = {
+	HINIC3_FLOW_ITEM_TYPE_ETH,
+	HINIC3_FLOW_ITEM_TYPE_IPV4,
+	HINIC3_FLOW_ITEM_TYPE_IPV4,
+	HINIC3_FLOW_ITEM_TYPE_TCP,
+	HINIC3_FLOW_ITEM_TYPE_END,
+};
+ 
+static enum rte_flow_item_type pattern_ipv4_ipv4_any[] = {
+	HINIC3_FLOW_ITEM_TYPE_ETH,
+	HINIC3_FLOW_ITEM_TYPE_IPV4,
+	HINIC3_FLOW_ITEM_TYPE_IPV4,
+	HINIC3_FLOW_ITEM_TYPE_ANY,
+	HINIC3_FLOW_ITEM_TYPE_END,
+};
+ 
+static enum rte_flow_item_type pattern_ipv4_ipv6[] = {
+	HINIC3_FLOW_ITEM_TYPE_ETH,
+	HINIC3_FLOW_ITEM_TYPE_IPV4,
+	HINIC3_FLOW_ITEM_TYPE_IPV6,
+	HINIC3_FLOW_ITEM_TYPE_END,
+};
+ 
+static enum rte_flow_item_type pattern_ipv4_ipv6_tcp[] = {
+	HINIC3_FLOW_ITEM_TYPE_ETH,
+	HINIC3_FLOW_ITEM_TYPE_IPV4,
+	HINIC3_FLOW_ITEM_TYPE_IPV6,
+	HINIC3_FLOW_ITEM_TYPE_TCP,
+	HINIC3_FLOW_ITEM_TYPE_END,
+};
+ 
+static enum rte_flow_item_type pattern_ipv4_ipv6_udp[] = {
+	HINIC3_FLOW_ITEM_TYPE_ETH,
+	HINIC3_FLOW_ITEM_TYPE_IPV4,
+	HINIC3_FLOW_ITEM_TYPE_IPV6,
+	HINIC3_FLOW_ITEM_TYPE_UDP,
+	HINIC3_FLOW_ITEM_TYPE_END,
+};
+ 
+static enum rte_flow_item_type pattern_ipv4_ipv6_any[] = {
+	HINIC3_FLOW_ITEM_TYPE_ETH,
+	HINIC3_FLOW_ITEM_TYPE_IPV4,
+	HINIC3_FLOW_ITEM_TYPE_IPV6,
+	HINIC3_FLOW_ITEM_TYPE_ANY,
+	HINIC3_FLOW_ITEM_TYPE_END,
+};
+ 
+static enum rte_flow_item_type pattern_ipv6_ipv6[] = {
+	HINIC3_FLOW_ITEM_TYPE_ETH,
+	HINIC3_FLOW_ITEM_TYPE_IPV6,
+	HINIC3_FLOW_ITEM_TYPE_IPV6,
+	HINIC3_FLOW_ITEM_TYPE_END,
+};
+ 
+static enum rte_flow_item_type pattern_ipv6_ipv6_tcp[] = {
+	HINIC3_FLOW_ITEM_TYPE_ETH,
+	HINIC3_FLOW_ITEM_TYPE_IPV6,
+	HINIC3_FLOW_ITEM_TYPE_IPV6,
+	HINIC3_FLOW_ITEM_TYPE_TCP,
+	HINIC3_FLOW_ITEM_TYPE_END,
+};
+ 
+static enum rte_flow_item_type pattern_ipv6_ipv6_udp[] = {
+	HINIC3_FLOW_ITEM_TYPE_ETH,
+	HINIC3_FLOW_ITEM_TYPE_IPV6,
+	HINIC3_FLOW_ITEM_TYPE_IPV6,
+	HINIC3_FLOW_ITEM_TYPE_UDP,
+	HINIC3_FLOW_ITEM_TYPE_END,
+};
+ 
+static enum rte_flow_item_type pattern_ipv6_ipv6_any[] = {
+	HINIC3_FLOW_ITEM_TYPE_ETH,
+	HINIC3_FLOW_ITEM_TYPE_IPV6,
+	HINIC3_FLOW_ITEM_TYPE_IPV6,
+	HINIC3_FLOW_ITEM_TYPE_ANY,
+	HINIC3_FLOW_ITEM_TYPE_END,
+};
+ 
+static enum rte_flow_item_type pattern_ipv6_ipv4[] = {
+	HINIC3_FLOW_ITEM_TYPE_ETH,
+	HINIC3_FLOW_ITEM_TYPE_IPV6,
+	HINIC3_FLOW_ITEM_TYPE_IPV4,
+	HINIC3_FLOW_ITEM_TYPE_END,
+};
+ 
+static enum rte_flow_item_type pattern_ipv6_ipv4_udp[] = {
+	HINIC3_FLOW_ITEM_TYPE_ETH,
+	HINIC3_FLOW_ITEM_TYPE_IPV6,
+	HINIC3_FLOW_ITEM_TYPE_IPV4,
+	HINIC3_FLOW_ITEM_TYPE_UDP,
+	HINIC3_FLOW_ITEM_TYPE_END,
+};
+ 
+static enum rte_flow_item_type pattern_ipv6_ipv4_tcp[] = {
+	HINIC3_FLOW_ITEM_TYPE_ETH,
+	HINIC3_FLOW_ITEM_TYPE_IPV6,
+	HINIC3_FLOW_ITEM_TYPE_IPV4,
+	HINIC3_FLOW_ITEM_TYPE_TCP,
+	HINIC3_FLOW_ITEM_TYPE_END,
+};
+ 
+static enum rte_flow_item_type pattern_ipv6_ipv4_any[] = {
+	HINIC3_FLOW_ITEM_TYPE_ETH,
+	HINIC3_FLOW_ITEM_TYPE_IPV6,
+	HINIC3_FLOW_ITEM_TYPE_IPV4,
+	HINIC3_FLOW_ITEM_TYPE_ANY,
+	HINIC3_FLOW_ITEM_TYPE_END,
+};
+
 typedef int (*hinic3_parse_filter_t)(struct rte_eth_dev *	  dev,
 				     const struct rte_flow_attr * attr,
 				     const struct rte_flow_item	  pattern[],
@@ -722,6 +846,24 @@ static const struct hinic3_valid_pattern hinic3_supported_patterns[] = {
 	{ pattern_ipv6_gpe_eth_ipv6_udp, hinic3_flow_parse_fdir_vxlan_geneve_filter },
 	{ pattern_ipv4_gpe, hinic3_flow_parse_fdir_vxlan_geneve_filter },
 	{ pattern_ipv6_gpe, hinic3_flow_parse_fdir_vxlan_geneve_filter },
+
+	/*support pinip */
+	{ pattern_ipv4_ipv4, hinic3_flow_parse_fdir_filter},
+	{ pattern_ipv4_ipv4_tcp, hinic3_flow_parse_fdir_filter},
+	{ pattern_ipv4_ipv4_udp, hinic3_flow_parse_fdir_filter},
+	{ pattern_ipv4_ipv4_any, hinic3_flow_parse_fdir_filter},
+	{ pattern_ipv4_ipv6, hinic3_flow_parse_fdir_filter},
+	{ pattern_ipv4_ipv6_tcp, hinic3_flow_parse_fdir_filter},
+	{ pattern_ipv4_ipv6_udp, hinic3_flow_parse_fdir_filter},
+	{ pattern_ipv4_ipv6_any, hinic3_flow_parse_fdir_filter},
+	{ pattern_ipv6_ipv4, hinic3_flow_parse_fdir_filter},
+	{ pattern_ipv6_ipv4_tcp, hinic3_flow_parse_fdir_filter},
+	{ pattern_ipv6_ipv4_udp, hinic3_flow_parse_fdir_filter},
+	{ pattern_ipv6_ipv4_any, hinic3_flow_parse_fdir_filter},
+	{ pattern_ipv6_ipv6, hinic3_flow_parse_fdir_filter},
+	{ pattern_ipv6_ipv6_tcp, hinic3_flow_parse_fdir_filter},
+	{ pattern_ipv6_ipv6_udp, hinic3_flow_parse_fdir_filter},
+	{ pattern_ipv6_ipv6_any, hinic3_flow_parse_fdir_filter},
 };
 
 static inline void
