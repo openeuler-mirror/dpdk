@@ -2650,7 +2650,7 @@ static int hinic3_dev_stats_get(struct rte_eth_dev *dev,
 #ifdef HINIC3_XSTAT_MBUF_USE
 		rxq->rxq_stats.left_mbuf = rxq->rxq_stats.alloc_mbuf - rxq->rxq_stats.free_mbuf;
 #endif
-		rxq->rxq_stats.errors = rxq->rxq_stats.csum_errors + rxq->rxq_stats.other_errors;
+		rxq->rxq_stats.errors = rxq->rxq_stats.other_errors;
 
 		stats->q_ipackets[i] = rxq->rxq_stats.packets;
 		stats->q_ibytes[i] = rxq->rxq_stats.bytes;
