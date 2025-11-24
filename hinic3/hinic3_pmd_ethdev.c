@@ -1982,8 +1982,12 @@ static void hinic3_dev_close(struct rte_eth_dev *eth_dev)
 
 #ifdef DPDK_20_11
 	ret = hinic3_dev_stop(eth_dev);
+	if (ret == 0) {
+		(void)hinic3_flush_tcam_rule(nic_dev->hwdev);
+	}
 #else
 	hinic3_dev_stop(eth_dev);
+	(void)hinic3_flush_tcam_rule(nic_dev->hwdev);
 #endif
 
 	hinic3_dev_release(eth_dev);
