@@ -58,6 +58,146 @@ check_git() {
 	fi
 }
 
+config_dpdk_19() {
+	echo "Disable selected DPDK 19 PMDs in defconfig files."
+
+	make_config=(
+		"config/defconfig_arm64-armv8a-linuxapp-gcc"
+		"config/defconfig_x86_64-native-linuxapp-gcc"
+	)
+
+	disabled_pmds=(
+		CONFIG_RTE_LIBRTE_PMD_AF_PACKET
+		CONFIG_RTE_LIBRTE_PMD_AF_XDP
+		CONFIG_RTE_LIBRTE_ARK_PMD
+		CONFIG_RTE_LIBRTE_ATLANTIC_PMD
+		CONFIG_RTE_LIBRTE_AVP_PMD
+		CONFIG_RTE_LIBRTE_AXGBE_PMD
+		CONFIG_RTE_LIBRTE_BNX2X_PMD
+		CONFIG_RTE_LIBRTE_CXGBE_PMD
+		CONFIG_RTE_LIBRTE_DPAA_BUS
+		CONFIG_RTE_LIBRTE_DPAA_PMD
+		CONFIG_RTE_LIBRTE_DPAA_MEMPOOL
+		CONFIG_RTE_LIBRTE_PMD_DPAA_SEC
+		CONFIG_RTE_LIBRTE_PMD_DPAA_EVENTDEV
+		CONFIG_RTE_LIBRTE_FSLMC_BUS
+		CONFIG_RTE_LIBRTE_DPAA2_PMD
+		CONFIG_RTE_LIBRTE_DPAA2_MEMPOOL
+		CONFIG_RTE_LIBRTE_DPAA2_USE_PHYS_IOVA
+		CONFIG_RTE_LIBRTE_PMD_DPAA2_SEC
+		CONFIG_RTE_LIBRTE_PMD_DPAA2_EVENTDEV
+		CONFIG_RTE_LIBRTE_PMD_DPAA2_CMDIF_RAWDEV
+		CONFIG_RTE_LIBRTE_PMD_DPAA2_QDMA_RAWDEV
+		CONFIG_RTE_LIBRTE_E1000_PMD
+		CONFIG_RTE_LIBRTE_EM_PMD
+		CONFIG_RTE_LIBRTE_IGB_PMD
+		CONFIG_RTE_LIBRTE_ENA_PMD
+		CONFIG_RTE_LIBRTE_ENETC_PMD
+		CONFIG_RTE_LIBRTE_ENIC_PMD
+		CONFIG_RTE_LIBRTE_PMD_FAILSAFE
+		CONFIG_RTE_LIBRTE_FM10K_PMD
+		CONFIG_RTE_LIBRTE_FM10K_RX_OLFLAGS_ENABLE
+		CONFIG_RTE_LIBRTE_FM10K_INC_VECTOR
+		CONFIG_RTE_LIBRTE_I40E_PMD
+		CONFIG_RTE_LIBRTE_I40E_RX_ALLOW_BULK_ALLOC
+		CONFIG_RTE_LIBRTE_I40E_INC_VECTOR
+		CONFIG_RTE_LIBRTE_IAVF_PMD
+		CONFIG_RTE_LIBRTE_ICE_PMD
+		CONFIG_RTE_LIBRTE_IPN3KE_PMD
+		CONFIG_RTE_LIBRTE_IXGBE_PMD
+		CONFIG_RTE_IXGBE_INC_VECTOR
+		CONFIG_RTE_LIBRTE_LIO_PMD
+		CONFIG_RTE_LIBRTE_PMD_MEMIF
+		CONFIG_RTE_LIBRTE_MLX4_PMD
+		CONFIG_RTE_LIBRTE_MLX5_PMD
+		CONFIG_RTE_LIBRTE_MVNETA_PMD
+		CONFIG_RTE_LIBRTE_MVPP2_PMD
+		CONFIG_RTE_LIBRTE_NETVSC_PMD
+		CONFIG_RTE_LIBRTE_NFB_PMD
+		CONFIG_RTE_LIBRTE_NFP_PMD
+		CONFIG_RTE_LIBRTE_BNXT_PMD
+		CONFIG_RTE_LIBRTE_PMD_NULL
+		CONFIG_RTE_LIBRTE_OCTEONTX_PMD
+		CONFIG_RTE_LIBRTE_PMD_OCTEONTX_SSOVF
+		CONFIG_RTE_LIBRTE_PMD_OCTEONTX_CRYPTO
+		CONFIG_RTE_LIBRTE_PMD_OCTEONTX_ZIPVF
+		CONFIG_RTE_LIBRTE_OCTEONTX_MEMPOOL
+		CONFIG_RTE_LIBRTE_OCTEONTX2_PMD
+		CONFIG_RTE_LIBRTE_PMD_OCTEONTX2_CRYPTO
+		CONFIG_RTE_LIBRTE_PMD_OCTEONTX2_EVENTDEV
+		CONFIG_RTE_LIBRTE_PMD_OCTEONTX2_DMA_RAWDEV
+		CONFIG_RTE_LIBRTE_OCTEONTX2_MEMPOOL
+		CONFIG_RTE_LIBRTE_PMD_PCAP
+		CONFIG_RTE_LIBRTE_PFE_PMD
+		CONFIG_RTE_LIBRTE_PMD_CAAM_JR
+		CONFIG_RTE_LIBRTE_QEDE_PMD
+		CONFIG_RTE_LIBRTE_SFC_EFX_PMD
+		CONFIG_RTE_LIBRTE_PMD_SZEDATA2
+		CONFIG_RTE_LIBRTE_THUNDERX_NICVF_PMD
+		CONFIG_RTE_LIBRTE_VDEV_NETVSC_PMD
+		CONFIG_RTE_LIBRTE_VMXNET3_PMD
+		CONFIG_RTE_LIBRTE_KNI
+		CONFIG_RTE_LIBRTE_PMD_KNI
+		CONFIG_RTE_LIBRTE_PMD_SOFTNIC
+		CONFIG_RTE_LIBRTE_PMD_NITROX
+		CONFIG_RTE_LIBRTE_PMD_QAT
+		CONFIG_RTE_LIBRTE_PMD_VIRTIO_CRYPTO
+		CONFIG_RTE_LIBRTE_PMD_CRYPTO_SCHEDULER
+		CONFIG_RTE_LIBRTE_PMD_NULL_CRYPTO
+		CONFIG_RTE_LIBRTE_PMD_SKELETON_RAWDEV
+		CONFIG_RTE_LIBRTE_PMD_SKELETON_EVENTDEV
+		CONFIG_RTE_LIBRTE_PMD_SW_EVENTDEV
+		CONFIG_RTE_LIBRTE_PMD_DSW_EVENTDEV
+		CONFIG_RTE_LIBRTE_PMD_OPDL_EVENTDEV
+		CONFIG_RTE_LIBRTE_PMD_NTB_RAWDEV
+		CONFIG_RTE_LIBRTE_IFC_PMD
+
+		CONFIG_RTE_EAL_IGB_UIO
+		CONFIG_RTE_KNI_KMOD
+	)
+
+	for f in "${make_config[@]}"; do
+		if [ -f "$f" ]; then
+			echo "Disable PMDs in $f ..."
+
+			# 删除旧项
+			for pmd in "${disabled_pmds[@]}"; do
+				sed -i "/^${pmd}=n/d" "$f"
+				sed -i "/^${pmd}=y/d" "$f"
+			done
+
+			# 统一追加
+			{
+				echo ""
+				for pmd in "${disabled_pmds[@]}"; do
+					echo "${pmd}=n"
+				done
+			} >> "$f"
+		fi
+	done
+
+	echo "修改 DPDK 19 的 Makefile"
+	if ! grep -q "CONFIG_RTE_LIBRTE_HINIC3_PMD" "./config/common_base"; then
+		sed -i "/CONFIG_RTE_LIBRTE_HINIC_PMD/a #\n#Compile burst-oriented HINIC3 PMD driver\n#\nCONFIG_RTE_LIBRTE_HINIC3_PMD=y" \
+			./config/common_base
+	fi
+
+	if ! grep -q "hinic3" "./drivers/net/Makefile"; then
+		sed -i "/CONFIG_RTE_LIBRTE_HINIC_PMD/aDIRS-\$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3" \
+			./drivers/net/Makefile
+	fi
+
+	if ! grep -q "hinic3" "./mk/rte.app.mk"; then
+		sed -i "/CONFIG_RTE_LIBRTE_HINIC_PMD/a_LDLIBS-\$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += -lrte_pmd_hinic3" \
+			./mk/rte.app.mk
+	fi
+
+	echo "修改 CONFIG_RTE_BUILD_SHARED_LIB 为 y 用于生成动态库"
+	if grep -q "CONFIG_RTE_BUILD_SHARED_LIB=n" "./config/common_base"; then
+		sed -i "s/CONFIG_RTE_BUILD_SHARED_LIB=n/CONFIG_RTE_BUILD_SHARED_LIB=y/g" ./config/common_base
+	fi
+}
+
 install() {
 	install_type="$1" # 可为空或 bifur
 
@@ -112,27 +252,7 @@ install() {
 
 	# dpdk=19
 	if [ "$DPDK_MAJOR" -eq 19 ]; then
-		echo "执行 DPDK 19.x 的 Makefile 修改"
-
-		if ! grep -q "CONFIG_RTE_LIBRTE_HINIC3_PMD" "./config/common_base"; then
-			sed -i "/CONFIG_RTE_LIBRTE_HINIC_PMD/a #\n#Compile burst-oriented HINIC3 PMD driver\n#\nCONFIG_RTE_LIBRTE_HINIC3_PMD=y" \
-				./config/common_base
-		fi
-
-		if ! grep -q "hinic3" "./drivers/net/Makefile"; then
-			sed -i "/CONFIG_RTE_LIBRTE_HINIC_PMD/aDIRS-\$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3" \
-				./drivers/net/Makefile
-		fi
-
-		if ! grep -q "hinic3" "./mk/rte.app.mk"; then
-			sed -i "/CONFIG_RTE_LIBRTE_HINIC_PMD/a_LDLIBS-\$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += -lrte_pmd_hinic3" \
-				./mk/rte.app.mk
-		fi
-
-		echo "修改 CONFIG_RTE_BUILD_SHARED_LIB 为 y 用于生成动态库"
-		if grep -q "CONFIG_RTE_BUILD_SHARED_LIB=n" "./config/common_base"; then
-			sed -i "s/CONFIG_RTE_BUILD_SHARED_LIB=n/CONFIG_RTE_BUILD_SHARED_LIB=y/g" ./config/common_base
-		fi
+		config_dpdk_19
 	fi
 
 	# 添加 hinic3 并提交
@@ -232,23 +352,34 @@ build() {
 	# dpdk=19 用 Makefile
 	if [ "$DPDK_MAJOR" -eq 19 ]; then
 		echo "开始编译 (Makefile 模式)"
-		build_dir="arm64-armv8a-linuxapp-gcc"
+
+		arch=$(uname -m)
+		echo "当前架构：$arch"
+		if [ "$arch" = "aarch64" ]; then
+			build_dir="arm64-armv8a-linuxapp-gcc"
+		else
+			build_dir="x86_64-native-linux-gcc"
+		fi
+
 		rm -rf $build_dir
 		make config T=$build_dir
+		# 保证 dpdk=19 在一些 GCC 版本下能顺利编译
+		extra_cflags="-Wno-error"
+
 		# debug
 		if [ "$build_type" == "debug" ]; then
-			extra_cflags="EXTRA_CFLAGS=-O0 -g -DRTE_ENABLE_ASSERT"
+			extra_cflags="-O0 -g -DRTE_ENABLE_ASSERT $extra_cflags"
 		fi
-		# release
-		make install T=$build_dir $extra_cflags -j
+
+		make install T=$build_dir EXTRA_CFLAGS="$extra_cflags" -j
 		echo ""
 		ls -lh $build_dir/lib/librte_pmd_hinic3*
 		ls -lh $build_dir/app/*testpmd
 		echo ""
 		echo "Use your device's PCI address in place of <BDF> and run:"
 		echo ""
-		echo "export LD_LIBRARY_PATH=$PWD/$stable_dir/arm64-armv8a-linuxapp-gcc/lib:\$LD_LIBRARY_PATH"
-		echo "$DPDK_PATH/$build_dir/app/testpmd -w 0000:01:00.0 -d $DPDK_PATH/$build_dir/lib/librte_pmd_hinic3.so -l 0-8 -- --nb-cores=8 --rxq=8 --txq=8 -i -a"
+		echo "export LD_LIBRARY_PATH=$PWD/$stable_dir/$build_dir/lib:\$LD_LIBRARY_PATH"
+		echo "$DPDK_PATH/$build_dir/app/testpmd -v -w 0000:01:00.0 -d $DPDK_PATH/$build_dir/lib/librte_pmd_hinic3.so -l 0-8 -- --nb-cores=8 --rxq=8 --txq=8 -i -a"
 	else
 		echo "执行 Meson 构建方式"
 		rm -rf $build_dir
@@ -271,7 +402,7 @@ build() {
 		echo ""
 		echo "Use your device's PCI address in place of <BDF> and run:"
 		echo ""
-		echo "$DPDK_PATH/$build_dir/app/dpdk-testpmd -a 0000:01:00.0 -l 0-8 -- --nb-cores=8 --rxq=8 --txq=8 -i -a"
+		echo "$DPDK_PATH/$build_dir/app/dpdk-testpmd -v -a 0000:01:00.0 -l 0-8 -- --nb-cores=8 --rxq=8 --txq=8 -i -a"
 	fi
 }
 
