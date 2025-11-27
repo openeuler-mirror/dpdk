@@ -125,6 +125,7 @@ static const struct hinic3_xstats_name_off hinic3_vport_stats_strings[] = {
 	HINIC3_FUNC_STAT(rx_discard_vport),
 	HINIC3_FUNC_STAT(tx_err_vport),
 	HINIC3_FUNC_STAT(rx_err_vport),
+	HINIC3_FUNC_STAT(rx_mtu_err_vport),
 };
 
 #define HINIC3_VPORT_XSTATS_NUM (sizeof(hinic3_vport_stats_strings) / \

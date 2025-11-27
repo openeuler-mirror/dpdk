@@ -491,6 +491,8 @@ struct hinic3_vport_stats {
 	u64 rx_discard_vport;
 	u64 tx_err_vport;
 	u64 rx_err_vport;
+
+	u64 rx_mtu_err_vport;
 };
 
 struct hinic3_cmd_vport_stats {
@@ -499,7 +501,7 @@ struct hinic3_cmd_vport_stats {
 	u32 stats_size;
 	u32 rsvd1;
 	struct hinic3_vport_stats stats;
-	u64 rsvd2[6];
+	u64 rsvd2[5];
 };
 
 struct hinic3_phy_port_stats {
