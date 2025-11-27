@@ -1831,6 +1831,7 @@ static void hinic3_dev_stop(struct rte_eth_dev *dev)
 	struct hinic3_nic_dev *nic_dev;
 	struct rte_eth_link link;
 	int err;
+	uint16_t i;
 
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	if (!hinic3_test_and_clear_bit(HINIC3_DEV_START,
@@ -1890,6 +1891,11 @@ static void hinic3_dev_stop(struct rte_eth_dev *dev)
 
 	/* Free mempool */
 	hinic3_copy_mempool_uninit(nic_dev);
+
+	for (i = 0; i < dev->data->nb_rx_queues; i++)
+		dev->data->rx_queue_state[i] = RTE_ETH_QUEUE_STATE_STOPPED;
+	for (i = 0; i < dev->data->nb_tx_queues; i++)
+		dev->data->tx_queue_state[i] = RTE_ETH_QUEUE_STATE_STOPPED;
 
 #ifdef DPDK_20_11
 	return 0;
