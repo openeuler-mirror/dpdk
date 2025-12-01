@@ -428,6 +428,9 @@ hinic3_tx_offload_pkt_prepare(struct rte_mbuf *mbuf, u16 *inner_l3_offset)
 		!(ol_flags & (HINIC3_PKT_TX_TUNNEL_VXLAN | HINIC3_PKT_TX_TUNNEL_GENEVE)))
 		return -EINVAL;
 
+	if (hinic3_is_ipinip(mbuf))
+		return 0;
+
 #ifdef RTE_LIBRTE_ETHDEV_DEBUG
 	if (rte_validate_tx_offload(mbuf) != 0)
 		return -EINVAL;
@@ -773,7 +776,7 @@ static bool hinic3_is_ipinip(struct rte_mbuf *mbuf)
 	uint64_t ol_flags;
 
 	ol_flags = mbuf->ol_flags & HINIC3_PKT_TX_TUNNEL_MASK;
-	if (ol_flags == HINIC3_PKT_TX_TUNNEL_IPIP)
+	if (ol_flags == HINIC3_PKT_TX_TUNNEL_IPIP || mbuf->packet_type & RTE_PTYPE_TUNNEL_IP)
 		return true;
  
 	return false;
