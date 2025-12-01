@@ -413,6 +413,14 @@ static inline void hinic3_calculate_checksum(struct rte_mbuf *mbuf,
 	return;
 }
 
+static bool hinic3_is_ipinip(struct rte_mbuf *mbuf)
+{
+	uint64_t ol_flags;
+
+	ol_flags = mbuf->ol_flags & HINIC3_PKT_TX_TUNNEL_MASK;
+	return ol_flags == HINIC3_PKT_TX_TUNNEL_IPIP || mbuf->packet_type & RTE_PTYPE_TUNNEL_IP;
+}
+
 static int
 hinic3_tx_offload_pkt_prepare(struct rte_mbuf *mbuf, u16 *inner_l3_offset)
 {
@@ -769,17 +777,6 @@ static int hinic3_ipinip_cksum(struct rte_mbuf *mbuf)
 	hinic3_process_inner_cksums(inner_ip_hdr, mbuf);
  
 	return 0;
-}
- 
-static bool hinic3_is_ipinip(struct rte_mbuf *mbuf)
-{
-	uint64_t ol_flags;
-
-	ol_flags = mbuf->ol_flags & HINIC3_PKT_TX_TUNNEL_MASK;
-	if (ol_flags == HINIC3_PKT_TX_TUNNEL_IPIP || mbuf->packet_type & RTE_PTYPE_TUNNEL_IP)
-		return true;
- 
-	return false;
 }
 
 static int hinic3_set_tx_offload(struct rte_mbuf *mbuf,
