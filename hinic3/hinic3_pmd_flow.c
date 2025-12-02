@@ -474,9 +474,56 @@ static enum rte_flow_item_type pattern_ipv4_gpe_ipv6_udp[] = {
 	HINIC3_FLOW_ITEM_TYPE_IPV4,
 	HINIC3_FLOW_ITEM_TYPE_UDP,
 	HINIC3_FLOW_ITEM_TYPE_VXLAN_GPE,
-	HINIC3_FLOW_ITEM_TYPE_ETH,
 	HINIC3_FLOW_ITEM_TYPE_IPV6,
 	HINIC3_FLOW_ITEM_TYPE_UDP,
+	HINIC3_FLOW_ITEM_TYPE_END,
+};
+
+static enum rte_flow_item_type pattern_ipv4_gpe_ipv6_tcp[] = {
+	HINIC3_FLOW_ITEM_TYPE_ETH,
+	HINIC3_FLOW_ITEM_TYPE_IPV4,
+	HINIC3_FLOW_ITEM_TYPE_UDP,
+	HINIC3_FLOW_ITEM_TYPE_VXLAN_GPE,
+	HINIC3_FLOW_ITEM_TYPE_IPV6,
+	HINIC3_FLOW_ITEM_TYPE_TCP,
+	HINIC3_FLOW_ITEM_TYPE_END,
+};
+
+static enum rte_flow_item_type pattern_ipv4_gpe_ipv6[] = {
+	HINIC3_FLOW_ITEM_TYPE_ETH,
+	HINIC3_FLOW_ITEM_TYPE_IPV4,
+	HINIC3_FLOW_ITEM_TYPE_UDP,
+	HINIC3_FLOW_ITEM_TYPE_VXLAN_GPE,
+	HINIC3_FLOW_ITEM_TYPE_IPV6,
+	HINIC3_FLOW_ITEM_TYPE_END,
+};
+
+static enum rte_flow_item_type pattern_ipv4_gpe_ipv4_tcp[] = {
+	HINIC3_FLOW_ITEM_TYPE_ETH,
+	HINIC3_FLOW_ITEM_TYPE_IPV4,
+	HINIC3_FLOW_ITEM_TYPE_UDP,
+	HINIC3_FLOW_ITEM_TYPE_VXLAN_GPE,
+	HINIC3_FLOW_ITEM_TYPE_IPV4,
+	HINIC3_FLOW_ITEM_TYPE_TCP,
+	HINIC3_FLOW_ITEM_TYPE_END,
+};
+
+static enum rte_flow_item_type pattern_ipv4_gpe_ipv4_udp[] = {
+	HINIC3_FLOW_ITEM_TYPE_ETH,
+	HINIC3_FLOW_ITEM_TYPE_IPV4,
+	HINIC3_FLOW_ITEM_TYPE_UDP,
+	HINIC3_FLOW_ITEM_TYPE_VXLAN_GPE,
+	HINIC3_FLOW_ITEM_TYPE_IPV4,
+	HINIC3_FLOW_ITEM_TYPE_UDP,
+	HINIC3_FLOW_ITEM_TYPE_END,
+};
+
+static enum rte_flow_item_type pattern_ipv4_gpe_ipv4[] = {
+	HINIC3_FLOW_ITEM_TYPE_ETH,
+	HINIC3_FLOW_ITEM_TYPE_IPV4,
+	HINIC3_FLOW_ITEM_TYPE_UDP,
+	HINIC3_FLOW_ITEM_TYPE_VXLAN_GPE,
+	HINIC3_FLOW_ITEM_TYPE_IPV4,
 	HINIC3_FLOW_ITEM_TYPE_END,
 };
 
@@ -862,6 +909,11 @@ static const struct hinic3_valid_pattern hinic3_supported_patterns[] = {
 	{ pattern_ipv4_gpe_eth_ipv6_tcp, hinic3_flow_parse_fdir_vxlan_geneve_filter },
 	{ pattern_ipv4_gpe_eth_ipv6_udp, hinic3_flow_parse_fdir_vxlan_geneve_filter },
 	{ pattern_ipv4_gpe_ipv6_udp, hinic3_flow_parse_fdir_vxlan_geneve_filter },
+	{ pattern_ipv4_gpe_ipv6_tcp, hinic3_flow_parse_fdir_vxlan_geneve_filter },
+	{ pattern_ipv4_gpe_ipv6, hinic3_flow_parse_fdir_vxlan_geneve_filter },
+	{ pattern_ipv4_gpe_ipv4_tcp, hinic3_flow_parse_fdir_vxlan_geneve_filter },
+	{ pattern_ipv4_gpe_ipv4_udp, hinic3_flow_parse_fdir_vxlan_geneve_filter },
+	{ pattern_ipv4_gpe_ipv4, hinic3_flow_parse_fdir_vxlan_geneve_filter },
 	{ pattern_ipv6_gpe_ipv4, hinic3_flow_parse_fdir_vxlan_geneve_filter },
 	{ pattern_ipv6_gpe_ipv4_tcp, hinic3_flow_parse_fdir_vxlan_geneve_filter },
 	{ pattern_ipv6_gpe_ipv4_udp, hinic3_flow_parse_fdir_vxlan_geneve_filter },

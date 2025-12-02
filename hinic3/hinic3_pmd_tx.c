@@ -427,13 +427,13 @@ hinic3_tx_offload_pkt_prepare(struct rte_mbuf *mbuf, u16 *inner_l3_offset)
 	uint64_t ol_flags = mbuf->ol_flags;
 
 	/* Tunnel flag should be deleted in outer gre checksum */
-	if (ol_flags & HINIC3_PKT_TX_TUNNEL_GRE) {
+	if ((ol_flags & HINIC3_PKT_TX_TUNNEL_MASK) == HINIC3_PKT_TX_TUNNEL_GRE) {
 		ol_flags &= ~ HINIC3_PKT_TX_TUNNEL_MASK;
 	}
 
 	/* Vxlan and Geneve offload */
 	if ((ol_flags & HINIC3_PKT_TX_TUNNEL_MASK) &&
-		!(ol_flags & (HINIC3_PKT_TX_TUNNEL_VXLAN | HINIC3_PKT_TX_TUNNEL_GENEVE)))
+		!(ol_flags & (HINIC3_PKT_TX_TUNNEL_VXLAN | HINIC3_PKT_TX_TUNNEL_GENEVE | HINIC3_PKT_TX_TUNNEL_VXLAN_GPE)))
 		return -EINVAL;
 
 	if (hinic3_is_ipinip(mbuf))
@@ -812,6 +812,11 @@ static int hinic3_set_tx_offload(struct rte_mbuf *mbuf,
 	if (ol_flags & HINIC3_PKT_TX_TCP_SEG) {
 		if (hinic3_is_ipinip(mbuf)) {
 			PMD_DRV_LOG(ERR, "IPinIP not support TSO");
+			return -EINVAL;
+		}
+		if ((ol_flags & HINIC3_PKT_TX_TUNNEL_MASK) == HINIC3_PKT_TX_TUNNEL_VXLAN_GPE) {
+			PMD_DRV_LOG(ERR, "VXLAN_GPE not support TSO");
+			return -EINVAL;
 		}
 		pld_offset = wqe_info->payload_offset;
 		if ((pld_offset >> 1) > MAX_PAYLOAD_OFFSET)
@@ -856,6 +861,9 @@ static int hinic3_set_tx_offload(struct rte_mbuf *mbuf,
 	/* For vxlan, also can support PKT_TX_TUNNEL_GENEVE/GRE, etc */
 	switch (ol_flags & HINIC3_PKT_TX_TUNNEL_MASK) {
 	case HINIC3_PKT_TX_TUNNEL_VXLAN:
+		task->pkt_info0 |= SQ_TASK_INFO0_SET(1U, TUNNEL_FLAG);
+		break;
+	case HINIC3_PKT_TX_TUNNEL_VXLAN_GPE:
 		task->pkt_info0 |= SQ_TASK_INFO0_SET(1U, TUNNEL_FLAG);
 		break;
 	case HINIC3_PKT_TX_TUNNEL_GENEVE:
