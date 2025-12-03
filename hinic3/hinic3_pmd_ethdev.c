@@ -28,6 +28,7 @@
 #include "hinic3_pmd_ethdev.h"
 #include "hinic3_pmd_dcb.h"
 #include "hinic3_pmd_tm.h"
+#include "hinic3_pmd_hairpin.h"
 #ifdef HINIC3_TRAFFIC_BIFUR
 #include "hinic3_pmd_bifur.h"
 #endif
@@ -621,7 +622,8 @@ static void hinic3_reset_rx_queue(struct rte_eth_dev *dev)
 
 	for (q_id = 0; q_id < nic_dev->num_rqs; q_id++) {
 		rxq = nic_dev->rxqs[q_id];
-
+		if (!rxq)
+			break;
 		rxq->cons_idx = 0;
 		rxq->prod_idx = 0;
 		rxq->delta = rxq->q_depth;
@@ -639,7 +641,8 @@ static void hinic3_reset_tx_queue(struct rte_eth_dev *dev)
 
 	for (q_id = 0; q_id < nic_dev->num_sqs; q_id++) {
 		txq = nic_dev->txqs[q_id];
-
+		if (!txq)
+			break;
 		txq->cons_idx = 0;
 		txq->prod_idx = 0;
 		txq->owner = 1;
@@ -1055,6 +1058,8 @@ static void hinic3_rx_queue_release(struct rte_eth_dev *dev, uint16_t queue_id)
 		return;
 	}
 	struct hinic3_rxq *rxq = dev->data->rx_queues[queue_id];
+	if (!rxq)
+		return;
 #endif
 	struct hinic3_nic_dev *nic_dev = NULL;
 
@@ -1201,6 +1206,8 @@ static int hinic3_dev_tx_queue_stop(__rte_unused struct rte_eth_dev *dev,
 
 	if (sq_id < dev->data->nb_tx_queues) {
 		txq = dev->data->tx_queues[sq_id];
+		if (!txq)
+			return 0;
 		rc = hinic3_stop_sq(txq);
 		if (rc) {
 			PMD_DRV_LOG(ERR, "Stop tx queue failed, eth_dev:%s, queue_idx:%d",
@@ -2647,6 +2654,8 @@ static int hinic3_dev_stats_get(struct rte_eth_dev *dev,
 			nic_dev->num_rqs : RTE_ETHDEV_QUEUE_STAT_CNTRS;
 	for (i = 0; i < q_num; i++) {
 		rxq = nic_dev->rxqs[i];
+		if (!rxq)
+			break;
 #ifdef HINIC3_XSTAT_MBUF_USE
 		rxq->rxq_stats.left_mbuf = rxq->rxq_stats.alloc_mbuf - rxq->rxq_stats.free_mbuf;
 #endif
@@ -2666,6 +2675,8 @@ static int hinic3_dev_stats_get(struct rte_eth_dev *dev,
 		nic_dev->num_sqs : RTE_ETHDEV_QUEUE_STAT_CNTRS;
 	for (i = 0; i < q_num; i++) {
 		txq = nic_dev->txqs[i];
+		if (!txq)
+			break;
 		stats->q_opackets[i] = txq->txq_stats.packets;
 		stats->q_obytes[i] = txq->txq_stats.bytes;
 		stats->oerrors += (txq->txq_stats.tx_busy +
@@ -3262,6 +3273,9 @@ static const struct eth_dev_ops hinic3_pmd_ops = {
 	.get_reg                       = hinic3_get_reg,
 	.get_dcb_info                  = hinic3_get_dcb_info,
 	.tm_ops_get                    = hinic3_tm_ops_get,
+	.hairpin_cap_get			   = hinic3_hairpin_cap_get,
+	.rx_hairpin_queue_setup		   = hinic3_rx_hairpin_queue_setup,
+	.tx_hairpin_queue_setup		   = hinic3_tx_hairpin_queue_setup,	
 };
 
 static const struct eth_dev_ops hinic3_pmd_vf_ops = {
@@ -3314,6 +3328,9 @@ static const struct eth_dev_ops hinic3_pmd_vf_ops = {
 #endif
 	.get_dcb_info                  = hinic3_get_dcb_info,
 	.tm_ops_get                    = hinic3_tm_ops_get,
+	.hairpin_cap_get			   = hinic3_hairpin_cap_get,
+	.rx_hairpin_queue_setup		   = hinic3_rx_hairpin_queue_setup,
+	.tx_hairpin_queue_setup		   = hinic3_tx_hairpin_queue_setup,	
 };
 
 /**

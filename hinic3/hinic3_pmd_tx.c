@@ -210,6 +210,8 @@ int hinic3_start_all_sqs(struct rte_eth_dev *eth_dev)
 
 	for (i = 0; i < nic_dev->num_sqs; i++) {
 		txq = eth_dev->data->tx_queues[i];
+		if (!txq)
+			break;
 		HINIC3_SET_TXQ_STARTED(txq);
 		eth_dev->data->tx_queue_state[i] = RTE_ETH_QUEUE_STATE_STARTED;
 	}
@@ -315,9 +317,15 @@ void hinic3_free_txq_mbufs(struct hinic3_txq *txq)
 void hinic3_free_all_txq_mbufs(struct hinic3_nic_dev *nic_dev)
 {
 	u16 qid;
+	struct hinic3_txq *txq;
 
-	for (qid = 0; qid < nic_dev->num_sqs; qid++)
-		hinic3_free_txq_mbufs(nic_dev->txqs[qid]);
+	for (qid = 0; qid < nic_dev->num_sqs; qid++) {
+		txq = nic_dev->txqs[qid];
+		if (!txq)
+			break;
+		hinic3_free_txq_mbufs(txq);
+	}
+
 }
 
 int hinic3_tx_done_cleanup(void *txq, u32 free_cnt)
@@ -1342,9 +1350,13 @@ void hinic3_flush_txqs(struct hinic3_nic_dev *nic_dev)
 {
 	u16 qid;
 	int err;
+	struct hinic3_txq *txq;
 
 	for (qid = 0; qid < nic_dev->num_sqs; qid++) {
-		err = hinic3_stop_sq(nic_dev->txqs[qid]);
+		txq = nic_dev->txqs[qid];
+		if (!txq)
+			break;
+		err = hinic3_stop_sq(txq);
 		if (err)
 			PMD_DRV_LOG(ERR, "Stop sq%d failed", qid);
 	}

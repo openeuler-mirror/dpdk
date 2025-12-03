@@ -1054,6 +1054,9 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 					   act, "Invalid action param.");
 			return -rte_errno;
 		}
+		if (!dev->data->rx_queues[act_q->index]) 
+			filter->fdir_filter.is_hairpin = 1;
+		
 		break;
 /* RSS process */
 #ifdef HINIC3_TRAFFIC_BIFUR

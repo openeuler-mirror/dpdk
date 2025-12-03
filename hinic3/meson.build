@@ -59,6 +59,7 @@ sources = files(
 	'hinic3_pmd_dcb.c',
 	'hinic3_pmd_tm.c',
 	'hinic3_pmd_telemetry.c',
+	'hinic3_pmd_hairpin.c',
 )
 
 if arch_subdir == 'arm' and dpdk_conf.get('RTE_ARCH_64')

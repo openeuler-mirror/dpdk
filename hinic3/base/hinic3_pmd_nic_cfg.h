@@ -940,6 +940,9 @@ struct hinic3_cmd_register_vf {
 struct hinic3_tcam_result {
 	u32 qid;
 	u32 queue_num;
+	u32 is_hairpin : 1;
+	u32 rsvd1 : 31;
+	u32 rsvd2;
 };
 
 #define HINIC3_TCAM_FLOW_KEY_SIZE	44

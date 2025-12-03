@@ -541,6 +541,7 @@ hinic3_fdir_tcam_info_init(struct rte_eth_dev	       *dev,
 		hinic3_fdir_tcam_vxlan_geneve_init(dev, rule, tcam_key);
 
 	fdir_tcam_rule->data.qid = rule->rq_index;
+	fdir_tcam_rule->data.is_hairpin = rule->is_hairpin;
 #ifdef HINIC3_TRAFFIC_BIFUR
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	u8 bifur_en, iso_en;

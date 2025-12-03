@@ -486,6 +486,8 @@ static int init_sq_ctxts(struct hinic3_nic_dev *nic_dev)
 		for (i = 0; i < max_ctxts; i++) {
 			curr_id = q_id + i;
 			sq = nic_dev->txqs[curr_id];
+			if (!sq)
+				break;
 			hinic3_sq_prepare_ctxt(sq, curr_id, &sq_ctxt[i]);
 		}
 
@@ -541,7 +543,8 @@ static int init_rq_ctxts(struct hinic3_nic_dev *nic_dev)
 		for (i = 0; i < max_ctxts; i++) {
 			curr_id = q_id + i;
 			rq = nic_dev->rxqs[curr_id];
-
+			if (!rq)
+				break;
 			hinic3_rq_prepare_ctxt(rq, &rq_ctxt[i]);
 		}
 
@@ -641,6 +644,7 @@ int hinic3_init_qp_ctxts(void *dev)
 	struct hinic3_nic_dev *nic_dev = NULL;
 	struct hinic3_hwdev *hwdev = NULL;
 	struct hinic3_sq_attr sq_attr;
+	struct hinic3_txq *txq;
 	u32 rq_depth = 0;
 	u32 sq_depth = 0;
 	u16 q_id;
@@ -683,7 +687,10 @@ int hinic3_init_qp_ctxts(void *dev)
 	}
 
 	for (q_id = 0; q_id < nic_dev->num_sqs; q_id++) {
-		sq_attr.ci_dma_base = nic_dev->txqs[q_id]->ci_dma_base >> 0x2;
+		txq = nic_dev->txqs[q_id];
+		if (!txq)
+			break;
+		sq_attr.ci_dma_base = txq->ci_dma_base >> 0x2;
 		sq_attr.pending_limit = HINIC3_DEAULT_TX_CI_PENDING_LIMIT;
 		sq_attr.coalescing_time = HINIC3_DEAULT_TX_CI_COALESCING_TIME;
 		sq_attr.intr_en = 0;
