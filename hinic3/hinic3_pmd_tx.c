@@ -418,7 +418,7 @@ static bool hinic3_is_ipinip(struct rte_mbuf *mbuf)
 	uint64_t ol_flags;
 
 	ol_flags = mbuf->ol_flags & HINIC3_PKT_TX_TUNNEL_MASK;
-	return ol_flags == HINIC3_PKT_TX_TUNNEL_IPIP || mbuf->packet_type & RTE_PTYPE_TUNNEL_IP;
+	return ol_flags == HINIC3_PKT_TX_TUNNEL_IPIP || mbuf->packet_type == RTE_PTYPE_TUNNEL_IP;
 }
 
 static int
