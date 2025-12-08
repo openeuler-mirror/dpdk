@@ -283,7 +283,7 @@ void hinic3_free_all_rxq_mbufs(struct hinic3_nic_dev *nic_dev)
 
 	for (qid = 0; qid < nic_dev->num_rqs; qid++) {
 		rxq = nic_dev->rxqs[qid];
-		if (!rxq)
+		if (rxq->is_hairpin)
 			break;
 		hinic3_free_rxq_mbufs(rxq);
 	}
@@ -952,7 +952,7 @@ int hinic3_start_all_rqs(struct rte_eth_dev *eth_dev)
 
 	for (i = 0; i < nic_dev->num_rqs; i++) {
 		rxq = eth_dev->data->rx_queues[i];
-		if (!rxq) {
+		if (rxq->is_hairpin) {
 			rxq = eth_dev->data->rx_queues[i-1];
 			break;
 		}

@@ -940,9 +940,6 @@ struct hinic3_cmd_register_vf {
 struct hinic3_tcam_result {
 	u32 qid;
 	u32 queue_num;
-	u32 is_hairpin : 1;
-	u32 rsvd1 : 31;
-	u32 rsvd2;
 };
 
 #define HINIC3_TCAM_FLOW_KEY_SIZE	44
@@ -1558,11 +1555,13 @@ int hinic3_vf_get_default_cos(void *hwdev, u8 *cos_id);
  *   Tcam rule, including tcam rule index, tcam action, tcam key and etc
  * @param[in] tcam_rule_type
  *   Tcam rule type
- *
+ * @param[in] is_hairpin
+ *   whether this rule is for hairpin
+ * 
  * @retval zero : Success
  * @retval non-zero : Failure
  */
-int hinic3_add_tcam_rule(void *hwdev, struct hinic3_tcam_cfg_rule *tcam_rule, u8 tcam_rule_type);
+int hinic3_add_tcam_rule(void *hwdev, struct hinic3_tcam_cfg_rule *tcam_rule, u8 tcam_rule_type, bool is_hairpin);
 
 /**
  * Del tcam rules

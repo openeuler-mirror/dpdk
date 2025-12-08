@@ -291,6 +291,7 @@ struct hinic3_rxq {
 
 	unsigned long status;
 	u64 wait_time_cycle;
+	bool is_hairpin;
 
 	struct hinic3_rxq_stats	rxq_stats;
 #ifdef HINIC3_XSTAT_PROF_RX

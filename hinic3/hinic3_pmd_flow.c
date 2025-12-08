@@ -23,6 +23,7 @@
 #include "hinic3_pmd_ethdev.h"
 #include "hinic3_pmd_fdir.h"
 #include "hinic3_pmd_flow.h"
+#include "hinic3_pmd_rx.h"
 
 #ifdef HINIC3_TRAFFIC_BIFUR
 #ifdef DPDK_20_11
@@ -1025,6 +1026,7 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 {
 	const struct rte_flow_action_queue *act_q;
 	const struct rte_flow_action *act = actions;
+	struct hinic3_rxq *rxq;
 #ifdef HINIC3_TRAFFIC_BIFUR
 	const struct rte_flow_action_rss *act_r;
 	struct rte_pci_device *pci_dev = NULL;
@@ -1054,7 +1056,8 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 					   act, "Invalid action param.");
 			return -rte_errno;
 		}
-		if (!dev->data->rx_queues[act_q->index]) 
+		rxq = (struct hinic3_rxq *)dev->data->rx_queues[act_q->index];
+		if (rxq->is_hairpin) 
 			filter->fdir_filter.is_hairpin = 1;
 		
 		break;

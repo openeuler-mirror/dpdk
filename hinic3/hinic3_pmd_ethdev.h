@@ -17,6 +17,9 @@
 #define HINIC3_PMD_DRV_VERSION "B106"
 #endif
 
+#define HINIC3_MAX_QUEUE_DEPTH		16384
+#define HINIC3_MIN_QUEUE_DEPTH		128
+
 #ifdef DPDK_21_11
 #define PCI_DEV_TO_INTR_HANDLE(pci_dev) (pci_dev->intr_handle)
 

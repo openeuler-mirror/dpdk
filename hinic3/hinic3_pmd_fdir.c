@@ -541,7 +541,6 @@ hinic3_fdir_tcam_info_init(struct rte_eth_dev	       *dev,
 		hinic3_fdir_tcam_vxlan_geneve_init(dev, rule, tcam_key);
 
 	fdir_tcam_rule->data.qid = rule->rq_index;
-	fdir_tcam_rule->data.is_hairpin = rule->is_hairpin;
 #ifdef HINIC3_TRAFFIC_BIFUR
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	u8 bifur_en, iso_en;
@@ -734,7 +733,7 @@ failed:
 
 static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
 				struct hinic3_tcam_key *tcam_key,
-				struct hinic3_tcam_cfg_rule *fdir_tcam_rule)
+				struct hinic3_tcam_cfg_rule *fdir_tcam_rule, bool is_hairpin)
 {
 	struct hinic3_tcam_info *tcam_info =
 		HINIC3_DEV_PRIVATE_TO_TCAM_INFO(dev->data->dev_private);
@@ -777,7 +776,7 @@ static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
 		PMD_DRV_LOG(ERR, "Dynamic lookup tcam filter failed!");
 		goto lookup_tcam_index_failed;
 	}
-	err = hinic3_add_tcam_rule(nic_dev->hwdev, fdir_tcam_rule, TCAM_RULE_FDIR_TYPE);
+	err = hinic3_add_tcam_rule(nic_dev->hwdev, fdir_tcam_rule, TCAM_RULE_FDIR_TYPE, is_hairpin);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Fdir_tcam_rule add failed!");
 		goto add_tcam_rules_failed;
@@ -921,7 +920,7 @@ int hinic3_flow_add_del_fdir_filter(struct rte_eth_dev *dev,
 		}
 
 		ret = hinic3_add_tcam_filter(dev, &tcam_key,
-				&fdir_tcam_rule);
+				&fdir_tcam_rule, fdir_filter->is_hairpin);
 		if (ret)
 			goto cfg_tcam_filter_err;
 
@@ -977,7 +976,7 @@ int hinic3_enable_rxq_fdir_filter(struct rte_eth_dev *dev, u32 queue_id, u32 abl
 				fdir_tcam_rule.data.qid = queue_id;
 				tcam_key_calculate(&it->tcam_key, &fdir_tcam_rule);
 
-				ret = hinic3_add_tcam_rule(nic_dev->hwdev, &fdir_tcam_rule, TCAM_RULE_FDIR_TYPE);
+				ret = hinic3_add_tcam_rule(nic_dev->hwdev, &fdir_tcam_rule, TCAM_RULE_FDIR_TYPE, 0);
 				if (ret) {
 					PMD_DRV_LOG(ERR, "add correct tcam rule failed!");
 					return -EFAULT;
@@ -1003,7 +1002,7 @@ int hinic3_enable_rxq_fdir_filter(struct rte_eth_dev *dev, u32 queue_id, u32 abl
 				fdir_tcam_rule.data.qid = queue_res;
 				tcam_key_calculate(&it->tcam_key, &fdir_tcam_rule);
 
-				ret = hinic3_add_tcam_rule(nic_dev->hwdev, &fdir_tcam_rule, TCAM_RULE_FDIR_TYPE);
+				ret = hinic3_add_tcam_rule(nic_dev->hwdev, &fdir_tcam_rule, TCAM_RULE_FDIR_TYPE, 0);
 				if (ret) {
 					PMD_DRV_LOG(ERR, "add invalid tcam rule failed!");
 					return -EFAULT;

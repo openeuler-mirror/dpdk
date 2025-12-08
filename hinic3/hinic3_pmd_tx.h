@@ -290,6 +290,8 @@ struct hinic3_txq {
 	u16 tx_free_thresh;
 	u16 owner; /* Used for sq */
 
+	bool is_hairpin;
+
 	void *db_addr;
 
 	struct hinic3_tx_info *tx_info;

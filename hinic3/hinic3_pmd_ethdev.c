@@ -288,8 +288,6 @@ static int hinic3_xstats_calc_num(struct hinic3_nic_dev *nic_dev)
 	}
 }
 
-#define HINIC3_MAX_QUEUE_DEPTH		16384
-#define HINIC3_MIN_QUEUE_DEPTH		128
 #define HINIC3_TXD_ALIGN		1
 #define HINIC3_RXD_ALIGN		1
 
@@ -641,7 +639,7 @@ static void hinic3_reset_tx_queue(struct rte_eth_dev *dev)
 
 	for (q_id = 0; q_id < nic_dev->num_sqs; q_id++) {
 		txq = nic_dev->txqs[q_id];
-		if (!txq)
+		if (txq->is_hairpin)
 			break;
 		txq->cons_idx = 0;
 		txq->prod_idx = 0;
@@ -1058,7 +1056,7 @@ static void hinic3_rx_queue_release(struct rte_eth_dev *dev, uint16_t queue_id)
 		return;
 	}
 	struct hinic3_rxq *rxq = dev->data->rx_queues[queue_id];
-	if (!rxq)
+	if (rxq->is_hairpin)
 		return;
 #endif
 	struct hinic3_nic_dev *nic_dev = NULL;
@@ -1206,7 +1204,7 @@ static int hinic3_dev_tx_queue_stop(__rte_unused struct rte_eth_dev *dev,
 
 	if (sq_id < dev->data->nb_tx_queues) {
 		txq = dev->data->tx_queues[sq_id];
-		if (!txq)
+		if (txq->is_hairpin)
 			return 0;
 		rc = hinic3_stop_sq(txq);
 		if (rc) {
@@ -2654,7 +2652,7 @@ static int hinic3_dev_stats_get(struct rte_eth_dev *dev,
 			nic_dev->num_rqs : RTE_ETHDEV_QUEUE_STAT_CNTRS;
 	for (i = 0; i < q_num; i++) {
 		rxq = nic_dev->rxqs[i];
-		if (!rxq)
+		if (rxq->is_hairpin)
 			break;
 #ifdef HINIC3_XSTAT_MBUF_USE
 		rxq->rxq_stats.left_mbuf = rxq->rxq_stats.alloc_mbuf - rxq->rxq_stats.free_mbuf;
