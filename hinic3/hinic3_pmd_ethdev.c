@@ -620,7 +620,7 @@ static void hinic3_reset_rx_queue(struct rte_eth_dev *dev)
 
 	for (q_id = 0; q_id < nic_dev->num_rqs; q_id++) {
 		rxq = nic_dev->rxqs[q_id];
-		
+
 		rxq->cons_idx = 0;
 		rxq->prod_idx = 0;
 		rxq->delta = rxq->q_depth;
@@ -643,10 +643,9 @@ static void hinic3_reset_tx_queue(struct rte_eth_dev *dev)
 		txq->prod_idx = 0;
 		txq->owner = 1;
 
-		if (!txq->is_hairpin) {
+		if (!txq->is_hairpin)
 			/* Clear hardware ci */
 			*(txq->ci_vaddr_base) = 0;
-		}
 	}
 }
 
@@ -3264,7 +3263,9 @@ static const struct eth_dev_ops hinic3_pmd_ops = {
 	.get_dcb_info                  = hinic3_get_dcb_info,
 	.tm_ops_get                    = hinic3_tm_ops_get,
 	.hairpin_cap_get			   = hinic3_hairpin_cap_get,
+#ifdef DPDK_20_11
 	.hairpin_get_peer_ports		   = hinic3_hairpin_get_peer_ports,
+#endif
 	.rx_hairpin_queue_setup		   = hinic3_rx_hairpin_queue_setup,
 	.tx_hairpin_queue_setup		   = hinic3_tx_hairpin_queue_setup,	
 };
@@ -3320,7 +3321,9 @@ static const struct eth_dev_ops hinic3_pmd_vf_ops = {
 	.get_dcb_info                  = hinic3_get_dcb_info,
 	.tm_ops_get                    = hinic3_tm_ops_get,
 	.hairpin_cap_get			   = hinic3_hairpin_cap_get,
+#ifdef DPDK_20_11
 	.hairpin_get_peer_ports		   = hinic3_hairpin_get_peer_ports,
+#endif
 	.rx_hairpin_queue_setup		   = hinic3_rx_hairpin_queue_setup,
 	.tx_hairpin_queue_setup		   = hinic3_tx_hairpin_queue_setup,	
 };

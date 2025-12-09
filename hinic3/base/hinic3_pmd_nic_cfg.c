@@ -1409,9 +1409,9 @@ int hinic3_add_tcam_rule(void *hwdev, struct hinic3_tcam_cfg_rule *tcam_rule, u8
 
 	memset(&tcam_cmd, 0, sizeof(struct hinic3_fdir_add_rule));
 	tcam_cmd.func_id = hinic3_global_func_id(hwdev);
-	if (is_hairpin) {
+	if (is_hairpin)
 		tcam_cmd.bifur_rss_en |= HAIRPIN_FLAG;
-	}
+
 #ifdef HINIC3_TRAFFIC_BIFUR
 	/* Process of enabling group ext_info in the MPU */
 	u8 bifur_en, iso_en;

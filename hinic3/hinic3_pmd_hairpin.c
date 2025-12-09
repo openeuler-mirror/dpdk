@@ -1,13 +1,10 @@
-#include "hinic3_pmd_hairpin.h"
-#include "hinic3_compat.h"
-#include "hinic3_pmd_mgmt.h"
+#include "base/hinic3_compat.h"
+#include "base/hinic3_pmd_mgmt.h"
+
 #include "hinic3_pmd_ethdev.h"
 #include "hinic3_pmd_rx.h"
 #include "hinic3_pmd_tx.h"
-#include "hinic3_pmd_hwdev.h"
-#include "hinic3_pmd_hw_comm.h"
-#include "hinic3_pmd_hwif.h"
-#include "hinic3_pmd_dcb.h"
+#include "hinic3_pmd_hairpin.h"
 
 /**
  * DPDK callback to retrieve hairpin capabilities.
@@ -23,12 +20,20 @@
 int
 hinic3_hairpin_cap_get(struct rte_eth_dev *dev, struct rte_eth_hairpin_cap *cap)
 {
-    (void) dev;
+    RTE_SET_USED(dev);
     cap->max_nb_queues = UINT16_MAX;
     cap->max_rx_2_tx = 1;
     cap->max_tx_2_rx = 1;
-    cap->max_nb_desc = 8192;
-    return 0;
+    cap->max_nb_desc = HINIC3_MAX_QUEUE_DEPTH;
+#ifdef DPDK_22_11
+	/*not support yet*/
+	cap->rx_cap.locked_device_memory = 0;
+	cap->rx_cap.rte_memory = 0;
+	cap->tx_cap.locked_device_memory = 0;
+	/*not support yet*/
+	cap->tx_cap.rte_memory = 0;
+#endif
+	return 0;
 }
 
 /*
@@ -55,7 +60,7 @@ hinic3_hairpin_cap_get(struct rte_eth_dev *dev, struct rte_eth_hairpin_cap *cap)
  */
 int 
 hinic3_hairpin_get_peer_ports(struct rte_eth_dev *dev, uint16_t *peer_ports,
-				size_t len, uint32_t direction)
+							  size_t len, uint32_t direction)
 {
 	struct rte_eth_dev_data *data = dev->data;
 	struct hinic3_rxq **rxq = (struct hinic3_rxq **)data->rx_queues;
@@ -66,12 +71,13 @@ hinic3_hairpin_get_peer_ports(struct rte_eth_dev *dev, uint16_t *peer_ports,
 
 	if (direction) {
 		for (i = 0; i < txq_num; i++) {
-			if (!rxq[i]->is_hairpin) {
+			if (!rxq[i]->is_hairpin)
 				continue;
-			}
+
 			if (peer_cnt >= len) {
 				rte_errno = ERANGE;
-				PMD_DRV_LOG(ERR, "port %u queue %u peer port out of range %u\n", data->port_id, i, len);
+				PMD_DRV_LOG(ERR, "port %u queue %u peer port out of range %lu\n",
+					data->port_id, i, len);
 				return -rte_errno;
 			}
 			peer_ports[peer_cnt++] = rxq[i]->hairpin_conf.peers[0].port;
@@ -83,7 +89,8 @@ hinic3_hairpin_get_peer_ports(struct rte_eth_dev *dev, uint16_t *peer_ports,
 			}
 			if (peer_cnt >= len) {
 				rte_errno = ERANGE;
-				PMD_DRV_LOG(ERR, "port %u queue %u peer port out of range %u\n", data->port_id, i, len);
+				PMD_DRV_LOG(ERR, "port %u queue %u peer port out of range %lu\n",
+					data->port_id, i, len);
 				return -rte_errno;
 			}
 			peer_ports[peer_cnt++] = txq[i]->hairpin_conf.peers[0].port;
@@ -107,12 +114,15 @@ hinic3_hairpin_get_peer_ports(struct rte_eth_dev *dev, uint16_t *peer_ports,
  *   0 on success, a negative errno value otherwise and rte_errno is set.
  */
 int
-hinic3_rx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid, uint16_t nb_desc, const struct rte_eth_hairpin_conf *conf)
+hinic3_rx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
+							  uint16_t nb_desc,
+							  const struct rte_eth_hairpin_conf *conf)
 {
     struct hinic3_rxq *rxq = NULL;
     struct hinic3_nic_dev *nic_dev;
+	u16 rq_depth;
+
     nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
-    u16 rq_depth;
     
     /* Queue depth must be power of 2, otherwise will be aligned up */
 	rq_depth = (nb_desc & (nb_desc - 1)) ?
@@ -144,6 +154,7 @@ hinic3_rx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid, uint16_t nb
 				conf->peers[0].queue, dev->data->nb_tx_queues);
 			return -rte_errno;
 		}
+#ifdef DPDK_20_11
 	} else {
 		if (conf->manual_bind == 0 ||
 		    conf->tx_explicit == 0) {
@@ -156,13 +167,13 @@ hinic3_rx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid, uint16_t nb
 				conf->tx_explicit);
 			return -rte_errno;
 		}
+#endif
 	}
     rxq = rte_zmalloc_socket("hinic3_rq", sizeof(struct hinic3_rxq),
 				 RTE_CACHE_LINE_SIZE, SOCKET_ID_ANY);
     if (!rxq) {
 		PMD_DRV_LOG(ERR, "Allocate rxq[%d] failed, dev_name: %s",
 			    qid, dev->data->name);
-
 		return -ENOMEM;
 	}
     rxq->nic_dev = nic_dev;
@@ -173,6 +184,7 @@ hinic3_rx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid, uint16_t nb
     rxq->is_hairpin = true;
 
     dev->data->rx_queues[qid] = rxq;
+	dev->data->rx_queue_state[qid] = RTE_ETH_QUEUE_STATE_HAIRPIN;
     return 0;
 }
 
@@ -192,7 +204,9 @@ hinic3_rx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid, uint16_t nb
  *   0 on success, a negative errno value otherwise and rte_errno is set.
  */
 int
-hinic3_tx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid, uint16_t nb_desc, const struct rte_eth_hairpin_conf *conf)
+hinic3_tx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
+							  uint16_t nb_desc,
+							  const struct rte_eth_hairpin_conf *conf)
 {
     struct hinic3_txq *txq = NULL;
     struct hinic3_nic_dev *nic_dev;
@@ -233,6 +247,7 @@ hinic3_tx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid, uint16_t nb
 				conf->peers[0].queue, dev->data->nb_tx_queues);
 			return -rte_errno;
 		}
+#ifdef DPDK_20_11
 	} else {
 		if (conf->manual_bind == 0 ||
 		    conf->tx_explicit == 0) {
@@ -245,6 +260,7 @@ hinic3_tx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid, uint16_t nb
 				conf->tx_explicit);
 			return -rte_errno;
 		}
+#endif
 	}
     txq = rte_zmalloc_socket("hinic3_tq", sizeof(struct hinic3_txq),
                 RTE_CACHE_LINE_SIZE, SOCKET_ID_ANY);
@@ -261,5 +277,6 @@ hinic3_tx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid, uint16_t nb
     txq->is_hairpin = true;
 
     dev->data->tx_queues[qid] = txq;
+	dev->data->tx_queue_state[qid] = RTE_ETH_QUEUE_STATE_HAIRPIN;
     return 0;
 }

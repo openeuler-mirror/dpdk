@@ -1556,7 +1556,7 @@ int hinic3_vf_get_default_cos(void *hwdev, u8 *cos_id);
  * @param[in] tcam_rule_type
  *   Tcam rule type
  * @param[in] is_hairpin
- *   whether this rule is for hairpin
+ *   Whether this rule is for hairpin
  * 
  * @retval zero : Success
  * @retval non-zero : Failure
