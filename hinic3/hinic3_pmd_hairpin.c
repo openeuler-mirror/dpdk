@@ -20,6 +20,45 @@ hinic3_hairpin_cap_get(struct rte_eth_dev *dev, struct rte_eth_hairpin_cap *cap)
     return 0;
 }
 
+int 
+hinic3_hairpin_get_peer_ports(struct rte_eth_dev *dev, uint16_t *peer_ports,
+				size_t len, uint32_t direction)
+{
+	struct rte_eth_dev_data *data = dev->data;
+	struct hinic3_rxq **rxq = (struct hinic3_rxq **)data->rx_queues;
+	struct hinic3_txq **txq = (struct hinic3_txq **)data->tx_queues;
+	uint16_t rxq_num = data->nb_rx_queues;
+	uint16_t txq_num = data->nb_tx_queues;
+	uint16_t i, peer_cnt = 0;
+
+	if (direction) {
+		for (i = 0; i < txq_num; i++) {
+			if (!rxq[i]->is_hairpin) {
+				continue;
+			}
+			if (peer_cnt >= len) {
+				rte_errno = ERANGE;
+				PMD_DRV_LOG(ERR, "port %u queue %u peer port out of range %u\n", data->port_id, i, len);
+				return -rte_errno;
+			}
+			peer_ports[peer_cnt++] = rxq[i]->hairpin_conf.peers[0].port;
+		}
+	} else {
+		for (i = 0; i < rxq_num; i++) {
+			if (!txq[i]->is_hairpin) {
+				continue;
+			}
+			if (peer_cnt >= len) {
+				rte_errno = ERANGE;
+				PMD_DRV_LOG(ERR, "port %u queue %u peer port out of range %u\n", data->port_id, i, len);
+				return -rte_errno;
+			}
+			peer_ports[peer_cnt++] = txq[i]->hairpin_conf.peers[0].port;
+		}
+	}
+	return peer_cnt;
+}
+
 int
 hinic3_rx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid, uint16_t nb_desc, const struct rte_eth_hairpin_conf *conf)
 {
@@ -83,6 +122,7 @@ hinic3_rx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid, uint16_t nb
     nic_dev->rxqs[qid] = rxq;
     rxq->q_id = qid;
 	rxq->q_depth = rq_depth;
+	rxq->hairpin_conf = *conf;
     rxq->is_hairpin = true;
 
     dev->data->rx_queues[qid] = rxq;
@@ -155,6 +195,7 @@ hinic3_tx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid, uint16_t nb
     txq->nic_dev = nic_dev;
 	txq->q_id = qid;
 	txq->q_depth = sq_depth;
+	txq->hairpin_conf = *conf;
     txq->is_hairpin = true;
 
     dev->data->tx_queues[qid] = txq;
