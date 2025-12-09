@@ -9,6 +9,17 @@
 #include "hinic3_pmd_hwif.h"
 #include "hinic3_pmd_dcb.h"
 
+/**
+ * DPDK callback to retrieve hairpin capabilities.
+ *
+ * @param dev
+ *   Pointer to Ethernet device structure.
+ * @param[out] cap
+ *   Storage for hairpin capability data.
+ *
+ * @return
+ *   0 on success, a negative errno value otherwise and rte_errno is set.
+ */
 int
 hinic3_hairpin_cap_get(struct rte_eth_dev *dev, struct rte_eth_hairpin_cap *cap)
 {
@@ -20,6 +31,28 @@ hinic3_hairpin_cap_get(struct rte_eth_dev *dev, struct rte_eth_hairpin_cap *cap)
     return 0;
 }
 
+/*
+ * DPDK callback to get the hairpin peer ports list.
+ * This will return the actual number of peer ports and save the identifiers
+ * into the array (sorted, may be different from that when setting up the
+ * hairpin peer queues).
+ * The peer port ID could be the same as the port ID of the current device.
+ *
+ * @param dev
+ *   Pointer to Ethernet device structure.
+ * @param peer_ports
+ *   Pointer to array to save the port identifiers.
+ * @param len
+ *   The length of the array.
+ * @param direction
+ *   Current port to peer port direction.
+ *   positive - current used as Tx to get all peer Rx ports.
+ *   zero - current used as Rx to get all peer Tx ports.
+ *
+ * @return
+ *   0 or positive value on success, actual number of peer ports.
+ *   a negative errno value otherwise and rte_errno is set.
+ */
 int 
 hinic3_hairpin_get_peer_ports(struct rte_eth_dev *dev, uint16_t *peer_ports,
 				size_t len, uint32_t direction)
@@ -59,6 +92,20 @@ hinic3_hairpin_get_peer_ports(struct rte_eth_dev *dev, uint16_t *peer_ports,
 	return peer_cnt;
 }
 
+/**
+ *
+ * @param dev
+ *   Pointer to Ethernet device structure.
+ * @param idx
+ *   RX queue index.
+ * @param desc
+ *   Number of descriptors to configure in queue.
+ * @param hairpin_conf
+ *   Hairpin configuration parameters.
+ *
+ * @return
+ *   0 on success, a negative errno value otherwise and rte_errno is set.
+ */
 int
 hinic3_rx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid, uint16_t nb_desc, const struct rte_eth_hairpin_conf *conf)
 {
@@ -129,6 +176,21 @@ hinic3_rx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid, uint16_t nb
     return 0;
 }
 
+/**
+ * DPDK callback to configure a TX hairpin queue.
+ *
+ * @param dev
+ *   Pointer to Ethernet device structure.
+ * @param idx
+ *   TX queue index.
+ * @param desc
+ *   Number of descriptors to configure in queue.
+ * @param[in] hairpin_conf
+ *   The hairpin binding configuration.
+ *
+ * @return
+ *   0 on success, a negative errno value otherwise and rte_errno is set.
+ */
 int
 hinic3_tx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid, uint16_t nb_desc, const struct rte_eth_hairpin_conf *conf)
 {
