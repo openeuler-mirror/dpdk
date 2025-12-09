@@ -735,13 +735,32 @@ static void hinic3_process_inner_cksums(void *l3_hdr, struct rte_mbuf *mbuf)
 	struct rte_tcp_hdr *tcp_hdr = NULL;
 	struct rte_ipv4_hdr *ipv4_hdr = NULL;
 	hinic3_ip_cs_handler_t *ip_handler = NULL;
+	uint16_t inner_ip_total_len = 0;
+	uint16_t mbuf_data_len = 0;
+	bool is_inner_fragmented = false;
  
 	version = (*(uint8_t *)l3_hdr) >> 4;
 	ver_index = hinic3_check_ip_version(version);
 	ip_handler = &g_ip_cs_handlers[ver_index];
-	if (version == 4) {
+	if (version == IPV4_VERSION) {
 		ip_handler->get_len_proto(l3_hdr, &(ip_handler->hdr_len), &l4_proto);
 		ipv4_hdr = l3_hdr;
+
+		/* Check if inner IP packet is fragmented */
+		inner_ip_total_len = rte_be_to_cpu_16(ipv4_hdr->total_length);
+		uint16_t inner_ip_data_len = inner_ip_total_len - ip_handler->hdr_len;
+
+		/* Get actual data length in mbuf (from inner IP header to end) */
+		mbuf_data_len = rte_pktmbuf_data_len(mbuf) - 
+				((uint8_t *)l3_hdr - rte_pktmbuf_mtod(mbuf, uint8_t *));
+
+		/* If inner IP total length > mbuf data length, inner IP is fragmented */
+		if (inner_ip_total_len > mbuf_data_len) {
+			is_inner_fragmented = true;
+			PMD_DRV_LOG(DEBUG, "Inner IP is fragmented: total_len=%u, mbuf_len=%u",
+				    inner_ip_total_len, mbuf_data_len);
+		}
+
 		ipv4_hdr->hdr_checksum = 0;
 		ipv4_hdr->hdr_checksum = rte_ipv4_cksum(ipv4_hdr);
 	} else {
@@ -751,28 +770,112 @@ static void hinic3_process_inner_cksums(void *l3_hdr, struct rte_mbuf *mbuf)
 	if (l4_proto == IPPROTO_UDP) {
 		udp_hdr = (struct rte_udp_hdr *)((char *)l3_hdr + ip_handler->hdr_len);
 		udp_hdr->dgram_cksum = 0;
-		udp_hdr->dgram_cksum = hinic3_get_udptcp_checksum(mbuf, l3_hdr, udp_hdr);
-	} else {
+		/* For fragmented inner IP (outer IP fragmented), rte_ipv4_udptcp_cksum
+		 * uses inner IP total_length field. However, if mbuf data is incomplete,
+		 * we need to temporarily adjust inner IP total_length to match mbuf
+		 * data length for correct checksum calculation.
+		 */
+		if (is_inner_fragmented && version == IPV4_VERSION) {
+			uint16_t saved_total_len = ipv4_hdr->total_length;
+			ipv4_hdr->total_length = rte_cpu_to_be_16(mbuf_data_len);
+			udp_hdr->dgram_cksum = hinic3_get_udptcp_checksum(mbuf, l3_hdr, udp_hdr);
+			ipv4_hdr->total_length = saved_total_len;
+		} else {
+			udp_hdr->dgram_cksum = hinic3_get_udptcp_checksum(mbuf, l3_hdr, udp_hdr);
+		}
+	} else if (l4_proto == IPPROTO_TCP){
 		tcp_hdr = (struct rte_tcp_hdr *)((char *)l3_hdr + ip_handler->hdr_len);
 		tcp_hdr->cksum = 0;
-		tcp_hdr->cksum = hinic3_get_udptcp_checksum(mbuf, l3_hdr, tcp_hdr);
+		/* For fragmented inner IP (outer IP fragmented), rte_ipv4_udptcp_cksum
+		 * uses inner IP total_length field. However, if mbuf data is incomplete,
+		 * we need to temporarily adjust inner IP total_length to match mbuf
+		 * data length for correct checksum calculation.
+		 * This ensures TCP checksum is calculated based on actual data in mbuf,
+		 * not the full inner IP packet length.
+		 */
+		if (is_inner_fragmented && version == 4) {
+			uint16_t saved_total_len = ipv4_hdr->total_length;
+			ipv4_hdr->total_length = rte_cpu_to_be_16(mbuf_data_len);
+			tcp_hdr->cksum = hinic3_get_udptcp_checksum(mbuf, l3_hdr, tcp_hdr);
+			ipv4_hdr->total_length = saved_total_len;
+		} else {
+			tcp_hdr->cksum = hinic3_get_udptcp_checksum(mbuf, l3_hdr, tcp_hdr);
+		}
+	} else if (l4_proto == IPPROTO_SCTP) {
+		PMD_DRV_LOG(ERR, "sctp cksum not support");
+	} else {
+		switch (l4_proto) {
+		case IPPROTO_HOPOPTS:
+		case IPPROTO_ROUTING:
+		case IPPROTO_DSTOPTS:
+		case IPPROTO_AH:
+		case IPPROTO_FRAGMENT:
+			PMD_DRV_LOG(ERR, "ext hdr exceed the number of parsed");
+			break;
+		default:
+			break;
+		}
 	}
 }
  
 static int hinic3_ipinip_cksum(struct rte_mbuf *mbuf)
 {
 	hinic3_ip_cs_handler_t *ip_handler = NULL;
-	uint8_t ip_hdr;
+	uint8_t *ip_hdr = NULL;
 	void *inner_ip_hdr = NULL;
 	uint16_t offset = 0;
+	u8 proto;
+	uint16_t fragment_offset;
+	bool is_first_fragment = true;
+	struct rte_ipv4_hdr *ipv4_hdr = NULL;
+	uint8_t *pkt_data = rte_pktmbuf_mtod(mbuf, uint8_t *);
  
-	ip_handler = hinic3_get_outer_l3_hdr(mbuf, &offset, &ip_hdr);
+	ip_handler = hinic3_get_outer_l3_hdr(mbuf, &offset, ip_hdr);
 	if (ip_handler == NULL) {
 		PMD_DRV_LOG(ERR, "not support outer l3 proto by IPinIP checksum, check packet");
-		return -EINVAL;;
+		return -EINVAL;
 	}
+
+	ip_hdr = pkt_data + offset;
+	ip_handler->get_len_proto(ip_hdr, &(ip_handler->hdr_len), &proto);
+	if (proto != IPPROTO_IPIP && proto != IPPROTO_IPV6) {
+		PMD_DRV_LOG(ERR, "packet is wrong, outer IP proto=%u, expected 4 or 41", proto);
+		return -EINVAL;
+	}
+
+	/* Check if this is the first fragment (only for inner checksum calculation) */
+	if (ip_handler == &g_ip_cs_handlers[IPV4_INDEX]) {
+		ipv4_hdr = (struct rte_ipv4_hdr *)ip_hdr;
+		fragment_offset = rte_be_to_cpu_16(ipv4_hdr->fragment_offset);
+		/* Check if this is the first fragment
+		 * IPv4 fragment_offset field: lower 13 bits are offset (in 8-byte units)
+		 */
+		is_first_fragment = ((fragment_offset & 0x1FFF) == 0);
+
+		/* Skip outer IP header checksum calculation - not needed */
+
+		/* If fragment_offset != 0, this is not the first fragment,
+		 * and inner IP header is not present in this fragment.
+		 * Skip inner checksum processing to avoid segmentation fault.
+		 */
+		if (!is_first_fragment) {
+			PMD_DRV_LOG(INFO, "Outer IP fragment (offset=%u), skip inner checksum", 
+				    fragment_offset & 0x1FFF);
+			return 0;
+		}
+	}
+	/* For IPv6, there is no IP header checksum */
+	else if (ip_handler == &g_ip_cs_handlers[IPV6_INDEX]) {
+		/* IPv6 fragmentation is handled via Fragment Extension Header,
+		 * which is parsed by hinic3_get_ipv6_len_proto.
+		 * If fragment extension header exists, proto will be set accordingly.
+		 * For simplicity, we assume inner IP header is present if proto is 4 or 41.
+		 */
+		/* IPv6 outer header checksum is not needed (IPv6 has no header checksum) */
+	}
+
+	/* Process inner IP and L4 checksums (only for first fragment) */
 	offset += ip_handler->hdr_len;
-	uint8_t *pkt_data = rte_pktmbuf_mtod(mbuf, uint8_t *);
 	inner_ip_hdr = (uint8_t *)(pkt_data + offset);
 	hinic3_process_inner_cksums(inner_ip_hdr, mbuf);
  
