@@ -138,6 +138,15 @@ enum hinic3_function_mode {
 TAILQ_HEAD(hinic3_ethertype_filter_list, rte_flow);
 TAILQ_HEAD(hinic3_fdir_rule_filter_list, rte_flow);
 
+#define HINIC3_PTYPE_NUM 4096
+struct hinic3_ptype_table {
+#ifdef DPDK_23_11
+	alignas(RTE_CACHE_LINE_SIZE) uint32_t ptype[HINIC3_PTYPE_NUM];
+#else
+	uint32_t ptype[HINIC3_PTYPE_NUM] __rte_cache_aligned;
+#endif
+};
+
 struct hinic3_nic_dev {
 	struct hinic3_hwdev *hwdev; /* Hardware device */
 
@@ -190,6 +199,8 @@ struct hinic3_nic_dev {
 	struct hinic3_tcam_info tcam;
 	struct hinic3_ethertype_filter_list filter_ethertype_list;
 	struct hinic3_fdir_rule_filter_list filter_fdir_rule_list;
+
+	struct hinic3_ptype_table* ptype_tbl;
 #ifdef HINIC3_TRAFFIC_BIFUR
 	u8 hinic3_function_mode;
 #endif

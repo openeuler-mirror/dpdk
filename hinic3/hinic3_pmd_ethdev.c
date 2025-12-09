@@ -1950,6 +1950,8 @@ static void hinic3_dev_release(struct rte_eth_dev *eth_dev)
 
 	rte_free(nic_dev->hwdev);
 	nic_dev->hwdev = NULL;
+	rte_free(nic_dev->ptype_tbl);
+	nic_dev->ptype_tbl = NULL;
 }
 
 /**
@@ -2938,17 +2940,37 @@ static int hinic3_dev_xstats_get_names(struct rte_eth_dev *dev,
 
 	return count;
 }
-
 #ifdef DPDK_24_11
 static const uint32_t *
-hinic3_dev_supported_ptypes_get(__rte_unused struct rte_eth_dev *dev,
-				__rte_unused size_t *no_of_elements)
+hinic3_dev_supported_ptypes_get(__rte_unused struct rte_eth_dev *dev, size_t *no_of_elements)
 #else
 static const uint32_t *
 hinic3_dev_supported_ptypes_get(__rte_unused struct rte_eth_dev *dev)
 #endif
 {
-	return 0;
+	static const uint32_t ptypes[] = {
+		RTE_PTYPE_L3_IPV4_EXT_UNKNOWN,
+		RTE_PTYPE_L3_IPV6_EXT_UNKNOWN,
+		RTE_PTYPE_L4_TCP,
+		RTE_PTYPE_L4_UDP,
+		RTE_PTYPE_L4_SCTP,
+		RTE_PTYPE_L4_NONFRAG,
+		RTE_PTYPE_TUNNEL_IP,
+		RTE_PTYPE_TUNNEL_GRE,
+		RTE_PTYPE_TUNNEL_VXLAN,
+		RTE_PTYPE_TUNNEL_VXLAN_GPE,
+		RTE_PTYPE_TUNNEL_GENEVE,
+		RTE_PTYPE_INNER_L3_IPV4_EXT_UNKNOWN,
+		RTE_PTYPE_INNER_L3_IPV6_EXT_UNKNOWN,
+		RTE_PTYPE_INNER_L4_TCP,
+		RTE_PTYPE_INNER_L4_UDP,
+		RTE_PTYPE_INNER_L4_SCTP,
+		RTE_PTYPE_INNER_L4_NONFRAG,
+	};
+#ifdef DPDK_24_11
+	*no_of_elements = RTE_DIM(ptypes);
+#endif
+	return ptypes;
 }
 
 static void hinic3_rxq_info_get(struct rte_eth_dev *dev, uint16_t queue_id,
@@ -3211,6 +3233,7 @@ static int hinic3_get_reg(__rte_unused struct rte_eth_dev *dev,
 static const struct eth_dev_ops hinic3_pmd_ops = {
 	.dev_configure                 = hinic3_dev_configure,
 	.dev_infos_get                 = hinic3_dev_infos_get,
+	.dev_supported_ptypes_get      = hinic3_dev_supported_ptypes_get,
 	.fw_version_get                = hinic3_fw_version_get,
 	.dev_set_link_up               = hinic3_dev_set_link_up,
 	.dev_set_link_down             = hinic3_dev_set_link_down,
@@ -3258,7 +3281,6 @@ static const struct eth_dev_ops hinic3_pmd_ops = {
 	.xstats_get                    = hinic3_dev_xstats_get,
 	.xstats_reset                  = hinic3_dev_xstats_reset,
 	.xstats_get_names              = hinic3_dev_xstats_get_names,
-	.dev_supported_ptypes_get      = hinic3_dev_supported_ptypes_get,
 	.rxq_info_get                  = hinic3_rxq_info_get,
 	.txq_info_get                  = hinic3_txq_info_get,
 	.mac_addr_set                  = hinic3_set_mac_addr,
@@ -3278,6 +3300,7 @@ static const struct eth_dev_ops hinic3_pmd_ops = {
 static const struct eth_dev_ops hinic3_pmd_vf_ops = {
 	.dev_configure                 = hinic3_dev_configure,
 	.dev_infos_get                 = hinic3_dev_infos_get,
+	.dev_supported_ptypes_get      = hinic3_dev_supported_ptypes_get,
 	.fw_version_get                = hinic3_fw_version_get,
 	.rx_queue_setup                = hinic3_rx_queue_setup,
 	.tx_queue_setup                = hinic3_tx_queue_setup,
@@ -3642,6 +3665,11 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 			    eth_dev->data->name);
 		goto enable_intr_fail;
 	}
+
+	err = hinic3_init_rx_ptype_table(eth_dev);
+	if (err) 
+		PMD_DRV_LOG(ERR, "Failed to create ptype_table.");
+	
 	tcam_info = &nic_dev->tcam;
 	memset(tcam_info, 0, sizeof(struct hinic3_tcam_info));
 	TAILQ_INIT(&tcam_info->tcam_list);

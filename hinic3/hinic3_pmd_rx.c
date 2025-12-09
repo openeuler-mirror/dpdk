@@ -16,26 +16,128 @@
 #include "hinic3_pmd_tx.h"
 #include "hinic3_pmd_rx.h"
 
-#define RQ_CQE_OFFOLAD_TYPE_TUNNEL_PKT_FORMAT_SHIFT 8
-#define RQ_CQE_OFFOLAD_TYPE_TUNNEL_PKT_FORMAT_MASK 0x7U
+static uint32_t
+hinic3_get_l3_ptype(uint32_t ip_type)
+{
+	uint32_t ptype = 0;
+	if (ip_type == IPSU_METADATA_L3_TP_IPV4)
+		ptype |= RTE_PTYPE_L3_IPV4_EXT_UNKNOWN;
+	else if (ip_type == IPSU_METADATA_L3_TP_IPV6)
+		ptype |= RTE_PTYPE_L3_IPV6_EXT_UNKNOWN;
+	return ptype;
+}
+static uint32_t
+hinic3_get_l4_ptype(uint32_t packet_type)
+{
+	int ptype = 0;
+	switch (packet_type) {
+		case IPSU_PKT_TYPE_NULL:
+			break;
+		case IPSU_PKT_TYPE_TCP:
+			ptype |= RTE_PTYPE_L4_TCP;
+			break;
+		case IPSU_PKT_TYPE_UDP:
+			ptype |= RTE_PTYPE_L4_UDP;
+			break;
+		case IPSU_PKT_TYPE_IPV4_FRAG:
+			ptype |= RTE_PTYPE_L4_FRAG;
+			break;
+		case IPSU_PKT_TYPE_SCTP:
+			ptype |= RTE_PTYPE_L4_SCTP;
+			break;
+		case IPSU_PKT_TYPE_ICMP:
+			ptype |= RTE_PTYPE_L4_ICMP;
+			break;
+		case IPSU_PKT_TYPE_IGMP:
+			ptype |= RTE_PTYPE_L4_IGMP;
+			break;
+#ifdef DPDK_24_11
+		case IPSU_PKT_TYPE_ESP_OVER_IP:
+			ptype |= RTE_PTYPE_L4_ESP;
+			break;
+#endif
+		default:
+			ptype |= RTE_PTYPE_L4_NONFRAG;
+		}
+	return ptype;
+}
 
-#define RQ_CQE_OFFOLAD_TYPE_GET(val, member) \
-        (((val) >> RQ_CQE_OFFOLAD_TYPE_##member##_SHIFT) & \
-        RQ_CQE_OFFOLAD_TYPE_##member##_MASK)
+/**
+ * Calculate the ptype value of given offload type.
+ *
+ * @param[in] offload_type
+ *   The offload of Packet
+ * @return
+ *   Ptype value
+ */
+static uint32_t
+hinic3_calc_rx_ptype_table(uint32_t offload_type)
+{
+	uint32_t packet_type, ip_type, enc_l3_type, pkt_fmt;
+	uint32_t ptype = RTE_PTYPE_UNKNOWN;
 
-#define HINIC3_GET_RX_TUNNEL_PKT_FORMAT(offload_type) \
-        RQ_CQE_OFFOLAD_TYPE_GET(offload_type, TUNNEL_PKT_FORMAT)
+	packet_type = HINIC3_GET_RX_PKT_TYPE(offload_type);
+	ip_type = HINIC3_GET_RX_IP_TYPE(offload_type);
+	enc_l3_type = HINIC3_GET_RX_ENC_L3_TYPE(offload_type);
+	pkt_fmt = HINIC3_GET_RX_PKT_FORMAT(offload_type);
+	
+	switch (pkt_fmt) {
+	case IPSU_METADATA_FMT_NO_ENC:
+		ptype |= RTE_PTYPE_L2_ETHER;
+		ptype |= hinic3_get_l3_ptype(ip_type);
+		ptype |= hinic3_get_l4_ptype(packet_type);
+		break;
+	case IPSU_METADATA_FMT_FC:
+		ptype |= RTE_PTYPE_L2_ETHER_FCOE;
+		break;
+	case IPSU_METADATA_FMT_NSH:
+		ptype |= RTE_PTYPE_L2_ETHER_NSH;
+		break;
+	/* IPinIP */
+	case IPSU_METADATA_FMT_IPIP:
+		ptype |= RTE_PTYPE_L2_ETHER;
+		ptype |= hinic3_get_l3_ptype(ip_type);
+		ptype |= RTE_PTYPE_TUNNEL_IP;
+		break;
+	default:
+	/* VXLAN 、NVGRE 、VXLAN_GPE 、GENEVE*/
+		ptype |= RTE_PTYPE_L2_ETHER;
+		ptype |= hinic3_get_l3_ptype(enc_l3_type);
 
-enum HINIC3_RX_TUNNEL_PKT_FORMAT {
-	HINIC3_RX_TUNNEL_PKT_FORMAT_NOT_TUNNEL = 0u,
-	HINIC3_RX_TUNNEL_PKT_FORMAT_VXLAN = 1u,
-	HINIC3_RX_TUNNEL_PKT_FORMAT_NVGRE = 2u,
-	HINIC3_RX_TUNNEL_PKT_FORMAT_FC = 3u,
-	HINIC3_RX_TUNNEL_PKT_FORMAT_GPE = 4u,
-	HINIC3_RX_TUNNEL_PKT_FORMAT_GENEVE = 5u,
-	HINIC3_RX_TUNNEL_PKT_FORMAT_NSH = 6u,
-	HINIC3_RX_TUNNEL_PKT_FORMAT_IPIP = 7u,
-};
+		switch (pkt_fmt) {
+		case IPSU_METADATA_FMT_VXLAN:
+			ptype |= RTE_PTYPE_L4_UDP;
+			ptype |= RTE_PTYPE_TUNNEL_VXLAN;
+			ptype |= RTE_PTYPE_INNER_L2_ETHER;
+			break;
+		case IPSU_METADATA_FMT_NVGRE:
+			ptype |= RTE_PTYPE_TUNNEL_GRE;
+			return ptype;
+		case IPSU_METADATA_FMT_GPE:
+			ptype |= RTE_PTYPE_L4_UDP;
+			ptype |= RTE_PTYPE_TUNNEL_VXLAN_GPE;
+			break;
+		case IPSU_METADATA_FMT_GENEVE:
+			ptype |= RTE_PTYPE_L4_UDP;
+			ptype |= RTE_PTYPE_TUNNEL_GENEVE;
+			ptype |= RTE_PTYPE_INNER_L2_ETHER;
+			break;
+		default:
+			ptype |= RTE_PTYPE_L4_NONFRAG;
+			break;
+		}
+		if (ip_type == IPSU_METADATA_L3_TP_IPV4)
+			ptype |= RTE_PTYPE_INNER_L3_IPV4_EXT_UNKNOWN;
+		else if (ip_type == IPSU_METADATA_L3_TP_IPV6)
+			ptype |= RTE_PTYPE_INNER_L3_IPV6_EXT_UNKNOWN;
+		else
+			return ptype;
+		/* shift ptype to inner*/
+		ptype |= hinic3_get_l4_ptype(packet_type) << HINIC3_L4_PYTPE_SHIFT;
+
+	}
+	return ptype;
+}
 
 /**
  * Get receive queue wqe
@@ -533,6 +635,29 @@ init_rss_fail:
 
 	return err;
 }
+/**
+ * Initialize the receive packet type table 
+ * @param[in] dev
+ *   Pointer to ethernet device structure.
+ */
+
+int
+hinic3_init_rx_ptype_table(struct rte_eth_dev *dev) {
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+	struct hinic3_ptype_table *tbl = rte_zmalloc("ptype_tbl", sizeof(struct hinic3_ptype_table), 0);
+	
+	if (tbl == NULL) 
+		return -ENOMEM;
+
+	uint32_t *ptype = tbl->ptype;
+	uint32_t i;
+
+	for (i = 0; i < HINIC3_PTYPE_NUM; i++) {
+		ptype[i] = hinic3_calc_rx_ptype_table(i);
+	}
+	nic_dev->ptype_tbl = tbl;
+	return 0;
+}
 
 /* Search given queue array to find possition of given id.
  * Return queue pos or queue_count if not found.
@@ -988,9 +1113,10 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 	volatile struct hinic3_rq_cqe *rx_cqe = NULL;
 	struct rte_mbuf *rxm = NULL;
 	u16 sw_ci, rx_buf_len, wqebb_cnt = 0, pkts = 0;
-	u32 status, pkt_len, vlan_len, offload_type, pkt_fmt, lro_num;
+	u32 status, pkt_len, vlan_len, offload_type, pkt_type, lro_num;
 	u64 rx_bytes = 0;
 	u32 hash_value ;
+	const struct hinic3_ptype_table * const ptype_tbl = rxq->nic_dev->ptype_tbl;
 
 #ifdef HINIC3_XSTAT_PROF_RX
 	uint64_t t1 = rte_get_tsc_cycles();
@@ -1056,22 +1182,8 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 						&rxm->vlan_tci);
 
 		/* 6. Packet ptype */
-		pkt_fmt = HINIC3_GET_RX_TUNNEL_PKT_FORMAT(offload_type);
-		switch (pkt_fmt) {
-			case HINIC3_RX_TUNNEL_PKT_FORMAT_NOT_TUNNEL:
-				break;
-			case HINIC3_RX_TUNNEL_PKT_FORMAT_VXLAN:
-				rxm->packet_type = RTE_PTYPE_TUNNEL_VXLAN;
-				break;
-			case HINIC3_RX_TUNNEL_PKT_FORMAT_GENEVE:
-				rxm->packet_type = RTE_PTYPE_TUNNEL_GENEVE;
-				break;
-			case HINIC3_RX_TUNNEL_PKT_FORMAT_IPIP:
-				rxm->packet_type = RTE_PTYPE_TUNNEL_IP;
-				break;
-			default:
-				rxm->packet_type = RTE_PTYPE_UNKNOWN;
-		} 
+		pkt_type = HINIC3_GET_RX_PTYPE_OFFLOAD(offload_type);
+		rxm->packet_type = ptype_tbl->ptype[pkt_type];
 
 		/* 7. RSS */
 		hash_value = hinic3_hw_cpu32(rx_cqe->hash_val);
