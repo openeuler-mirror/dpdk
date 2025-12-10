@@ -413,12 +413,19 @@ static inline void hinic3_calculate_checksum(struct rte_mbuf *mbuf,
 	return;
 }
 
-static bool hinic3_is_ipinip(struct rte_mbuf *mbuf)
+static inline bool 
+hinic3_is_ipinip(struct rte_mbuf *mbuf)
 {
 	uint64_t ol_flags;
+	uint32_t pkt_type;
 
 	ol_flags = mbuf->ol_flags & HINIC3_PKT_TX_TUNNEL_MASK;
-	return ol_flags == HINIC3_PKT_TX_TUNNEL_IPIP || mbuf->packet_type == RTE_PTYPE_TUNNEL_IP;
+	pkt_type = mbuf->packet_type & RTE_PTYPE_TUNNEL_MASK;
+
+	if (ol_flags == HINIC3_PKT_TX_TUNNEL_IPIP || pkt_type == RTE_PTYPE_TUNNEL_IP)
+		return true;
+ 
+	return false;
 }
 
 static int
