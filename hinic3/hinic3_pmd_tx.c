@@ -327,6 +327,91 @@ int hinic3_tx_done_cleanup(void *txq, u32 free_cnt)
 	return hinic3_xmit_mbuf_cleanup(tx_queue, try_free_cnt);
 }
 
+static void hinic3_get_ipv4_len_proto(const void *hdr, uint16_t *hdr_len, uint8_t *proto)
+{
+	const struct rte_ipv4_hdr *ipv4_hdr = (const struct rte_ipv4_hdr *)hdr;
+	*hdr_len = (ipv4_hdr->version_ihl & RTE_IPV4_HDR_IHL_MASK) * RTE_IPV4_IHL_MULTIPLIER;
+	*proto = ipv4_hdr->next_proto_id;
+}
+
+static void hinic3_get_ipv6_len_proto(const void *hdr, uint16_t *hdr_len, uint8_t *proto)
+{
+	hinic3_ipv6_ext_hdr *xh = NULL;
+	uint8_t i;
+
+	*proto = ((const struct rte_ipv6_hdr *)hdr)->proto;
+	*hdr_len = sizeof(struct rte_ipv6_hdr);
+
+	/*
+	 * Consistent with ucode's IPV6_MAX_EXT_HDRS,
+	 * maximum parsing up to IPV6_MAX_EXT_HDRS layer.
+	 */
+	for (i = 0; i < IPV6_MAX_EXT_HDRS; i++) {
+		xh = (hinic3_ipv6_ext_hdr *)((const uint8_t *)hdr + *hdr_len);
+		switch (*proto) {
+			case IPPROTO_HOPOPTS:
+			case IPPROTO_ROUTING:
+			case IPPROTO_DSTOPTS:
+				/* hdr len is a multiple of 8, excluding the first 8 bytes */
+				*hdr_len += FIXED_EXT_HDR_LEN + xh->len * UNIT_BYTES_U;
+				*proto = xh->next_hdr;
+				break;
+			case IPPROTO_AH:
+				/* hdr len is a multiple of 4, excluding the first 8 bytes */
+				*hdr_len += FIXED_EXT_HDR_LEN + xh->len * UNIT_BYTES_AH;
+				*proto = xh->next_hdr;
+				break;
+			case IPPROTO_FRAGMENT:
+				/* hdr len is fixed 8 bytes */
+				*hdr_len += FIXED_EXT_HDR_LEN;
+				*proto = xh->next_hdr;
+				break; 
+			default:
+				break;
+		}
+	}
+}
+
+static uint16_t
+hinic3_ipv6_phdr_cksum(const struct rte_ipv6_hdr *ipv6_hdr, uint64_t ol_flags)
+{
+	uint32_t   sum;
+	uint8_t	   proto;
+	uint16_t   l3_len;
+	rte_be32_t l4_len;
+	rte_be32_t l4_proto;
+
+	hinic3_get_ipv6_len_proto((const void *)ipv6_hdr, &l3_len, &proto);
+	l4_proto = rte_cpu_to_be_16(proto);
+	if (ol_flags & HINIC3_PKT_TX_TCP_SEG)
+		l4_len = 0;
+	else
+		l4_len = rte_cpu_to_be_16(rte_be_to_cpu_16(ipv6_hdr->payload_len) - l3_len + sizeof(*ipv6_hdr));
+
+#ifdef DPDK_24_11
+	sum = __rte_raw_cksum(ipv6_hdr->src_addr.a, sizeof(ipv6_hdr->src_addr.a) + sizeof(ipv6_hdr->dst_addr.a), 0);
+#else
+	sum = __rte_raw_cksum(ipv6_hdr->src_addr, sizeof(ipv6_hdr->src_addr) + sizeof(ipv6_hdr->dst_addr), 0);
+#endif
+	sum = __rte_raw_cksum(&l4_len, sizeof(l4_len), sum);
+	sum = __rte_raw_cksum(&l4_proto, sizeof(l4_proto), sum);
+
+	return __rte_raw_cksum_reduce(sum);
+}
+
+static hinic3_ip_cs_handler_t g_ip_cs_handlers[] = {
+	[IPV4_INDEX] = {
+		.cksum_func = (uint16_t (*)(const void *, uint64_t))rte_ipv4_phdr_cksum,
+		.get_len_proto = hinic3_get_ipv4_len_proto,
+		.hdr_len = sizeof(struct rte_ipv4_hdr),
+	},
+	[IPV6_INDEX] = {
+		.cksum_func = (uint16_t (*)(const void *, uint64_t))hinic3_ipv6_phdr_cksum,
+		.get_len_proto = hinic3_get_ipv6_len_proto,
+		.hdr_len = sizeof(struct rte_ipv6_hdr),
+	}
+};
+
 static inline void hinic3_calculate_tcp_checksum(struct rte_mbuf *mbuf,
 					u16 inner_l3_offset)
 {
@@ -351,7 +436,7 @@ static inline void hinic3_calculate_tcp_checksum(struct rte_mbuf *mbuf,
 		tcp_hdr = rte_pktmbuf_mtod_offset(mbuf, struct rte_tcp_hdr *,
 							(inner_l3_offset +
 							mbuf->l3_len));
-		tcp_hdr->cksum = rte_ipv6_phdr_cksum(ipv6_hdr, ol_flags);
+		tcp_hdr->cksum = hinic3_ipv6_phdr_cksum(ipv6_hdr, ol_flags);
 	}
 
 	return;
@@ -381,7 +466,7 @@ static inline void hinic3_calculate_udp_checksum(struct rte_mbuf *mbuf,
 		udp_hdr = rte_pktmbuf_mtod_offset(mbuf, struct rte_udp_hdr *,
 							(inner_l3_offset +
 							mbuf->l3_len));
-		udp_hdr->dgram_cksum = rte_ipv6_phdr_cksum(ipv6_hdr, ol_flags);
+		udp_hdr->dgram_cksum = hinic3_ipv6_phdr_cksum(ipv6_hdr, ol_flags);
 	}
 
 	return;
@@ -495,91 +580,6 @@ static inline void hinic3_set_vlan_tx_offload(struct hinic3_sq_task *task,
 			     SQ_TASK_INFO3_SET(vlan_type, VLAN_TYPE) |
 			     SQ_TASK_INFO3_SET(1U, VLAN_TAG_VALID);
 }
-
-static void hinic3_get_ipv4_len_proto(const void *hdr, uint16_t *hdr_len, uint8_t *proto)
-{
-	const struct rte_ipv4_hdr *ipv4_hdr = (const struct rte_ipv4_hdr *)hdr;
-	*hdr_len = (ipv4_hdr->version_ihl & RTE_IPV4_HDR_IHL_MASK) * RTE_IPV4_IHL_MULTIPLIER;
-	*proto = ipv4_hdr->next_proto_id;
-}
-
-static void hinic3_get_ipv6_len_proto(const void *hdr, uint16_t *hdr_len, uint8_t *proto)
-{
-	hinic3_ipv6_ext_hdr *xh = NULL;
-	uint8_t i;
-
-	*proto = ((const struct rte_ipv6_hdr *)hdr)->proto;
-	*hdr_len = sizeof(struct rte_ipv6_hdr);
-
-	/*
-	 * Consistent with ucode's IPV6_MAX_EXT_HDRS,
-	 * maximum parsing up to IPV6_MAX_EXT_HDRS layer.
-	 */
-	for (i = 0; i < IPV6_MAX_EXT_HDRS; i++) {
-		xh = (hinic3_ipv6_ext_hdr *)((const uint8_t *)hdr + *hdr_len);
-		switch (*proto) {
-			case IPPROTO_HOPOPTS:
-			case IPPROTO_ROUTING:
-			case IPPROTO_DSTOPTS:
-				/* hdr len is a multiple of 8, excluding the first 8 bytes */
-				*hdr_len += FIXED_EXT_HDR_LEN + xh->len * UNIT_BYTES_U;
-				*proto = xh->next_hdr;
-				break;
-			case IPPROTO_AH:
-				/* hdr len is a multiple of 4, excluding the first 8 bytes */
-				*hdr_len += FIXED_EXT_HDR_LEN + xh->len * UNIT_BYTES_AH;
-				*proto = xh->next_hdr;
-				break;
-			case IPPROTO_FRAGMENT:
-				/* hdr len is fixed 8 bytes */
-				*hdr_len += FIXED_EXT_HDR_LEN;
-				*proto = xh->next_hdr;
-				break; 
-			default:
-				break;
-		}
-	}
-}
-
-static uint16_t
-hinic3_ipv6_phdr_cksum(const struct rte_ipv6_hdr *ipv6_hdr, uint64_t ol_flags)
-{
-	uint32_t   sum;
-	uint8_t	   proto;
-	uint16_t   l3_len;
-	rte_be32_t l4_len;
-	rte_be32_t l4_proto;
-
-	hinic3_get_ipv6_len_proto((const void *)ipv6_hdr, &l3_len, &proto);
-	l4_proto = rte_cpu_to_be_16(proto);
-	if (ol_flags & HINIC3_PKT_TX_TCP_SEG)
-		l4_len = 0;
-	else
-		l4_len = rte_cpu_to_be_16(rte_be_to_cpu_16(ipv6_hdr->payload_len) - l3_len + sizeof(*ipv6_hdr));
-
-#ifdef DPDK_24_11
-	sum = __rte_raw_cksum(ipv6_hdr->src_addr.a, sizeof(ipv6_hdr->src_addr.a) + sizeof(ipv6_hdr->dst_addr.a), 0);
-#else
-	sum = __rte_raw_cksum(ipv6_hdr->src_addr, sizeof(ipv6_hdr->src_addr) + sizeof(ipv6_hdr->dst_addr), 0);
-#endif
-	sum = __rte_raw_cksum(&l4_len, sizeof(l4_len), sum);
-	sum = __rte_raw_cksum(&l4_proto, sizeof(l4_proto), sum);
-
-	return __rte_raw_cksum_reduce(sum);
-}
-
-static hinic3_ip_cs_handler_t g_ip_cs_handlers[] = {
-	[IPV4_INDEX] = {
-		.cksum_func = (uint16_t (*)(const void *, uint64_t))rte_ipv4_phdr_cksum,
-		.get_len_proto = hinic3_get_ipv4_len_proto,
-		.hdr_len = sizeof(struct rte_ipv4_hdr),
-	},
-	[IPV6_INDEX] = {
-		.cksum_func = (uint16_t (*)(const void *, uint64_t))hinic3_ipv6_phdr_cksum,
-		.get_len_proto = hinic3_get_ipv6_len_proto,
-		.hdr_len = sizeof(struct rte_ipv6_hdr),
-	}
-};
 
 static bool hinic3_vxlan_out_udp_cksum_needed(hinic3_ip_cs_handler_t *ip_handler, uint8_t *pkt_data,
 	struct rte_mbuf *mbuf) {
