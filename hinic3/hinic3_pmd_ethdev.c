@@ -28,6 +28,7 @@
 #include "hinic3_pmd_ethdev.h"
 #include "hinic3_pmd_dcb.h"
 #include "hinic3_pmd_tm.h"
+#include "hinic3_pmd_hairpin.h"
 #ifdef HINIC3_TRAFFIC_BIFUR
 #include "hinic3_pmd_bifur.h"
 #endif
@@ -288,8 +289,6 @@ static int hinic3_xstats_calc_num(struct hinic3_nic_dev *nic_dev)
 	}
 }
 
-#define HINIC3_MAX_QUEUE_DEPTH		16384
-#define HINIC3_MIN_QUEUE_DEPTH		128
 #define HINIC3_TXD_ALIGN		1
 #define HINIC3_RXD_ALIGN		1
 
@@ -645,8 +644,9 @@ static void hinic3_reset_tx_queue(struct rte_eth_dev *dev)
 		txq->prod_idx = 0;
 		txq->owner = 1;
 
-		/* Clear hardware ci */
-		*(txq->ci_vaddr_base) = 0;
+		if (!txq->is_hairpin)
+			/* Clear hardware ci */
+			*(txq->ci_vaddr_base) = 0;
 	}
 }
 
@@ -1068,14 +1068,14 @@ static void hinic3_rx_queue_release(struct rte_eth_dev *dev, uint16_t queue_id)
 
 	hinic3_free_rxq_mbufs(rxq);
 
-	hinic3_memzone_free(rxq->cqe_mz);
+	if (!rxq->is_hairpin) {
+		hinic3_memzone_free(rxq->cqe_mz);
+		hinic3_memzone_free(rxq->rq_mz);
+		hinic3_memzone_free(rxq->pi_mz);
 
-	rte_free(rxq->rx_info);
-	rxq->rx_info = NULL;
-
-	hinic3_memzone_free(rxq->rq_mz);
-
-	hinic3_memzone_free(rxq->pi_mz);
+		rte_free(rxq->rx_info);
+		rxq->rx_info = NULL;
+	}
 
 	nic_dev->rxqs[rxq->q_id] = NULL;
 	rte_free(rxq);
@@ -3295,6 +3295,12 @@ static const struct eth_dev_ops hinic3_pmd_ops = {
 	.get_reg                       = hinic3_get_reg,
 	.get_dcb_info                  = hinic3_get_dcb_info,
 	.tm_ops_get                    = hinic3_tm_ops_get,
+	.hairpin_cap_get			   = hinic3_hairpin_cap_get,
+#ifdef DPDK_20_11
+	.hairpin_get_peer_ports		   = hinic3_hairpin_get_peer_ports,
+#endif
+	.rx_hairpin_queue_setup		   = hinic3_rx_hairpin_queue_setup,
+	.tx_hairpin_queue_setup		   = hinic3_tx_hairpin_queue_setup,	
 };
 
 static const struct eth_dev_ops hinic3_pmd_vf_ops = {
@@ -3348,6 +3354,12 @@ static const struct eth_dev_ops hinic3_pmd_vf_ops = {
 #endif
 	.get_dcb_info                  = hinic3_get_dcb_info,
 	.tm_ops_get                    = hinic3_tm_ops_get,
+	.hairpin_cap_get			   = hinic3_hairpin_cap_get,
+#ifdef DPDK_20_11
+	.hairpin_get_peer_ports		   = hinic3_hairpin_get_peer_ports,
+#endif
+	.rx_hairpin_queue_setup		   = hinic3_rx_hairpin_queue_setup,
+	.tx_hairpin_queue_setup		   = hinic3_tx_hairpin_queue_setup,	
 };
 
 /**

@@ -1426,6 +1426,8 @@ u16 hinic3_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, u16 nb_pkts)
 
 int hinic3_stop_sq(struct hinic3_txq *txq)
 {
+	if (txq->is_hairpin)
+		return 0;
 	struct hinic3_nic_dev *nic_dev = txq->nic_dev;
 	unsigned long timeout;
 	int err = -EFAULT;

@@ -337,6 +337,9 @@ struct hinic3_rxq {
 	u16 next_to_update;
 	u16 port_id;
 
+	struct rte_eth_hairpin_conf hairpin_conf;
+	bool is_hairpin;
+
 	const struct rte_memzone *rq_mz;
 	void *queue_buf_vaddr; /* Rq dma info */
 	rte_iova_t queue_buf_paddr;

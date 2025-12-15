@@ -1072,6 +1072,8 @@ int hinic3_start_all_rqs(struct rte_eth_dev *eth_dev)
 
 	for (i = 0; i < nic_dev->num_rqs; i++) {
 		rxq = eth_dev->data->rx_queues[i];
+		if (rxq->is_hairpin)
+			break;
 		hinic3_add_rq_to_rx_queue_list(nic_dev, rxq->q_id);
 		err = hinic3_rearm_rxq_mbuf(rxq);
 		if (err) {

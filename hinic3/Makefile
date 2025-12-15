@@ -106,5 +106,6 @@ SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_mml_ioctl.c
 SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_mml_lib.c
 SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_mml_main.c
 SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_mml_queue.c
+SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_hairpin.c
 
 include $(RTE_SDK)/mk/rte.lib.mk

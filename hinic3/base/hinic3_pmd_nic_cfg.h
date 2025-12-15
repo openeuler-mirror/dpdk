@@ -1557,11 +1557,13 @@ int hinic3_vf_get_default_cos(void *hwdev, u8 *cos_id);
  *   Tcam rule, including tcam rule index, tcam action, tcam key and etc
  * @param[in] tcam_rule_type
  *   Tcam rule type
- *
+ * @param[in] is_hairpin
+ *   Whether this rule is for hairpin
+ * 
  * @retval zero : Success
  * @retval non-zero : Failure
  */
-int hinic3_add_tcam_rule(void *hwdev, struct hinic3_tcam_cfg_rule *tcam_rule, u8 tcam_rule_type);
+int hinic3_add_tcam_rule(void *hwdev, struct hinic3_tcam_cfg_rule *tcam_rule, u8 tcam_rule_type, bool is_hairpin);
 
 /**
  * Del tcam rules
