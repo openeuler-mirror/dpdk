@@ -3009,6 +3009,13 @@ static int hinic3_set_mac_addr(struct rte_eth_dev *dev,
 	u16 func_id;
 	int err;
 
+#ifdef HINIC3_TRAFFIC_BIFUR
+	if (hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev)) {
+		PMD_DRV_LOG(INFO, "The current mode not support set mac.");
+		return -EPERM;
+	}
+#endif
+
 	if (!rte_is_valid_assigned_ether_addr(addr)) {
 		rte_ether_format_addr(mac_addr, RTE_ETHER_ADDR_FMT_SIZE, addr);
 		PMD_DRV_LOG(ERR, "Set invalid MAC address %s", mac_addr);
