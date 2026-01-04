@@ -8,7 +8,7 @@ cd dpdk
 ```
 ###### 2）下载DPDK_22.11.0_patch
 ```shell
-git clone git@gitee.com:openeuler/dpdk.git -b dpu
+git clone git@atomgit.com:openeuler/dpdk.git -b dpu
 ```
 
 ###### 3）将dpdk版本回退到基线commit_id
