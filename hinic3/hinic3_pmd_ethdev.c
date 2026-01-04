@@ -3689,7 +3689,7 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 	TAILQ_INIT(&nic_dev->filter_ethertype_list);
 	TAILQ_INIT(&nic_dev->filter_fdir_rule_list);
 
-	hinic3_mutex_init(&nic_dev->rx_mode_mutex, NULL);
+	hinic3_mutex_init_shared(&nic_dev->rx_mode_mutex);
 
 	hinic3_set_bit(HINIC3_DEV_INTR_EN, &nic_dev->dev_status);
 

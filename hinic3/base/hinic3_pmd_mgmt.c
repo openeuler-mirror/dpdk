@@ -349,7 +349,7 @@ int hinic3_pf_to_mgmt_init(struct hinic3_hwdev *hwdev)
 	hwdev->pf_to_mgmt = pf_to_mgmt;
 	pf_to_mgmt->hwdev = hwdev;
 
-	err = hinic3_mutex_init(&pf_to_mgmt->sync_msg_mutex, NULL);
+	err = hinic3_mutex_init_shared(&pf_to_mgmt->sync_msg_mutex);
 	if (err)
 		goto mutex_init_err;
 

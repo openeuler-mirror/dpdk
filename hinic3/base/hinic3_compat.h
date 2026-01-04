@@ -226,6 +226,40 @@ static inline int hinic3_mutex_init(pthread_mutex_t *pthreadmutex,
 	return err;
 }
 
+static inline int hinic3_mutex_init_shared(pthread_mutex_t *pthreadmutex)
+{
+	int err;
+	pthread_mutexattr_t attr;
+
+	err = pthread_mutexattr_init(&attr);
+	if (unlikely(err)) {
+		PMD_DRV_LOG(ERR, "Initialize mutex attr failed, error: %d", err);
+		return err;
+	}
+
+	err = pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);
+	if (unlikely(err)) {
+		PMD_DRV_LOG(ERR, "Set mutex process shared failed, error: %d", err);
+		pthread_mutexattr_destroy(&attr);
+		return err;
+	}
+
+	err = pthread_mutexattr_setrobust(&attr, PTHREAD_MUTEX_ROBUST);
+	if (unlikely(err)) {
+		PMD_DRV_LOG(ERR, "Set mutex robust failed, error: %d", err);
+		pthread_mutexattr_destroy(&attr);
+		return err;
+	}
+
+	err = pthread_mutex_init(pthreadmutex, &attr);
+	pthread_mutexattr_destroy(&attr);
+
+	if (unlikely(err))
+		PMD_DRV_LOG(ERR, "Initialize shared mutex failed, error: %d", err);
+
+	return err;
+}
+
 static inline int hinic3_mutex_destroy(pthread_mutex_t *pthreadmutex)
 {
 	int err;
@@ -242,8 +276,19 @@ static inline int hinic3_mutex_lock(pthread_mutex_t *pthreadmutex)
 	int err;
 
 	err = pthread_mutex_lock(pthreadmutex);
-	if (err)
+	if (unlikely(err)) {
+		if (err == EOWNERDEAD) {
+			/* The previous owner died, make the mutex consistent */
+			err = pthread_mutex_consistent(pthreadmutex);
+			if (err) {
+				PMD_DRV_LOG(ERR, "Make mutex consistent failed, err: %d", err);
+				return err;
+			}
+			PMD_DRV_LOG(WARNING, "Recovered from dead mutex owner");
+			return 0;
+		}
 		PMD_DRV_LOG(ERR, "Mutex lock failed, err: %d", err);
+	}
 
 	return err; /*lint !e454*/
 }
