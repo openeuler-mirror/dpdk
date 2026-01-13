@@ -847,13 +847,17 @@ struct hinic3_cmd_lro_timer {
 	u32 timer;
 };
 
+#define HINIC3_RSS_QUEUE_TEMPLATE_ALLOC 3
+#define HINIC3_RSS_QUEUE_TEMPLATE_FREE 4
+
 struct hinic3_rss_template_mgmt {
 	struct mgmt_msg_head msg_head;
 
 	u16 func_id;
 	u8 cmd;
 	u8 template_id;
-	u8 rsvd1[4];
+	u16 q_grp_id;
+	u8 rsvd1[2];
 };
 
 struct hinic3_cmd_rss_hash_key {
@@ -874,12 +878,21 @@ struct hinic3_rss_indir_table {
 };
 
 struct nic_rss_indirect_tbl {
-	u32 rsvd[4]; /* Make sure that 16B beyond entry[] */
+	u32 rsvd[3]; /* Make sure that 16B beyond entry[] */
+	u16 rsvd1;
+	u16 q_grp_id;
 	u16 entry[HINIC3_RSS_INDIR_SIZE];
 };
 
+enum hinic3_qpool_subcmd {
+	HINIC3_NIC_QPOOL_CMD_CFG_QGRP_ID = 0x0,         /** < alloc/free q_grp_id */
+	HINIC3_NIC_QPOOL_CMD_GET_RSS_ID,                /** < get temp_id/inst_id/node_id */
+};
+
 struct nic_rss_context_tbl {
-	u32 rsvd[4];
+	u32 rsvd[3];
+	u16 q_grp_id;
+	u16 cmd_type;  /** 0-default 1-fdir-rss */
 	u32 ctx;
 };
 
@@ -939,10 +952,32 @@ struct hinic3_cmd_register_vf {
 	u8 rsvd[39];
 };
 
+#define HINIC3_ACTION_DROP 5
+#define HINIC3_ACTION_RSS 1
+
 struct hinic3_tcam_result {
-	u32 qid;
-	u32 queue_num;
-};
+	union {
+		u32 qid;
+		struct q_grp_info {
+			u32 rss_temp_id : 12;
+			u32 rss_instance_id : 6;
+			u32 rss_node_id : 5;
+			u32 rsvd0 : 1;
+			u32 rss_level : 2;
+			u32 rsvd1 : 6;
+		} q_grp;
+	}dw0;
+
+	union {
+		u32 queue_num;
+		struct {
+			u32 func_id : 10;
+			u32 rsvd0 : 6;
+			u32 action : 8;
+			u32 rsvd1 : 8;
+		} bs;
+	}dw1;
+	};
 
 #define HINIC3_TCAM_FLOW_KEY_SIZE	44
 #define HINIC3_MAX_TCAM_RULES_NUM	4096
@@ -963,6 +998,7 @@ struct hinic3_tcam_cfg_rule {
 
 #define TCAM_RULE_FDIR_TYPE 0
 #define TCAM_RULE_PPA_TYPE  1
+#define TCAM_RULE_Q_GROUP_TYPE 2
 
 enum hinic3_port_flow_bifur_cmd_type {
     PORT_BIFUR_CMD_SET,
@@ -1082,6 +1118,36 @@ struct hinic3_cmd_ets_cfg {
 	u8 cos_bw[NIC_DCB_COS_MAX];
 	u8 tc_prio[NIC_DCB_TC_MAX]; /* 0 - DWRR, 1 - STRICT */
 	u8 rate_limit[NIC_DCB_TC_MAX];
+};
+
+typedef struct nic_mpu_cmd_extend_comm {
+	u32 common[2];
+} nic_mpu_cmd_extend_comm_s;
+
+struct nic_mpu_sub_msg_extend {
+	struct mgmt_msg_head head;
+
+	u32 sub_cmd;
+	u16 sub_msg_len;
+	u16 rsvd;
+	nic_mpu_cmd_extend_comm_s sub_msg;
+};
+
+#define HINIC3_QUEUE_GROUP_ID_ALLOC 1
+#define HINIC3_QUEUE_GROUP_ID_FREE 0
+
+struct hinic3_cmd_cfg_qgrp_id {
+	u16 func_id;
+	u16 q_grp_id;
+	u8 opcode;
+	u8 rsvd1[3];
+};
+
+struct nic_cmd_get_rss_id {
+	u16 func_id;
+	u16 rss_temp_id;
+	u16 rss_node_id;
+	u16 rss_instance_id;
 };
 
 int l2nic_msg_to_mgmt_sync(void *hwdev, u16 cmd, void *buf_in, u16 in_size,
@@ -1670,5 +1736,15 @@ int hinic3_set_tm_hierarchy_do_commit(void *hwdev, u8 *cos_tc, u8 *tc_bw,
 				   u8 *rate_limit);
 
 int hinic3_get_bifur_enable(void *hwdev, u8 *bifur_enable, u8 *iso_enable);
+
+int hinic3_mgmt_cfg_rss_temp(void *hwdev, u16 q_grp_id, u8 opcode);
+
+int hinic3_cmdq_set_rss_queue_type(void *hwdev, struct hinic3_rss_type rss_type, u16 q_grp_id, u16 cmd_type);
+
+int hinic3_mgmt_cfg_qgrp_id(void *hwdev, u8 opcode, u16 *q_grp_id);
+
+void hinic3_mgmt_get_rss_id(void *hwdev, u16 func_id, u16 *rss_temp_id, u16 *rss_node_id, u16 *rss_inst_id);
+
+int hinic3_rss_queue_set_indir_tbl(void *hwdev, const u32 *indir_table, u32 indir_table_size, u16 q_grp_id);
 
 #endif /* _HINIC3_PMD_NIC_CFG_H_ */

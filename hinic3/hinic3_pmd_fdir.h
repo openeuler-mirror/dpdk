@@ -42,7 +42,9 @@ struct hinic3_fdir_filter {
 	uint8_t ip_type; /* inner ip type */
 	uint8_t outer_ip_type; /* outer ip type */
 	uint8_t tunnel_type;
-	uint8_t action;
+ 	uint8_t action;
+ 	uint32_t level;
+	uint16_t q_grp_id;
 	struct hinic3_fdir_rule_key key_mask;
 	struct hinic3_fdir_rule_key key_spec;
 	uint32_t rq_index; /* queue assigned when matched */
@@ -57,6 +59,7 @@ struct hinic3_filter_t {
 	enum rte_filter_type filter_type;
 	struct rte_eth_ethertype_filter ethertype_filter;
 	struct hinic3_fdir_filter fdir_filter;
+	struct hinic3_rss_template_entry *template_entry;
 
 };
 
@@ -436,6 +439,28 @@ enum hinic3_ether_type {
 
 	HINIC3_PKT_UNKNOWN = 31,
 };
+
+#ifndef HINIC3_QUEUE_MAX
+#define HINIC3_QUEUE_MAX          16
+#endif
+
+/* RSS template entry structure for managing RSS templates */
+struct hinic3_rss_template_entry {
+	TAILQ_ENTRY(hinic3_rss_template_entry) node;
+	u64 types;
+	u16 q_grp_id;					/* Queue group ID */
+	u16 queue_num;					/* Number of queues */
+	u16 queues[HINIC3_QUEUE_MAX];	/* Queue list */
+	u16 ref_count;
+};
+
+/* RSS template list head */
+TAILQ_HEAD(hinic3_rss_template_list, hinic3_rss_template_entry);
+
+/* Maximum number of RSS templates per function */
+#ifndef FUNC_MAX_DPDK_NUM
+#define FUNC_MAX_DPDK_NUM 32
+#endif
 
 int hinic3_flow_add_del_fdir_filter(struct rte_eth_dev *dev,
 				    struct hinic3_fdir_filter *fdir_filter,

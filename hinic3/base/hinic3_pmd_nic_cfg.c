@@ -1862,3 +1862,200 @@ hinic3_get_bifur_enable(void *hwdev, u8 *bifur_en, u8 *iso_en)
 
 	return 0;
 }
+
+int
+hinic3_cmdq_set_rss_queue_type(void *hwdev, struct hinic3_rss_type rss_type, u16 q_grp_id, u16 cmd_type)
+{
+	struct nic_rss_context_tbl *ctx_tbl = NULL;
+	struct hinic3_cmd_buf *cmd_buf = NULL;
+	u32 ctx = 0;
+	u64 out_param = 0;
+	int err;
+
+	if (!hwdev)
+		return -EINVAL;
+
+	cmd_buf = hinic3_alloc_cmd_buf(hwdev);
+	if (!cmd_buf) {
+		PMD_DRV_LOG(ERR, "Allocate cmd buf failed");
+		return -ENOMEM;
+	}
+
+	ctx |= HINIC3_RSS_TYPE_SET(1, VALID) |
+			HINIC3_RSS_TYPE_SET(rss_type.ipv4, IPV4) |
+			HINIC3_RSS_TYPE_SET(rss_type.ipv6, IPV6) |
+			HINIC3_RSS_TYPE_SET(rss_type.tcp_ipv4, TCP_IPV4) |
+			HINIC3_RSS_TYPE_SET(rss_type.tcp_ipv6, TCP_IPV6) |
+			HINIC3_RSS_TYPE_SET(rss_type.udp_ipv4, UDP_IPV4) |
+			HINIC3_RSS_TYPE_SET(rss_type.udp_ipv6, UDP_IPV6);
+
+	cmd_buf->size = sizeof(struct nic_rss_context_tbl);
+	ctx_tbl = (struct nic_rss_context_tbl *)cmd_buf->buf;
+	memset(ctx_tbl, 0, sizeof(*ctx_tbl));
+	rte_mb();
+	ctx_tbl->ctx = cpu_to_be32(ctx);
+	ctx_tbl->q_grp_id = cpu_to_be16(q_grp_id);
+	ctx_tbl->cmd_type = cpu_to_be16(cmd_type);
+
+	/* Cfg the RSS context table by command queue */
+	err = hinic3_cmdq_direct_resp(hwdev, HINIC3_MOD_L2NIC,
+						HINIC3_UCODE_CMD_SET_RSS_CONTEXT_TABLE,
+						cmd_buf, &out_param, 0);
+
+	hinic3_free_cmd_buf(cmd_buf);
+
+	if (err || out_param != 0) {
+		PMD_DRV_LOG(ERR, "Cmdq set rss context table failed, err: %d", err);
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
+int
+hinic3_mgmt_cfg_qgrp_id(void *hwdev, u8 opcode, u16 *q_grp_id)
+{
+	struct nic_mpu_sub_msg_extend msg_extend;
+	struct hinic3_cmd_cfg_qgrp_id cfg_qgrp;
+	u16 out_size = sizeof(msg_extend);
+	int err;
+
+	if (!hwdev)
+		return -EINVAL;
+
+	memset(&msg_extend, 0, sizeof(msg_extend));
+	memset(&cfg_qgrp, 0, sizeof(cfg_qgrp));
+
+	if (opcode == 0)
+		cfg_qgrp.q_grp_id = *q_grp_id;
+	cfg_qgrp.func_id = hinic3_global_func_id(hwdev);
+	cfg_qgrp.opcode = opcode;
+	msg_extend.sub_cmd = HINIC3_NIC_QPOOL_CMD_CFG_QGRP_ID;
+	msg_extend.sub_msg_len = sizeof(struct hinic3_cmd_cfg_qgrp_id);
+
+	memcpy(&msg_extend.sub_msg, &cfg_qgrp, sizeof(struct hinic3_cmd_cfg_qgrp_id));
+
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_QUEUE_GROUP,
+						&msg_extend, sizeof(msg_extend),
+						&msg_extend, &out_size);
+	if (err || msg_extend.head.status || !out_size)
+		PMD_DRV_LOG(ERR,
+				"Failed to get q_grp_id, err: %d, status: 0x%x, "
+				"out size: 0x%x",
+				err, msg_extend.head.status, out_size);
+
+	memcpy(&cfg_qgrp, &msg_extend.sub_msg, sizeof(struct hinic3_cmd_cfg_qgrp_id));
+	*q_grp_id = cfg_qgrp.q_grp_id;
+
+	return err;
+}
+
+int
+hinic3_mgmt_cfg_rss_temp(void *hwdev, u16 q_grp_id, u8 opcode)
+{
+	struct hinic3_rss_template_mgmt template_mgmt;
+	u16 out_size = sizeof(template_mgmt);
+	int err;
+
+	if (!hwdev)
+		return -EINVAL;
+
+	memset(&template_mgmt, 0, sizeof(struct hinic3_rss_template_mgmt));
+	template_mgmt.func_id = hinic3_global_func_id(hwdev);
+	template_mgmt.cmd = opcode;
+	template_mgmt.q_grp_id = q_grp_id;
+
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_RSS_TEMP_MGR,
+						&template_mgmt, sizeof(template_mgmt),
+						&template_mgmt, &out_size);
+	if (err || !out_size || template_mgmt.msg_head.status) {
+		PMD_DRV_LOG(ERR, "Alloc/Free rss template failed, err: %d, "
+				"status: 0x%x, out size: 0x%x",
+				err, template_mgmt.msg_head.status, out_size);
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
+void
+hinic3_mgmt_get_rss_id(void *hwdev, u16 func_id, u16 *rss_temp_id, u16 *rss_node_id, u16 *rss_inst_id)
+{
+	struct nic_mpu_sub_msg_extend msg_extend;
+	struct nic_cmd_get_rss_id rss_tbl;
+	u16 out_size = sizeof(msg_extend);
+	int err;
+
+	if (!hwdev) {
+		return;
+	}
+
+	memset(&msg_extend, 0, sizeof(msg_extend));
+	memset(&rss_tbl, 0, sizeof(rss_tbl));
+	rss_tbl.func_id = func_id;
+	msg_extend.sub_cmd = HINIC3_NIC_QPOOL_CMD_GET_RSS_ID;
+	msg_extend.sub_msg_len = sizeof(struct nic_cmd_get_rss_id);
+	memcpy(&msg_extend.sub_msg, &rss_tbl, sizeof(struct nic_cmd_get_rss_id));
+
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_QUEUE_GROUP,
+								&msg_extend, sizeof(msg_extend),
+								&msg_extend, &out_size);
+	if (err != 0 || out_size == 0 || msg_extend.head.status != 0) {
+		PMD_DRV_LOG(ERR, "mgmt Failed to get rss tbl id, err: %d, status: 0x%x, out size: 0x%x\n",
+				err, msg_extend.head.status, out_size);
+		return;
+	}
+
+	memcpy(&rss_tbl, &msg_extend.sub_msg, sizeof(struct nic_cmd_get_rss_id));
+	*rss_temp_id = rss_tbl.rss_temp_id;
+	*rss_node_id = rss_tbl.rss_node_id;
+	*rss_inst_id = rss_tbl.rss_instance_id;
+
+	return;
+}
+
+int
+hinic3_rss_queue_set_indir_tbl(void *hwdev, const u32 *indir_table, u32 indir_table_size, u16 q_grp_id)
+{
+	struct nic_rss_indirect_tbl *indir_tbl = NULL;
+	struct hinic3_cmd_buf *cmd_buf = NULL;
+	u32 i, size;
+	u32 *temp = NULL;
+	u64 out_param = 0;
+	int err;
+
+	if (!hwdev || !indir_table)
+		return -EINVAL;
+
+	cmd_buf = hinic3_alloc_cmd_buf(hwdev);
+	if (!cmd_buf) {
+		PMD_DRV_LOG(ERR, "Allocate cmd buf failed");
+		return -ENOMEM;
+	}
+
+	cmd_buf->size = sizeof(struct nic_rss_indirect_tbl);
+	indir_tbl = (struct nic_rss_indirect_tbl *)cmd_buf->buf;
+	memset(indir_tbl, 0, sizeof(*indir_tbl));
+	indir_tbl->q_grp_id = cpu_to_be16(q_grp_id);
+
+	for (i = 0; i < indir_table_size; i++)
+		indir_tbl->entry[i] = (u16)(*(indir_table + i));
+
+	rte_mb();
+	size = sizeof(indir_tbl->entry) / sizeof(u32);
+	temp = (u32 *)indir_tbl->entry;
+	for (i = 0; i < size; i++)
+		temp[i] = cpu_to_be32(temp[i]);
+
+	err = hinic3_cmdq_direct_resp(hwdev, HINIC3_MOD_L2NIC,
+						HINIC3_UCODE_CMD_SET_RSS_QGRP_INDIR_TABLE,
+						cmd_buf, &out_param, 0);
+	if (err || out_param != 0) {
+		PMD_DRV_LOG(ERR, "Set rss indir table failed");
+		err = -EFAULT;
+	}
+
+	hinic3_free_cmd_buf(cmd_buf);
+
+	return err;
+}

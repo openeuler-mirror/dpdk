@@ -3695,6 +3695,7 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 	TAILQ_INIT(&tcam_info->tcam_dynamic_info.tcam_dynamic_list);
 	TAILQ_INIT(&nic_dev->filter_ethertype_list);
 	TAILQ_INIT(&nic_dev->filter_fdir_rule_list);
+	TAILQ_INIT(&nic_dev->rss_template_list);
 
 	hinic3_mutex_init_shared(&nic_dev->rx_mode_mutex);
 
