@@ -535,22 +535,44 @@ hinic3_fdir_tcam_info_init(struct rte_eth_dev	       *dev,
 			   struct hinic3_tcam_key      *tcam_key,
 			   struct hinic3_tcam_cfg_rule *fdir_tcam_rule)
 {
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+
 	if (rule->tunnel_type == HINIC3_FDIR_TUNNEL_MODE_NORMAL)
 		hinic3_fdir_tcam_notunnel_init(dev, rule, tcam_key);
 	else
 		hinic3_fdir_tcam_vxlan_geneve_init(dev, rule, tcam_key);
 
-	fdir_tcam_rule->data.qid = rule->rq_index;
+	fdir_tcam_rule->data.dw0.qid = rule->rq_index;
 #ifdef HINIC3_TRAFFIC_BIFUR
-	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	u8 bifur_en, iso_en;
 
 	if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &iso_en) != 0)
 		PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable status failed.");
 
 	if (bifur_en)
-		fdir_tcam_rule->data.queue_num = rule->queue_num;
+		fdir_tcam_rule->data.dw1.queue_num = rule->queue_num;
+#else
+ 	 	u16 rss_temp_id, rss_node_id, rss_inst_id;
+ 	 	switch (rule->action) {
+ 	 	case RTE_FLOW_ACTION_TYPE_DROP:
+ 	 		fdir_tcam_rule->data.dw1.bs.action = HINIC3_ACTION_DROP;
+ 	 		break;
+
+ 	 	case RTE_FLOW_ACTION_TYPE_RSS:
+ 	 		hinic3_mgmt_get_rss_id(nic_dev->hwdev, rule->q_grp_id, &rss_temp_id, &rss_node_id, &rss_inst_id);
+ 	 		fdir_tcam_rule->data.dw0.q_grp.rss_level = rule->level;
+ 	 		fdir_tcam_rule->data.dw1.bs.action = HINIC3_ACTION_RSS;
+ 	 		fdir_tcam_rule->data.dw1.bs.func_id = hinic3_global_func_id(nic_dev->hwdev);
+ 	 		fdir_tcam_rule->data.dw0.q_grp.rss_instance_id = rss_inst_id;
+ 	 		fdir_tcam_rule->data.dw0.q_grp.rss_node_id = rss_node_id;
+ 	 		fdir_tcam_rule->data.dw0.q_grp.rss_temp_id = rss_temp_id;
+ 	 		PMD_DRV_LOG(INFO, "rss_instance_id:%d, rss_node_id: %d, rss_temp_id: %d", rss_inst_id, rss_node_id, rss_temp_id);
+
+ 	 	default:
+ 	 		break;
+ 	 	}
 #endif
+
 	tcam_key_calculate(tcam_key, fdir_tcam_rule);
 }
 
@@ -743,6 +765,7 @@ static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
 	struct hinic3_tcam_filter *tcam_filter;
 	u16 tcam_block_index = 0;
 	u16 index = 0;
+	u8 tcam_rule_type;
 	int err;
 
 	tcam_filter = rte_zmalloc("hinic3_fdir_filter",
@@ -751,7 +774,7 @@ static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
 		return -ENOMEM;
 	(void)rte_memcpy(&tcam_filter->tcam_key,
 			 tcam_key, sizeof(struct hinic3_tcam_key));
-	tcam_filter->queue = (u16)(fdir_tcam_rule->data.qid);
+	tcam_filter->queue = (u16)(fdir_tcam_rule->data.dw0.qid);
 
 	if (nic_dev->tcam_rule_nums == 0) {
 		err = hinic3_alloc_tcam_block(nic_dev->hwdev,
@@ -776,7 +799,13 @@ static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
 		PMD_DRV_LOG(ERR, "Dynamic lookup tcam filter failed!");
 		goto lookup_tcam_index_failed;
 	}
-	err = hinic3_add_tcam_rule(nic_dev->hwdev, fdir_tcam_rule, TCAM_RULE_FDIR_TYPE, is_hairpin);
+
+	if (fdir_tcam_rule->data.dw1.bs.action != 0)
+ 	 	tcam_rule_type =  TCAM_RULE_Q_GROUP_TYPE;
+ 	else
+ 	 	tcam_rule_type = TCAM_RULE_FDIR_TYPE;
+
+	err = hinic3_add_tcam_rule(nic_dev->hwdev, fdir_tcam_rule, tcam_rule_type, is_hairpin);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Fdir_tcam_rule add failed!");
 		goto add_tcam_rules_failed;
@@ -799,7 +828,7 @@ static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
 		    "tcam_rule_nums: %d succeed",
 		    hinic3_global_func_id(nic_dev->hwdev),
 		    tcam_filter->dynamic_block_id, index, fdir_tcam_rule->index,
-		    fdir_tcam_rule->data.qid, nic_dev->tcam_rule_nums);
+		    fdir_tcam_rule->data.dw0.qid, nic_dev->tcam_rule_nums);
 
 	return 0;
 
@@ -973,7 +1002,7 @@ int hinic3_enable_rxq_fdir_filter(struct rte_eth_dev *dev, u32 queue_id, u32 abl
 				}
 
 				fdir_tcam_rule.index = index;
-				fdir_tcam_rule.data.qid = queue_id;
+				fdir_tcam_rule.data.dw0.qid = queue_id;
 				tcam_key_calculate(&it->tcam_key, &fdir_tcam_rule);
 
 				ret = hinic3_add_tcam_rule(nic_dev->hwdev, &fdir_tcam_rule, TCAM_RULE_FDIR_TYPE, 0);
@@ -999,7 +1028,7 @@ int hinic3_enable_rxq_fdir_filter(struct rte_eth_dev *dev, u32 queue_id, u32 abl
 				}
 
 				fdir_tcam_rule.index = index;
-				fdir_tcam_rule.data.qid = queue_res;
+				fdir_tcam_rule.data.dw0.qid = queue_res;
 				tcam_key_calculate(&it->tcam_key, &fdir_tcam_rule);
 
 				ret = hinic3_add_tcam_rule(nic_dev->hwdev, &fdir_tcam_rule, TCAM_RULE_FDIR_TYPE, 0);
@@ -1029,19 +1058,19 @@ static int hinic3_flow_set_arp_filter(struct rte_eth_dev *dev, struct rte_eth_et
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	int ret;
 
-	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_ARP, ethertype_filter->queue, add);
+	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_ARP, ethertype_filter, add);
 	if (ret) {
 		PMD_DRV_LOG(ERR, "%s fdir ethertype rule failed, err: %d", add ? "Add" : "Del", ret);
 		return ret;
 	}
 
-	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_ARP_REQ, ethertype_filter->queue, add);
+	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_ARP_REQ, ethertype_filter, add);
 	if (ret) {
 		PMD_DRV_LOG(ERR, "%s arp request rule failed, err: %d", add ? "Add" : "Del", ret);
 		goto set_arp_req_failed;
 	}
 
-	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_ARP_REP, ethertype_filter->queue, add);
+	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_ARP_REP, ethertype_filter, add);
 	if (ret) {
 		PMD_DRV_LOG(ERR, "%s arp response rule failed, err: %d", add ? "Add" : "Del", ret);
 		goto set_arp_rep_failed;
@@ -1050,10 +1079,10 @@ static int hinic3_flow_set_arp_filter(struct rte_eth_dev *dev, struct rte_eth_et
 	return 0;
 
 set_arp_rep_failed:
-	(void)hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_ARP_REQ, ethertype_filter->queue, !add);
+	(void)hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_ARP_REQ, ethertype_filter, !add);
 
 set_arp_req_failed:
-	(void)hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_ARP, ethertype_filter->queue, !add);
+	(void)hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_ARP, ethertype_filter, !add);
 
 	return ret;
 }
@@ -1065,13 +1094,13 @@ static int hinic3_flow_set_slow_filter(struct rte_eth_dev *dev,
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	int ret;
 
-	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_LACP, ethertype_filter->queue, add);
+	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_LACP, ethertype_filter, add);
 	if (ret) {
 		PMD_DRV_LOG(ERR, "%s lacp fdir rule failed, err: %d", add ? "Add" : "Del", ret);
 		return ret;
 	}
 
-	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_OAM, ethertype_filter->queue, add);
+	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_OAM, ethertype_filter, add);
 	if (ret) {
 		PMD_DRV_LOG(ERR, "%s oam rule failed, err: %d", add ? "Add" : "Del", ret);
 		goto set_arp_oam_failed;
@@ -1080,7 +1109,7 @@ static int hinic3_flow_set_slow_filter(struct rte_eth_dev *dev,
 	return 0;
 
 set_arp_oam_failed:
-	(void)hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_LACP, ethertype_filter->queue, !add);
+	(void)hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_LACP, ethertype_filter, !add);
 
 	return ret;
 }
@@ -1092,13 +1121,13 @@ static int hinic3_flow_set_lldp_filter(struct rte_eth_dev *dev,
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	int ret;
 
-	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_LLDP, ethertype_filter->queue, add);
+	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_LLDP, ethertype_filter, add);
 	if (ret) {
 		PMD_DRV_LOG(ERR, "%s lldp fdir rule failed, err: %d", add ? "Add" : "Del", ret);
 		return ret;
 	}
 
-	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_CDCP, ethertype_filter->queue, add);
+	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_CDCP, ethertype_filter, add);
 	if (ret) {
 		PMD_DRV_LOG(ERR, "%s cdcp fdir rule failed, err: %d", add ? "Add" : "Del", ret);
 		goto set_arp_cdcp_failed;
@@ -1107,7 +1136,7 @@ static int hinic3_flow_set_lldp_filter(struct rte_eth_dev *dev,
 	return 0;
 
 set_arp_cdcp_failed:
-	(void)hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_LLDP, ethertype_filter->queue, !add);
+	(void)hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_LLDP, ethertype_filter, !add);
 
 	return ret;
 }
@@ -1136,7 +1165,7 @@ static int hinic3_flow_add_del_ethertype_filter_rule(struct rte_eth_dev *dev,
 			return hinic3_flow_set_arp_filter(dev, ethertype_filter, add);
 		case RTE_ETHER_TYPE_RARP:
 			return hinic3_set_fdir_ethertype_filter(nic_dev->hwdev,
-				HINIC3_PKT_TYPE_RARP, ethertype_filter->queue, add);
+				HINIC3_PKT_TYPE_RARP, ethertype_filter, add);
 
 		case RTE_ETHER_TYPE_SLOW:
 			return hinic3_flow_set_slow_filter(dev, ethertype_filter, add);
@@ -1146,11 +1175,11 @@ static int hinic3_flow_add_del_ethertype_filter_rule(struct rte_eth_dev *dev,
 
 		case RTE_ETHER_TYPE_CNM:
 			return hinic3_set_fdir_ethertype_filter(nic_dev->hwdev,
-				HINIC3_PKT_TYPE_CNM, ethertype_filter->queue, add);
+				HINIC3_PKT_TYPE_CNM, ethertype_filter, add);
 
 		case RTE_ETHER_TYPE_ECP:
 			return hinic3_set_fdir_ethertype_filter(nic_dev->hwdev,
-				HINIC3_PKT_TYPE_ECP, ethertype_filter->queue, add);
+				HINIC3_PKT_TYPE_ECP, ethertype_filter, add);
 
 		default:
 			PMD_DRV_LOG(ERR, "Unknown ethertype %d queue_id %d",
@@ -1174,7 +1203,7 @@ static int hinic3_flow_ethertype_rule_nums(struct rte_eth_ethertype_filter *ethe
 			return HINIC3_CNM_RULE_NUM;
 		case RTE_ETHER_TYPE_ECP:
 			return HINIC3_ECP_RULE_NUM;
-		
+
 		default:
 			PMD_DRV_LOG(ERR, "Unknown ethertype %d",
 				    ethertype_filter->ether_type);

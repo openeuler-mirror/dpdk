@@ -650,7 +650,7 @@ static void hinic3_record_mbox_info(struct hinic3_mbox *func_to_func, enum hinic
 
 	u8 pos = (func_to_func->save_mbox->start + func_to_func->save_mbox->count) % HINIC3_MBOX_SAVE_NUM;
 	func_to_func->save_mbox->send_info[pos] = send_mbox;
-	
+
 	if (func_to_func->save_mbox->count < HINIC3_MBOX_SAVE_NUM)
 		func_to_func->save_mbox->count++;
 	else

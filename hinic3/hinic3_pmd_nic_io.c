@@ -584,7 +584,7 @@ static int clean_queue_offload_ctxt(struct hinic3_nic_dev *nic_dev,
 	ctxt_block->cmdq_hdr.queue_type = ctxt_type;
 	ctxt_block->cmdq_hdr.start_qid = 0;
 	/*
-	 Add a memory barrier to ensure that instructions are not out of order due to compilation 
+	 Add a memory barrier to ensure that instructions are not out of order due to compilation
 	 optimization
 	*/
 	rte_mb();

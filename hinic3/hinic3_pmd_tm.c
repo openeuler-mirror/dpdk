@@ -36,7 +36,7 @@ hinic3_tm_conf_init(struct rte_eth_dev *dev)
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	uint32_t max_tx_queues = hinic3_tm_max_tx_queues_get(dev);
 	struct hinic3_ets *ets = nic_dev->ets;
-	
+
 	struct hinic3_tm_conf *tm_conf = &ets->tm_conf;
 
 	tm_conf->nb_leaf_nodes_max = max_tx_queues;

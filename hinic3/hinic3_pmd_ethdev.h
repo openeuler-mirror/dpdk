@@ -167,7 +167,7 @@ struct hinic3_nic_dev {
 
 	u16 rss_state;
 	u16 num_rss;
-	
+
 	struct hinic3_rss_type rss_type;
 
 	u32 rx_mode;
@@ -202,6 +202,7 @@ struct hinic3_nic_dev {
 	struct hinic3_tcam_info tcam;
 	struct hinic3_ethertype_filter_list filter_ethertype_list;
 	struct hinic3_fdir_rule_filter_list filter_fdir_rule_list;
+	struct hinic3_rss_template_list rss_template_list;
 
 	struct hinic3_ptype_table* ptype_tbl;
 #ifdef HINIC3_TRAFFIC_BIFUR

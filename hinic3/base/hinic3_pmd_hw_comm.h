@@ -69,7 +69,7 @@ struct hinic3_cmd_msix_config {
 
 struct hinic3_dma_attr_table {
 	struct mgmt_msg_head head;
-	
+
 	u16 func_id;
 	u8 entry_idx;
 	u8 st;

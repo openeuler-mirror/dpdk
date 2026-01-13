@@ -365,7 +365,7 @@ static void hinic3_get_ipv6_len_proto(const void *hdr, uint16_t *hdr_len, uint8_
 				/* hdr len is fixed 8 bytes */
 				*hdr_len += FIXED_EXT_HDR_LEN;
 				*proto = xh->next_hdr;
-				break; 
+				break;
 			default:
 				break;
 		}
@@ -498,7 +498,7 @@ static inline void hinic3_calculate_checksum(struct rte_mbuf *mbuf,
 	return;
 }
 
-static inline bool 
+static inline bool
 hinic3_is_ipinip(struct rte_mbuf *mbuf)
 {
 	uint64_t ol_flags;
@@ -509,7 +509,7 @@ hinic3_is_ipinip(struct rte_mbuf *mbuf)
 
 	if (ol_flags == HINIC3_PKT_TX_TUNNEL_IPIP || pkt_type == RTE_PTYPE_TUNNEL_IP)
 		return true;
- 
+
 	return false;
 }
 
@@ -703,17 +703,17 @@ static u16 hinic3_ipv6_udptcp_cksum(struct rte_mbuf *mbuf, const struct rte_ipv6
 {
 	u16 cksum;
 	u32 sum, l4_len;
- 
+
 	hinic3_ip_cs_handler_t *ip_handler = NULL;
 	ip_handler = &g_ip_cs_handlers[IPV6_INDEX];
 	l4_len = rte_be_to_cpu_16(ipv6_hdr->payload_len);
 	sum = __rte_raw_cksum(l4_hdr, l4_len, 0);
 	sum = __rte_raw_cksum_reduce(sum);
 	sum += ip_handler->cksum_func(ipv6_hdr, mbuf->ol_flags);
- 
+
 	cksum = (u16)((sum & 0xffff0000) >> 16) + (sum & 0xffff);
 	cksum = ~cksum;
- 
+
 	/*
 	 * Per RFC 768: If the computed checksum is zero for UDP,
 	 * it is transmitted as all ones
@@ -721,10 +721,10 @@ static u16 hinic3_ipv6_udptcp_cksum(struct rte_mbuf *mbuf, const struct rte_ipv6
 	 */
 	if (cksum == 0 && ipv6_hdr->proto == IPPROTO_UDP)
 		cksum = 0xffff;
- 
+
 	return cksum;
 }
- 
+
 static u16 hinic3_get_udptcp_checksum(struct rte_mbuf *mbuf, void *l3_hdr, void *l4_hdr)
 {
 	u8 version;
@@ -734,7 +734,7 @@ static u16 hinic3_get_udptcp_checksum(struct rte_mbuf *mbuf, void *l3_hdr, void 
 	else
 		return hinic3_ipv6_udptcp_cksum(mbuf, l3_hdr, l4_hdr);
 }
- 
+
 static void hinic3_process_inner_cksums(void *l3_hdr, struct rte_mbuf *mbuf)
 {
 	u8 l4_proto, version, ver_index;
@@ -745,7 +745,7 @@ static void hinic3_process_inner_cksums(void *l3_hdr, struct rte_mbuf *mbuf)
 	uint16_t inner_ip_total_len = 0;
 	uint16_t mbuf_data_len = 0;
 	bool is_inner_fragmented = false;
- 
+
 	version = (*(uint8_t *)l3_hdr) >> 4;
 	ver_index = hinic3_check_ip_version(version);
 	ip_handler = &g_ip_cs_handlers[ver_index];
@@ -758,7 +758,7 @@ static void hinic3_process_inner_cksums(void *l3_hdr, struct rte_mbuf *mbuf)
 		uint16_t inner_ip_data_len = inner_ip_total_len - ip_handler->hdr_len;
 
 		/* Get actual data length in mbuf (from inner IP header to end) */
-		mbuf_data_len = rte_pktmbuf_data_len(mbuf) - 
+		mbuf_data_len = rte_pktmbuf_data_len(mbuf) -
 				((uint8_t *)l3_hdr - rte_pktmbuf_mtod(mbuf, uint8_t *));
 
 		/* If inner IP total length > mbuf data length, inner IP is fragmented */
@@ -773,7 +773,7 @@ static void hinic3_process_inner_cksums(void *l3_hdr, struct rte_mbuf *mbuf)
 	} else {
 		ip_handler->get_len_proto(l3_hdr, &(ip_handler->hdr_len), &l4_proto);
 	}
- 
+
 	if (l4_proto == IPPROTO_UDP) {
 		udp_hdr = (struct rte_udp_hdr *)((char *)l3_hdr + ip_handler->hdr_len);
 		udp_hdr->dgram_cksum = 0;
@@ -824,7 +824,7 @@ static void hinic3_process_inner_cksums(void *l3_hdr, struct rte_mbuf *mbuf)
 		}
 	}
 }
- 
+
 static int hinic3_ipinip_cksum(struct rte_mbuf *mbuf)
 {
 	hinic3_ip_cs_handler_t *ip_handler = NULL;
@@ -836,7 +836,7 @@ static int hinic3_ipinip_cksum(struct rte_mbuf *mbuf)
 	bool is_first_fragment = true;
 	struct rte_ipv4_hdr *ipv4_hdr = NULL;
 	uint8_t *pkt_data = rte_pktmbuf_mtod(mbuf, uint8_t *);
- 
+
 	ip_handler = hinic3_get_outer_l3_hdr(mbuf, &offset, ip_hdr);
 	if (ip_handler == NULL) {
 		PMD_DRV_LOG(ERR, "not support outer l3 proto by IPinIP checksum, check packet");
@@ -866,7 +866,7 @@ static int hinic3_ipinip_cksum(struct rte_mbuf *mbuf)
 		 * Skip inner checksum processing to avoid segmentation fault.
 		 */
 		if (!is_first_fragment) {
-			PMD_DRV_LOG(INFO, "Outer IP fragment (offset=%u), skip inner checksum", 
+			PMD_DRV_LOG(INFO, "Outer IP fragment (offset=%u), skip inner checksum",
 				    fragment_offset & 0x1FFF);
 			return 0;
 		}
@@ -885,7 +885,7 @@ static int hinic3_ipinip_cksum(struct rte_mbuf *mbuf)
 	offset += ip_handler->hdr_len;
 	inner_ip_hdr = (uint8_t *)(pkt_data + offset);
 	hinic3_process_inner_cksums(inner_ip_hdr, mbuf);
- 
+
 	return 0;
 }
 

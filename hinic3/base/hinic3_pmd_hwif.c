@@ -93,7 +93,7 @@
 
 #define HINIC3_AF6_FUNC_MAX_QUEUE_SHIFT	23
 #define HINIC3_AF6_FUNC_MAX_QUEUE_MASK		0x1FF
-	
+
 #define HINIC3_AF6_MSIX_FLEX_EN_SHIFT	22
 #define HINIC3_AF6_MSIX_FLEX_EN_MASK	0x1
 
@@ -628,7 +628,7 @@ int hinic3_init_hwif(void *dev)
 		PMD_DRV_LOG(ERR, "get bar addr fail");
 		goto hwif_ready_err;
 	}
-	
+
 	err = wait_hwif_ready(hwdev);
 	if (err != 0) {
 		PMD_DRV_LOG(ERR, "Chip status is not ready");

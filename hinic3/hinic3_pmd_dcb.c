@@ -159,7 +159,7 @@ init_default_dcb_cfg(struct hinic3_nic_dev *nic_dev,
 		PMD_DRV_LOG(ERR, "None cos supported");
 		return -EFAULT;
 	}
-	
+
 	dcb->func_dft_cos_bitmap = hw_dft_cos_map;
 	dcb->port_dft_cos_bitmap = port_cos_bitmap;
 
@@ -436,7 +436,7 @@ hinic3_set_hw_rss_parameters(struct hinic3_nic_dev *nic_dev, u8 rss_en, u8 cos_n
 	if (HINIC3_FUNC_TYPE(nic_dev->hwdev) == TYPE_VF)
 		hinic3_vf_fillout_indir_tbl(nic_dev, cos_num, indirtbl);
 
-	else 
+	else
 		hinic3_fillout_indir_tbl(nic_dev, cos_num, indirtbl);
 
 	err = hinic3_rss_set_indir_tbl(nic_dev->hwdev, indirtbl, HINIC3_RSS_INDIR_SIZE);
@@ -572,7 +572,7 @@ hinic3_get_dcb_info(struct rte_eth_dev *dev, struct rte_eth_dcb_info *dcb_info)
 		&dev->data->dev_conf.rx_adv_conf.dcb_rx_conf;
 	for (i = 0; i < NIC_DCB_TC_MAX; i++)
 		dcb_info->prio_tc[i] = rx_conf->dcb_tc[i];
-	
+
 	while (cos_num & (cos_num - 1))
 		cos_num++;
 
