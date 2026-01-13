@@ -167,7 +167,7 @@ struct hinic3_nic_dev {
 
 	u16 rss_state;
 	u16 num_rss;
-	
+
 	struct hinic3_rss_type rss_type;
 
 	u32 rx_mode;

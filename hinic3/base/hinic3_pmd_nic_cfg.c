@@ -1856,8 +1856,8 @@ hinic3_get_bifur_enable(void *hwdev, u8 *bifur_en, u8 *iso_en)
 	if (bifur_en != NULL)
 		*bifur_en = bifur_cmd.flow_bifur_en;
 
-	if (iso_en != NULL) 
+	if (iso_en != NULL)
 		*iso_en	  = bifur_cmd.iso_en;
-                             
+
 	return 0;
 }

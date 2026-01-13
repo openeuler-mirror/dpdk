@@ -161,7 +161,7 @@ struct hinic3_cmd_qos_map_cfg {
 	u16 func_id;
 	/* Must be configured in sets of 8. */
 	u8 pcp2cos[8];
-	/* 
+	/*
 	 * When configuring dscp2cos, if cos value is set to 0xFF,
 	 * MPU will ignore configuration of this dscp priority.
 	 * Allow configure multiple dscp2-to-cos mappings at once.
@@ -234,13 +234,13 @@ enum hinic3_link_port_type {
 	LINK_PORT_ELECTRIC,
 	LINK_PORT_BACKBOARD_INTERFACE,
 };
- 
+
 enum hilink_fibre_subtype {
 	FIBRE_SUBTYPE_SR = 1,
 	FIBRE_SUBTYPE_LR,
 	FIBRE_SUBTYPE_MAX,
 };
- 
+
 enum hilink_fec_type {
 	HILINK_FEC_NOT_SET,
 	HILINK_FEC_RSFEC,
@@ -434,7 +434,7 @@ struct hinic3_vport_state {
 #define MAG_CMD_PORT_DISABLE  0x0
 #define MAG_CMD_TX_ENABLE     0x1
 #define MAG_CMD_RX_ENABLE     0x2
-/* 
+/*
  * The physical port is disable only when all pf of the port are set to down,
  * if any pf is enable, the port is enable.
  */
@@ -1055,7 +1055,7 @@ enum hinic3_link_follow_status {
 
 struct mag_cmd_set_link_follow {
     struct mgmt_msg_head head;
-    u16 function_id; 
+    u16 function_id;
     u16 rsvd0;
     u8 follow;
     u8 rsvd1[3];
@@ -1063,7 +1063,7 @@ struct mag_cmd_set_link_follow {
 
 struct hinic3_cmd_ets_cfg {
 	struct mgmt_msg_head head;
- 
+
 	u8 port_id;
 	u8 op_code; /* 1 - set, 0 - get */
 	/*
@@ -1075,7 +1075,7 @@ struct hinic3_cmd_ets_cfg {
 	 */
 	u8 cfg_bitmap;
 	u8 rsvd;
- 
+
 	u8 cos_tc[NIC_DCB_COS_MAX];
 	u8 tc_bw[NIC_DCB_TC_MAX];
 	u8 cos_prio[NIC_DCB_COS_MAX]; /* 0 - DWRR, 1 - STRICT */
@@ -1559,7 +1559,7 @@ int hinic3_vf_get_default_cos(void *hwdev, u8 *cos_id);
  *   Tcam rule type
  * @param[in] is_hairpin
  *   Whether this rule is for hairpin
- * 
+ *
  * @retval zero : Success
  * @retval non-zero : Failure
  */

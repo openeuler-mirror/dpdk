@@ -58,7 +58,7 @@ hinic3_hairpin_cap_get(struct rte_eth_dev *dev, struct rte_eth_hairpin_cap *cap)
  *   0 or positive value on success, actual number of peer ports.
  *   a negative errno value otherwise and rte_errno is set.
  */
-int 
+int
 hinic3_hairpin_get_peer_ports(struct rte_eth_dev *dev, uint16_t *peer_ports,
 							  size_t len, uint32_t direction)
 {
@@ -123,7 +123,7 @@ hinic3_rx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	u16 rq_depth;
 
     nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
-    
+
     /* Queue depth must be power of 2, otherwise will be aligned up */
 	rq_depth = (nb_desc & (nb_desc - 1)) ?
 		((u16)(1U << (ilog2(nb_desc) + 1))) : nb_desc;

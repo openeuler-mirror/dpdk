@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright(c) 2019 Huawei Technologies Co., Ltd
  */
- 
+
 #ifndef _HINIC3_PMD_FLOW_H_
 #define _HINIC3_PMD_FLOW_H_
 

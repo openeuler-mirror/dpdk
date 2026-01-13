@@ -1842,10 +1842,10 @@ static void hinic3_dev_stop(struct rte_eth_dev *dev)
 		return 0;
 #endif
 	}
-	
+
 	if (nic_dev->dcb->dcb_on)
 		hinic3_sync_dcb_state(nic_dev->hwdev, 1, 0);
-	
+
 	hinic3_tm_dev_stop_proc(dev);
 
 	/* Stop phy port and vport */
@@ -3307,7 +3307,7 @@ static const struct eth_dev_ops hinic3_pmd_ops = {
 	.hairpin_get_peer_ports		   = hinic3_hairpin_get_peer_ports,
 #endif
 	.rx_hairpin_queue_setup		   = hinic3_rx_hairpin_queue_setup,
-	.tx_hairpin_queue_setup		   = hinic3_tx_hairpin_queue_setup,	
+	.tx_hairpin_queue_setup		   = hinic3_tx_hairpin_queue_setup,
 };
 
 static const struct eth_dev_ops hinic3_pmd_vf_ops = {
@@ -3366,7 +3366,7 @@ static const struct eth_dev_ops hinic3_pmd_vf_ops = {
 	.hairpin_get_peer_ports		   = hinic3_hairpin_get_peer_ports,
 #endif
 	.rx_hairpin_queue_setup		   = hinic3_rx_hairpin_queue_setup,
-	.tx_hairpin_queue_setup		   = hinic3_tx_hairpin_queue_setup,	
+	.tx_hairpin_queue_setup		   = hinic3_tx_hairpin_queue_setup,
 };
 
 /**
@@ -3686,9 +3686,9 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 	}
 
 	err = hinic3_init_rx_ptype_table(eth_dev);
-	if (err) 
+	if (err)
 		PMD_DRV_LOG(ERR, "Failed to create ptype_table.");
-	
+
 	tcam_info = &nic_dev->tcam;
 	memset(tcam_info, 0, sizeof(struct hinic3_tcam_info));
 	TAILQ_INIT(&tcam_info->tcam_list);

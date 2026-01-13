@@ -28,7 +28,7 @@ void get_port_info(struct hinic3_hwdev *hwdev, u8 link_state,
 	uint32_t port_speed[LINK_SPEED_LEVELS] = {ETH_SPEED_NUM_NONE, ETH_SPEED_NUM_10M,
 					ETH_SPEED_NUM_100M, ETH_SPEED_NUM_1G,
 					ETH_SPEED_NUM_10G, ETH_SPEED_NUM_25G,
-					ETH_SPEED_NUM_40G, ETH_SPEED_NUM_50G, 
+					ETH_SPEED_NUM_40G, ETH_SPEED_NUM_50G,
 					ETH_SPEED_NUM_100G, ETH_SPEED_NUM_200G};
 	struct nic_port_info port_info = {0};
 	int err;
@@ -179,7 +179,7 @@ static void print_cable_info(struct mag_cmd_event_port_info *port_info)
 		PMD_DRV_LOG(INFO, "Cable unpresent\n");
 		return;
 	}
-	
+
 	get_port_type(port_info, &port_type);
 
 	for (i = (int)sizeof(port_info->vendor_name) - 1; i >= 0; i--) {
@@ -240,10 +240,10 @@ static void print_port_info(void *hwdev, struct mag_cmd_event_port_info *port_in
 	print_cable_info(port_info);
 
 	print_link_info(port_info);
-	
+
 	if (type == ETH_LINK_UP)
 		return;
-	
+
 	PMD_DRV_LOG(INFO, "Function %d link down msg:\n", hinic3_global_func_id(hwdev));
 
 	PMD_DRV_LOG(INFO, "PMA ctrl: %s, tx %s, rx %s, PMA fifo reg: 0x%x, PMA signal ok reg: 0x%x, RF/LF status reg: 0x%x\n",
@@ -270,7 +270,7 @@ static void port_info_event_printf(void *hwdev, void *buf_in,
 		PMD_DRV_LOG(ERR, "Invalid hilink info report, type: %d\n", type);
 		return;
 	}
-	
+
 	print_port_info(hwdev, port_info, type);
 	return;
 }

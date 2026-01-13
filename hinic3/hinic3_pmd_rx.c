@@ -80,7 +80,7 @@ hinic3_calc_rx_ptype_table(uint32_t offload_type)
 	ip_type = HINIC3_GET_RX_IP_TYPE(offload_type);
 	enc_l3_type = HINIC3_GET_RX_ENC_L3_TYPE(offload_type);
 	pkt_fmt = HINIC3_GET_RX_PKT_FORMAT(offload_type);
-	
+
 	switch (pkt_fmt) {
 	case IPSU_METADATA_FMT_NO_ENC:
 		ptype |= RTE_PTYPE_L2_ETHER;
@@ -636,7 +636,7 @@ init_rss_fail:
 	return err;
 }
 /**
- * Initialize the receive packet type table 
+ * Initialize the receive packet type table
  * @param[in] dev
  *   Pointer to ethernet device structure.
  */
@@ -645,8 +645,8 @@ int
 hinic3_init_rx_ptype_table(struct rte_eth_dev *dev) {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_ptype_table *tbl = rte_zmalloc("ptype_tbl", sizeof(struct hinic3_ptype_table), 0);
-	
-	if (tbl == NULL) 
+
+	if (tbl == NULL)
 		return -ENOMEM;
 
 	uint32_t *ptype = tbl->ptype;

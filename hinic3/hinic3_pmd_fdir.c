@@ -1174,7 +1174,7 @@ static int hinic3_flow_ethertype_rule_nums(struct rte_eth_ethertype_filter *ethe
 			return HINIC3_CNM_RULE_NUM;
 		case RTE_ETHER_TYPE_ECP:
 			return HINIC3_ECP_RULE_NUM;
-		
+
 		default:
 			PMD_DRV_LOG(ERR, "Unknown ethertype %d",
 				    ethertype_filter->ether_type);
