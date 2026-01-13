@@ -1029,19 +1029,19 @@ static int hinic3_flow_set_arp_filter(struct rte_eth_dev *dev, struct rte_eth_et
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	int ret;
 
-	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_ARP, ethertype_filter->queue, add);
+	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_ARP, ethertype_filter, add);
 	if (ret) {
 		PMD_DRV_LOG(ERR, "%s fdir ethertype rule failed, err: %d", add ? "Add" : "Del", ret);
 		return ret;
 	}
 
-	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_ARP_REQ, ethertype_filter->queue, add);
+	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_ARP_REQ, ethertype_filter, add);
 	if (ret) {
 		PMD_DRV_LOG(ERR, "%s arp request rule failed, err: %d", add ? "Add" : "Del", ret);
 		goto set_arp_req_failed;
 	}
 
-	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_ARP_REP, ethertype_filter->queue, add);
+	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_ARP_REP, ethertype_filter, add);
 	if (ret) {
 		PMD_DRV_LOG(ERR, "%s arp response rule failed, err: %d", add ? "Add" : "Del", ret);
 		goto set_arp_rep_failed;
@@ -1050,10 +1050,10 @@ static int hinic3_flow_set_arp_filter(struct rte_eth_dev *dev, struct rte_eth_et
 	return 0;
 
 set_arp_rep_failed:
-	(void)hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_ARP_REQ, ethertype_filter->queue, !add);
+	(void)hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_ARP_REQ, ethertype_filter, !add);
 
 set_arp_req_failed:
-	(void)hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_ARP, ethertype_filter->queue, !add);
+	(void)hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_ARP, ethertype_filter, !add);
 
 	return ret;
 }
@@ -1065,13 +1065,13 @@ static int hinic3_flow_set_slow_filter(struct rte_eth_dev *dev,
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	int ret;
 
-	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_LACP, ethertype_filter->queue, add);
+	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_LACP, ethertype_filter, add);
 	if (ret) {
 		PMD_DRV_LOG(ERR, "%s lacp fdir rule failed, err: %d", add ? "Add" : "Del", ret);
 		return ret;
 	}
 
-	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_OAM, ethertype_filter->queue, add);
+	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_OAM, ethertype_filter, add);
 	if (ret) {
 		PMD_DRV_LOG(ERR, "%s oam rule failed, err: %d", add ? "Add" : "Del", ret);
 		goto set_arp_oam_failed;
@@ -1080,7 +1080,7 @@ static int hinic3_flow_set_slow_filter(struct rte_eth_dev *dev,
 	return 0;
 
 set_arp_oam_failed:
-	(void)hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_LACP, ethertype_filter->queue, !add);
+	(void)hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_LACP, ethertype_filter, !add);
 
 	return ret;
 }
@@ -1092,13 +1092,13 @@ static int hinic3_flow_set_lldp_filter(struct rte_eth_dev *dev,
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	int ret;
 
-	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_LLDP, ethertype_filter->queue, add);
+	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_LLDP, ethertype_filter, add);
 	if (ret) {
 		PMD_DRV_LOG(ERR, "%s lldp fdir rule failed, err: %d", add ? "Add" : "Del", ret);
 		return ret;
 	}
 
-	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_CDCP, ethertype_filter->queue, add);
+	ret = hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_CDCP, ethertype_filter, add);
 	if (ret) {
 		PMD_DRV_LOG(ERR, "%s cdcp fdir rule failed, err: %d", add ? "Add" : "Del", ret);
 		goto set_arp_cdcp_failed;
@@ -1107,7 +1107,7 @@ static int hinic3_flow_set_lldp_filter(struct rte_eth_dev *dev,
 	return 0;
 
 set_arp_cdcp_failed:
-	(void)hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_LLDP, ethertype_filter->queue, !add);
+	(void)hinic3_set_fdir_ethertype_filter(nic_dev->hwdev, HINIC3_PKT_TYPE_LLDP, ethertype_filter, !add);
 
 	return ret;
 }
@@ -1136,7 +1136,7 @@ static int hinic3_flow_add_del_ethertype_filter_rule(struct rte_eth_dev *dev,
 			return hinic3_flow_set_arp_filter(dev, ethertype_filter, add);
 		case RTE_ETHER_TYPE_RARP:
 			return hinic3_set_fdir_ethertype_filter(nic_dev->hwdev,
-				HINIC3_PKT_TYPE_RARP, ethertype_filter->queue, add);
+				HINIC3_PKT_TYPE_RARP, ethertype_filter, add);
 
 		case RTE_ETHER_TYPE_SLOW:
 			return hinic3_flow_set_slow_filter(dev, ethertype_filter, add);
@@ -1146,11 +1146,11 @@ static int hinic3_flow_add_del_ethertype_filter_rule(struct rte_eth_dev *dev,
 
 		case RTE_ETHER_TYPE_CNM:
 			return hinic3_set_fdir_ethertype_filter(nic_dev->hwdev,
-				HINIC3_PKT_TYPE_CNM, ethertype_filter->queue, add);
+				HINIC3_PKT_TYPE_CNM, ethertype_filter, add);
 
 		case RTE_ETHER_TYPE_ECP:
 			return hinic3_set_fdir_ethertype_filter(nic_dev->hwdev,
-				HINIC3_PKT_TYPE_ECP, ethertype_filter->queue, add);
+				HINIC3_PKT_TYPE_ECP, ethertype_filter, add);
 
 		default:
 			PMD_DRV_LOG(ERR, "Unknown ethertype %d queue_id %d",

@@ -1365,7 +1365,7 @@ int hinic3_vf_get_default_cos(void *hwdev, u8 *cos_id)
 	return 0;
 }
 
-int hinic3_set_fdir_ethertype_filter(void *hwdev, u8 pkt_type, u16 queue_id, u8 en)
+int hinic3_set_fdir_ethertype_filter(void *hwdev, u8 pkt_type, struct rte_eth_ethertype_filter *ethertype_filter, u8 en)
 {
 	struct hinic3_set_fdir_ethertype_rule ethertype_cmd;
 	u16 out_size = sizeof(ethertype_cmd);
@@ -1378,7 +1378,8 @@ int hinic3_set_fdir_ethertype_filter(void *hwdev, u8 pkt_type, u16 queue_id, u8 
 	ethertype_cmd.func_id = hinic3_global_func_id(hwdev);
 	ethertype_cmd.pkt_type = pkt_type;
 	ethertype_cmd.pkt_type_en = en;
-	ethertype_cmd.qid = (u8)queue_id;
+	ethertype_cmd.qid = (u8)ethertype_filter->queue;
+ 	ethertype_cmd.flags = ethertype_filter->flags;
 
 	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_SET_FDIR_STATUS,
 				     &ethertype_cmd, sizeof(ethertype_cmd),

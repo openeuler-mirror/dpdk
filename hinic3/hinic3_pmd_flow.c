@@ -1141,6 +1141,10 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 		}
 		break;
 #endif
+	case RTE_FLOW_ACTION_TYPE_DROP:
+ 	 	filter->fdir_filter.action = RTE_FLOW_ACTION_TYPE_DROP;
+ 	 	break;
+
 	default:
 		rte_flow_error_set(error, EINVAL,
 				   HINIC3_FLOW_ERROR_TYPE_ACTION, act,
@@ -1503,6 +1507,10 @@ hinic3_flow_parse_ethertype_action(struct rte_eth_dev		*dev,
 			return -rte_errno;
 		}
 		break;
+
+	case RTE_FLOW_ACTION_TYPE_DROP:
+ 	 	filter->ethertype_filter.flags |= RTE_ETHTYPE_FLAGS_DROP;
+ 	 	break;
 
 	default:
 		rte_flow_error_set(error, EINVAL,

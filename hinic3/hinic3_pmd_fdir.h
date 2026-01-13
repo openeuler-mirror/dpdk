@@ -42,6 +42,7 @@ struct hinic3_fdir_filter {
 	uint8_t ip_type; /* inner ip type */
 	uint8_t outer_ip_type; /* outer ip type */
 	uint8_t tunnel_type;
+	uint8_t action;
 	struct hinic3_fdir_rule_key key_mask;
 	struct hinic3_fdir_rule_key key_spec;
 	uint32_t rq_index; /* queue assigned when matched */
