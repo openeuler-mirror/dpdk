@@ -972,7 +972,7 @@ int hinic3_set_rx_lro_state(void *hwdev, u8 lro_en, u32 lro_timer,
 }
 
 /* RSS config */
-int hinic3_rss_template_alloc(void *hwdev)
+int hinic3_rss_template_alloc(void *hwdev, u16 q_grp_id)
 {
 	struct hinic3_rss_template_mgmt template_mgmt;
 	u16 out_size = sizeof(template_mgmt);
@@ -982,7 +982,10 @@ int hinic3_rss_template_alloc(void *hwdev)
 		return -EINVAL;
 
 	memset(&template_mgmt, 0, sizeof(struct hinic3_rss_template_mgmt));
-	template_mgmt.func_id = hinic3_global_func_id(hwdev);
+	if (q_grp_id == 0)
+		template_mgmt.func_id = hinic3_global_func_id(hwdev);
+	else
+		template_mgmt.func_id = q_grp_id;
 	template_mgmt.cmd = NIC_RSS_CMD_TEMP_ALLOC;
 
 	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_RSS_TEMP_MGR,
@@ -1003,7 +1006,7 @@ int hinic3_rss_template_alloc(void *hwdev)
 	return 0;
 }
 
-int hinic3_rss_template_free(void *hwdev)
+int hinic3_rss_template_free(void *hwdev, u16 q_grp_id)
 {
 	struct hinic3_rss_template_mgmt template_mgmt;
 	u16 out_size = sizeof(template_mgmt);
@@ -1013,7 +1016,10 @@ int hinic3_rss_template_free(void *hwdev)
 		return -EINVAL;
 
 	memset(&template_mgmt, 0, sizeof(struct hinic3_rss_template_mgmt));
-	template_mgmt.func_id = hinic3_global_func_id(hwdev);
+	if (q_grp_id == 0)
+		template_mgmt.func_id = hinic3_global_func_id(hwdev);
+	else
+		template_mgmt.func_id = q_grp_id;
 	template_mgmt.cmd = NIC_RSS_CMD_TEMP_FREE;
 
 	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_RSS_TEMP_MGR,
@@ -1379,7 +1385,10 @@ int hinic3_set_fdir_ethertype_filter(void *hwdev, u8 pkt_type, struct rte_eth_et
 	ethertype_cmd.pkt_type = pkt_type;
 	ethertype_cmd.pkt_type_en = en;
 	ethertype_cmd.qid = (u8)ethertype_filter->queue;
- 	ethertype_cmd.flags = ethertype_filter->flags;
+	if (en == 0)
+		ethertype_cmd.flags = 0;
+	else
+ 		ethertype_cmd.flags = (u8)ethertype_filter->flags;
 
 	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_SET_FDIR_STATUS,
 				     &ethertype_cmd, sizeof(ethertype_cmd),
@@ -1948,34 +1957,6 @@ hinic3_mgmt_cfg_qgrp_id(void *hwdev, u8 opcode, u16 *q_grp_id)
 	*q_grp_id = cfg_qgrp.q_grp_id;
 
 	return err;
-}
-
-int
-hinic3_mgmt_cfg_rss_temp(void *hwdev, u16 q_grp_id, u8 opcode)
-{
-	struct hinic3_rss_template_mgmt template_mgmt;
-	u16 out_size = sizeof(template_mgmt);
-	int err;
-
-	if (!hwdev)
-		return -EINVAL;
-
-	memset(&template_mgmt, 0, sizeof(struct hinic3_rss_template_mgmt));
-	template_mgmt.func_id = hinic3_global_func_id(hwdev);
-	template_mgmt.cmd = opcode;
-	template_mgmt.q_grp_id = q_grp_id;
-
-	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_RSS_TEMP_MGR,
-						&template_mgmt, sizeof(template_mgmt),
-						&template_mgmt, &out_size);
-	if (err || !out_size || template_mgmt.msg_head.status) {
-		PMD_DRV_LOG(ERR, "Alloc/Free rss template failed, err: %d, "
-				"status: 0x%x, out size: 0x%x",
-				err, template_mgmt.msg_head.status, out_size);
-		return -EFAULT;
-	}
-
-	return 0;
 }
 
 void

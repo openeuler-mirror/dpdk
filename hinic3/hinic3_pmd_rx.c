@@ -595,7 +595,7 @@ int hinic3_update_rss_config(struct rte_eth_dev *dev,
 		return -EINVAL;
 	}
 
-	err = hinic3_rss_template_alloc(nic_dev->hwdev);
+	err = hinic3_rss_template_alloc(nic_dev->hwdev, 0);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Alloc rss template failed, err: %d", err);
 		return err;
@@ -630,7 +630,7 @@ int hinic3_update_rss_config(struct rte_eth_dev *dev,
 	return 0;
 
 init_rss_fail:
-	if (hinic3_rss_template_free(nic_dev->hwdev))
+	if (hinic3_rss_template_free(nic_dev->hwdev, 0))
 		PMD_DRV_LOG(WARNING, "Free rss template failed");
 
 	return err;
