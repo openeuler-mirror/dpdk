@@ -847,17 +847,13 @@ struct hinic3_cmd_lro_timer {
 	u32 timer;
 };
 
-#define HINIC3_RSS_QUEUE_TEMPLATE_ALLOC 3
-#define HINIC3_RSS_QUEUE_TEMPLATE_FREE 4
-
 struct hinic3_rss_template_mgmt {
 	struct mgmt_msg_head msg_head;
 
 	u16 func_id;
 	u8 cmd;
 	u8 template_id;
-	u16 q_grp_id;
-	u8 rsvd1[2];
+	u8 rsvd1[4];
 };
 
 struct hinic3_cmd_rss_hash_key {
@@ -1064,11 +1060,11 @@ struct hinic3_set_fdir_ethertype_rule {
 	struct mgmt_msg_head head;
 
 	u16 func_id;
-	u16 flags;
+	u16 rsvd1;
 	u8 pkt_type_en;
 	u8 pkt_type;
 	u8 qid;
-	u8 rsvd2;
+	u8 flags;
 };
 
 
@@ -1431,7 +1427,7 @@ int hinic3_init_function_table(void *hwdev, u16 rx_buff_len);
  * @retval zero : Success
  * @retval non-zero : Failure
  */
-int hinic3_rss_template_alloc(void *hwdev);
+int hinic3_rss_template_alloc(void *hwdev, u16 q_grp_id);
 
 /**
  * Free RSS template table
@@ -1442,7 +1438,7 @@ int hinic3_rss_template_alloc(void *hwdev);
  * @retval zero : Success
  * @retval non-zero : Failure
  */
-int hinic3_rss_template_free(void *hwdev);
+int hinic3_rss_template_free(void *hwdev, u16 q_grp_id);
 
 /**
  * Set RSS indirect table
@@ -1736,8 +1732,6 @@ int hinic3_set_tm_hierarchy_do_commit(void *hwdev, u8 *cos_tc, u8 *tc_bw,
 				   u8 *rate_limit);
 
 int hinic3_get_bifur_enable(void *hwdev, u8 *bifur_enable, u8 *iso_enable);
-
-int hinic3_mgmt_cfg_rss_temp(void *hwdev, u16 q_grp_id, u8 opcode);
 
 int hinic3_cmdq_set_rss_queue_type(void *hwdev, struct hinic3_rss_type rss_type, u16 q_grp_id, u16 cmd_type);
 

@@ -1405,7 +1405,7 @@ static void hinic3_remove_rxtx_configure(struct rte_eth_dev *dev)
 
 	if (nic_dev->rss_state == HINIC3_RSS_ENABLE) {
 		hinic3_rss_cfg(nic_dev->hwdev, HINIC3_RSS_DISABLE, 0, prio_tc);
-		hinic3_rss_template_free(nic_dev->hwdev);
+		hinic3_rss_template_free(nic_dev->hwdev, 0);
 		nic_dev->rss_state = HINIC3_RSS_DISABLE;
 	}
 }

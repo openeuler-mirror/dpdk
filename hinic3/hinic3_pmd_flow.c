@@ -1125,7 +1125,7 @@ static int hinic3_flow_set_normal_rss_action_config(struct rte_eth_dev *dev,
 		}
 
 		/* Alloc rss template */
-		ret = hinic3_mgmt_cfg_rss_temp(nic_dev->hwdev, q_grp_id, HINIC3_RSS_QUEUE_TEMPLATE_ALLOC);
+		ret = hinic3_rss_template_alloc(nic_dev->hwdev, q_grp_id);
 		if (ret != 0) {
 			rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION, act,
 						"Failed to alloc rss template");
@@ -1177,7 +1177,7 @@ static int hinic3_flow_set_normal_rss_action_config(struct rte_eth_dev *dev,
 	return 0;
 
 	free_rss_template:
-	hinic3_mgmt_cfg_rss_temp(nic_dev->hwdev, q_grp_id, HINIC3_RSS_QUEUE_TEMPLATE_FREE);
+	hinic3_rss_template_free(nic_dev->hwdev, q_grp_id);
 
 	free_g_grp_id:
 	hinic3_mgmt_cfg_qgrp_id(nic_dev->hwdev, HINIC3_QUEUE_GROUP_ID_FREE, &q_grp_id);
@@ -1201,7 +1201,6 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 #ifdef HINIC3_TRAFFIC_BIFUR
 	struct rte_pci_device *pci_dev = NULL;
 	pci_dev = RTE_ETH_DEV_TO_PCI(dev);
-	uint32_t i;
 
 	for (i = 0; i < HINIC3_QUEUE_MAX; i++) {
 		rte_bit_relaxed_clear32(i, &filter->fdir_filter.rq_index);
@@ -2408,9 +2407,7 @@ static void hinic3_flow_release_rss_template(struct hinic3_nic_dev *nic_dev,
 	/* If reference count is 1，delete RSS template and q_grp_id */
 	q_grp_id = template_entry->q_grp_id;
 
-	ret = hinic3_mgmt_cfg_rss_temp(nic_dev->hwdev, q_grp_id, HINIC3_RSS_QUEUE_TEMPLATE_FREE);
-	if (ret != 0)
-		PMD_DRV_LOG(ERR, "Failed to delete rss template, q_grp_id: %u, ret: %d", q_grp_id, ret);
+	hinic3_rss_template_free(nic_dev->hwdev, q_grp_id);
 
 	ret = hinic3_mgmt_cfg_qgrp_id(nic_dev->hwdev, HINIC3_QUEUE_GROUP_ID_FREE, &q_grp_id);
 	if (ret != 0)
