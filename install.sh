@@ -17,7 +17,7 @@ function meson_build_adapt() {
 	FLAGS[22]="-DDPDK_20_11 -DDPDK_21_11 -DDPDK_22_11"
 	FLAGS[23]="-DDPDK_20_11 -DDPDK_21_11 -DDPDK_22_11"
 	FLAGS[24]="-DDPDK_20_11 -DDPDK_21_11 -DDPDK_22_11 -DDPDK_24_11"
-	FLAGS[25]="-DDPDK_20_11 -DDPDK_21_11 -DDPDK_22_11 -DDPDK_24_11"
+	FLAGS[25]="-DDPDK_20_11 -DDPDK_21_11 -DDPDK_22_11 -DDPDK_24_11 -DDPDK_25_11"
 
 	# 如果有对应的 flags 就写入 meson.build
 	for flag in ${FLAGS[$DPDK_MAJOR]}; do
@@ -363,8 +363,12 @@ build() {
 
 		rm -rf $build_dir
 		make config T=$build_dir
-		# 保证 dpdk=19 在一些 GCC 版本下能顺利编译
-		extra_cflags="-Wno-error"
+
+		extra_cflags=""
+		# 默认忽略告警，保证 dpdk=19 在一些 GCC 版本下能顺利编译
+		if [ -z "$DISABLE_DPDK19_WNO_ERROR" ]; then
+			extra_cflags="-Wno-error"
+		fi
 
 		# debug
 		if [ "$build_type" == "debug" ]; then
@@ -384,7 +388,7 @@ build() {
 		echo "执行 Meson 构建方式"
 		rm -rf $build_dir
 		# dpdk>=21
-		meson_flags="-Ddisable_drivers=true -Denable_drivers=mempool/ring,net/${pmd_name}"
+		meson_flags="-Ddisable_drivers=true -Denable_drivers=mempool/ring,net/hns3,net/${pmd_name}"
 		# dpdk=20
 		if [ "$DPDK_MAJOR" -eq 20 ]; then
 			meson_flags="-Ddisable_drivers=net/cnxk,net/mlx4,net/mlx5,common/mlx5,regex/mlx5,vdpa/mlx5,crypto/*"

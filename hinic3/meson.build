@@ -7,9 +7,9 @@ if not is_linux
 	subdir_done()
 endif
 
-if arch_subdir != 'x86' and arch_subdir != 'arm' or not dpdk_conf.get('RTE_ARCH_64')
+if not dpdk_conf.get('RTE_ARCH_64')
 	build = false
-	reason = 'only supported on x86_64 and aarch64'
+	reason = 'only supported on 64-bit architectures'
 	subdir_done()
 endif
 
@@ -42,6 +42,7 @@ elif dpdk_version.substring(0,2) == '25'
 	cflags += ['-DDPDK_21_11']
 	cflags += ['-DDPDK_22_11']
 	cflags += ['-DDPDK_24_11']
+	cflags += ['-DDPDK_25_11']
 endif
 
 subdir('base')
@@ -64,7 +65,7 @@ sources = files(
 
 if arch_subdir == 'arm' and dpdk_conf.get('RTE_ARCH_64')
 	cflags  += ['-D__ARM64_NEON__']
-else
+elif arch_subdir == 'x86' and dpdk_conf.get('RTE_ARCH_64')
 	cflags += ['-D__X86_64_SSE__']
 endif
 

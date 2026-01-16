@@ -2,6 +2,7 @@
  * Copyright(c) 2025 Huawei Technologies Co., Ltd
  */
 
+#include <rte_os.h>
 #include <rte_telemetry.h>
 #include "base/hinic3_compat.h"
 #include "base/hinic3_pmd_mgmt.h"
