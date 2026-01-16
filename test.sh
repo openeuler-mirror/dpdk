@@ -2,9 +2,14 @@
 set -e
 
 DPDK_DIR=..
-NIC_PCI="0000:03:00.0"
+NIC_PCI="0000:01:00.0"
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+
+# 可选：第一个入参作为 NIC_PCI
+if [[ -n "$1" ]]; then
+	NIC_PCI="$1"
+fi
 
 # 检测 vendor/device id
 vendor=$(lspci -n -s "$NIC_PCI" | awk '{print $3}' | cut -d: -f1)
@@ -27,8 +32,10 @@ fi
 modprobe vfio enable_unsafe_noiommu_mode=1
 modprobe vfio-pci
 echo 1 >/sys/module/vfio/parameters/enable_unsafe_noiommu_mode
-echo never >/sys/kernel/mm/transparent_hugepage/enabled
 dpdk-devbind.py -b vfio-pci $NIC_PCI
+
+echo never >/sys/kernel/mm/transparent_hugepage/enabled
+dpdk-hugepages.py -s
 
 # 要测试的版本列表 (压缩包名)
 VERSIONS=(
@@ -38,7 +45,7 @@ VERSIONS=(
 	"dpdk-22.11.9.tar.xz"
 	"dpdk-23.11.5.tar.xz"
 	"dpdk-24.11.3.tar.xz"
-	"dpdk-25.07.tar.xz"
+	"dpdk-25.11.tar.xz"
 )
 
 cd "$DPDK_DIR"
@@ -53,15 +60,20 @@ for pkg in "${VERSIONS[@]}"; do
 	tar -xf $pkg
 
 	# 编译
+	export DISABLE_DPDK19_WNO_ERROR=1
 	sh "$SCRIPT_DIR/install.sh" "$stable_dir" install bifur
 	sh "$SCRIPT_DIR/install.sh" "$stable_dir" build
+
+	if [ "$DISABLE_TESTPMD_CMD" = "1" ]; then
+		continue
+	fi
 
 	if [[ "$pkg" == dpdk-19.11.* ]]; then
 		export LD_LIBRARY_PATH=$PWD/$stable_dir/arm64-armv8a-linuxapp-gcc/lib:$LD_LIBRARY_PATH
 		hinic3_pmd="$stable_dir/arm64-armv8a-linuxapp-gcc/lib/librte_pmd_hinic3.so"
-		testpmd_cmd="$stable_dir/arm64-armv8a-linuxapp-gcc/app/testpmd -d $hinic3_pmd -w $NIC_PCI -l 0-8 -- --nb-cores=8 --rxq=8 --txq=8 -i -a --forward-mode=txonly"
+		testpmd_cmd="$stable_dir/arm64-armv8a-linuxapp-gcc/app/testpmd -v -d $hinic3_pmd -w $NIC_PCI -l 0-8 -- --nb-cores=8 --rxq=8 --txq=8 -i -a --forward-mode=txonly"
 	else
-		testpmd_cmd="$stable_dir/build/app/dpdk-testpmd -a $NIC_PCI -l 0-8 -- --nb-cores=8 --rxq=8 --txq=8 -i -a --forward-mode=txonly"
+		testpmd_cmd="$stable_dir/build/app/dpdk-testpmd -v -a $NIC_PCI -l 0-8 -- --nb-cores=8 --rxq=8 --txq=8 -i -a --forward-mode=txonly"
 	fi
 
 	# 运行并自动退出

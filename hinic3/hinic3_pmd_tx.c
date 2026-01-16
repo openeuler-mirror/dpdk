@@ -755,7 +755,6 @@ static void hinic3_process_inner_cksums(void *l3_hdr, struct rte_mbuf *mbuf)
 
 		/* Check if inner IP packet is fragmented */
 		inner_ip_total_len = rte_be_to_cpu_16(ipv4_hdr->total_length);
-		uint16_t inner_ip_data_len = inner_ip_total_len - ip_handler->hdr_len;
 
 		/* Get actual data length in mbuf (from inner IP header to end) */
 		mbuf_data_len = rte_pktmbuf_data_len(mbuf) -
