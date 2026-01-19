@@ -395,7 +395,11 @@ build() {
 		fi
 		# 如果指定 generic
 		if [[ "$build_target" == "generic" ]]; then
-			meson_flags="$meson_flags -Dplatform=generic"
+			if [ "$DPDK_MAJOR" -eq 20 ]; then
+				meson_flags="$meson_flags -Dmachine=generic"
+			else
+				meson_flags="$meson_flags -Dplatform=generic"
+			fi
 		fi
 		meson $build_dir $meson_flags -Dbuildtype=$build_type
 		ninja -C $build_dir
