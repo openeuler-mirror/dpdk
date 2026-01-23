@@ -1206,9 +1206,20 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 		rte_bit_relaxed_clear32(i, &filter->fdir_filter.rq_index);
 	}
 #endif
-	/* skip the first void item */
-	while (act->type == RTE_FLOW_ACTION_TYPE_VOID)
-		act++;
+
+	/* find the last non-VOID action before END */
+	const struct rte_flow_action *last_act = NULL;
+	for (act = actions; act->type != RTE_FLOW_ACTION_TYPE_END; act++) {
+		if (act->type != RTE_FLOW_ACTION_TYPE_VOID)
+			last_act = act;
+	}
+	if (last_act == NULL) {
+		rte_flow_error_set(error, EINVAL,
+				   HINIC3_FLOW_ERROR_TYPE_ACTION, actions,
+				   "No valid action.");
+		return -rte_errno;
+	}
+	act = last_act;
 
 	switch (act->type) {
 	case RTE_FLOW_ACTION_TYPE_QUEUE:
@@ -1634,9 +1645,19 @@ hinic3_flow_parse_ethertype_action(struct rte_eth_dev		*dev,
 	const struct rte_flow_action *act = actions;
 	const struct rte_flow_action_queue *act_q;
 
-	/* skip the firset void item */
-	while (act->type == RTE_FLOW_ACTION_TYPE_VOID)
-		act++;
+	/* find the last non-VOID action before END */
+	const struct rte_flow_action *last_act = NULL;
+	for (act = actions; act->type != RTE_FLOW_ACTION_TYPE_END; act++) {
+		if (act->type != RTE_FLOW_ACTION_TYPE_VOID)
+			last_act = act;
+	}
+	if (last_act == NULL) {
+		rte_flow_error_set(error, EINVAL,
+				   HINIC3_FLOW_ERROR_TYPE_ACTION, actions,
+				   "No valid action.");
+		return -rte_errno;
+	}
+	act = last_act;
 
 	switch (act->type) {
 	case RTE_FLOW_ACTION_TYPE_QUEUE:
