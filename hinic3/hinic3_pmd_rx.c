@@ -1114,6 +1114,7 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 	struct hinic3_rx_info *rx_info = NULL;
 	volatile struct hinic3_rq_cqe *rx_cqe = NULL;
 	struct rte_mbuf *rxm = NULL;
+	struct rte_eth_dev *eth_dev = (struct rte_eth_dev *)rxq->nic_dev->hwdev->eth_dev;
 	u16 sw_ci, rx_buf_len, wqebb_cnt = 0, pkts = 0;
 	u32 status, pkt_len, vlan_len, offload_type, pkt_type, lro_num;
 	u64 rx_bytes = 0;
@@ -1154,7 +1155,7 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 		rte_prefetch0(rxq->rx_info[sw_ci].mbuf);
 
 		/* 3. Jumbo frame process */
-		if (likely(pkt_len <= (u32)rx_buf_len)) {
+		if (likely(!eth_dev->data->scattered_rx || pkt_len <= (u32)rx_buf_len)) {
 			rxm->data_len = (u16)pkt_len;
 			rxm->pkt_len = pkt_len;
 			wqebb_cnt++;
