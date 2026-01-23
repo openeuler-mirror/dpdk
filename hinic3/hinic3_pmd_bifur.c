@@ -297,7 +297,7 @@ hinic3_bifur_query_func_type(struct rte_pci_addr *target_pci_addr, enum bifur_fu
 static char *
 hinic3_bifur_pci_addr_to_path(const struct rte_pci_addr *addr, char *str)
 {
-	sprintf(str, "%s%04x:%02x:%02x.%x", PCI_SYS_PATH, addr->domain, addr->bus, addr->devid, addr->function);
+	snprintf(str, MAX_PATH_LEN, "%s%04x:%02x:%02x.%x", PCI_SYS_PATH, addr->domain, addr->bus, addr->devid, addr->function);
 	return str;
 }
 
@@ -769,7 +769,7 @@ hinic3_bifur_lock_pair(struct hinic3_bifur_dev_pair *dev_pair)
 {
 	int ret = 0;
 	u32 dbdf;
-	char real_path[4096] = {0};
+	char real_path[PATH_MAX] = {0};
 	char file_path[128] = {0};
 	struct rte_pci_addr *addr = &dev_pair->work_pci_dev->addr;
 
