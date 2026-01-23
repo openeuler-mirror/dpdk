@@ -6,7 +6,14 @@ PMD 已归一到本项目的 hinic3 目录中，使用方式由原先的每个�
 
 - 当前 `hinic3` PMD 支持的 DPDK 版本：**19.11 ~ 25**
 - 分流功能支持的 DPDK 版本：**19.11 ~ 22.11**
-
+- 注意点：
+  - DPU场景下发以下流规则时，会导致管理口的SSH登录报文被送到用户态，导致DPU断链
+  ```
+    flow create port_id ingress pattern eth / ipv4 / end actions queue index queue_id / end
+    flow create port_id ingress pattern eth / ipv4 / tcp / end actions queue index queue_id / end
+    flow create port_id ingress pattern eth / ipv4 / end actions rss queues queue_num end / end
+    flow create port_id ingress pattern eth / ipv4 / tcp / end actions rss queues queue_num end / end
+  ```
 ---
 
 ## 1. 环境准备
