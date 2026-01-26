@@ -2017,7 +2017,8 @@ hinic3_rss_queue_set_indir_tbl(void *hwdev, const u32 *indir_table, u32 indir_ta
 	cmd_buf->size = sizeof(struct nic_rss_indirect_tbl);
 	indir_tbl = (struct nic_rss_indirect_tbl *)cmd_buf->buf;
 	memset(indir_tbl, 0, sizeof(*indir_tbl));
-	indir_tbl->q_grp_id = cpu_to_be16(q_grp_id);
+	indir_tbl->dw0.bs.qgrp_id = cpu_to_be16(q_grp_id - HINIC3_QGRP_START_INDEX);
+	indir_tbl->dw0.bs.op_code = 1;
 
 	for (i = 0; i < indir_table_size; i++)
 		indir_tbl->entry[i] = (u16)(*(indir_table + i));
@@ -2029,7 +2030,7 @@ hinic3_rss_queue_set_indir_tbl(void *hwdev, const u32 *indir_table, u32 indir_ta
 		temp[i] = cpu_to_be32(temp[i]);
 
 	err = hinic3_cmdq_direct_resp(hwdev, HINIC3_MOD_L2NIC,
-						HINIC3_UCODE_CMD_SET_RSS_QGRP_INDIR_TABLE,
+						HINIC3_UCODE_CMD_SET_RSS_INDIR_TABLE,
 						cmd_buf, &out_param, 0);
 	if (err || out_param != 0) {
 		PMD_DRV_LOG(ERR, "Set rss indir table failed");
