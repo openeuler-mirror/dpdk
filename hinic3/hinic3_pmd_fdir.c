@@ -86,7 +86,7 @@ static void hinic3_fdir_tcam_ipv4_init(struct hinic3_fdir_filter *rule,
 	struct rte_pci_device *pci_dev = NULL;
 	pci_dev = RTE_ETH_DEV_TO_PCI(dev);
 
-	if (pci_dev->id.device_id == HINIC3_DEV_ID_DPU || hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev)) {
+	if (pci_dev->id.device_id == HINIC3_DEV_ID_SP920 || hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev)) {
 		/* VF RSS flow table traffic distribution */
 		tcam_key->key_mask.bifur_flag = HINIC3_UINT2_MAX;
 		tcam_key->key_info.bifur_flag = BIFUR_EN;
@@ -134,7 +134,7 @@ static void hinic3_fdir_tcam_ipv6_init(struct hinic3_fdir_filter *rule,
 	pci_dev = RTE_ETH_DEV_TO_PCI(dev);
 
 	/* ipv6 bifur_flag*/
-    if (pci_dev->id.device_id == HINIC3_DEV_ID_DPU || hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev)) {
+    if (pci_dev->id.device_id == HINIC3_DEV_ID_SP920 || hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev)) {
 		/* VF RSS flow table traffic distribution */
 		tcam_key->key_mask_ipv6.bifur_flag = HINIC3_UINT2_MAX;
 		tcam_key->key_info_ipv6.bifur_flag = BIFUR_EN;
