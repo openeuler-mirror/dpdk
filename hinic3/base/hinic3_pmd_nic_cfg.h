@@ -873,10 +873,18 @@ struct hinic3_rss_indir_table {
 	u8 indir[HINIC3_RSS_INDIR_SIZE];
 };
 
+#define HINIC3_QGRP_START_INDEX 2048
+
 struct nic_rss_indirect_tbl {
+	union {
+		struct {
+			u32 op_code : 8; /* 1: new fdir_rss */
+			u32 qgrp_id : 8; /* The value of qgrp_id must be 2048 less */
+			u32 rsvd1 : 16;
+		} bs;
+		u32 value;
+	} dw0;
 	u32 rsvd[3]; /* Make sure that 16B beyond entry[] */
-	u16 rsvd1;
-	u16 q_grp_id;
 	u16 entry[HINIC3_RSS_INDIR_SIZE];
 };
 
