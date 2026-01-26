@@ -294,11 +294,11 @@ hinic3_bifur_query_func_type(struct rte_pci_addr *target_pci_addr, enum bifur_fu
 #define IORESOURCE_MEM 0x00000200
 #define PCI_SYS_PATH   "/sys/bus/pci/devices/"
 
-static char *
+static int
 hinic3_bifur_pci_addr_to_path(const struct rte_pci_addr *addr, char *str)
 {
-	snprintf(str, MAX_PATH_LEN, "%s%04x:%02x:%02x.%x", PCI_SYS_PATH, addr->domain, addr->bus, addr->devid, addr->function);
-	return str;
+	return snprintf(str, MAX_PATH_LEN, "%s%04x:%02x:%02x.%x", PCI_SYS_PATH, addr->domain, addr->bus, addr->devid,
+					addr->function);
 }
 
 static bool
@@ -713,12 +713,15 @@ static int
 hinic3_bifur_probe_pair_func(struct rte_pci_driver *pci_drv, struct rte_pci_device *origin_pci_dev,
 			     struct rte_pci_device **work_pci_dev, struct rte_pci_addr *pair_pci_addr)
 {
-	int ret = -1;
+	int ret;
 	char path[MAX_PATH_LEN] = {0};
-	hinic3_bifur_pci_addr_to_path(pair_pci_addr, path);
+	ret = hinic3_bifur_pci_addr_to_path(pair_pci_addr, path);
+	if (ret < 0) {
+		return -1;
+	}
 	*work_pci_dev = hinic3_bifur_alloc_pci_dev(path, pair_pci_addr, origin_pci_dev);
 	if (*work_pci_dev == NULL) {
-		return ret;
+		return -1;
 	}
 	ret = hinic3_bifur_work_pci_pre_probe(pci_drv, *work_pci_dev);
 	if (ret != 0) {
