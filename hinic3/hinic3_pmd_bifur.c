@@ -767,17 +767,19 @@ hinic3_bifur_mapped_dev_op(struct rte_pci_device *mapped_pci_dev, enum MAPPED_DE
 	return 0;
 }
 
+#define HINIC3_BIFUR_MAX_PATH_LEN 128
+
 static int
 hinic3_bifur_lock_pair(struct hinic3_bifur_dev_pair *dev_pair)
 {
 	int ret = 0;
 	u32 dbdf;
 	char real_path[PATH_MAX] = {0};
-	char file_path[128] = {0};
+	char file_path[HINIC3_BIFUR_MAX_PATH_LEN] = {0};
 	struct rte_pci_addr *addr = &dev_pair->work_pci_dev->addr;
 
 	dbdf = PCI_DBDF(addr->domain, addr->bus, addr->devid, addr->function);
-	ret = snprintf(file_path, 128, "%s/0x%x/%s", BIFUR_PROC_PATH, dbdf, BIFUR_DEV_NAME);
+	ret = snprintf(file_path, HINIC3_BIFUR_MAX_PATH_LEN, "%s/0x%x/%s", BIFUR_PROC_PATH, dbdf, BIFUR_DEV_NAME);
 	if (ret < 0) {
 		PMD_DRV_LOG(ERR, "Build dbdf(0x%x) path(%s) failed, err(%s).", dbdf, file_path, strerror(errno));
 		return -1;
