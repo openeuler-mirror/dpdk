@@ -385,7 +385,7 @@ cmd_tx_execute(major_cmd_t *self)
 	struct cmd_show_q_st *show_q = self->cmd_st;
 	int ret;
 	struct nic_sq_info sq_info = {0};
-	struct nic_tx_wqe_desc nwqe;
+	struct nic_tx_wqe_desc nwqe = {0};
 
 	if (tx_param_check(self, show_q) != UDA_SUCCESS) {
 		return;
@@ -410,7 +410,6 @@ cmd_tx_execute(major_cmd_t *self)
 			return;
 		}
 
-		(void)memset(&nwqe, 0, sizeof(nwqe));
 		ret = lib_tx_wqe_info_get(show_q->target, &sq_info, show_q->q_id, show_q->wqe_id, (void *)&nwqe, sizeof(nwqe));
 		if (ret != UDA_SUCCESS) {
 			self->err_no = ret;
@@ -430,8 +429,8 @@ cmd_rx_execute(major_cmd_t *self)
 {
 	int ret;
 	struct nic_rq_info rq_info = {0};
-	struct tag_l2nic_rx_cqe cqe;
-	nic_rq_wqe wqe;
+	struct tag_l2nic_rx_cqe cqe = {0};
+	nic_rq_wqe wqe = {0};
 	struct cmd_show_q_st *show_q = self->cmd_st;
 
 	if (rx_param_check(self, show_q) != UDA_SUCCESS) {
@@ -457,7 +456,6 @@ cmd_rx_execute(major_cmd_t *self)
 	}
 
 	if (show_q->qobj == OBJ_WQE_INFO) {
-		(void)memset(&wqe, 0, sizeof(wqe));
 		ret = lib_rx_wqe_info_get(show_q->target, &rq_info, show_q->q_id, show_q->wqe_id, (void *)&wqe, sizeof(wqe));
 		if (ret != UDA_SUCCESS) {
 			self->err_no = ret;
@@ -470,7 +468,6 @@ cmd_rx_execute(major_cmd_t *self)
 	}
 
 	/* OBJ_CQE_INFO */
-	(void)memset(&cqe, 0, sizeof(cqe));
 	ret = lib_rx_cqe_info_get(show_q->target, &rq_info, show_q->q_id, show_q->wqe_id, (void *)&cqe, sizeof(cqe));
 	if (ret != UDA_SUCCESS) {
 		self->err_no = ret;
