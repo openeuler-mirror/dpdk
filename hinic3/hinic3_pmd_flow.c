@@ -1048,7 +1048,7 @@ hinic3_check_rss_queues(struct rte_eth_dev		 *dev,
 	}
 
 	for (i = 0; i < act_r->queue_num; i++) {
-		if ((pci_dev->id.device_id == HINIC3_DEV_ID_DPU && act_r->queue[i] >= HINIC3_QUEUE_MAX) ||
+		if ((pci_dev->id.device_id == HINIC3_DEV_ID_SP920 && act_r->queue[i] >= HINIC3_QUEUE_MAX) ||
 			(hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev) && act_r->queue[i] >= HINIC3_QUEUE_ALLOW_NUM) ||
 			(act_r->queue[i] >= dev->data->nb_rx_queues)) {
 			rte_flow_error_set(error, EINVAL,
@@ -1059,7 +1059,7 @@ hinic3_check_rss_queues(struct rte_eth_dev		 *dev,
 	}
 
 	if ((hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev) && act_r->queue_num > HINIC3_QUEUE_ALLOW_NUM) ||
-			(pci_dev->id.device_id == HINIC3_DEV_ID_DPU && act_r->queue_num > HINIC3_QUEUE_MAX)) {
+			(pci_dev->id.device_id == HINIC3_DEV_ID_SP920 && act_r->queue_num > HINIC3_QUEUE_MAX)) {
 			rte_flow_error_set(error, EINVAL,
 					   HINIC3_FLOW_ERROR_TYPE_ACTION,
 					   act, "Invalid action queue number.");

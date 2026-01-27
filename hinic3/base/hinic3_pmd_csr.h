@@ -5,19 +5,20 @@
 #ifndef _HINIC3_PMD_CSR_H_
 #define _HINIC3_PMD_CSR_H_
 
-#define PCI_VENDOR_ID_HUAWEI        0x19e5
-#define PCI_VENDOR_ID_BD            0x00ff
-#define HINIC3_DEV_ID_STANDARD      0x0222
-#define HINIC3_DEV_ID_VF            0x375f
-#define HINIC3_DEV_ID_DPU           0x0224
+#define PCI_VENDOR_ID_HUAWEI     0x19e5
+#define HINIC3_DEV_ID_SP620      0x0222
+#define HINIC3_DEV_ID_VF_SP620   0x375f
+#define HINIC3_DEV_ID_SP920      0x0224
 
-#define PCI_VENDOR_ID_SPNIC         0x1f3f
-#define SPNIC_DEV_ID_STANDARD       0x9020
-#define SPNIC_DEV_ID_VF	            0x9001
+#define PCI_VENDOR_ID_BP1        0x00ff
 
-#define PCI_VENDOR_ID_CTCHNIC       0x1b18
-#define CTCHNIC_DEV_ID_PF           0x1120
-#define CTCHNIC_DEV_ID_VF           0x1121
+#define PCI_VENDOR_ID_BP2        0x1b18
+#define HINIC3_DEV_ID_BP2_620    0x1120
+#define HINIC3_DEV_ID_VF_BP2_620 0x1121
+
+#define PCI_VENDOR_ID_BP3        0x1f3f
+#define HINIC3_DEV_ID_BP3_620    0x9020
+#define HINIC3_DEV_ID_VF_BP3_620 0x9001
 
 /*
  * Bit30/bit31 for bar index flag
