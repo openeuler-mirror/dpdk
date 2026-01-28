@@ -1468,3 +1468,26 @@ void hinic3_flush_txqs(struct hinic3_nic_dev *nic_dev)
 			PMD_DRV_LOG(ERR, "Stop sq%d failed", qid);
 	}
 }
+
+int
+hinic3_tx_burst_mode_get(struct rte_eth_dev *dev,
+						 uint16_t tx_queue_id,
+						 struct rte_eth_burst_mode *mode)
+{
+	uint16_t tx_offloads = dev->data->dev_conf.txmode.offloads;
+
+	snprintf(mode->info, sizeof(mode->info),
+		"Scalar%s%s%s%s%s%s%s%s%s%s%s%s",
+		(tx_offloads & DEV_TX_OFFLOAD_MULTI_SEGS) ? " + MULTI" : " + MULTI",
+		(tx_offloads & DEV_TX_OFFLOAD_TCP_TSO) ? " + TSO" : " + TSO",
+		(tx_offloads & DEV_TX_OFFLOAD_IPV4_CKSUM) ? " + IPV4_CKSUM" : " + IPV4_CKSUM",
+		(tx_offloads & DEV_TX_OFFLOAD_VLAN_INSERT) ? " + VLAN_INSERT" : " + VLAN_INSERT",
+		(tx_offloads & DEV_TX_OFFLOAD_UDP_CKSUM) ? " + UDP_CKSUM" : " + UDP_CKSUM",
+		(tx_offloads & DEV_TX_OFFLOAD_TCP_CKSUM) ? " + TCP_CKSUM" : " + TCP_CKSUM",
+		(tx_offloads & DEV_TX_OFFLOAD_SCTP_CKSUM) ? " + SCTP_CKSUM" : " + SCTP_CKSUM",
+		(tx_offloads & DEV_TX_OFFLOAD_OUTER_IPV4_CKSUM) ? " + OUTER_IPV4_CKSUM" : " + OUTER_IPV4_CKSUM",
+		(tx_offloads & DEV_TX_OFFLOAD_VXLAN_TNL_TSO) ? " + VXLAN_TNL_TSO" : " + VXLAN_TNL_TSO",
+		(tx_offloads & DEV_TX_OFFLOAD_QINQ_INSERT) ? " + QINQ_INSERT" : " + QINQ_INSERT");
+
+	return 0;
+}

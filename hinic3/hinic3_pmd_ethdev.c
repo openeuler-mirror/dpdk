@@ -1722,7 +1722,7 @@ static int hinic3_dev_start(struct rte_eth_dev *eth_dev)
 
 	/* Add scatter support if scatter mode should be enabled */
 	if (eth_dev->data->dev_conf.rxmode.offloads & DEV_RX_OFFLOAD_SCATTER ||
-		nic_dev->mtu_size + HINIC3_ETH_OVERHEAD > nic_dev->rx_buff_len) {
+		(nic_dev->mtu_size + HINIC3_ETH_OVERHEAD) > nic_dev->rx_buff_len) {
 			eth_dev->data->scattered_rx = true;
 		}
 
@@ -1903,7 +1903,7 @@ static void hinic3_dev_stop(struct rte_eth_dev *dev)
 	for (i = 0; i < dev->data->nb_tx_queues; i++)
 		dev->data->tx_queue_state[i] = RTE_ETH_QUEUE_STATE_STOPPED;
 
-	/* Add scatter initialization */
+	/* Clear scatter rx flag */
 	dev->data->scattered_rx = false;
 
 #ifdef DPDK_20_11
@@ -2039,7 +2039,7 @@ static int hinic3_dev_set_mtu(struct rte_eth_dev *dev, uint16_t mtu)
 
 	if (dev->data->dev_started && !dev->data->scattered_rx &&
 		frame_size > nic_dev->rx_buff_len) {
-			PMD_DRV_LOG(ERR, "filled to set mtu because current is"
+			PMD_DRV_LOG(ERR, "failed to set mtu because current is"
 					"not scattered rx mode, frame_size: %u, rx_buff_len: %u",
 					frame_size, nic_dev->rx_buff_len);
 			return -EOPNOTSUPP;
@@ -3347,6 +3347,7 @@ static const struct eth_dev_ops hinic3_pmd_ops = {
 #endif
 	.rx_hairpin_queue_setup		   = hinic3_rx_hairpin_queue_setup,
 	.tx_hairpin_queue_setup		   = hinic3_tx_hairpin_queue_setup,
+	.tx_burst_mode_get             = hinic3_tx_burst_mode_get,
 };
 
 static const struct eth_dev_ops hinic3_pmd_vf_ops = {
@@ -3406,6 +3407,7 @@ static const struct eth_dev_ops hinic3_pmd_vf_ops = {
 #endif
 	.rx_hairpin_queue_setup		   = hinic3_rx_hairpin_queue_setup,
 	.tx_hairpin_queue_setup		   = hinic3_tx_hairpin_queue_setup,
+	.tx_burst_mode_get             = hinic3_tx_burst_mode_get,
 };
 
 /**
