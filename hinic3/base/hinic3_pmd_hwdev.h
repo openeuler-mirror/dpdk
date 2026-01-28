@@ -130,6 +130,7 @@ struct hinic3_hwdev {
 
 	u16 max_vfs;
 	u16 link_status;
+	u8 vf_valid_status; /* vport_enable: 1, vport_disable: 0 */
 };
 
 bool hinic3_is_vfio_iommu_enable(const struct rte_eth_dev *rte_dev);

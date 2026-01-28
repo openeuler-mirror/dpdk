@@ -109,6 +109,12 @@ static void link_status_event_handler(void *hwdev, void *buf_in,
 
 	/* Link event reported only after set vport enable */
 	get_port_info(dev, link_status->state, &link);
+
+	if(HINIC3_IS_VF(dev)) {
+		dev->link_status = link.link_status;
+		link.link_status = dev->link_status & dev->vf_valid_status;
+	}
+
 	err = rte_eth_linkstatus_set((struct rte_eth_dev *)(dev->eth_dev),
 				     &link);
 	if (!err)
