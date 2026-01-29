@@ -1720,6 +1720,12 @@ static int hinic3_dev_start(struct rte_eth_dev *eth_dev)
 		goto set_rxtx_config_fail;
 	}
 
+	/* Add scatter support if scatter mode should be enabled */
+	if (eth_dev->data->dev_conf.rxmode.offloads & DEV_RX_OFFLOAD_SCATTER ||
+		(nic_dev->mtu_size + HINIC3_ETH_OVERHEAD) > nic_dev->rx_buff_len) {
+			eth_dev->data->scattered_rx = true;
+		}
+
 	/* enable dev interrupt */
 	hinic3_enable_interrupt(eth_dev);
 	err = hinic3_start_all_rqs(eth_dev);
@@ -1897,6 +1903,9 @@ static void hinic3_dev_stop(struct rte_eth_dev *dev)
 	for (i = 0; i < dev->data->nb_tx_queues; i++)
 		dev->data->tx_queue_state[i] = RTE_ETH_QUEUE_STATE_STOPPED;
 
+	/* Clear scatter rx flag */
+	dev->data->scattered_rx = false;
+
 #ifdef DPDK_20_11
 	return 0;
 #endif
@@ -2016,6 +2025,7 @@ static int hinic3_dev_reset(__rte_unused struct rte_eth_dev *dev)
 static int hinic3_dev_set_mtu(struct rte_eth_dev *dev, uint16_t mtu)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+	uint32_t frame_size = mtu + HINIC3_ETH_OVERHEAD;
 	int err = 0;
 
 	PMD_DRV_LOG(INFO, "Set port mtu, port_id: %d, mtu: %d, max_pkt_len: %d",
@@ -2026,6 +2036,14 @@ static int hinic3_dev_set_mtu(struct rte_eth_dev *dev, uint16_t mtu)
 			    mtu, HINIC3_MIN_MTU_SIZE, HINIC3_MAX_MTU_SIZE);
 		return -EINVAL;
 	}
+
+	if (dev->data->dev_started && !dev->data->scattered_rx &&
+		frame_size > nic_dev->rx_buff_len) {
+			PMD_DRV_LOG(ERR, "failed to set mtu because current is"
+					"not scattered rx mode, frame_size: %u, rx_buff_len: %u",
+					frame_size, nic_dev->rx_buff_len);
+			return -EOPNOTSUPP;
+		}
 
 	err = hinic3_set_port_mtu(nic_dev->hwdev, mtu);
 	if (err) {
@@ -3000,6 +3018,7 @@ static void hinic3_rxq_info_get(struct rte_eth_dev *dev, uint16_t queue_id,
 
 	rxq_info->mp = rxq->mb_pool;
 	rxq_info->nb_desc = rxq->q_depth;
+	rxq_info->scattered_rx = dev->data->scattered_rx;
 }
 
 static void hinic3_txq_info_get(struct rte_eth_dev *dev, uint16_t queue_id,
@@ -3328,6 +3347,7 @@ static const struct eth_dev_ops hinic3_pmd_ops = {
 #endif
 	.rx_hairpin_queue_setup		   = hinic3_rx_hairpin_queue_setup,
 	.tx_hairpin_queue_setup		   = hinic3_tx_hairpin_queue_setup,
+	.tx_burst_mode_get             = hinic3_tx_burst_mode_get,
 };
 
 static const struct eth_dev_ops hinic3_pmd_vf_ops = {
@@ -3387,6 +3407,7 @@ static const struct eth_dev_ops hinic3_pmd_vf_ops = {
 #endif
 	.rx_hairpin_queue_setup		   = hinic3_rx_hairpin_queue_setup,
 	.tx_hairpin_queue_setup		   = hinic3_tx_hairpin_queue_setup,
+	.tx_burst_mode_get             = hinic3_tx_burst_mode_get,
 };
 
 /**
