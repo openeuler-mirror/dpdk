@@ -549,35 +549,35 @@ hinic3_bifur_alloc_pci_dev(const char *dirname,
 
 	snprintf(filename, sizeof(filename), "%s/vendor", dirname);
 	if (hinic3_bifur_parse_sysfs_value(filename, &tmp) < 0) {
-		free(dev);
+		rte_free(dev);
 		return NULL;
 	}
 	dev->id.vendor_id = (uint16_t)tmp;
 
 	snprintf(filename, sizeof(filename), "%s/device", dirname);
 	if (hinic3_bifur_parse_sysfs_value(filename, &tmp) < 0) {
-		free(dev);
+		rte_free(dev);
 		return NULL;
 	}
 	dev->id.device_id = (uint16_t)tmp;
 
 	snprintf(filename, sizeof(filename), "%s/subsystem_vendor", dirname);
 	if (hinic3_bifur_parse_sysfs_value(filename, &tmp) < 0) {
-		free(dev);
+		rte_free(dev);
 		return NULL;
 	}
 	dev->id.subsystem_vendor_id = (uint16_t)tmp;
 
 	snprintf(filename, sizeof(filename), "%s/subsystem_device", dirname);
 	if (hinic3_bifur_parse_sysfs_value(filename, &tmp) < 0) {
-		free(dev);
+		rte_free(dev);
 		return NULL;
 	}
 	dev->id.subsystem_device_id = (uint16_t)tmp;
 
 	snprintf(filename, sizeof(filename), "%s/class", dirname);
 	if (hinic3_bifur_parse_sysfs_value(filename, &tmp) < 0) {
-		free(dev);
+		rte_free(dev);
 		return NULL;
 	}
 
@@ -612,7 +612,7 @@ hinic3_bifur_alloc_pci_dev(const char *dirname,
 	snprintf(filename, sizeof(filename), "%s/resource", dirname);
 	if (hinic3_bifur_parse_sysfs_resource(filename, dev) < 0) {
 		PMD_DRV_LOG(ERR, "Cannot parse resource");
-		free(dev);
+		rte_free(dev);
 		return NULL;
 	}
 
@@ -620,7 +620,7 @@ hinic3_bifur_alloc_pci_dev(const char *dirname,
 	ret = hinic3_bifur_get_kernel_driver_by_path(filename, driver, sizeof(driver));
 	if (ret < 0) {
 		PMD_DRV_LOG(ERR, "Fail to get kernel driver");
-		free(dev);
+		rte_free(dev);
 		return NULL;
 	}
 
@@ -635,7 +635,7 @@ hinic3_bifur_alloc_pci_dev(const char *dirname,
 			dev->kdrv = RTE_PCI_KDRV_UNKNOWN;
 		}
 	} else {
-		free(dev);
+		rte_free(dev);
 		return NULL;
 	}
 	return dev;
