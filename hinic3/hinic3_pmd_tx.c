@@ -627,7 +627,7 @@ static inline uint8_t hinic3_check_ip_version(uint8_t version)
 	}
 }
 
-static hinic3_ip_cs_handler_t* hinic3_get_outer_l3_hdr(struct rte_mbuf *mbuf, uint16_t *offset, uint8_t *ip_hdr)
+static hinic3_ip_cs_handler_t* hinic3_get_outer_l3_hdr(struct rte_mbuf *mbuf, uint16_t *offset, uint8_t **ip_hdr)
 {
 	struct rte_ether_hdr *eth_hdr = NULL;
 	struct rte_vlan_hdr *vlan_hdr = NULL;
@@ -644,8 +644,8 @@ static hinic3_ip_cs_handler_t* hinic3_get_outer_l3_hdr(struct rte_mbuf *mbuf, ui
 		*offset += sizeof(struct rte_vlan_hdr);
 	}
 
-	ip_hdr = (uint8_t *)(pkt_data + *offset);
-	version = (*ip_hdr >> 4) & 0x0F;
+	*ip_hdr = (uint8_t *)(pkt_data + *offset);
+	version = (**ip_hdr >> 4) & 0x0F;
 	ver_index = hinic3_check_ip_version(version);
 	if (ver_index == IP_INDEX_INVALID) {
 		PMD_DRV_LOG(ERR, "not support outer l3 version(%u) by IPinIP checksum", version);
@@ -657,7 +657,7 @@ static hinic3_ip_cs_handler_t* hinic3_get_outer_l3_hdr(struct rte_mbuf *mbuf, ui
 
 static int hinic3_vxlan_tso_ip_phdr_cksum(struct rte_mbuf *mbuf)
 {
-    uint8_t outer_ip_hdr;
+    uint8_t *outer_ip_hdr = NULL;
 	uint8_t *ip_hdr = NULL;
 	uint8_t version, ver_index, l4_proto;
 	uint16_t offset = 0;
@@ -668,14 +668,14 @@ static int hinic3_vxlan_tso_ip_phdr_cksum(struct rte_mbuf *mbuf)
 	ip_handler = hinic3_get_outer_l3_hdr(mbuf, &offset, &outer_ip_hdr);
 	if (ip_handler == NULL) {
 		PMD_DRV_LOG(INFO, "not support outer l3 proto by vxlan checksum, check packet");
-		return 0;
+		return -EINVAL;
 	}
 	/* if outer UDP checksum is 0 and OUT_UDP is not set, not calculate */
-	if (hinic3_vxlan_out_udp_cksum_needed(ip_handler, &outer_ip_hdr, mbuf)) {
-		l4_proto = hinic3_ip_phdr_cksum(ip_handler, &outer_ip_hdr, mbuf);
+	if (hinic3_vxlan_out_udp_cksum_needed(ip_handler, outer_ip_hdr, mbuf)) {
+		l4_proto = hinic3_ip_phdr_cksum(ip_handler, outer_ip_hdr, mbuf);
 		if (unlikely(l4_proto != IPPROTO_UDP)) {
 			PMD_DRV_LOG(INFO, "not support outer l4 proto(%u) by vxlan checksum", l4_proto);
-			return 0;
+			return -EINVAL;
 		}
 	}
 
@@ -686,7 +686,7 @@ static int hinic3_vxlan_tso_ip_phdr_cksum(struct rte_mbuf *mbuf)
 	ver_index = hinic3_check_ip_version(version);
 	if (ver_index == IP_INDEX_INVALID) {
 		PMD_DRV_LOG(INFO, "not support inner l3 version(%u) by vxlan checksum", version);
-		return 0;
+		return -EINVAL;
 	}
 
 	/* calculate outer TCP phdr checksum */
@@ -694,6 +694,7 @@ static int hinic3_vxlan_tso_ip_phdr_cksum(struct rte_mbuf *mbuf)
 	l4_proto = hinic3_ip_phdr_cksum(ip_handler, ip_hdr, mbuf);
 	if (unlikely(l4_proto != IPPROTO_TCP)) {
 		PMD_DRV_LOG(INFO, "not support inner l4 proto(%u) by vxlan checksum", l4_proto);
+		return -EINVAL;
 	}
 
 	return 0;
@@ -836,7 +837,7 @@ static int hinic3_ipinip_cksum(struct rte_mbuf *mbuf)
 	struct rte_ipv4_hdr *ipv4_hdr = NULL;
 	uint8_t *pkt_data = rte_pktmbuf_mtod(mbuf, uint8_t *);
 
-	ip_handler = hinic3_get_outer_l3_hdr(mbuf, &offset, ip_hdr);
+	ip_handler = hinic3_get_outer_l3_hdr(mbuf, &offset, &ip_hdr);
 	if (ip_handler == NULL) {
 		PMD_DRV_LOG(ERR, "not support outer l3 proto by IPinIP checksum, check packet");
 		return -EINVAL;
