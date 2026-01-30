@@ -1474,10 +1474,11 @@ hinic3_tx_burst_mode_get(struct rte_eth_dev *dev,
 						 uint16_t tx_queue_id,
 						 struct rte_eth_burst_mode *mode)
 {
+	(void)tx_queue_id;
 	uint16_t tx_offloads = dev->data->dev_conf.txmode.offloads;
 
 	snprintf(mode->info, sizeof(mode->info),
-		"Scalar%s%s%s%s%s%s%s%s%s%s%s%s",
+		"Scalar%s%s%s%s%s%s%s%s%s%s",
 		(tx_offloads & DEV_TX_OFFLOAD_MULTI_SEGS) ? " + MULTI" : " + MULTI",
 		(tx_offloads & DEV_TX_OFFLOAD_TCP_TSO) ? " + TSO" : " + TSO",
 		(tx_offloads & DEV_TX_OFFLOAD_IPV4_CKSUM) ? " + IPV4_CKSUM" : " + IPV4_CKSUM",
