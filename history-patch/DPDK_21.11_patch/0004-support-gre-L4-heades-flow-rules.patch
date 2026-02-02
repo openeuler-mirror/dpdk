@@ -1,0 +1,63 @@
+From a62def90ceb324656b81b1c3e008684c75517328 Mon Sep 17 00:00:00 2001
+From: liya51 <luckly0822@qq.com>
+Date: Sat, 21 Jun 2025 16:48:08 +0800
+Subject: [PATCH 4/6] support gre L4 heades flow rules
+
+---
+ drivers/net/hinic3/hinic3_pmd_flow.c | 19 ++++++++++++++-----
+ 1 file changed, 14 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/net/hinic3/hinic3_pmd_flow.c b/drivers/net/hinic3/hinic3_pmd_flow.c
+index b0d25d6..8e311cf 100644
+--- a/drivers/net/hinic3/hinic3_pmd_flow.c
++++ b/drivers/net/hinic3/hinic3_pmd_flow.c
+@@ -562,6 +562,13 @@ static int hinic3_flow_fdir_ipv4(const struct rte_flow_item *flow_item,
+ 
+ 	mask_ipv4 = (const struct rte_flow_item_ipv4 *)flow_item->mask;
+ 	spec_ipv4 = (const struct rte_flow_item_ipv4 *)flow_item->spec;
++
++	filter->fdir_filter.ip_type = HINIC3_FDIR_IP_TYPE_IPV4;
++	filter->fdir_filter.tunnel_type = HINIC3_FDIR_TUNNEL_MODE_NORMAL;
++
++	if (!mask_ipv4 && !spec_ipv4) {
++		return 0;
++	}
+ 	if (!mask_ipv4 || !spec_ipv4) {
+ 		rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ITEM, flow_item,
+ 			"Invalid fdir filter ipv4 mask or spec");
+@@ -581,8 +588,6 @@ static int hinic3_flow_fdir_ipv4(const struct rte_flow_item *flow_item,
+ 		return -rte_errno;
+ 	}
+ 
+-	filter->fdir_filter.ip_type = HINIC3_FDIR_IP_TYPE_IPV4;
+-	filter->fdir_filter.tunnel_type = HINIC3_FDIR_TUNNEL_MODE_NORMAL;
+ 	filter->fdir_filter.key_mask.ipv4.src_ip = rte_be_to_cpu_32(mask_ipv4->hdr.src_addr);
+ 	filter->fdir_filter.key_spec.ipv4.src_ip = rte_be_to_cpu_32(spec_ipv4->hdr.src_addr);
+ 	filter->fdir_filter.key_mask.ipv4.dst_ip = rte_be_to_cpu_32(mask_ipv4->hdr.dst_addr);
+@@ -600,6 +605,13 @@ static int hinic3_flow_fdir_ipv6(const struct rte_flow_item *flow_item,
+ 
+ 	mask_ipv6 = (const struct rte_flow_item_ipv6 *)flow_item->mask;
+ 	spec_ipv6 = (const struct rte_flow_item_ipv6 *)flow_item->spec;
++	filter->fdir_filter.ip_type = HINIC3_FDIR_IP_TYPE_IPV6;
++	filter->fdir_filter.tunnel_type = HINIC3_FDIR_TUNNEL_MODE_NORMAL;
++
++	if (!mask_ipv6 && !spec_ipv6) {
++		return 0;
++	}
++	
+ 	if (!mask_ipv6 || !spec_ipv6) {
+ 		rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ITEM, flow_item,
+ 			"Invalid fdir filter ipv6 mask or spec");
+@@ -613,9 +625,6 @@ static int hinic3_flow_fdir_ipv6(const struct rte_flow_item *flow_item,
+ 		return -rte_errno;
+ 	}
+ 
+-	filter->fdir_filter.ip_type = HINIC3_FDIR_IP_TYPE_IPV6;
+-	filter->fdir_filter.tunnel_type = HINIC3_FDIR_TUNNEL_MODE_NORMAL;
+-
+ 	net_addr_to_host(filter->fdir_filter.key_mask.ipv6.src_ip, (const uint32_t *)mask_ipv6->hdr.src_addr, 4);
+ 	net_addr_to_host(filter->fdir_filter.key_spec.ipv6.src_ip, (const uint32_t *)spec_ipv6->hdr.src_addr, 4);
+ 	net_addr_to_host(filter->fdir_filter.key_mask.ipv6.dst_ip, (const uint32_t *)mask_ipv6->hdr.dst_addr, 4);
+-- 
+2.45.1.windows.1
+

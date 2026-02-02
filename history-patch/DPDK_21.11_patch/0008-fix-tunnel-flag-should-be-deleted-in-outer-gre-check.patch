@@ -1,0 +1,51 @@
+From a584c2f875ca42f97f9b8db94f8ac915c5e15bf5 Mon Sep 17 00:00:00 2001
+From: liya51 <luckly0822@qq.com>
+Date: Thu, 14 Aug 2025 21:55:16 +0800
+Subject: [PATCH 8/8] fix tunnel flag should be deleted in outer gre checksum
+
+---
+ drivers/net/hinic3/hinic3_pmd_ethdev.h | 2 ++
+ drivers/net/hinic3/hinic3_pmd_tx.c     | 7 ++++++-
+ 2 files changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/net/hinic3/hinic3_pmd_ethdev.h b/drivers/net/hinic3/hinic3_pmd_ethdev.h
+index 9f22e51..5a85fe7 100644
+--- a/drivers/net/hinic3/hinic3_pmd_ethdev.h
++++ b/drivers/net/hinic3/hinic3_pmd_ethdev.h
+@@ -38,6 +38,7 @@
+ #define HINIC3_PKT_RX_RSS_HASH           RTE_MBUF_F_RX_RSS_HASH
+ #define HINIC3_PKT_TX_TUNNEL_MASK        RTE_MBUF_F_TX_TUNNEL_MASK
+ #define HINIC3_PKT_TX_TUNNEL_VXLAN       RTE_MBUF_F_TX_TUNNEL_VXLAN
++#define HINIC3_PKT_TX_TUNNEL_GRE         RTE_MBUF_F_TX_TUNNEL_GRE
+ #define HINIC3_PKT_TX_OUTER_IP_CKSUM     RTE_MBUF_F_TX_OUTER_IP_CKSUM
+ #define HINIC3_PKT_TX_OUTER_IPV6         RTE_MBUF_F_TX_OUTER_IPV6
+ #define HINIC3_PKT_RX_LRO                RTE_MBUF_F_RX_LRO
+@@ -64,6 +65,7 @@
+ #define HINIC3_PKT_RX_RSS_HASH           PKT_RX_RSS_HASH
+ #define HINIC3_PKT_TX_TUNNEL_MASK        PKT_TX_TUNNEL_MASK
+ #define HINIC3_PKT_TX_TUNNEL_VXLAN       PKT_TX_TUNNEL_VXLAN
++#define HINIC3_PKT_TX_TUNNEL_GRE      	 PKT_TX_TUNNEL_GRE
+ #define HINIC3_PKT_TX_OUTER_IP_CKSUM     PKT_TX_OUTER_IP_CKSUM
+ #define HINIC3_PKT_TX_OUTER_IPV6         PKT_TX_OUTER_IPV6
+ #define HINIC3_PKT_RX_LRO                PKT_RX_LRO
+diff --git a/drivers/net/hinic3/hinic3_pmd_tx.c b/drivers/net/hinic3/hinic3_pmd_tx.c
+index 6e784de..4b887a1 100644
+--- a/drivers/net/hinic3/hinic3_pmd_tx.c
++++ b/drivers/net/hinic3/hinic3_pmd_tx.c
+@@ -416,7 +416,12 @@ static int hinic3_tx_offload_pkt_prepare(struct rte_mbuf *mbuf,
+ {
+ 	uint64_t ol_flags = mbuf->ol_flags;
+ 
+-	/* Only support vxlan offload */
++	/* Tunnel flag should be deleted in outer gre checksum */
++
++	if (ol_flags & HINIC3_PKT_TX_TUNNEL_GRE) {
++		ol_flags &= ~ HINIC3_PKT_TX_TUNNEL_MASK;
++	}
++
+ 	if ((ol_flags & HINIC3_PKT_TX_TUNNEL_MASK) &&
+ 		(!(ol_flags & HINIC3_PKT_TX_TUNNEL_VXLAN)))
+ 		return -EINVAL;
+-- 
+2.45.1.windows.1
+

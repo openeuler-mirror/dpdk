@@ -1,0 +1,44 @@
+From 24e0ec08e194cd6b8dce43dd896602f0ebdf8100 Mon Sep 17 00:00:00 2001
+From: xiaobai <chenyi19990512@163.com>
+Date: Mon, 19 May 2025 11:59:04 +0800
+Subject: [PATCH 11/12] fix support different queue depth
+
+---
+ drivers/net/hinic3/hinic3_pmd_ethdev.c | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/drivers/net/hinic3/hinic3_pmd_ethdev.c b/drivers/net/hinic3/hinic3_pmd_ethdev.c
+index a58777e..ece8252 100644
+--- a/drivers/net/hinic3/hinic3_pmd_ethdev.c
++++ b/drivers/net/hinic3/hinic3_pmd_ethdev.c
+@@ -640,6 +640,13 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
+ 
+ 	nic_dev = HINIC3_RTE_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+ 
++	/* Queue depth must be equal to queue 0*/
++	if (qid != 0) {
++		PMD_DRV_LOG(WARNING, "rxq%u depth:%u is not equal to queue0 depth:%u.\n",
++			qid, nb_desc, nic_dev->rxqs[0]->q_depth);
++		nb_desc = nic_dev->rxqs[0]->q_depth;
++	}
++
+ 	/* Queue depth must be power of 2, otherwise will be aligned up */
+ 	rq_depth = (nb_desc & (nb_desc - 1)) ?
+ 		((u16)(1U << (ilog2(nb_desc) + 1))) : nb_desc;
+@@ -852,6 +859,13 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
+ 	nic_dev = HINIC3_RTE_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+ 	hwdev = nic_dev->hwdev;
+ 
++	/*Queue depth must be equal to queue 0*/
++	if (qid != 0) {
++		PMD_DRV_LOG(WARNING, "txq%u depth:%u is not equal to queue0 depth:%u.\n",
++			qid, nb_desc, nic_dev->txqs[0]->q_depth);
++		nb_desc = nic_dev->txqs[0]->q_depth;
++	}
++
+ 	/* Queue depth must be power of 2, otherwise will be aligned up */
+ 	sq_depth = (nb_desc & (nb_desc - 1)) ?
+ 		   ((u16)(1U << (ilog2(nb_desc) + 1))) : nb_desc;
+-- 
+2.45.1.windows.1
+

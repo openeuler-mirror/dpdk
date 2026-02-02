@@ -1,0 +1,51 @@
+From 96ab0a7deb07dc7d1f39ff9973979124cc6e630f Mon Sep 17 00:00:00 2001
+From: xiaobai <chenyi19990512@163.com>
+Date: Tue, 6 May 2025 11:22:51 +0800
+Subject: [PATCH 07/11] Support the vf unicast promiscuous function
+
+---
+ drivers/net/hinic3/hinic3_pmd_ethdev.c | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/drivers/net/hinic3/hinic3_pmd_ethdev.c b/drivers/net/hinic3/hinic3_pmd_ethdev.c
+index 0fceeb4..3e8f8bc 100644
+--- a/drivers/net/hinic3/hinic3_pmd_ethdev.c
++++ b/drivers/net/hinic3/hinic3_pmd_ethdev.c
+@@ -2143,6 +2143,12 @@ static int hinic3_dev_promiscuous_enable(struct rte_eth_dev *dev)
+ 	u32 rx_mode;
+ 	int err;
+ 
++	if (!(nic_dev->feature_cap & NIC_F_PROMISC)) {
++		PMD_DRV_LOG(ERR, "nic_dev: %s, port_id: %d, do not support vf promisc: %" PRIu64 "",
++			nic_dev->dev_name, dev->data->port_id, nic_dev->feature_cap);
++		return -ENOTSUP;
++	}
++
+ 	err = hinic3_mutex_lock(&nic_dev->rx_mode_mutex);
+ 	if (err)
+ 		return err;
+@@ -2181,6 +2187,12 @@ static int hinic3_dev_promiscuous_disable(struct rte_eth_dev *dev)
+ 	u32 rx_mode;
+ 	int err;
+ 
++	if (!(nic_dev->feature_cap & NIC_F_PROMISC)) {
++		PMD_DRV_LOG(ERR, "nic_dev: %s, port_id: %d, do not support vf promisc: %" PRIu64 "",
++			nic_dev->dev_name, dev->data->port_id, nic_dev->feature_cap);
++		return -ENOTSUP;
++	}
++
+ 	err = hinic3_mutex_lock(&nic_dev->rx_mode_mutex);
+ 	if (err)
+ 		return err;
+@@ -3184,6 +3196,8 @@ static const struct eth_dev_ops hinic3_pmd_vf_ops = {
+ 	.vlan_offload_set              = hinic3_vlan_offload_set,
+ 	.allmulticast_enable           = hinic3_dev_allmulticast_enable,
+ 	.allmulticast_disable          = hinic3_dev_allmulticast_disable,
++	.promiscuous_enable            = hinic3_dev_promiscuous_enable,
++	.promiscuous_disable           = hinic3_dev_promiscuous_disable,
+ 	.rss_hash_update               = hinic3_rss_hash_update,
+ 	.rss_hash_conf_get             = hinic3_rss_conf_get,
+ 	.reta_update                   = hinic3_rss_reta_update,
+-- 
+2.45.1.windows.1
+

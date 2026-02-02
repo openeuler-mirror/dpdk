@@ -1,0 +1,196 @@
+From cf6908b24b12c74b64318768021e2cc0db3aa503 Mon Sep 17 00:00:00 2001
+From: Yi Chen <chenyi221@huawei.com>
+Date: Fri, 18 Apr 2025 17:06:04 +0800
+Subject: [V1 18/18] drivers/net: add hinic3 PMD build and doc files
+
+The meson.build file is added to this patch to enable
+the hinic3 compilation function.
+
+Signed-off-by: Yi Chen <chenyi221@huawei.com>
+Reviewed-by: Xin Wang <wangxin679@h-partners.com>
+Reviewed-by: Feifei Wang <wangfeifei40@huawei.com>
+---
+ doc/guides/nics/features/hinic3.ini |  9 ++++++
+ drivers/net/hinic3/base/meson.build | 50 +++++++++++++++++++++++++++++
+ drivers/net/hinic3/meson.build      | 33 +++++++++++++++++++
+ drivers/net/hinic3/mml/meson.build  | 33 +++++--------------
+ drivers/net/meson.build             |  1 +
+ 5 files changed, 101 insertions(+), 25 deletions(-)
+ create mode 100644 doc/guides/nics/features/hinic3.ini
+ create mode 100644 drivers/net/hinic3/base/meson.build
+ create mode 100644 drivers/net/hinic3/meson.build
+
+diff --git a/doc/guides/nics/features/hinic3.ini b/doc/guides/nics/features/hinic3.ini
+new file mode 100644
+index 0000000000..8bafd49090
+--- /dev/null
++++ b/doc/guides/nics/features/hinic3.ini
+@@ -0,0 +1,9 @@
++;
++; Supported features of the 'hinic3' network poll mode driver.
++;
++; Refer to default.ini for the full list of available PMD features.
++;
++[Features]
++Linux                = Y
++x86-64               = Y
++ARMv8                = Y
+diff --git a/drivers/net/hinic3/base/meson.build b/drivers/net/hinic3/base/meson.build
+new file mode 100644
+index 0000000000..b6a3a6cfe7
+--- /dev/null
++++ b/drivers/net/hinic3/base/meson.build
+@@ -0,0 +1,50 @@
++# SPDX-License-Identifier: BSD-3-Clause
++# Copyright(c) 2025 Huawei Technologies Co., Ltd
++
++sources = files(
++        'hinic3_cmdq.c',
++        'hinic3_eqs.c',
++        'hinic3_hw_cfg.c',
++        'hinic3_hw_comm.c',
++        'hinic3_hwdev.c',
++        'hinic3_hwif.c',
++        'hinic3_mbox.c',
++        'hinic3_mgmt.c',
++        'hinic3_nic_cfg.c',
++        'hinic3_nic_event.c',
++        'hinic3_wq.c',
++)
++
++extra_flags = []
++
++# The driver runs only on arch64 machine, remove 32bit warnings
++if not dpdk_conf.get('RTE_ARCH_64')
++    extra_flags += [
++            '-Wno-int-to-pointer-cast',
++            '-Wno-pointer-to-int-cast',
++    ]
++endif
++
++foreach flag: extra_flags
++    if cc.has_argument(flag)
++        cflags += flag
++    endif
++endforeach
++
++deps += ['hash']
++c_args = cflags
++includes += include_directories('../')
++
++base_lib = static_library(
++    'spnic_base',
++    sources,
++    dependencies: [
++        static_rte_eal,
++        static_rte_ethdev,
++        static_rte_bus_pci,
++        static_rte_hash,
++    ],
++    include_directories: includes,
++    c_args: c_args,
++)
++base_objs = base_lib.extract_all_objects()
+diff --git a/drivers/net/hinic3/meson.build b/drivers/net/hinic3/meson.build
+new file mode 100644
+index 0000000000..42fb5bc194
+--- /dev/null
++++ b/drivers/net/hinic3/meson.build
+@@ -0,0 +1,33 @@
++# SPDX-License-Identifier: BSD-3-Clause
++# Copyright(c) 2025 Huawei Technologies Co., Ltd
++
++if not is_linux
++    build = false
++    reason = 'only supported on Linux'
++    subdir_done()
++endif
++
++if (arch_subdir != 'x86' and arch_subdir != 'arm'
++        or not dpdk_conf.get('RTE_ARCH_64'))
++    build = false
++    reason = 'only supported on x86_64 and aarch64'
++    subdir_done()
++endif
++
++cflags += ['-DHW_CONVERT_ENDIAN']
++
++subdir('base')
++subdir('mml')
++objs = [base_objs] + [mml_objs]
++
++sources = files(
++        'hinic3_ethdev.c',
++        'hinic3_fdir.c',
++        'hinic3_flow.c',
++        'hinic3_nic_io.c',
++        'hinic3_rx.c',
++        'hinic3_tx.c',
++)
++
++includes += include_directories('base')
++includes += include_directories('mml')
+diff --git a/drivers/net/hinic3/mml/meson.build b/drivers/net/hinic3/mml/meson.build
+index f8d2650d8d..67bba4f067 100644
+--- a/drivers/net/hinic3/mml/meson.build
++++ b/drivers/net/hinic3/mml/meson.build
+@@ -2,36 +2,19 @@
+ # Copyright(c) 2025 Huawei Technologies Co., Ltd
+ 
+ sources = files(
+-    'hinic3_dbg.c',
+-    'hinic3_mml_cmd.c',
+-    'hinic3_mml_ioctl.c',
+-    'hinic3_mml_lib.c',
+-    'hinic3_mml_main.c',
+-    'hinic3_mml_queue.c',
++        'hinic3_dbg.c',
++        'hinic3_mml_cmd.c',
++        'hinic3_mml_ioctl.c',
++        'hinic3_mml_lib.c',
++        'hinic3_mml_main.c',
++        'hinic3_mml_queue.c',
+ )
+ 
+-extra_flags = [
+-    '-Wno-cast-qual',
+-    '-Wno-format',
+-    '-Wno-format-nonliteral',
+-    '-Wno-format-security',
+-    '-Wno-missing-braces',
+-    '-Wno-missing-field-initializers',
+-    '-Wno-missing-prototypes',
+-    '-Wno-pointer-sign',
+-    '-Wno-pointer-to-int-cast',
+-    '-Wno-sign-compare',
+-    '-Wno-strict-aliasing',
+-    '-Wno-unused-parameter',
+-    '-Wno-unused-value',
+-    '-Wno-unused-variable',
+-]
+-
+ # The driver runs only on arch64 machine, remove 32bit warnings
+ if not dpdk_conf.get('RTE_ARCH_64')
+     extra_flags += [
+-        '-Wno-int-to-pointer-cast',
+-        '-Wno-pointer-to-int-cast',
++            '-Wno-int-to-pointer-cast',
++            '-Wno-pointer-to-int-cast',
+     ]
+ endif
+ 
+diff --git a/drivers/net/meson.build b/drivers/net/meson.build
+index 460eb69e5b..b5442349d4 100644
+--- a/drivers/net/meson.build
++++ b/drivers/net/meson.build
+@@ -23,6 +23,7 @@ drivers = [
+         'failsafe',
+         'gve',
+         'hinic',
++        'hinic3',
+         'hns3',
+         'intel/e1000',
+         'intel/fm10k',
+-- 
+2.45.1.windows.1
+

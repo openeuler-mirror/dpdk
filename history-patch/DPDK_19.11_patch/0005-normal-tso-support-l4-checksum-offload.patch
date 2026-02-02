@@ -1,0 +1,80 @@
+From 2995269ad2ba79f27b7d481f99e782d78ea6f7c6 Mon Sep 17 00:00:00 2001
+From: Feifei Wang <wangfeifei40@huawei.com>
+Date: Tue, 1 Apr 2025 15:26:50 +0800
+Subject: [PATCH 05/11] normal tso support l4 checksum offload
+
+---
+ drivers/net/hinic3/hinic3_pmd_tx.c | 34 +++++++++++++++---------------
+ 1 file changed, 17 insertions(+), 17 deletions(-)
+
+diff --git a/drivers/net/hinic3/hinic3_pmd_tx.c b/drivers/net/hinic3/hinic3_pmd_tx.c
+index 1ec3ff3..8cb622c 100644
+--- a/drivers/net/hinic3/hinic3_pmd_tx.c
++++ b/drivers/net/hinic3/hinic3_pmd_tx.c
+@@ -422,7 +422,7 @@ static uint8_t hinic3_ip_phdr_cksum(hinic3_ip_cs_handler_t *ip_handler, uint8_t
+     return proto;
+ }
+ 
+-static int hinic3_vxlan_tso_ip_phdr_cksum(struct rte_mbuf *mbuf) {
++static int hinic3_tso_ip_phdr_cksum(struct rte_mbuf *mbuf) {
+     uint8_t *ip_hdr = NULL;
+     uint8_t version, l4_proto;
+     uint16_t offset = 0;
+@@ -435,7 +435,7 @@ static int hinic3_vxlan_tso_ip_phdr_cksum(struct rte_mbuf *mbuf) {
+     if (version == IPV4_VERSION || version == IPV6_VERSION) {
+         ip_handler = &g_ip_cs_handlers[version];
+         l4_proto = hinic3_ip_phdr_cksum(ip_handler, ip_hdr, mbuf);
+-        if (unlikely(l4_proto != IPPROTO_UDP)) {
++        if (unlikely((mbuf->ol_flags & HINIC3_PKT_TX_TUNNEL_MASK) && (l4_proto != IPPROTO_UDP))) {
+             PMD_DRV_LOG(INFO, "not support outer l4 proto(%u) by vxlan checksum", l4_proto);
+             return -EINVAL;
+         }
+@@ -444,19 +444,21 @@ static int hinic3_vxlan_tso_ip_phdr_cksum(struct rte_mbuf *mbuf) {
+         return -EINVAL;
+     }
+ 
+-    offset += ip_handler->hdr_size + sizeof(struct rte_udp_hdr) + sizeof(struct rte_vxlan_hdr) +sizeof(struct rte_ether_hdr);
+-    ip_hdr = (uint8_t *)(pkt_data + offset);
+-    version = (* ip_hdr >> 4) & 0x0F;
+-    if (version == IPV4_VERSION || version == IPV6_VERSION) {
+-        ip_handler = &g_ip_cs_handlers[version];
+-        l4_proto = hinic3_ip_phdr_cksum(ip_handler, ip_hdr, mbuf);
+-        if (unlikely(l4_proto != IPPROTO_TCP)) {
+-            PMD_DRV_LOG(INFO, "not support inner l4 proto(%u) by vxlan checksum", l4_proto);
++    if (mbuf->ol_flags & HINIC3_PKT_TX_TUNNEL_MASK) {
++        offset += ip_handler->hdr_size + sizeof(struct rte_udp_hdr) + sizeof(struct rte_vxlan_hdr) +sizeof(struct rte_ether_hdr);
++        ip_hdr = (uint8_t *)(pkt_data + offset);
++        version = (* ip_hdr >> 4) & 0x0F;
++        if (version == IPV4_VERSION || version == IPV6_VERSION) {
++            ip_handler = &g_ip_cs_handlers[version];
++            l4_proto = hinic3_ip_phdr_cksum(ip_handler, ip_hdr, mbuf);
++            if (unlikely(l4_proto != IPPROTO_TCP)) {
++                PMD_DRV_LOG(INFO, "not support inner l4 proto(%u) by vxlan checksum", l4_proto);
++                return -EINVAL;
++            }
++        } else {
++            PMD_DRV_LOG(INFO, "not support inner l3 proto(%u) by vxlan checksum", version);
+             return -EINVAL;
+         }
+-    } else {
+-        PMD_DRV_LOG(INFO, "not support inner l3 proto(%u) by vxlan checksum", version);
+-        return -EINVAL;
+     }
+ 
+     return 0;
+@@ -502,10 +504,8 @@ static int hinic3_set_tx_offload(struct rte_mbuf *mbuf,
+ 		queue_info = SQ_CTRL_QUEUE_INFO_CLEAR(queue_info, MSS);
+ 		queue_info |= SQ_CTRL_QUEUE_INFO_SET(mbuf->tso_segsz, MSS); /*lint !e40*/
+ 
+-        if (ol_flags & HINIC3_PKT_TX_TUNNEL_MASK) {
+-            if (unlikely(hinic3_vxlan_tso_ip_phdr_cksum(mbuf))) {
+-                return -EINVAL;
+-            }
++        if (unlikely(hinic3_tso_ip_phdr_cksum(mbuf))) {
++            return -EINVAL;
+         }
+ 	} else {
+ 		if (ol_flags & HINIC3_PKT_TX_IP_CKSUM)
+-- 
+2.45.1.windows.1
+

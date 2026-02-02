@@ -1,0 +1,76 @@
+From ca08f82e78678b6b9bbc37a018d25c36d36bf590 Mon Sep 17 00:00:00 2001
+From: wangxin679 <wangxin679@h-partners.com>
+Date: Thu, 21 Aug 2025 21:00:18 +0800
+Subject: [PATCH] remove unsupported rss capabilities
+
+---
+ drivers/net/hinic3/hinic3_pmd_ethdev.c | 4 ----
+ drivers/net/hinic3/hinic3_pmd_rx.c     | 2 --
+ drivers/net/hinic3/hinic3_pmd_rx.h     | 6 ++----
+ 3 files changed, 2 insertions(+), 10 deletions(-)
+
+diff --git a/drivers/net/hinic3/hinic3_pmd_ethdev.c b/drivers/net/hinic3/hinic3_pmd_ethdev.c
+index 594bcf5..a63a6d2 100644
+--- a/drivers/net/hinic3/hinic3_pmd_ethdev.c
++++ b/drivers/net/hinic3/hinic3_pmd_ethdev.c
+@@ -2368,9 +2368,7 @@ static int hinic3_rss_hash_update(struct rte_eth_dev *dev,
+ 	rss_type.tcp_ipv4 = (rss_hf & ETH_RSS_NONFRAG_IPV4_TCP) ? 1 : 0;
+ 	rss_type.ipv6 = (rss_hf & (ETH_RSS_IPV6 | ETH_RSS_FRAG_IPV6 |
+ 		ETH_RSS_NONFRAG_IPV6_OTHER)) ? 1 : 0;
+-	rss_type.ipv6_ext = (rss_hf & ETH_RSS_IPV6_EX) ? 1 : 0;
+ 	rss_type.tcp_ipv6 = (rss_hf & ETH_RSS_NONFRAG_IPV6_TCP) ? 1 : 0;
+-	rss_type.tcp_ipv6_ext = (rss_hf & ETH_RSS_IPV6_TCP_EX) ? 1 : 0;
+ 	rss_type.udp_ipv4 = (rss_hf & ETH_RSS_NONFRAG_IPV4_UDP) ? 1 : 0;
+ 	rss_type.udp_ipv6 = (rss_hf & ETH_RSS_NONFRAG_IPV6_UDP) ? 1 : 0;
+ 
+@@ -2429,9 +2427,7 @@ static int hinic3_rss_conf_get(struct rte_eth_dev *dev,
+ 	rss_conf->rss_hf |=  rss_type.tcp_ipv4 ? ETH_RSS_NONFRAG_IPV4_TCP : 0;
+ 	rss_conf->rss_hf |=  rss_type.ipv6 ? (ETH_RSS_IPV6 |
+ 		ETH_RSS_FRAG_IPV6 | ETH_RSS_NONFRAG_IPV6_OTHER) : 0;
+-	rss_conf->rss_hf |=  rss_type.ipv6_ext ? ETH_RSS_IPV6_EX : 0;
+ 	rss_conf->rss_hf |=  rss_type.tcp_ipv6 ? ETH_RSS_NONFRAG_IPV6_TCP : 0;
+-	rss_conf->rss_hf |=  rss_type.tcp_ipv6_ext ? ETH_RSS_IPV6_TCP_EX : 0;
+ 	rss_conf->rss_hf |=  rss_type.udp_ipv4 ? ETH_RSS_NONFRAG_IPV4_UDP : 0;
+ 	rss_conf->rss_hf |=  rss_type.udp_ipv6 ? ETH_RSS_NONFRAG_IPV6_UDP : 0;
+ 
+diff --git a/drivers/net/hinic3/hinic3_pmd_rx.c b/drivers/net/hinic3/hinic3_pmd_rx.c
+index 9cebd81..1d4ba95 100644
+--- a/drivers/net/hinic3/hinic3_pmd_rx.c
++++ b/drivers/net/hinic3/hinic3_pmd_rx.c
+@@ -457,9 +457,7 @@ static int hinic3_init_rss_type(struct hinic3_nic_dev *nic_dev,
+ 	rss_type.ipv4 = (rss_hf & (ETH_RSS_IPV4 | ETH_RSS_FRAG_IPV4)) ? 1 : 0;
+ 	rss_type.tcp_ipv4 = (rss_hf & ETH_RSS_NONFRAG_IPV4_TCP) ? 1 : 0;
+ 	rss_type.ipv6 = (rss_hf & (ETH_RSS_IPV6 | ETH_RSS_FRAG_IPV6)) ? 1 : 0;
+-	rss_type.ipv6_ext = (rss_hf & ETH_RSS_IPV6_EX) ? 1 : 0;
+ 	rss_type.tcp_ipv6 = (rss_hf & ETH_RSS_NONFRAG_IPV6_TCP) ? 1 : 0;
+-	rss_type.tcp_ipv6_ext = (rss_hf & ETH_RSS_IPV6_TCP_EX) ? 1 : 0;
+ 	rss_type.udp_ipv4 = (rss_hf & ETH_RSS_NONFRAG_IPV4_UDP) ? 1 : 0;
+ 	rss_type.udp_ipv6 = (rss_hf & ETH_RSS_NONFRAG_IPV6_UDP) ? 1 : 0;
+ 
+diff --git a/drivers/net/hinic3/hinic3_pmd_rx.h b/drivers/net/hinic3/hinic3_pmd_rx.h
+index 6eeb997..d665f2b 100644
+--- a/drivers/net/hinic3/hinic3_pmd_rx.h
++++ b/drivers/net/hinic3/hinic3_pmd_rx.h
+@@ -147,6 +147,7 @@
+ #define HINIC3_DEFAULT_RX_CSUM_OFFLOAD	0xFFF
+ #define HINIC3_CQE_LEN 32
+ 
++/* ETH_RSS_IPV6_EX dose not support */
+ #define HINIC3_RSS_OFFLOAD_ALL ( \
+ 	ETH_RSS_IPV4 | \
+ 	ETH_RSS_FRAG_IPV4 | \
+@@ -157,10 +158,7 @@
+ 	ETH_RSS_FRAG_IPV6 | \
+ 	ETH_RSS_NONFRAG_IPV6_TCP | \
+ 	ETH_RSS_NONFRAG_IPV6_UDP | \
+-	ETH_RSS_NONFRAG_IPV6_OTHER | \
+-	ETH_RSS_IPV6_EX | \
+-	ETH_RSS_IPV6_TCP_EX | \
+-	ETH_RSS_IPV6_UDP_EX)
++	ETH_RSS_NONFRAG_IPV6_OTHER)
+ 
+ enum HINIC3_RX_CQE_PT_L3 {
+ 	HINIC3_RX_CQE_L3_IPV4 = 0u,
+-- 
+2.45.1.windows.1
+
