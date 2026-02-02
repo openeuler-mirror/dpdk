@@ -3,6 +3,7 @@
  */
 
 #include <rte_ether.h>
+#include <rte_memcpy.h>
 
 #include "hinic3_compat.h"
 #include "hinic3_pmd_cmd.h"
@@ -1582,7 +1583,7 @@ int hinic3_set_fdir_tcam_rule_filter(void *hwdev, bool enable)
 
 	if (port_tcam_cmd.msg_head.status == HINIC3_MGMT_CMD_UNSUPPORTED) {
 		err = HINIC3_MGMT_CMD_UNSUPPORTED;
-		PMD_DRV_LOG(WARNING, "Fw doesn't support setting fdir tcam filter");
+		PMD_DRV_LOG(ERR, "Fw doesn't support setting fdir tcam filter");
 	}
 
 	return err;
@@ -2038,6 +2039,253 @@ hinic3_rss_queue_set_indir_tbl(void *hwdev, const u32 *indir_table, u32 indir_ta
 	}
 
 	hinic3_free_cmd_buf(cmd_buf);
+
+	return err;
+}
+
+int hinic3_fdir_alloc_sec_tcam_block(void *hwdev, u8 key_width, u16 *index)
+{
+	struct nic_cmd_fdir_ext cmd_buf = {0};
+	struct hinic3_tcam_block tcam_block_info = {0};
+	u16 out_size = sizeof(cmd_buf);
+	int err;
+
+	if (!hwdev)
+		return -EINVAL;
+
+	tcam_block_info.func_id = hinic3_global_func_id(hwdev);
+	tcam_block_info.alloc_en = HINIC3_TCAM_BLOCK_ENABLE;
+	tcam_block_info.tcam_type = HINIC3_TCAM_BLOCK_NORMAL_TYPE;
+
+	rte_memcpy(&cmd_buf.data.alloc_block, &tcam_block_info, sizeof(tcam_block_info));
+	cmd_buf.key_width = key_width;
+	cmd_buf.op_code = TCAM_EXTEND_OPCODE_ALLOC_BLOCK;
+
+	err = l2nic_msg_to_mgmt_sync(hwdev,
+				     HINIC3_NIC_CMD_FDIR_EXT,
+				     &cmd_buf, sizeof(cmd_buf),
+				     &cmd_buf, &out_size);
+	if (err || (!out_size) || cmd_buf.msg_head.status) {
+		PMD_DRV_LOG(ERR,
+			    "Set tcam block failed, err: %d, status: 0x%x, out size: 0x%x",
+			    err, cmd_buf.msg_head.status,
+			    out_size);
+		return -EIO;
+	}
+
+	if (index != NULL)
+		*index = cmd_buf.data.alloc_block.tcam_block_index;
+
+	return 0;
+}
+
+int hinic3_fdir_sec_tcam_block_free(void *hwdev, u8 key_width, u16 *index)
+{
+	struct nic_cmd_fdir_ext cmd_buf = {0};
+	struct hinic3_tcam_block tcam_block_info = {0};
+	u16 out_size = sizeof(cmd_buf);
+	int err;
+
+	if (!hwdev)
+		return -EINVAL;
+
+	tcam_block_info.func_id = hinic3_global_func_id(hwdev);
+	tcam_block_info.tcam_type = HINIC3_TCAM_BLOCK_NORMAL_TYPE;
+	tcam_block_info.tcam_block_index = *index;
+	tcam_block_info.alloc_en = HINIC3_TCAM_BLOCK_DISABLE;
+
+	rte_memcpy(&cmd_buf.data.free_block, &tcam_block_info, sizeof(tcam_block_info));
+	cmd_buf.key_width = key_width;
+	cmd_buf.op_code = TCAM_EXTEND_OPCODE_FREE_BLOCK;
+
+	err = l2nic_msg_to_mgmt_sync(hwdev,
+				     HINIC3_NIC_CMD_FDIR_EXT,
+				     &cmd_buf, sizeof(cmd_buf),
+				     &cmd_buf, &out_size);
+	if (err || (!out_size) || cmd_buf.msg_head.status) {
+		PMD_DRV_LOG(ERR,
+			    "Set tcam block failed, err: %d, status: 0x%x, out size: 0x%x",
+			    err, cmd_buf.msg_head.status,
+			    out_size);
+		return -EIO;
+	}
+
+	return 0;
+}
+
+int hinic3_fdir_add_sec_tcam_rule(void *hwdev, struct hinic3_ext_tcam_cfg_rule *tcam_rule,
+				  u8 tcam_rule_type, bool is_hairpin, u8 key_width)
+{
+	struct nic_cmd_fdir_ext cmd_buf = {0};
+	struct hinic3_ext_fdir_add_rule tcam_cmd = {0};
+	u16 out_size = sizeof(cmd_buf);
+	int err;
+
+	if (!hwdev || !tcam_rule)
+		return -EINVAL;
+
+	if (tcam_rule->index >= HINIC3_MAX_TCAM_RULES_NUM) {
+		PMD_DRV_LOG(ERR, "Tcam rules num to add is invalid");
+		return -EINVAL;
+	}
+
+	tcam_cmd.func_id = hinic3_global_func_id(hwdev);
+	if (is_hairpin)
+		tcam_cmd.bifur_rss_en |= HAIRPIN_FLAG;
+
+	rte_memcpy((void *)&tcam_cmd.rule, (void *)tcam_rule,
+		sizeof(struct hinic3_ext_tcam_cfg_rule));
+	tcam_cmd.type = tcam_rule_type;
+
+	rte_memcpy(&cmd_buf.data.tcam_add, &tcam_cmd, sizeof(tcam_cmd));
+	cmd_buf.key_width = key_width;
+	cmd_buf.op_code = TCAM_EXTEND_OPCODE_ADD_RULE;
+
+
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_FDIR_EXT,
+				     &cmd_buf, sizeof(cmd_buf),
+				     &cmd_buf, &out_size);
+	if (err || cmd_buf.msg_head.status || !out_size) {
+		PMD_DRV_LOG(ERR,
+			    "Add tcam rule failed, err: %d, status: 0x%x, out size: 0x%x",
+			    err, cmd_buf.msg_head.status, out_size);
+		return -EIO;
+	}
+
+	return 0;
+}
+
+int hinic3_fdir_set_fdir_sec_tcam_rule_filter(void *hwdev, bool enable)
+{
+	struct nic_cmd_fdir_ext cmd_buf = {0};
+	struct hinic3_port_tcam_info port_tcam_cmd = {0};
+	u16 out_size = sizeof(cmd_buf);
+	int err;
+
+	if (!hwdev)
+		return -EINVAL;
+
+	port_tcam_cmd.func_id = hinic3_global_func_id(hwdev);
+	port_tcam_cmd.tcam_enable = (u8)enable;
+
+	rte_memcpy(&cmd_buf.data.tcam_en, &port_tcam_cmd, sizeof(port_tcam_cmd));
+	cmd_buf.op_code = TCAM_EXTEND_OPCODE_ENABLE_TCAM;
+
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_FDIR_EXT,
+				     &cmd_buf, sizeof(cmd_buf),
+				     &cmd_buf, &out_size);
+	if ((cmd_buf.msg_head.status !=
+		HINIC3_MGMT_CMD_UNSUPPORTED &&
+		cmd_buf.msg_head.status) || err || !out_size) {
+		PMD_DRV_LOG(ERR, "Set fdir tcam filter failed, err: %d, "
+			    "status: 0x%x, out size: 0x%x, enable: 0x%x",
+			    err, cmd_buf.msg_head.status, out_size,
+			    enable);
+		return -EIO;
+	}
+
+	if (cmd_buf.msg_head.status == HINIC3_MGMT_CMD_UNSUPPORTED) {
+		err = HINIC3_MGMT_CMD_UNSUPPORTED;
+		PMD_DRV_LOG(ERR, "Fw doesn't support setting fdir tcam filter");
+	}
+
+	return err;
+}
+
+int hinic3_fdir_del_sec_tcam_rule(void *hwdev, u32 index, u8 tcam_rule_type,
+				  u8 key_width)
+{
+	struct nic_cmd_fdir_ext cmd_buf = {0};
+	struct hinic3_fdir_del_rule tcam_cmd = {0};
+	u16 out_size = sizeof(cmd_buf);
+	int err;
+
+	if (!hwdev)
+		return -EINVAL;
+
+	if (index >= HINIC3_MAX_TCAM_RULES_NUM) {
+		PMD_DRV_LOG(ERR, "Tcam rules num to del is invalid");
+		return -EINVAL;
+	}
+
+	tcam_cmd.func_id = hinic3_global_func_id(hwdev);
+	tcam_cmd.index_start = index;
+	tcam_cmd.index_num = 1;
+	tcam_cmd.type = tcam_rule_type;
+
+	rte_memcpy(&cmd_buf.data.tcam_del, &tcam_cmd, sizeof(tcam_cmd));
+	cmd_buf.key_width = key_width;
+	cmd_buf.op_code = TCAM_EXTEND_OPCODE_DEL_RULES;
+
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_FDIR_EXT,
+				     &cmd_buf, sizeof(cmd_buf),
+				     &cmd_buf, &out_size);
+	if (err || cmd_buf.msg_head.status || !out_size) {
+		PMD_DRV_LOG(ERR,
+			    "Del tcam rule failed, err: %d, status: 0x%x, out size: 0x%x",
+			    err, cmd_buf.msg_head.status, out_size);
+		return -EIO;
+	}
+
+	return 0;
+}
+
+int hinic3_fdir_flush_sec_tcam_rule(void *hwdev)
+{
+	struct nic_cmd_fdir_ext cmd_buf = {0};
+	struct hinic3_flush_tcam_rules tcam_flush = {0};
+	u16 out_size = sizeof(cmd_buf);
+	int err;
+
+	if (!hwdev)
+		return -EINVAL;
+
+	tcam_flush.func_id = hinic3_global_func_id(hwdev);
+
+	rte_memcpy(&cmd_buf.data.tcam_flush, &tcam_flush, sizeof(tcam_flush));
+	cmd_buf.op_code = TCAM_EXTEND_OPCODE_FLUSH_TCAM;
+
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_FDIR_EXT,
+				     &cmd_buf,
+				     sizeof(struct hinic3_flush_tcam_rules),
+				     &cmd_buf, &out_size);
+	if (cmd_buf.msg_head.status == HINIC3_MGMT_CMD_UNSUPPORTED) {
+		err = HINIC3_MGMT_CMD_UNSUPPORTED;
+		PMD_DRV_LOG(ERR, "Firmware/uP doesn't support flush tcam fdir");
+	} else if (err || (!out_size) || cmd_buf.msg_head.status) {
+		PMD_DRV_LOG(ERR,
+			    "Flush tcam fdir rules failed, err: %d, status: 0x%x, out size: 0x%x",
+			    err, cmd_buf.msg_head.status, out_size);
+		err = -EIO;
+	}
+
+	return err;
+}
+
+int hinic3_fdir_cfg_sec_tcam(void *hwdev, u8 *en)
+{
+	struct nic_cmd_fdir_ext cmd_buf = {0};
+	u16 out_size = sizeof(cmd_buf);
+	int err;
+
+	if (!hwdev)
+		return -EINVAL;
+
+	cmd_buf.op_code = TCAM_EXTEND_OPCODE_GET_FLAG;
+
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_FDIR_EXT,
+				     &cmd_buf,
+				     sizeof(struct hinic3_flush_tcam_rules),
+				     &cmd_buf, &out_size);
+	if (err || cmd_buf.msg_head.status || !out_size) {
+		PMD_DRV_LOG(ERR,
+			    "Flush tcam fdir rules failed, err: %d, status: 0x%x, out size: 0x%x",
+			    err, cmd_buf.msg_head.status, out_size);
+		err = -EIO;
+	}
+
+	if (en != NULL)
+		*en = cmd_buf.data.tcam_cfg.key_mode;
 
 	return err;
 }
