@@ -1,0 +1,2301 @@
+From 32c6a6702c1a935304778739c34b9042fcc07b9a Mon Sep 17 00:00:00 2001
+From: liya51 <luckly0822@qq.com>
+Date: Fri, 18 Jul 2025 11:40:28 +0800
+Subject: [PATCH] support flow traffic bifur
+
+---
+ drivers/net/hinic3/Makefile                  |   4 +
+ drivers/net/hinic3/base/hinic3_pmd_cmd.h     |   2 +
+ drivers/net/hinic3/base/hinic3_pmd_csr.h     |   1 +
+ drivers/net/hinic3/base/hinic3_pmd_mbox.c    |  17 +
+ drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c |  64 ++
+ drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h |  20 +-
+ drivers/net/hinic3/hinic3_pmd_bifur.c        | 993 +++++++++++++++++++
+ drivers/net/hinic3/hinic3_pmd_bifur.h        |  20 +
+ drivers/net/hinic3/hinic3_pmd_ethdev.c       |  47 +-
+ drivers/net/hinic3/hinic3_pmd_ethdev.h       |  11 +-
+ drivers/net/hinic3/hinic3_pmd_fdir.c         | 176 +++-
+ drivers/net/hinic3/hinic3_pmd_fdir.h         |  37 +-
+ drivers/net/hinic3/hinic3_pmd_flow.c         | 209 +++-
+ drivers/net/hinic3/hinic3_pmd_rx.c           |  50 +-
+ drivers/net/hinic3/hinic3_pmd_rx.h           |  17 +-
+ drivers/net/hinic3/meson.build               |   4 +
+ 16 files changed, 1648 insertions(+), 24 deletions(-)
+ create mode 100644 drivers/net/hinic3/hinic3_pmd_bifur.c
+ create mode 100644 drivers/net/hinic3/hinic3_pmd_bifur.h
+
+diff --git a/drivers/net/hinic3/Makefile b/drivers/net/hinic3/Makefile
+index ea89e19..bafcc4c 100644
+--- a/drivers/net/hinic3/Makefile
++++ b/drivers/net/hinic3/Makefile
+@@ -44,6 +44,9 @@ CFLAGS += -DOVS_VIRTIO_SWPT
+ CFLAGS += -DHINIC3_XSTAT_MBUF_USE
+ endif
+ 
++CFLAGS += -DHINIC3_TRAFFIC_BIFUR
++CFLAGS += -DDPDK_19_11
++CFLAGS += -DDPDK_19_BIFUR
+ CFLAGS += -Wno-cast-qual
+ CFLAGS += -I$(RTE_SDK)/drivers/net/hinic3/
+ CFLAGS += -I$(RTE_SDK)/drivers/net/hinic3/base
+@@ -79,6 +82,7 @@ VPATH += $(SRCDIR)/mml
+ #
+ # all source are stored in SRCS-y
+ #
++SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_bifur.c
+ SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_eqs.c
+ SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_hwif.c
+ SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_mbox.c
+diff --git a/drivers/net/hinic3/base/hinic3_pmd_cmd.h b/drivers/net/hinic3/base/hinic3_pmd_cmd.h
+index c07720b..86ab82a 100644
+--- a/drivers/net/hinic3/base/hinic3_pmd_cmd.h
++++ b/drivers/net/hinic3/base/hinic3_pmd_cmd.h
+@@ -122,6 +122,8 @@ enum hinic3_nic_cmd {
+ 	HINIC3_NIC_CMD_SET_ETS,
+ 	HINIC3_NIC_CMD_SET_PFC,
+ 
++	HINIC3_NIC_CMD_SET_PORT_FLOW_BIFUR_ENABLE = 117,
++
+ 	/* MISC */
+ 	HINIC3_NIC_CMD_BIOS_CFG = 120,
+ 	HINIC3_NIC_CMD_SET_FIRMWARE_CUSTOM_PACKETS_MSG,
+diff --git a/drivers/net/hinic3/base/hinic3_pmd_csr.h b/drivers/net/hinic3/base/hinic3_pmd_csr.h
+index fa10821..d8cbe61 100644
+--- a/drivers/net/hinic3/base/hinic3_pmd_csr.h
++++ b/drivers/net/hinic3/base/hinic3_pmd_csr.h
+@@ -12,6 +12,7 @@
+ #else
+ #define PCI_VENDOR_ID_HUAWEI			0x19e5
+ #define HINIC3_DEV_ID_STANDARD			0x0222
++#define HINIC3_DEV_ID_DPU			0x0224
+ #define HINIC3_DEV_ID_VF			0x375F
+ #endif
+ 
+diff --git a/drivers/net/hinic3/base/hinic3_pmd_mbox.c b/drivers/net/hinic3/base/hinic3_pmd_mbox.c
+index 89d81df..896762c 100644
+--- a/drivers/net/hinic3/base/hinic3_pmd_mbox.c
++++ b/drivers/net/hinic3/base/hinic3_pmd_mbox.c
+@@ -28,6 +28,7 @@
+ #define HINIC3_MBOX_INT_TX_SIZE_MASK				0x1F
+ #define HINIC3_MBOX_INT_STAT_DMA_SO_RO_MASK			0x3
+ #define HINIC3_MBOX_INT_WB_EN_MASK				0x1
++#define SPU_HOST_ID									4
+ 
+ #define HINIC3_MBOX_INT_SET(val, field)	\
+ 			(((val) & HINIC3_MBOX_INT_##field##_MASK) << \
+@@ -191,7 +192,11 @@ static void response_for_recv_func_mbox(struct hinic3_mbox *func_to_func,
+ 		if (err)
+ 			msg_info.status = HINIC3_MBOX_PF_SEND_ERR;
+ 
++#ifdef HINIC3_TRAFFIC_BIFUR
++		if (IS_TLP_MBX(src_func_idx) && (hinic3_pcie_itf_id(func_to_func->hwdev) != SPU_HOST_ID))
++#else 
+ 		if (IS_TLP_MBX(src_func_idx))
++#endif
+ 			send_tlp_mbox_to_func(func_to_func, recv_mbox->mod,
+ 					      recv_mbox->cmd,
+ 					      recv_mbox->buf_out, out_size,
+@@ -777,7 +782,11 @@ static int hinic3_mbox_to_func(struct hinic3_mbox *func_to_func,
+ 
+ 	set_mbox_to_func_event(func_to_func, EVENT_START);
+ 
++#ifdef HINIC3_TRAFFIC_BIFUR
++	if (IS_TLP_MBX(dst_func) && (hinic3_pcie_itf_id(func_to_func->hwdev) != SPU_HOST_ID))
++#else
+ 	if (IS_TLP_MBX(dst_func))
++#endif
+ 		err = send_tlp_mbox_to_func(func_to_func, mod, cmd, buf_in,
+ 					    in_size, dst_func,
+ 					    HINIC3_MSG_DIRECT_SEND,
+@@ -871,7 +880,11 @@ static int hinic3_mbox_to_func_no_ack(struct hinic3_hwdev *hwdev, u16 func_idx,
+ 	if (err)
+ 		return err;
+ 
++#ifdef HINIC3_TRAFFIC_BIFUR
++	if (IS_TLP_MBX(func_idx) && (hinic3_pcie_itf_id(func_to_func->hwdev) != SPU_HOST_ID))
++#else
+ 	if (IS_TLP_MBX(func_idx))
++#endif
+ 		err = send_tlp_mbox_to_func(func_to_func, mod, cmd,
+ 					    buf_in, in_size, func_idx,
+ 					    HINIC3_MSG_DIRECT_SEND,
+@@ -916,7 +929,11 @@ void hinic3_response_mbox_to_mgmt(struct hinic3_hwdev *hwdev,
+ 	msg_info.status = 0;
+ 	dst_func = HINIC3_MGMT_SRC_ID;
+ 
++#ifdef HINIC3_TRAFFIC_BIFUR
++	if (IS_TLP_MBX(dst_func) && (hinic3_pcie_itf_id(hwdev->func_to_func->hwdev) != SPU_HOST_ID))
++#else
+ 	if (IS_TLP_MBX(dst_func))
++#endif
+ 		send_tlp_mbox_to_func(hwdev->func_to_func, mod, cmd, buf_in,
+ 				      in_size, HINIC3_MGMT_SRC_ID,
+ 				      HINIC3_MSG_RESPONSE, HINIC3_MSG_NO_ACK,
+diff --git a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c
+index 94af5e3..8929fdd 100644
+--- a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c
++++ b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c
+@@ -14,6 +14,9 @@
+ #include "hinic3_pmd_cmdq.h"
+ #include "hinic3_pmd_nic_cfg.h"
+ #include "hinic3_pmd_hw_cfg.h"
++#ifdef HINIC3_TRAFFIC_BIFUR
++#include "hinic3_pmd_bifur.h"
++#endif
+ 
+ struct vf_msg_handler {
+ 	u16 cmd;
+@@ -143,6 +146,13 @@ int hinic3_set_mac(void *hwdev, const u8 *mac_addr, u16 vlan_id, u16 func_id)
+ 	if (!hwdev || !mac_addr)
+ 		return -EINVAL;
+ 
++#ifdef HINIC3_TRAFFIC_BIFUR
++	if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
++		PMD_DRV_LOG(WARNING, "Shared mode vf do not support change mac.");
++		return 0;
++	}
++#endif
++
+ 	memset(&mac_info, 0, sizeof(mac_info));
+ 
+ 	if (vlan_id >= VLAN_N_VID) {
+@@ -185,6 +195,13 @@ int hinic3_del_mac(void *hwdev, const u8 *mac_addr, u16 vlan_id, u16 func_id)
+ 	if (!hwdev || !mac_addr)
+ 		return -EINVAL;
+ 
++#ifdef HINIC3_TRAFFIC_BIFUR
++	if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
++		PMD_DRV_LOG(WARNING, "Shared mode vf do not support change mac.");
++		return 0;
++	}
++#endif
++
+ 	if (vlan_id >= VLAN_N_VID) {
+ 		PMD_DRV_LOG(ERR, "Invalid VLAN number: %d", vlan_id);
+ 		return -EINVAL;
+@@ -222,6 +239,13 @@ int hinic3_update_mac(void *hwdev, u8 *old_mac, u8 *new_mac, u16 vlan_id,
+ 	if (!hwdev || !old_mac || !new_mac)
+ 		return -EINVAL;
+ 
++#ifdef HINIC3_TRAFFIC_BIFUR
++	if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
++		PMD_DRV_LOG(WARNING, "Shared mode vf do not support change mac.");
++		return 0;
++	}
++#endif
++
+ 	if (vlan_id >= VLAN_N_VID) {
+ 		PMD_DRV_LOG(ERR, "Invalid VLAN number: %d", vlan_id);
+ 		return -EINVAL;
+@@ -265,6 +289,13 @@ int hinic3_get_default_mac(void *hwdev, u8 *mac_addr, int ether_len)
+ 	if (!hwdev || !mac_addr)
+ 		return -EINVAL;
+ 
++#ifdef HINIC3_TRAFFIC_BIFUR
++	if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
++		return hinic3_bifur_get_default_mac(((struct hinic3_hwdev *)hwdev)->pci_dev,
++			mac_addr, ether_len);
++	}
++#endif
++
+ 	memset(&mac_info, 0, sizeof(mac_info));
+ 	mac_info.func_id = hinic3_global_func_id(hwdev);
+ 
+@@ -1382,6 +1413,11 @@ int hinic3_add_tcam_rule(void *hwdev, struct hinic3_tcam_cfg_rule *tcam_rule, u8
+ 
+ 	memset(&tcam_cmd, 0, sizeof(struct hinic3_fdir_add_rule));
+ 	tcam_cmd.func_id = hinic3_global_func_id(hwdev);
++
++#ifdef HINIC3_TRAFFIC_BIFUR
++	tcam_cmd.bifur_rss_en = 1;	
++#endif
++
+ 	memcpy((void *)&tcam_cmd.rule, (void *)tcam_rule,
+ 		sizeof(struct hinic3_tcam_cfg_rule));
+ 	tcam_cmd.type = tcam_rule_type;
+@@ -1624,4 +1660,32 @@ int hinic3_set_link_status_follow(void *hwdev, enum hinic3_link_follow_status st
+ 	}
+ 
+ 	return follow.head.status;
++}
++
++int hinic3_get_bifur_enable(void *hwdev, u8 *enable)
++{
++	struct hinic3_port_flow_bifur_en_cmd bifur_cmd;
++	u16 out_size = sizeof(bifur_cmd);
++	int err;
++
++	if (!hwdev)
++		return -EINVAL;
++
++	memset(&bifur_cmd, 0, sizeof(struct hinic3_port_flow_bifur_en_cmd));
++	bifur_cmd.port_id = hinic3_physical_port_id(hwdev);
++	bifur_cmd.config_flag = PORT_BIFUR_CMD_GET;
++
++	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_SET_PORT_FLOW_BIFUR_ENABLE,
++			&bifur_cmd, sizeof(bifur_cmd),
++			&bifur_cmd, &out_size);
++	if (err || bifur_cmd.msg_head.status || !out_size) {
++		PMD_DRV_LOG(ERR,
++			"get bifur status failed, err: %d, status: 0x%x, out size: 0x%x",
++			err, bifur_cmd.msg_head.status, out_size);
++		return -EIO;
++	}
++
++	*enable = bifur_cmd.flow_bifur_en;
++
++	return 0;
+ }
+\ No newline at end of file
+diff --git a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h
+index 5dcb25a..5ab0026 100644
+--- a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h
++++ b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h
+@@ -840,7 +840,7 @@ struct hinic3_cmd_register_vf {
+ 
+ struct hinic3_tcam_result {
+ 	u32 qid;
+-	u32 rsvd;
++	u32 queue_num;
+ };
+ 
+ #define HINIC3_TCAM_FLOW_KEY_SIZE	44
+@@ -863,15 +863,29 @@ struct hinic3_tcam_cfg_rule {
+ #define TCAM_RULE_FDIR_TYPE 0
+ #define TCAM_RULE_PPA_TYPE  1
+ 
++enum hinic3_port_flow_bifur_cmd_type {
++	PORT_BIFUR_CMD_SET,
++	PORT_BIFUR_CMD_GET,
++};
++
+ struct hinic3_fdir_add_rule {
+ 	struct mgmt_msg_head msg_head;
+ 
+ 	u16 func_id;
+ 	u8 type;
+-	u8 rsvd;
++	u8 bifur_rss_en;
+ 	struct hinic3_tcam_cfg_rule rule;
+ };
+ 
++struct hinic3_port_flow_bifur_en_cmd {
++	struct mgmt_msg_head msg_head;
++	u16 port_id;
++	u8 flow_bifur_en;
++	u8 flow_bifur_type; /* 0: vf bifur, 2: traffic bifur */
++	u8 config_flag;
++	u8 rsvd[3];
++};
++
+ struct hinic3_fdir_del_rule {
+ 	struct mgmt_msg_head msg_head;
+ 
+@@ -1518,4 +1532,6 @@ int hinic3_set_feature_to_hw(void *hwdev, u64 *s_feature, u16 size);
+ int hinic3_set_fdir_ethertype_filter(void *hwdev, u8 pkt_type, u16 queue_id, u8 en);
+ 
+ int hinic3_set_link_status_follow(void *hwdev, enum hinic3_link_follow_status status);
++
++int hinic3_get_bifur_enable(void *hwdev, u8 *enable);
+ #endif /* _HINIC3_PMD_NIC_CFG_H_ */
+diff --git a/drivers/net/hinic3/hinic3_pmd_bifur.c b/drivers/net/hinic3/hinic3_pmd_bifur.c
+new file mode 100644
+index 0000000..38059fd
+--- /dev/null
++++ b/drivers/net/hinic3/hinic3_pmd_bifur.c
+@@ -0,0 +1,993 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ */
++
++#ifdef HINIC3_TRAFFIC_BIFUR
++
++#include <string.h>
++#include <dirent.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <unistd.h>
++#include <fcntl.h>
++#include <errno.h>
++
++#if defined(DPDK_21_BIFUR) || defined(DPDK_20_BIFUR)
++#include <rte_bus.h>
++#else
++#include <bus_driver.h>
++#endif
++
++#ifndef DPDK_21_11
++#define RTE_PCI_ANY_ID (0xffff)
++#define RTE_INTR_INSTANCE_F_PRIVATE UINT32_C(0)
++#endif
++
++#include "base/hinic3_compat.h"
++#include "hinic3_pmd_bifur.h"
++
++#ifndef PCI_DBDF
++#define PCI_DBDF(dom, bus, dev, func) (((u32)(dom) << 16) | ((u32)(bus) << 8) | ((u32)(dev) << 3) | ((u32)(func)&0x7))
++#endif
++
++// bifur kernel define
++#define BIFUR_GDEV_PATH "/dev/bifur_gdev"
++#define BIFUR_PROC_PATH "/proc/net/bifur"
++#define BIFUR_DEV_NAME "bifur_vdev"
++
++#define MEMZONE_NAME "bifur_pci_addr_zone"
++#define MEMZONE_SIZE sizeof(struct rte_pci_addr) // 分配 PCI 地址所需的内存大小
++
++enum bifur_func_type {
++    BIFUR_EXCLUSIVE_PF = 1,
++    BIFUR_SHARED_PF,
++    BIFUR_RESOURCE_PF,
++    BIFUR_RESOURCE_VF,
++    BIFUR_FUNC_TYPE_MAX
++};
++
++enum bifur_cmd_m {
++    BIFUR_DRV_CMD_FUNC_ATTR_GET = 1,
++    BIFUR_DRV_CMD_VF_ALLOC,
++    BIFUR_DRV_CMD_MAC_GET,
++    BIFUR_DRV_CMD_MAX
++};
++
++struct bifur_mac_get_cmd_msg {
++    unsigned int dbdf;
++};
++
++struct bifur_mac_get_cmd_rsp {
++    u8 mac[RTE_ETHER_ADDR_LEN];
++};
++
++struct bifur_vf_alloc_cmd_msg {
++    unsigned int dbdf;
++};
++
++struct bifur_vf_alloc_cmd_rsp {
++    u32 vf_dbdf;
++};
++
++struct bifur_func_attr_get_cmd_msg {
++    unsigned int dbdf;
++};
++
++struct bifur_func_attr_get_cmd_rsp {
++    u32 func_type;
++};
++
++struct bifur_msg {
++    u32 drv_cmd;
++    u32 in_buf_len;
++    u32 out_buf_len;
++    u32 out_data_len;
++    void *in_buf;
++    void *out_buf;
++    u8 rsvd[24];
++};
++
++// bifur define
++enum BIFUR_INIT_STATE {
++    BIFUR_UNINIT = 0,
++    BIFUR_INIT_SUCCEED,
++    BIFUR_INIT_FAILED,
++};
++
++struct hinic3_bifur_dev_pair {
++    TAILQ_ENTRY(hinic3_bifur_dev_pair) entries;
++    struct rte_pci_device *origin_pci_dev;
++    struct rte_pci_device *work_pci_dev;
++    int work_func_fd;
++};
++
++struct hinic3_bifur_mapped_dev {
++    STAILQ_ENTRY(hinic3_bifur_mapped_dev) entries;
++    struct rte_pci_device *pci_dev;
++};
++
++struct hinic3_bifur_func_mgr {
++    int global_func_fd;
++};
++
++TAILQ_HEAD(hinic3_bifur_dev_pair_list, hinic3_bifur_dev_pair);
++
++struct hinic3_bifur_mgr {
++    struct hinic3_bifur_dev_pair_list pair_list;
++    struct hinic3_bifur_func_mgr func_mgr;
++    enum BIFUR_INIT_STATE init_state;
++};
++
++static struct hinic3_bifur_mgr g_hinic3_bifur_mgr;
++static STAILQ_HEAD(, hinic3_bifur_mapped_dev)
++    g_mapped_dev_list = STAILQ_HEAD_INITIALIZER(g_mapped_dev_list);
++
++static int hinic3_bifur_send_msg(int cdev_fd, struct bifur_msg *msg)
++{
++    int ret;
++    int msg_len = sizeof(struct bifur_msg);
++
++    ret = write(cdev_fd, msg, msg_len);
++    if (ret < 0) {
++        PMD_DRV_LOG(ERR, "Write bifur message error(%s)", strerror(errno));
++        return ret;
++    }
++
++    return 0;
++}
++
++static void hinic3_bifur_fill_msg(struct bifur_msg *msg, enum bifur_cmd_m cmd, void *in_buf, uint32_t in_buf_len,
++    void *out_buf, uint32_t out_buf_len)
++{
++    msg->drv_cmd = cmd;
++    msg->in_buf = in_buf;
++    msg->in_buf_len = in_buf_len;
++    msg->out_buf = out_buf;
++    msg->out_buf_len = out_buf_len;
++}
++
++static int hinic3_bifur_init_mgr(void)
++{
++    int fd, ret = -1;
++    fd = open(BIFUR_GDEV_PATH, O_WRONLY);
++    if (fd < 0) {
++        PMD_DRV_LOG(ERR, "%s open failed (%s)", BIFUR_GDEV_PATH, strerror(errno));
++        ret = fd;
++        goto init_failed; // Once failed, will not try again.
++    }
++
++    g_hinic3_bifur_mgr.func_mgr.global_func_fd = fd;
++    TAILQ_INIT(&g_hinic3_bifur_mgr.pair_list);
++    g_hinic3_bifur_mgr.init_state = BIFUR_INIT_SUCCEED;
++    return 0;
++init_failed:
++    g_hinic3_bifur_mgr.init_state = BIFUR_INIT_FAILED;
++    return ret;
++}
++
++static void hinic3_bifur_try_deinit_mgr(void)
++{
++    if (g_hinic3_bifur_mgr.init_state != BIFUR_INIT_SUCCEED) {
++        return;
++    }
++
++    if (TAILQ_EMPTY(&g_hinic3_bifur_mgr.pair_list)) {
++        int *g_fd = &g_hinic3_bifur_mgr.func_mgr.global_func_fd;
++        if (*g_fd >= 0) {
++            close(*g_fd);
++            *g_fd = -1;
++        }
++
++        g_hinic3_bifur_mgr.init_state = BIFUR_UNINIT;
++    }
++}
++
++static int hinic3_bifur_pci_map_device(struct rte_pci_device *dev)
++{
++    int ret = 0;
++    ret = rte_pci_map_device(dev);
++#ifdef DPDK_21_BIFUR
++    if (ret != 0) {
++        rte_intr_instance_free(dev->vfio_req_intr_handle);
++        dev->vfio_req_intr_handle = NULL;
++        rte_intr_instance_free(dev->intr_handle);
++        dev->intr_handle = NULL;
++    }
++#endif
++
++    return ret;
++}
++
++static void hinic3_bifur_pci_unmap_device(struct rte_pci_device *dev)
++{
++    if (rte_eal_process_type() == RTE_PROC_PRIMARY) {
++        rte_pci_unmap_device(dev);
++    }
++}
++
++static int hinic3_bifur_func_pair_from_kernel(struct rte_pci_addr *target_pci_addr, struct rte_pci_addr *pair_pci_addr)
++{
++    int ret;
++    u32 dbdf;
++    struct bifur_msg msg = { 0 };
++    struct bifur_vf_alloc_cmd_msg cmd = { 0 };
++    struct bifur_vf_alloc_cmd_rsp rsp = { 0 };
++    struct rte_pci_addr *addr = target_pci_addr;
++    int g_func_fd = g_hinic3_bifur_mgr.func_mgr.global_func_fd;
++
++    dbdf = PCI_DBDF(addr->domain, addr->bus, addr->devid, addr->function);
++    cmd.dbdf = dbdf;
++    hinic3_bifur_fill_msg(&msg, BIFUR_DRV_CMD_VF_ALLOC, &cmd, sizeof(struct bifur_vf_alloc_cmd_msg), &rsp,
++        sizeof(struct bifur_vf_alloc_cmd_rsp));
++
++    ret = hinic3_bifur_send_msg(g_func_fd, &msg);
++    if (ret) {
++        return ret;
++    }
++
++    pair_pci_addr->domain = (rsp.vf_dbdf >> 16) & 0xffff;
++    pair_pci_addr->bus = (rsp.vf_dbdf >> 8) & 0xff;
++    pair_pci_addr->devid = (rsp.vf_dbdf >> 3) & 0x1f;
++    pair_pci_addr->function = (rsp.vf_dbdf) &0x7;
++
++    PMD_DRV_LOG(INFO, "0x%x`s pair function is 0x%x", dbdf, rsp.vf_dbdf);
++    return 0; 
++}
++
++static int hinic3_bifur_func_type_from_kernel(struct rte_pci_addr *target_pci_addr, enum bifur_func_type *func_type)
++{
++    int ret;
++    u32 dbdf;
++    struct bifur_msg msg = { 0 };
++    struct bifur_func_attr_get_cmd_msg cmd = { 0 };
++    struct bifur_func_attr_get_cmd_rsp rsp = { 0 };
++    struct rte_pci_addr *addr = target_pci_addr;
++    int g_func_fd = g_hinic3_bifur_mgr.func_mgr.global_func_fd;
++
++    dbdf = PCI_DBDF(addr->domain, addr->bus, addr->devid, addr->function);
++    cmd.dbdf = dbdf;
++    hinic3_bifur_fill_msg(&msg, BIFUR_DRV_CMD_FUNC_ATTR_GET, &cmd, sizeof(struct bifur_func_attr_get_cmd_msg), &rsp,
++        sizeof(struct bifur_func_attr_get_cmd_rsp));
++    
++    ret = hinic3_bifur_send_msg(g_func_fd, &msg);
++    if (ret) {
++        return ret;
++    }
++
++    *func_type = rsp.func_type;
++    return 0;
++}
++
++static int hinic3_bifur_query_func_type(struct rte_pci_addr *target_pci_addr, enum bifur_func_type *func_type)
++{
++    int ret;
++    if(g_hinic3_bifur_mgr.init_state == BIFUR_INIT_FAILED) {
++        return -1;
++    }
++
++    if (g_hinic3_bifur_mgr.init_state == BIFUR_UNINIT) {
++        ret = hinic3_bifur_init_mgr();
++        if (ret != 0) {
++            return ret;
++        }
++    }
++
++    return hinic3_bifur_func_type_from_kernel(target_pci_addr, func_type);
++}
++
++#define MAX_PATH_LEN 64
++#define IORESOURCE_IO 0x00000100
++#define IORESOURCE_MEM 0x00000200
++#define PCI_SYS_PATH "/sys/bus/pci/devices/"
++
++static char* hinic3_bifur_pci_addr_to_path(const struct rte_pci_addr *addr, char *str)
++{
++    sprintf(str, "%s%04x:%02x:%02x.%x", PCI_SYS_PATH, addr->domain, addr->bus, addr->devid, addr->function);
++    return str;
++}
++
++static bool hinic3_bifur_pci_match(const struct rte_pci_driver *pci_drv,
++        const struct rte_pci_device *pci_dev)
++{
++    const struct rte_pci_id *id_table;
++
++    for (id_table = pci_drv->id_table; id_table->vendor_id != 0; id_table++) {
++        if (id_table->vendor_id != pci_dev->id.vendor_id &&
++            id_table->vendor_id != RTE_PCI_ANY_ID) {
++            continue;
++        }
++
++        if (id_table->device_id != pci_dev->id.device_id &&
++            id_table->device_id != RTE_PCI_ANY_ID) {
++            continue;
++        }
++
++        if (id_table->subsystem_vendor_id != pci_dev->id.subsystem_vendor_id &&
++            id_table->subsystem_vendor_id != RTE_PCI_ANY_ID) {
++            continue;
++        }
++
++        if (id_table->subsystem_device_id != pci_dev->id.subsystem_device_id &&
++            id_table->subsystem_device_id != RTE_PCI_ANY_ID) {
++            continue;
++        }
++
++        if (id_table->class_id != pci_dev->id.class_id &&
++            id_table->class_id != RTE_CLASS_ANY_ID) {
++            continue;
++        }
++
++        return true;
++    }
++
++    return false;
++}
++
++static int hinic3_bifur_parse_sysfs_value(const char *filename, unsigned long *val)
++{
++    FILE *f;
++    char buf[BUFSIZ];
++    char *end = NULL;
++
++    if ((f = fopen(filename, "r")) == NULL) {
++        PMD_DRV_LOG(ERR, "Cannot open sysfs value %s", filename);
++        return -1;
++    }
++
++    if (fgets(buf, sizeof(buf), f) == NULL) {
++        PMD_DRV_LOG(ERR, "Cannot read sysfs value %s", filename);
++        fclose(f);
++        return -1;
++    }
++
++    *val = strtoul(buf, &end, 0);
++    if ((buf[0] == '\0') || (end == NULL) || (*end != '\n')) {
++        PMD_DRV_LOG(ERR, "Cannot parse sysfs value %s", filename);
++        fclose(f);
++        return -1;
++    }
++
++    fclose(f);
++    return 0;
++}
++
++static enum rte_iova_mode hinic3_bifur_pci_device_iova_mode(const struct rte_pci_driver *pdrv,
++    const struct rte_pci_device *pdev)
++{
++    enum rte_iova_mode iova_mode = RTE_IOVA_DC;
++
++    switch (pdev->kdrv) {
++    case RTE_PCI_KDRV_VFIO: {
++    #ifdef VFIO_PRESENT
++        static int is_vfio_noiommu_enabled = -1;
++
++        if (is_vfio_noiommu_enabled == -1) {
++            if (rte_vfio_noiommu_is_enabled() == 1) {
++
++                is_vfio_noiommu_enabled = 1;
++            } else {
++                is_vfio_noiommu_enabled = 0;
++            }
++        }
++
++        if (is_vfio_noiommu_enabled != 0) {
++            iova_mode = RTE_IOVA_PA;
++        } else if ((pdrv->drv_flags & RTE_PCI_DRV_NEED_IOVA_AS_VA) != 0) {
++            iova_mode = RTE_IOVA_VA;
++        }
++    #endif
++        break;
++    }
++    case RTE_PCI_KDRV_IGB_UIO:
++    case RTE_PCI_KDRV_UIO_GENERIC:
++        iova_mode = RTE_IOVA_PA;
++        break;
++    default:
++        if ((pdrv->drv_flags & RTE_PCI_DRV_NEED_IOVA_AS_VA) != 0) {
++            iova_mode = RTE_IOVA_VA;
++        }
++        break;
++    }
++
++    return iova_mode;
++}
++
++static struct rte_devargs *hinic3_bifur_pci_devargs_lookup(const struct rte_pci_addr *pci_addr)
++{
++    struct rte_devargs *devargs;
++    struct rte_pci_addr addr;
++
++    RTE_EAL_DEVARGS_FOREACH("pci", devargs) {
++        devargs->bus->parse(devargs->name, &addr);
++        if (!rte_pci_addr_cmp(pci_addr, &addr)) {
++            return devargs;
++        }
++    }
++
++    return NULL;
++}
++
++static void hinic3_bifur_pci_name_set(struct rte_pci_device *dev, struct rte_pci_device *cur_pci_dev)
++{
++    struct rte_devargs *devargs;
++
++    // Fake vf using the name of pf
++    rte_pci_device_name(&cur_pci_dev->addr, dev->name, sizeof(dev->name));
++    devargs = hinic3_bifur_pci_devargs_lookup(&dev->addr);
++    dev->device.devargs = devargs;
++    
++    if (devargs != NULL) {
++        dev->device.name = dev->device.devargs->name;
++    } else {
++        dev->device.name = dev->name;
++    }
++}
++
++static int hinic3_bifur_parse_one_sysfs_resource(char *line, size_t len, uint64_t *phys_addr,
++    uint64_t *end_addr, uint64_t *flags)
++{
++    union pci_resource_info {
++        struct {
++            char *phys_addr;
++            char *end_addr;
++            char *flags;
++        };
++
++        char *ptrs[PCI_RESOURCE_FMT_NVAL];
++    }res_info;
++
++    if (rte_strsplit(line, len, res_info.ptrs, 3, ' ') != 3) {
++        PMD_DRV_LOG(ERR, "Bad resource format");
++        return -1;
++    }
++
++    errno = 0;
++    *phys_addr = strtoull(res_info.phys_addr, NULL, 16);
++    *end_addr = strtoull(res_info.end_addr, NULL, 16);
++    *flags = strtoull(res_info.flags, NULL, 16);
++
++    if (errno != 0) {
++        PMD_DRV_LOG(ERR, "Bad resource format");
++        return -1;
++    }
++
++    return 0;
++}
++
++static int hinic3_bifur_get_kernel_driver_by_path(const char *filename, char *dri_name,
++                    size_t len)
++{
++    int count;
++    char path[PATH_MAX];
++    char *name;
++
++    if (!filename || !dri_name) {
++        return -1;
++    }
++
++    count = readlink(filename, path, PATH_MAX);
++    if (count >= PATH_MAX)
++        return -1;
++
++    if (count < 0) {
++        return 1;
++    }
++
++    path[count] = '\0';
++    name = strrchr(path, '/');
++    if (name) {
++        strlcpy(dri_name, name + 1, len);
++        return 0;
++    }
++
++    return -1;
++}
++
++static int hinic3_bifur_parse_sysfs_resource(const char *filename, struct rte_pci_device *dev)
++{
++    FILE *f;
++    char buf[BUFSIZ];
++    int i;
++    uint64_t phys_addr, end_addr, flags;
++
++    f = fopen(filename, "r");
++    if (f == NULL) {
++        PMD_DRV_LOG(ERR, "Cannot open sysfs resource");
++        return -1;
++    }
++
++    for (i = 0; i < PCI_MAX_RESOURCE; i++) {
++        if (fgets(buf, sizeof(buf), f) == NULL) {
++            PMD_DRV_LOG(ERR, "Cannot read resource");
++            goto error;
++        }
++
++        if (hinic3_bifur_parse_one_sysfs_resource(buf, sizeof(buf), &phys_addr,
++                &end_addr, &flags) < 0) {
++            goto error;
++        }
++
++        if (flags & IORESOURCE_MEM) {
++            dev->mem_resource[i].phys_addr = phys_addr;
++            dev->mem_resource[i].len = end_addr - phys_addr + 1;
++            dev->mem_resource[i].addr = NULL;
++        }
++    }
++
++    fclose(f);
++    return 0;
++
++error:
++    fclose(f);
++    return -1;
++}
++
++static struct rte_pci_device *hinic3_bifur_alloc_pci_dev(const char *dirname,
++    const struct rte_pci_addr *pair_pci_addr, struct rte_pci_device *origin_pci_dev)
++{
++    char filename[PATH_MAX];
++    unsigned long tmp;
++    struct rte_pci_device *dev;
++    char driver[PATH_MAX];
++    int ret;
++
++    dev = rte_zmalloc("hinic3_bifur_pci_dev", sizeof(*dev), 0);
++    if (dev == NULL) {
++        return NULL;
++    }
++
++    dev->device.bus = origin_pci_dev->device.bus;
++    dev->addr = *pair_pci_addr;
++
++    snprintf(filename, sizeof(filename), "%s/vendor", dirname);
++    if (hinic3_bifur_parse_sysfs_value(filename, &tmp) < 0) {
++        free(dev);
++        return NULL;
++    }
++    dev->id.vendor_id = (uint16_t)tmp;
++
++    snprintf(filename, sizeof(filename), "%s/device", dirname);
++    if (hinic3_bifur_parse_sysfs_value(filename, &tmp) < 0) {
++        free(dev);
++        return NULL;
++    }
++    dev->id.device_id = (uint16_t)tmp;
++
++    snprintf(filename, sizeof(filename), "%s/subsystem_vendor", dirname);
++    if (hinic3_bifur_parse_sysfs_value(filename, &tmp) < 0) {
++        free(dev);
++        return NULL;
++    }
++    dev->id.subsystem_vendor_id = (uint16_t)tmp;
++
++    snprintf(filename, sizeof(filename), "%s/subsystem_device", dirname);
++    if (hinic3_bifur_parse_sysfs_value(filename, &tmp) < 0) {
++        free(dev);
++        return NULL;
++    }
++    dev->id.subsystem_device_id = (uint16_t)tmp;
++
++
++    snprintf(filename, sizeof(filename), "%s/class", dirname);
++    if (hinic3_bifur_parse_sysfs_value(filename, &tmp) < 0) {
++        free(dev);
++        return NULL;
++    }
++    dev->id.class_id = (uint32_t)tmp & RTE_CLASS_ANY_ID;
++
++    dev->max_vfs = 0;
++    snprintf(filename, sizeof(filename), "%s/max_vfs", dirname);
++    if (!access(filename, F_OK) &&
++        hinic3_bifur_parse_sysfs_value(filename, &tmp) == 0) {
++        dev->max_vfs = (uint16_t)tmp;
++    } else {
++        snprintf(filename, sizeof(filename), "%s/sriov_numvfs", dirname);
++        if (!access(filename, F_OK) &&
++            hinic3_bifur_parse_sysfs_value(filename, &tmp) == 0 ) {
++            dev->max_vfs = (uint16_t)tmp;
++        }
++    }
++
++    snprintf(filename, sizeof(filename), "%s/numa_node", dirname);
++    if (access(filename, F_OK) != -1) {
++        if (hinic3_bifur_parse_sysfs_value(filename, &tmp) == 0) {
++            dev->device.numa_node = tmp;
++        } else {
++            dev->device.numa_node = -1;
++        }
++    } else {
++        dev->device.numa_node = 0;
++    }
++    
++    hinic3_bifur_pci_name_set(dev, origin_pci_dev);
++    snprintf(filename, sizeof(filename), "%s/resource", dirname);
++    if (hinic3_bifur_parse_sysfs_resource(filename, dev) < 0) {
++        PMD_DRV_LOG(ERR, "Cannot parse resource");
++        free(dev);
++        return NULL;
++    }
++
++    snprintf(filename, sizeof(filename), "%s/driver", dirname);
++    ret = hinic3_bifur_get_kernel_driver_by_path(filename, driver, sizeof(driver));
++    if (ret < 0) {
++        PMD_DRV_LOG(ERR, "Failed to get kernel driver");
++        free(dev);
++        return NULL;
++    }
++
++    if (!ret) {
++        if (!strcmp(driver, "vfio-pci")) {
++            dev->kdrv = RTE_PCI_KDRV_VFIO;
++        } else if (!strcmp(driver, "igb_uio")) {
++            dev->kdrv = RTE_PCI_KDRV_IGB_UIO;
++        } else if (!strcmp(driver, "uio_pci_generic")) {
++            dev->kdrv = RTE_PCI_KDRV_UIO_GENERIC;
++        } else {
++            dev->kdrv = RTE_PCI_KDRV_UNKNOWN;
++        }
++    } else {
++        free(dev);
++        return NULL;
++    }
++
++    return dev;
++
++}
++
++static int hinic3_bifur_work_pci_pre_probe(struct rte_pci_driver *dr, struct rte_pci_device *dev)
++{
++    bool already_probed;
++    
++    if ((dr == NULL) || (dev == NULL)) {
++        return -EINVAL;
++    }
++
++    if (!hinic3_bifur_pci_match(dr, dev)) {
++        return 1;
++    }
++
++    if (dev->device.devargs != NULL &&
++        dev->device.devargs->policy == RTE_DEV_BLOCKED) {
++        PMD_DRV_LOG(INFO, "Device is blocked, not initializing");
++        return 1;
++    }
++
++    if (dev->device.numa_node < 0) {
++        if (rte_socket_count() > 1) {
++            PMD_DRV_LOG(INFO, "Device %s is not NUMA-aware, defaulting socket to 0", dev->name);
++        }
++
++        dev->device.numa_node = 0;
++    }
++
++    already_probed = rte_dev_is_probed(&dev->device);
++    if (already_probed && !(dr->drv_flags & RTE_PCI_DRV_PROBE_AGAIN)) {
++        PMD_DRV_LOG(DEBUG, "Device %s is already probed", dev->device.name);
++        return -EEXIST;
++    }
++
++    if (!already_probed) {
++        enum rte_iova_mode dev_iova_mode;
++        enum rte_iova_mode iova_mode;
++
++        dev_iova_mode = hinic3_bifur_pci_device_iova_mode(dr, dev);
++        iova_mode =  rte_eal_iova_mode();
++        if (dev_iova_mode != RTE_IOVA_DC &&
++            dev_iova_mode != iova_mode) {
++            PMD_DRV_LOG(ERR, "Expecting '%s' IOVA mode but current mode is '%s', not initializing",
++                dev_iova_mode == RTE_IOVA_PA ? "PA" : "VA",
++                iova_mode == RTE_IOVA_PA ? "PA": "VA");
++            return -EINVAL;
++        }
++#ifdef DPDK_21_BIFUR
++        dev->intr_handle = rte_intr_instance_alloc(RTE_INTR_INSTANCE_F_PRIVATE);
++        if (dev->intr_handle == NULL) {
++            PMD_DRV_LOG(ERR, "Failed to create interrupt instance for %s", dev->device.name);
++            return -ENOMEM;
++        }
++
++        dev->vfio_req_intr_handle = rte_intr_instance_alloc(RTE_INTR_INSTANCE_F_PRIVATE);
++        if (dev->vfio_req_intr_handle == NULL) {
++            rte_intr_instance_free(dev->intr_handle);
++            dev->intr_handle = NULL;
++            PMD_DRV_LOG(ERR, "Failed to create vfio req interrupt instance for %s", dev->device.name);
++            return -ENOMEM;
++        }
++#endif
++        dev->driver = dr;
++    }
++
++    dev->device.driver = &dr->driver;
++    return 0;
++}
++
++static int hinic3_bifur_probe_pair_func(struct rte_pci_driver *pci_drv, struct rte_pci_device *origin_pci_dev,
++    struct rte_pci_device **work_pci_dev, struct rte_pci_addr *pair_pci_addr)
++{
++    int ret = -1;
++    char path[MAX_PATH_LEN] = { 0 };
++    hinic3_bifur_pci_addr_to_path(pair_pci_addr, path);
++    *work_pci_dev = hinic3_bifur_alloc_pci_dev(path, pair_pci_addr, origin_pci_dev);
++    if (*work_pci_dev == NULL) {
++        return ret;
++    }
++
++    ret = hinic3_bifur_work_pci_pre_probe(pci_drv, *work_pci_dev);
++    if (ret != 0) {
++        return ret;
++    }
++
++    return 0;
++}
++
++enum MAPPED_DEV_OP_OODE {
++    DEV_ADD = 0x1,
++    DEV_DEL = 0x2,
++    DEV_QUERY = 0x4,
++};
++
++static int hinic3_bifur_mapped_dev_op(struct rte_pci_device *mapped_pci_dev, enum MAPPED_DEV_OP_OODE opcode)
++{
++    struct hinic3_bifur_mapped_dev *mapped_dev = NULL;
++
++    if ((opcode & DEV_ADD) != 0) {
++        mapped_dev = rte_zmalloc("hinic3_bifur_mapped_dev", sizeof(struct hinic3_bifur_mapped_dev), 0);
++        if (mapped_dev == NULL) {
++            return -ENOMEM;
++        }
++
++        mapped_dev->pci_dev = mapped_pci_dev;
++        STAILQ_INSERT_TAIL(&g_mapped_dev_list, mapped_dev, entries);
++    } else if ((opcode & DEV_DEL) != 0 && (opcode & DEV_QUERY) != 0) {
++        bool found = false;
++        STAILQ_FOREACH(mapped_dev, &g_mapped_dev_list, entries) {
++            if (mapped_dev->pci_dev == mapped_pci_dev) {
++                hinic3_bifur_pci_unmap_device(mapped_dev->pci_dev);
++                rte_free(mapped_dev);
++                STAILQ_REMOVE(&g_mapped_dev_list, mapped_dev, hinic3_bifur_mapped_dev, entries);
++                found = true;
++                break;
++            }
++        }
++
++        if (found == true) {
++            return 0;
++        }
++
++        return -1;
++    }
++
++    return 0;
++}
++
++static int hinic3_bifur_lock_pair(struct hinic3_bifur_dev_pair *dev_pair)
++{
++    int ret = 0;
++    u32 dbdf;
++    char real_path[4096] = { 0 };
++    char file_path[128] = { 0 };
++    struct rte_pci_addr *addr = &dev_pair->work_pci_dev->addr;
++
++    dbdf = PCI_DBDF(addr->domain, addr->bus, addr->devid, addr->function);
++    ret = snprintf(file_path, 128, "%s/0x%x/%s", BIFUR_PROC_PATH, dbdf, BIFUR_DEV_NAME);
++    if (ret < 0) {
++        PMD_DRV_LOG(ERR, "Build dbdf(0x%x) path(%s), failed, err(%s).", dbdf, file_path, strerror(errno));
++        return -1;
++    }
++
++    if (realpath(file_path, real_path) == NULL) {
++        PMD_DRV_LOG(ERR, "Build dbdf(0x%x) real path(%s) failed, err(%s) ret(%d).", dbdf, file_path, strerror(errno), ret);
++        return -1;
++    }
++
++    int fd = open(real_path, O_RDONLY);
++    if (fd < 0) {
++        PMD_DRV_LOG(ERR, "Build dbdf(0x%x) open path(%s) failed, err(%s) ret(%d).", dbdf, real_path, strerror(errno), ret);
++        return -1;
++    }
++
++    dev_pair->work_func_fd = fd;
++    return 0;
++}
++
++static int hinic3_bifur_store_pcidev_pairs(struct rte_pci_device *origin_pci_dev,
++    struct rte_pci_device *work_pci_dev)
++{
++    int ret;
++    struct hinic3_bifur_dev_pair *dev_pair = NULL;
++    
++    dev_pair = rte_zmalloc("hinic3_bifur_dev_pair", sizeof(struct hinic3_bifur_dev_pair), 0);
++    if (dev_pair == NULL) {
++        return -ENOMEM;
++    }
++
++    dev_pair->origin_pci_dev = origin_pci_dev;
++    dev_pair->work_pci_dev = work_pci_dev;
++
++    ret = hinic3_bifur_lock_pair(dev_pair);
++    if (ret != 0) {
++        return ret;
++    }
++
++    TAILQ_INSERT_TAIL(&g_hinic3_bifur_mgr.pair_list, dev_pair, entries);
++    return 0;
++}
++
++static void hinic3_bifur_remove_pcidev_pairs(struct rte_pci_device *origin_pci_dev)
++{
++    struct hinic3_bifur_dev_pair *dev_pair = NULL;
++
++    TAILQ_FOREACH(dev_pair, &g_hinic3_bifur_mgr.pair_list, entries) {
++        if (dev_pair->origin_pci_dev == origin_pci_dev) {
++            hinic3_bifur_pci_unmap_device(dev_pair->work_pci_dev);
++            close(dev_pair->work_func_fd);
++            rte_free(dev_pair->work_pci_dev);
++            TAILQ_REMOVE(&g_hinic3_bifur_mgr.pair_list, dev_pair, entries);
++            rte_free(dev_pair);
++            return;
++        }
++    }
++
++    if (hinic3_bifur_mapped_dev_op(origin_pci_dev, DEV_DEL | DEV_QUERY) != 0) {
++        PMD_DRV_LOG(ERR, "Bifur remove pcidev pairs failed");
++    }
++}
++
++static int hinic3_bifur_handle_share_func(struct rte_pci_driver *pci_drv, struct rte_pci_device *origin_pci_dev,
++    struct rte_pci_device **work_pci_dev)
++{
++    int ret;
++    struct rte_pci_addr pair_pci_addr;
++    if (rte_eal_process_type() == RTE_PROC_PRIMARY) {
++        // 避免同进程内两次probe时重复创建memzone
++        if (rte_memzone_lookup(MEMZONE_NAME)== NULL) {
++            if (rte_memzone_reserve(MEMZONE_NAME, MEMZONE_SIZE, SOCKET_ID_ANY, 0) == NULL) {
++                PMD_DRV_LOG(ERR, "Failed to reserve memory zone.");
++                return -1;
++            }
++        }
++
++        // 预留共享内存区域
++        const struct rte_memzone *mz = rte_memzone_lookup(MEMZONE_NAME);
++        if (mz == NULL) {
++            PMD_DRV_LOG(ERR, "Memory zone not found in primary process.");
++            return -1;
++        }
++
++        ret = hinic3_bifur_func_pair_from_kernel(&origin_pci_dev->addr, &pair_pci_addr);
++        if (ret != 0) {
++            return ret;
++        }
++
++        *((struct rte_pci_addr *)mz->addr) = pair_pci_addr;
++    } else {
++        const struct rte_memzone *mz = rte_memzone_lookup(MEMZONE_NAME);
++        if (mz == NULL) {
++            PMD_DRV_LOG(ERR, "Memory zone not found in secondary process.");
++            return -1;
++        }
++
++        pair_pci_addr = *(struct rte_pci_addr*)mz->addr;
++    }
++
++    ret = hinic3_bifur_probe_pair_func(pci_drv, origin_pci_dev, work_pci_dev, &pair_pci_addr);
++    if (ret != 0) {
++        return ret;
++    }
++
++    ret = hinic3_bifur_store_pcidev_pairs(origin_pci_dev, *work_pci_dev);
++    if (ret != 0) {
++        return ret;
++    }
++
++    return 0;
++}
++
++
++int hinic3_bifur_pre_probe(struct rte_pci_driver *pci_drv, struct rte_pci_device *origin_pci_dev,
++    struct rte_pci_device **work_pci_dev, enum BIFUR_ACTION *bifur_action)
++{
++    int ret = -1;
++    enum bifur_func_type func_type = BIFUR_EXCLUSIVE_PF;
++
++    if (pci_drv == NULL || origin_pci_dev == NULL || work_pci_dev == NULL || bifur_action == NULL) {
++        return 0;
++    }
++
++    ret = hinic3_bifur_query_func_type(&origin_pci_dev->addr, &func_type);
++    if (ret != 0) {
++        func_type = BIFUR_EXCLUSIVE_PF;
++    }
++
++    switch (func_type) {
++        case BIFUR_SHARED_PF:
++            ret = hinic3_bifur_handle_share_func(pci_drv, origin_pci_dev, work_pci_dev);
++            if (ret != 0) {
++                *bifur_action = BIFUR_DONE;
++            } else {
++                *bifur_action = BIFUR_CONTINUE;
++            }
++            break;
++        case BIFUR_RESOURCE_PF:
++            *bifur_action = BIFUR_DONE;
++            ret = -1;
++            break;
++        case BIFUR_RESOURCE_VF:
++            *bifur_action = BIFUR_DONE;
++            ret = 0;
++            break;
++        default:
++            *work_pci_dev = origin_pci_dev;
++            *bifur_action = BIFUR_CONTINUE;
++            ret = 0;
++            break;
++    }
++
++    if (*bifur_action == BIFUR_CONTINUE) {
++        ret = hinic3_bifur_pci_map_device(*work_pci_dev);
++        if (hinic3_bifur_mapped_dev_op(*work_pci_dev, DEV_ADD) != 0) {
++            PMD_DRV_LOG(WARNING, "Record mapped device failed, may cause error while release.");
++        }
++    }
++
++    return ret;
++}
++
++
++void hinic3_bifur_post_remove(struct rte_pci_device *origin_pci_dev)
++{
++    if (origin_pci_dev == NULL) {
++        return;
++    }
++
++    hinic3_bifur_remove_pcidev_pairs(origin_pci_dev);
++    hinic3_bifur_try_deinit_mgr();
++}
++
++bool hinic3_bifur_is_shared_dev(struct rte_pci_device *work_pci_dev)
++{
++    struct hinic3_bifur_dev_pair *dev_pair = NULL;
++
++    if (work_pci_dev == NULL) {
++        return false;
++    }
++
++    TAILQ_FOREACH(dev_pair, &g_hinic3_bifur_mgr.pair_list, entries) {
++        if (dev_pair->work_pci_dev == work_pci_dev) {
++            return true;
++        }
++    }
++
++    return false;
++}
++
++int hinic3_bifur_get_default_mac(struct rte_pci_device *pci_dev, u8 *mac_addr, int ether_len)
++{
++    int ret;
++    u32 dbdf;
++    struct bifur_msg msg = { 0 };
++    struct rte_pci_addr *addr = NULL;
++    struct bifur_mac_get_cmd_msg cmd = { 0 };
++    struct bifur_mac_get_cmd_rsp rsp = { 0 };
++
++    int g_func_fd = g_hinic3_bifur_mgr.func_mgr.global_func_fd;
++    if (pci_dev == NULL || mac_addr == NULL || ether_len > RTE_ETHER_ADDR_LEN) {
++        return -EINVAL;
++    }
++
++    addr = &pci_dev->addr;
++    dbdf = PCI_DBDF(addr->domain, addr->bus, addr->devid, addr->function);
++    cmd.dbdf = dbdf;
++
++    hinic3_bifur_fill_msg(&msg, BIFUR_DRV_CMD_MAC_GET, &cmd, sizeof(struct bifur_mac_get_cmd_msg), &rsp,
++        sizeof(struct bifur_mac_get_cmd_rsp));
++    ret = hinic3_bifur_send_msg(g_func_fd, &msg);
++    if (ret) {
++        return ret;
++    }
++
++    memcpy(mac_addr, rsp.mac, RTE_ETHER_ADDR_LEN);
++    return 0;
++}
++
++#endif
+\ No newline at end of file
+diff --git a/drivers/net/hinic3/hinic3_pmd_bifur.h b/drivers/net/hinic3/hinic3_pmd_bifur.h
+new file mode 100644
+index 0000000..84e75e1
+--- /dev/null
++++ b/drivers/net/hinic3/hinic3_pmd_bifur.h
+@@ -0,0 +1,20 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ */
++#ifndef _HINIC3_PMD_BIFUR_H_
++#define _HINIC3_PMD_BIFUR_H_
++
++#include <rte_bus_pci.h>
++
++enum BIFUR_ACTION {
++    BIFUR_DONE,
++    BIFUR_CONTINUE,
++};
++
++int hinic3_bifur_pre_probe(struct rte_pci_driver *pci_dev, struct rte_pci_device *origin_pci_dev,
++    struct rte_pci_device **work_pci_dev, enum BIFUR_ACTION *bifur_flag);
++void hinic3_bifur_post_remove(struct rte_pci_device *origin_pci_dev);
++bool hinic3_bifur_is_shared_dev(struct rte_pci_device *pci_dev);
++int hinic3_bifur_get_default_mac(struct rte_pci_device *pci_dev, u8 *mac_addr, int ether_len);
++
++#endif // _HINIC3_PMD_BIFUR_H_
+\ No newline at end of file
+diff --git a/drivers/net/hinic3/hinic3_pmd_ethdev.c b/drivers/net/hinic3/hinic3_pmd_ethdev.c
+index e128c0b..4c1e945 100644
+--- a/drivers/net/hinic3/hinic3_pmd_ethdev.c
++++ b/drivers/net/hinic3/hinic3_pmd_ethdev.c
+@@ -14,18 +14,21 @@
+ #include "base/hinic3_pmd_csr.h"
+ #include "base/hinic3_pmd_wq.h"
+ #include "base/hinic3_pmd_eqs.h"
++#include "base/hinic3_pmd_cmd.h"
+ #include "base/hinic3_pmd_cmdq.h"
+ #include "base/hinic3_pmd_hwdev.h"
+ #include "base/hinic3_pmd_hwif.h"
+ #include "base/hinic3_pmd_hw_cfg.h"
+ #include "base/hinic3_pmd_hw_comm.h"
+-#include "base/hinic3_pmd_nic_cfg.h"
+ #include "base/hinic3_pmd_nic_event.h"
+ #include "mml/hinic3_pmd_mml_lib.h"
+ #include "hinic3_pmd_nic_io.h"
+ #include "hinic3_pmd_tx.h"
+ #include "hinic3_pmd_rx.h"
+ #include "hinic3_pmd_ethdev.h"
++#ifdef HINIC3_TRAFFIC_BIFUR
++#include "hinic3_pmd_bifur.h"
++#endif
+ 
+ #define HINIC3_MIN_RX_BUF_SIZE		1024
+ 
+@@ -3385,6 +3388,14 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
+ 
+ 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
+ 	memset(nic_dev, 0, sizeof(*nic_dev));
++
++#ifdef HINIC3_TRAFFIC_BIFUR
++	if (hinic3_bifur_is_shared_dev(pci_dev)) {
++		PMD_DRV_LOG(INFO, "It`s a shared vf for flow bifurcation.");
++		nic_dev->hinic3_function_mode = HINIC3_FUNC_SHARED;
++	}
++#endif
++
+ 	(void)snprintf(nic_dev->dev_name, sizeof(nic_dev->dev_name),
+ 		 "dbdf-%.4x:%.2x:%.2x.%x",
+ 		 pci_dev->addr.domain, pci_dev->addr.bus,
+@@ -3619,21 +3630,51 @@ static const struct rte_pci_id pci_id_hinic3_map[] = {
+ 	{.vendor_id = 0},
+ };
+ 
++#ifdef HINIC3_TRAFFIC_BIFUR
++static int hinic3_pci_probe(struct rte_pci_driver *pci_drv,
++	struct rte_pci_device *pci_dev)
++#else
+ static int hinic3_pci_probe(__rte_unused struct rte_pci_driver *pci_drv,
+ 			    struct rte_pci_device *pci_dev)
++#endif
+ {
+-	return rte_eth_dev_pci_generic_probe(pci_dev,
++	int ret = 0;
++	struct rte_pci_device *work_pci_dev = pci_dev;
++#ifdef HINIC3_TRAFFIC_BIFUR
++	enum BIFUR_ACTION bifur_action = BIFUR_CONTINUE;
++	ret = hinic3_bifur_pre_probe(pci_drv, pci_dev, &work_pci_dev, &bifur_action);
++	if (ret != 0 || bifur_action == BIFUR_DONE) {
++		return ret;
++	}
++#endif
++	ret = rte_eth_dev_pci_generic_probe(work_pci_dev,
+ 		sizeof(struct hinic3_nic_dev), hinic3_dev_init);
++	return ret;
+ }
+ 
+ static int hinic3_pci_remove(struct rte_pci_device *pci_dev)
+ {
+-	return rte_eth_dev_pci_generic_remove(pci_dev, hinic3_dev_uninit);
++	int ret;
++
++	ret = rte_eth_dev_pci_generic_remove(pci_dev, hinic3_dev_uninit);
++	if (ret != 0) {
++		PMD_DRV_LOG(ERR, "hinic3 pci remove rte remove failed.");
++	}
++
++#ifdef HINIC3_TRAFFIC_BIFUR
++	hinic3_bifur_post_remove(pci_dev);
++#endif
++
++	return ret;
+ }
+ 
+ static struct rte_pci_driver rte_hinic3_pmd = {
+ 	.id_table = pci_id_hinic3_map,
++#ifdef HINIC3_TRAFFIC_BIFUR
++	.drv_flags = RTE_PCI_DRV_INTR_LSC,
++#else 
+ 	.drv_flags = RTE_PCI_DRV_NEED_MAPPING | RTE_PCI_DRV_INTR_LSC,
++#endif
+ 	.probe = hinic3_pci_probe,
+ 	.remove = hinic3_pci_remove,
+ };
+diff --git a/drivers/net/hinic3/hinic3_pmd_ethdev.h b/drivers/net/hinic3/hinic3_pmd_ethdev.h
+index d068ee8..6837c7c 100644
+--- a/drivers/net/hinic3/hinic3_pmd_ethdev.h
++++ b/drivers/net/hinic3/hinic3_pmd_ethdev.h
+@@ -7,6 +7,7 @@
+ 
+ #include <rte_ethdev.h>
+ #include <rte_ethdev_core.h>
++#include "base/hinic3_pmd_nic_cfg.h"
+ #include "hinic3_pmd_fdir.h"
+ 
+ #ifdef GLOBAL_VERSION_STR
+@@ -116,6 +117,11 @@ enum nic_feature_cap {
+     NIC_F_ALLMULTI = BIT(13),
+ };
+ 
++enum hinic3_function_mode {
++	HINIC3_FUNC_EXCLUSIVE = 0,
++	HINIC3_FUNC_SHARED,
++};
++
+ #define DEFAULT_DRV_FEATURE		0x3FFF
+ 
+ TAILQ_HEAD(hinic3_ethertype_filter_list, rte_flow);
+@@ -140,6 +146,7 @@ struct hinic3_nic_dev {
+ 	u8 num_rss;
+ 	u8 rsvd0;
+ 
++	struct hinic3_rss_type rss_type;
+ 	u32 rx_mode;
+ 	u8 rx_queue_list[HINIC3_MAX_QUEUE_NUM];
+ 	rte_spinlock_t queue_list_lock;
+@@ -169,7 +176,9 @@ struct hinic3_nic_dev {
+ 	struct hinic3_tcam_info      tcam;
+ 	struct hinic3_ethertype_filter_list filter_ethertype_list;
+ 	struct hinic3_fdir_rule_filter_list filter_fdir_rule_list;
+-
++#ifdef HINIC3_TRAFFIC_BIFUR
++	u8 hinic3_function_mode;
++#endif
+ };
+ 
+ extern const struct rte_flow_ops hinic3_flow_ops;
+diff --git a/drivers/net/hinic3/hinic3_pmd_fdir.c b/drivers/net/hinic3/hinic3_pmd_fdir.c
+index f5c64fe..f4e454c 100644
+--- a/drivers/net/hinic3/hinic3_pmd_fdir.c
++++ b/drivers/net/hinic3/hinic3_pmd_fdir.c
+@@ -22,11 +22,17 @@
+ #include "base/hinic3_pmd_mgmt.h"
+ #include "base/hinic3_pmd_nic_cfg.h"
+ #include "hinic3_pmd_ethdev.h"
++#include "hinic3_pmd_csr.h"
++#ifdef HINIC3_TRAFFIC_BIFUR
++#include "hinic3_pmd_bifur.h"
++#endif
+ #include "hinic3_pmd_fdir.h"
+ 
+ #define HINIC3_UINT1_MAX          0x1
++#define HINIC3_UINT2_MAX          0x3
+ #define HINIC3_UINT4_MAX          0xf
+ #define HINIC3_UINT15_MAX         0x7fff
++#define BIFUR_EN                  0x2
+ 
+ #define HINIC3_DEV_PRIVATE_TO_TCAM_INFO(nic_dev) \
+ 	(&((struct hinic3_nic_dev *)(nic_dev))->tcam)
+@@ -61,12 +67,33 @@ static void tcam_key_calculate(struct hinic3_tcam_key *tcam_key,
+ 		HINIC3_TCAM_FLOW_KEY_SIZE);
+ }
+ 
++#ifdef HINIC3_TRAFFIC_BIFUR
++static void hinic3_fdir_tcam_ipv4_init(struct hinic3_fdir_filter *rule,
++	struct hinic3_tcam_key *tcam_key, struct rte_eth_dev *dev)
++#else
+ static void hinic3_fdir_tcam_ipv4_init(struct hinic3_fdir_filter *rule,
+ 			struct hinic3_tcam_key *tcam_key)
++#endif
+ {
+ 	tcam_key->key_mask.ip_type = HINIC3_UINT1_MAX;
+ 	tcam_key->key_info.ip_type = HINIC3_FDIR_IP_TYPE_IPV4;
+ 
++#ifdef HINIC3_TRAFFIC_BIFUR
++	struct hinic3_nic_dev *nic_dev =HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
++	struct rte_pci_device *pci_dev = NULL;
++	pci_dev = RTE_ETH_DEV_TO_PCI(dev);
++
++	if (pci_dev->id.device_id == HINIC3_DEV_ID_DPU || hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev)) {
++		/** VF RSS flow table traffic distribution */
++		tcam_key->key_mask.bifur_flag = HINIC3_UINT2_MAX;
++		tcam_key->key_info.bifur_flag = BIFUR_EN;
++	} else {
++		/** FDIR flow table traffic distribution  */
++		tcam_key->key_mask.bifur_flag = 0;
++		tcam_key->key_info.bifur_flag = 0;
++	}
++#endif
++
+ 	tcam_key->key_mask.sipv4_h =
+ 		HINIC3_32_UPPER_16_BITS(rule->key_mask.ipv4.src_ip);
+ 	tcam_key->key_mask.sipv4_l =
+@@ -87,12 +114,33 @@ static void hinic3_fdir_tcam_ipv4_init(struct hinic3_fdir_filter *rule,
+ 
+ }
+ 
++#ifdef HINIC3_TRAFFIC_BIFUR
++static void hinic3_fdir_tcam_ipv6_init(struct hinic3_fdir_filter *rule,
++			struct hinic3_tcam_key *tcam_key, struct rte_eth_dev *dev)
++#else
+ static void hinic3_fdir_tcam_ipv6_init(struct hinic3_fdir_filter *rule,
+ 			struct hinic3_tcam_key *tcam_key)
++#endif
+ {
+ 	tcam_key->key_mask_ipv6.ip_type = HINIC3_UINT1_MAX;
+ 	tcam_key->key_info_ipv6.ip_type = HINIC3_FDIR_IP_TYPE_IPV6;
+ 
++#ifdef HINIC3_TRAFFIC_BIFUR
++	struct hinic3_nic_dev *nic_dev =HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
++	struct rte_pci_device *pci_dev = NULL;
++	pci_dev = RTE_ETH_DEV_TO_PCI(dev);
++
++	if (pci_dev->id.device_id == HINIC3_DEV_ID_DPU || hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev)) {
++		/** VF RSS flow table traffic distribution */
++		tcam_key->key_mask_ipv6.bifur_flag = HINIC3_UINT2_MAX;
++		tcam_key->key_info_ipv6.bifur_flag = BIFUR_EN;
++	} else {
++		/** FDIR flow table traffic distribution  */
++		tcam_key->key_mask_ipv6.bifur_flag = 0;
++		tcam_key->key_info_ipv6.bifur_flag = 0;
++	}
++#endif
++
+ 	tcam_key->key_mask_ipv6.sipv6_key0 =
+ 		HINIC3_32_UPPER_16_BITS(rule->key_mask.ipv6.src_ip[0]);
+ 	tcam_key->key_mask_ipv6.sipv6_key1 =
+@@ -176,16 +224,37 @@ static void hinic3_fdir_tcam_notunnel_init(struct rte_eth_dev *dev,
+ 	tcam_key->key_info.tunnel_type = HINIC3_FDIR_TUNNEL_MODE_NORMAL;
+ 
+ 	tcam_key->key_mask.function_id = HINIC3_UINT15_MAX;
+-	tcam_key->key_info.function_id =
+-		hinic3_global_func_id(nic_dev->hwdev) & HINIC3_UINT15_MAX;
++#ifdef HINIC3_TRAFFIC_BIFUR
++	u8 enable;
++	if (hinic3_get_bifur_enable(nic_dev->hwdev, &enable) != 0) {
++		PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable status failed.");
++	} 
++	
++	if (enable) {
++		tcam_key->key_info.function_id = HINIC3_UINT15_MAX;
++		tcam_key->key_mask.ether_type =  rule->key_mask.ether_type;
++		tcam_key->key_info.ether_type = rule->key_spec.ether_type;
++	} else {
++		tcam_key->key_info.function_id =
++			hinic3_global_func_id(nic_dev->hwdev) & HINIC3_UINT15_MAX;
++	}
++#endif
+ 
+ 	tcam_key->key_mask.ip_proto = rule->key_mask.proto;
+ 	tcam_key->key_info.ip_proto = rule->key_spec.proto;
+ 
+ 	if (rule->ip_type == HINIC3_FDIR_IP_TYPE_IPV4)
+- 		hinic3_fdir_tcam_ipv4_init(rule, tcam_key);
++#ifdef HINIC3_TRAFFIC_BIFUR
++ 		hinic3_fdir_tcam_ipv4_init(rule, tcam_key, dev);
++#else
++		hinic3_fdir_tcam_ipv4_init(rule, tcam_key);
++#endif
+ 	else if (rule->ip_type == HINIC3_FDIR_IP_TYPE_IPV6)
++#ifdef HINIC3_TRAFFIC_BIFUR
++		hinic3_fdir_tcam_ipv6_init(rule, tcam_key, dev);
++#else
+ 		hinic3_fdir_tcam_ipv6_init(rule, tcam_key);
++#endif
+ }
+ 
+ static void hinic3_fdir_tcam_vxlan_ipv4_init(struct hinic3_fdir_filter *rule,
+@@ -426,9 +495,26 @@ static void hinic3_fdir_tcam_info_init(struct rte_eth_dev *dev,
+ 
+ 	fdir_tcam_rule->data.qid = rule->rq_index;
+ 
++#ifdef HINIC3_TRAFFIC_BIFUR
++	fdir_tcam_rule->data.queue_num = rule->queue_num;
++#endif
++
+ 	tcam_key_calculate(tcam_key, fdir_tcam_rule);
+ }
+ 
++#ifdef HINIC3_TRAFFIC_BIFUR
++static void hinic3_fdir_tcam_key_get(struct rte_eth_dev *dev,
++			struct hinic3_fdir_filter *rule,
++			struct hinic3_tcam_key *tcam_key)
++{
++	if (rule->tunnel_type == HINIC3_FDIR_TUNNEL_MODE_NORMAL) {
++		hinic3_fdir_tcam_notunnel_init(dev, rule, tcam_key);
++	} else {
++		hinic3_fdir_tcam_vxlan_init(dev, rule, tcam_key);
++	}
++}
++#endif
++
+ static inline uint16_t
+ hinic3_ethertype_filter_lookup(struct hinic3_ethertype_filter_list *ethertype_list,
+ 			uint16_t type)
+@@ -1079,3 +1165,87 @@ int hinic3_flow_add_del_ethertype_filter(struct rte_eth_dev *dev,
+ 	return ret;
+ }
+ 
++#ifdef HINIC3_TRAFFIC_BIFUR
++int hinic3_flow_query_fdir_filter(struct rte_eth_dev *dev, struct hinic3_fdir_filter *fdir_filter,
++					__rte_unused u64 *hits, __rte_unused u64 *bytes_count)
++{
++	struct hinic3_tcam_info *tcam_info = HINIC3_DEV_PRIVATE_TO_TCAM_INFO(dev->data->dev_private);
++	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
++	struct hinic3_tcam_filter *tcam_filter;
++	struct hinic3_tcam_key tcam_key;
++
++	memset((void *)&tcam_key, 0, sizeof(struct hinic3_tcam_key));
++	hinic3_fdir_tcam_key_get(dev, fdir_filter, &tcam_key);
++	tcam_filter = hinic3_tcam_filter_lookup(&tcam_info->tcam_list, &tcam_key);
++	if (tcam_filter == NULL) {
++		PMD_DRV_LOG(ERR, "Filter doesn't exist.");
++		return -EINVAL;
++	}
++
++	if (fdir_filter->ip_type == HINIC3_FDIR_IP_TYPE_IPV4) {
++		PMD_DRV_LOG(INFO, "fdir ipv4 flow get:");
++		PMD_DRV_LOG(INFO, "glb index: %d", fdir_filter->tcam_index);
++		PMD_DRV_LOG(INFO, "ether_type mask: 0x%x", fdir_filter->key_mask.ether_type);
++		PMD_DRV_LOG(INFO, "ether_type spec: 0x%x", fdir_filter->key_spec.ether_type);
++		PMD_DRV_LOG(INFO, "protocol mask: 0x%x", fdir_filter->key_mask.ipv4.proto);
++		PMD_DRV_LOG(INFO, "protocol spec: 0x%x", fdir_filter->key_spec.ipv4.proto);
++		PMD_DRV_LOG(INFO, "src_ip mask: 0x%x", fdir_filter->key_mask.ipv4.src_ip);
++		PMD_DRV_LOG(INFO, "src_ip spec: 0x%x", fdir_filter->key_spec.ipv4.src_ip);
++		PMD_DRV_LOG(INFO, "dst_ip mask: 0x%x", fdir_filter->key_mask.ipv4.dst_ip);
++		PMD_DRV_LOG(INFO, "dst_ip spec: 0x%x", fdir_filter->key_spec.ipv4.dst_ip);
++		PMD_DRV_LOG(INFO, "src_port mask: 0x%x", fdir_filter->key_mask.src_port);
++		PMD_DRV_LOG(INFO, "src_port spec: 0x%x", fdir_filter->key_spec.src_port);
++		PMD_DRV_LOG(INFO, "dst_port mask: 0x%x", fdir_filter->key_mask.dst_port);
++		PMD_DRV_LOG(INFO, "dst_port spec: 0x%x", fdir_filter->key_spec.dst_port);
++		PMD_DRV_LOG(INFO, "rule_nums: 0x%x", nic_dev->tcam_rule_nums);
++		PMD_DRV_LOG(INFO, "mark_id: 0x%x", fdir_filter->rq_index);
++	} else {
++		PMD_DRV_LOG(INFO, "fdir ipv6 flow get:");
++		PMD_DRV_LOG(INFO, "glb index: %d", fdir_filter->tcam_index);
++		PMD_DRV_LOG(INFO, "protocol mask: 0x%x", fdir_filter->key_mask.ipv6.proto);
++		PMD_DRV_LOG(INFO, "protocol spec: 0x%x", fdir_filter->key_spec.ipv6.proto);
++
++		PMD_DRV_LOG(INFO, "src_ip mask: 0x%08x:%08x:%08x:%08x", fdir_filter->key_mask.ipv6.src_ip[0],
++			fdir_filter->key_mask.ipv6.src_ip[1], fdir_filter->key_mask.ipv6.src_ip[2],
++			fdir_filter->key_mask.ipv6.src_ip[3]);
++		PMD_DRV_LOG(INFO, "src_ip spec: 0x%08x:%08x:%08x:%08x", fdir_filter->key_spec.ipv6.src_ip[0],
++			fdir_filter->key_spec.ipv6.src_ip[1], fdir_filter->key_spec.ipv6.src_ip[2],
++			fdir_filter->key_spec.ipv6.src_ip[3]);
++		PMD_DRV_LOG(INFO, "dst_ip mask: 0x%08x:%08x:%08x:%08x", fdir_filter->key_mask.ipv6.dst_ip[0],
++			fdir_filter->key_mask.ipv6.dst_ip[1], fdir_filter->key_mask.ipv6.dst_ip[2],
++			fdir_filter->key_mask.ipv6.dst_ip[3]);
++		PMD_DRV_LOG(INFO, "dst_ip spec: 0x%08x:%08x:%08x:%08x", fdir_filter->key_spec.ipv6.dst_ip[0],
++			fdir_filter->key_spec.ipv6.dst_ip[1], fdir_filter->key_spec.ipv6.dst_ip[2],
++			fdir_filter->key_spec.ipv6.dst_ip[3]);
++		PMD_DRV_LOG(INFO, "src_port mask: 0x%x", fdir_filter->key_mask.src_port);
++		PMD_DRV_LOG(INFO, "src_sport spec: 0x%x", fdir_filter->key_spec.src_port);
++		PMD_DRV_LOG(INFO, "dst_port mask: 0x%x", fdir_filter->key_mask.dst_port);
++		PMD_DRV_LOG(INFO, "dst_sport spec: 0x%x", fdir_filter->key_spec.dst_port);
++		PMD_DRV_LOG(INFO, "rule_nums: 0x%x", nic_dev->tcam_rule_nums);
++		PMD_DRV_LOG(INFO, "mark_id: 0x%x", fdir_filter->rq_index);
++	}
++
++	if (fdir_filter->queue_num > 1) {
++		char queues[HINIC3_RSS_QUEUE_BUF] = { 0 };
++		size_t offset = 0;
++		queues[0] = '\0';
++		u32 rq_index = fdir_filter->rq_index;
++
++		for (int idx = 0; rq_index > 0 && offset < (HINIC3_RSS_QUEUE_BUF - 1); ++idx, rq_index >>= 1) {
++			if (!(rq_index & 1)) {
++				continue;;
++			}
++
++			offset += snprintf(queues + offset, HINIC3_RSS_QUEUE_BUF - offset, "%s%d", (offset > 0) ? " ": "", idx);
++			if (offset >= HINIC3_RSS_QUEUE_BUF - 1) {
++				break;
++			}
++		}
++
++		PMD_DRV_LOG(INFO, "queues: [%s]", queues);
++		PMD_DRV_LOG(INFO, "bifur_flag: %d", tcam_key.key_info.bifur_flag);
++	}
++
++	return 0;
++}
++#endif
+\ No newline at end of file
+diff --git a/drivers/net/hinic3/hinic3_pmd_fdir.h b/drivers/net/hinic3/hinic3_pmd_fdir.h
+index 481490d..35c2a68 100644
+--- a/drivers/net/hinic3/hinic3_pmd_fdir.h
++++ b/drivers/net/hinic3/hinic3_pmd_fdir.h
+@@ -14,6 +14,10 @@
+ #define HINIC3_PKT_TCAM_DYNAMIC_INDEX_START(block_index)  \
+ 		(HINIC3_TCAM_DYNAMIC_BLOCK_SIZE * (block_index))
+ 
++#ifdef HINIC3_TRAFFIC_BIFUR
++#define HINIC3_RSS_QUEUE_BUF 128
++#endif
++
+ struct rte_flow {
+ 	TAILQ_ENTRY(rte_flow) node;
+ 	enum rte_filter_type filter_type;
+@@ -29,6 +33,7 @@ struct hinic3_fdir_rule_key {
+ 	uint16_t src_port;
+ 	uint16_t dst_port;
+ 	uint8_t proto;
++	uint16_t ether_type;
+ };
+ 
+ struct hinic3_fdir_filter {
+@@ -46,7 +51,9 @@ struct hinic3_filter_t {
+ 	enum rte_filter_type filter_type;
+ 	struct rte_eth_ethertype_filter ethertype_filter;
+ 	struct hinic3_fdir_filter fdir_filter;
+-
++#ifdef HINIC3_TRAFFIC_BIFUR
++	uint32_t queue_num;
++#endif
+ };
+ 
+ enum hinic3_fdir_tunnel_mode {
+@@ -65,7 +72,13 @@ struct hinic3_tcam_key_mem {
+ 	u32 rsvd0 : 16;
+ 	u32 ip_proto : 8;
+ 	u32 tunnel_type : 4;
++#ifdef HINIC3_TRAFFIC_BIFUR
++	u32 model : 1;
++	u32 bifur_flag : 2;
++	u32 rsvd1 : 1;
++#else
+ 	u32 rsvd1 : 4;
++#endif
+ 
+ 	u32 function_id : 15;
+ 	u32 ip_type : 1;
+@@ -79,7 +92,7 @@ struct hinic3_tcam_key_mem {
+ 
+ 	u32 rsvd3;
+ 
+-	u32 rsvd4 : 16;
++	u32 ether_type : 16;
+ 	u32 dport : 16;
+ 
+ 	u32 sport : 16;
+@@ -96,8 +109,14 @@ struct hinic3_tcam_key_mem {
+ 
+ 	u32 vni_l : 16;
+ 	u32 rsvd7 : 16;
++#else
++#ifdef HINIC3_TRAFFIC_BIFUR
++	u32 rsvd1 : 1;
++	u32 bifur_flag : 2;
++	u32 model : 1;
+ #else
+ 	u32 rsvd1 : 4;
++#endif
+ 	u32 tunnel_type : 4;
+ 	u32 ip_proto : 8;
+ 	u32 rsvd0 : 16;
+@@ -115,7 +134,7 @@ struct hinic3_tcam_key_mem {
+ 	u32 rsvd3;
+ 
+ 	u32 dport : 16;
+-	u32 rsvd4 : 16;
++	u32 ether_type : 16;
+ 
+ 	u32 rsvd5 : 16;
+ 	u32 sport : 16;
+@@ -162,7 +181,12 @@ struct hinic3_tcam_key_ipv6_mem {
+ 	u32 ip_proto : 8;
+ 	u32 tunnel_type : 4;
+ 	u32 outer_ip_type : 1;
++#ifdef HINIC3_TRAFFIC_BIFUR
++	u32 model : 1;
++	u32 bifur_flag : 2;
++#else
+ 	u32 rsvd1 : 3;
++#endif
+ 
+ 	u32 function_id : 15;
+ 	u32 ip_type : 1;
+@@ -194,8 +218,13 @@ struct hinic3_tcam_key_ipv6_mem {
+ 
+ 	u32 dipv6_key7 : 16;
+ 	u32 rsvd2 : 16;
++#else
++#ifdef HINIC3_TRAFFIC_BIFUR
++	u32 bifur_flag : 2;
++	u32 model : 1;
+ #else
+ 	u32 rsvd1 : 3;
++#endif
+ 	u32 outer_ip_type : 1;
+ 	u32 tunnel_type : 4;
+ 	u32 ip_proto : 8;
+@@ -391,5 +420,7 @@ int hinic3_flow_add_del_ethertype_filter(struct rte_eth_dev *dev,
+ void hinic3_free_fdir_filter(struct rte_eth_dev *dev);
+ int hinic3_enable_rxq_fdir_filter(struct rte_eth_dev *dev, u32 queue_id, u32 able);
+ int hinic3_flow_parse_attr(const struct rte_flow_attr *attr, struct rte_flow_error *error);
++int hinic3_flow_query_fdir_filter(struct rte_eth_dev *dev, struct hinic3_fdir_filter *fdir_filter,
++					__rte_unused u64 *hits, __rte_unused u64 *bytes_count);
+ 
+ #endif
+diff --git a/drivers/net/hinic3/hinic3_pmd_flow.c b/drivers/net/hinic3/hinic3_pmd_flow.c
+index 3ccafcd..f1eea18 100644
+--- a/drivers/net/hinic3/hinic3_pmd_flow.c
++++ b/drivers/net/hinic3/hinic3_pmd_flow.c
+@@ -24,6 +24,16 @@
+ #include "hinic3_pmd_fdir.h"
+ #include "hinic3_pmd_flow.h"
+ 
++#ifdef HINIC3_TRAFFIC_BIFUR
++#include <rte_bitops.h>
++#include "hinic3_pmd_rx.h"
++#include "base/hinic3_pmd_csr.h"
++#include "hinic3_pmd_bifur.h"
++
++#define HINIC3_QUEUE_MAX 16
++#define HINIC3_QUEUE_ALLOW_NUM 8
++#endif
++
+ #define HINIC3_UINT8_MAX          0xff
+ 
+ static enum rte_flow_item_type pattern_ipv4_icmp[] = {
+@@ -365,6 +375,66 @@ static hinic3_parse_filter_t hinic3_find_parse_filter_func(
+ 	return parse_filter;
+ }
+ 
++#ifdef HINIC3_TRAFFIC_BIFUR
++static int hinic3_flow_set_rss_action_config(struct rte_eth_dev *dev, const struct rte_flow_action *actions,
++	struct rte_flow_error *error)
++{
++	struct rte_flow_action_rss *act_r = NULL;
++	struct rte_eth_rss_conf rss_conf = { 0 };
++	int ret;
++
++	u8 hash[HINIC3_RSS_KEY_SIZE] = { 0 };
++
++	act_r = (struct rte_flow_action_rss *)actions->conf;
++	rss_conf.rss_hf = act_r->func;
++	rte_memcpy(hash, act_r->key, act_r->key_len);
++	rss_conf.rss_key = hash;
++	rss_conf.rss_key_len  = act_r->key_len;
++	
++	ret = hinic3_update_rss_config(dev, &rss_conf);
++	if (ret) {
++		rte_flow_error_set(error,
++			EINVAL, HINIC3_FLOW_ERROR_TYPE_HANDLE,
++			NULL, "Failed to create hash filter for rss configuration.");
++	}
++
++	return ret;
++}
++
++static int hinic3_check_rss_queues(struct rte_eth_dev *dev, const struct rte_pci_device *pci_dev,
++	const struct rte_flow_action_rss *act_r, const struct rte_flow_action *act, struct rte_flow_error *error)
++{
++	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
++	uint32_t i;
++
++	if (act_r->queue_num == 0) {
++		rte_flow_error_set(error,
++			EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION,
++			act, "Invalid action queue number.");
++		return -rte_errno;
++	}
++
++	for (i = 0; i < act_r->queue_num; i++) {
++		if ((pci_dev->id.device_id == HINIC3_DEV_ID_DPU && act_r->queue[i] > HINIC3_QUEUE_MAX) ||
++			(hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev) && act_r->queue[i] >= HINIC3_QUEUE_ALLOW_NUM) ||
++			(act_r->queue[i] >= dev->data->nb_rx_queues)) {
++			rte_flow_error_set(error, EINVAL,
++				HINIC3_FLOW_ERROR_TYPE_ACTION,
++				act, "Invalid action queue id.");
++			return -rte_errno;
++		}
++	}
++
++	if ((hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev) && act_r->queue_num > HINIC3_QUEUE_ALLOW_NUM) ||
++		(pci_dev->id.device_id == HINIC3_DEV_ID_DPU && act_r->queue_num > HINIC3_QUEUE_MAX)) {
++		return -rte_errno;
++	}
++
++	return 0;
++}
++
++#endif
++
+ static int hinic3_flow_parse_action(struct rte_eth_dev *dev,
+ 			    const struct rte_flow_action *actions,
+ 			    struct rte_flow_error *error,
+@@ -373,6 +443,17 @@ static int hinic3_flow_parse_action(struct rte_eth_dev *dev,
+ 	const struct rte_flow_action_queue *act_q;
+ 	const struct rte_flow_action *act = actions;
+ 
++#ifdef HINIC3_TRAFFIC_BIFUR
++	const struct rte_flow_action_rss *act_r;
++	struct rte_pci_device *pci_dev = NULL;
++	pci_dev = RTE_ETH_DEV_TO_PCI(dev);
++	uint32_t i;
++
++	for (i = 0; i < HINIC3_QUEUE_MAX; i++) {
++		rte_bit_relaxed_clear32(i, &filter->fdir_filter.rq_index);
++	}
++#endif
++
+ 	/* skip the first void item */
+ 	while (act->type == RTE_FLOW_ACTION_TYPE_VOID)
+ 		act++;
+@@ -382,6 +463,9 @@ static int hinic3_flow_parse_action(struct rte_eth_dev *dev,
+ 		act_q =
+ 		(const struct rte_flow_action_queue *)act->conf;
+ 		filter->fdir_filter.rq_index = act_q->index;
++#ifdef HINIC3_TRAFFIC_BIFUR
++		filter->fdir_filter.queue_num = 1;
++#endif
+ 		if (filter->fdir_filter.rq_index >=
+ 			dev->data->nb_rx_queues) {
+ 			rte_flow_error_set(error, EINVAL,
+@@ -390,6 +474,36 @@ static int hinic3_flow_parse_action(struct rte_eth_dev *dev,
+ 			return -rte_errno;
+ 		}
+ 		break;
++/* Rss process*/
++#ifdef HINIC3_TRAFFIC_BIFUR
++	case RTE_FLOW_ACTION_TYPE_RSS:
++		act_r =
++			(const struct rte_flow_action_rss *)act->conf;
++		int err = hinic3_check_rss_queues(dev, pci_dev, act_r, act, error);
++		if (err) {
++			return err;
++		}
++
++		if (act_r->queue_num > 1) {
++			for (i = 0; i < act_r->queue_num; i++) {
++				if (rte_bit_relaxed_get32(act_r->queue[i], &filter->fdir_filter.rq_index) != 0) {
++					rte_flow_error_set(error,
++						EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION,
++						act, "Duplicate action queue numbers.");
++					return -rte_errno;
++				}
++				rte_bit_relaxed_set32(act_r->queue[i], &filter->fdir_filter.rq_index);
++			}
++		} else {
++			filter->fdir_filter.rq_index = act_r->queue[0];
++		}
++
++		filter->fdir_filter.queue_num = act_r->queue_num;
++		if (act_r->key) {
++			return hinic3_flow_set_rss_action_config(dev, actions, error);
++		}
++		break;
++#endif
+ 	default:
+ 		rte_flow_error_set(error, EINVAL,
+ 				   HINIC3_FLOW_ERROR_TYPE_ACTION, act,
+@@ -415,6 +529,31 @@ int hinic3_flow_parse_attr(const struct rte_flow_attr *attr,
+ 	return 0;
+ }
+ 
++#ifdef HINIC3_TRAFFIC_BIFUR
++static int hinic3_flow_fdir_eth(const struct rte_flow_item *flow_item,
++	struct hinic3_filter_t *filter, struct rte_flow_error *error)
++{
++	const struct rte_flow_item_eth *ether_spec, *ether_mask;
++	ether_spec = (const struct rte_flow_item_eth *)flow_item->spec;
++	ether_mask = (const struct rte_flow_item_eth *)flow_item->mask;
++	if (!ether_spec || !ether_mask)
++		return 0;
++
++	if (!rte_is_zero_ether_addr(&ether_mask->src) || 
++		(!rte_is_zero_ether_addr(&ether_mask->dst))) {
++		rte_flow_error_set(error,
++			EINVAL, HINIC3_FLOW_ERROR_TYPE_ITEM,
++			flow_item, "Invalid ether address mask.");
++		return -rte_errno;
++	}
++
++	filter->fdir_filter.key_mask.ether_type = (u16)rte_be_to_cpu_16(ether_mask->type);
++	filter->fdir_filter.key_spec.ether_type = (u16)rte_be_to_cpu_16(ether_spec->type);
++
++	return 0;
++}
++#endif
++
+ static int hinic3_flow_fdir_ipv4(const struct rte_flow_item *flow_item,
+ 	struct hinic3_filter_t *filter, struct rte_flow_error *error)
+ {
+@@ -422,6 +561,14 @@ static int hinic3_flow_fdir_ipv4(const struct rte_flow_item *flow_item,
+ 
+ 	mask_ipv4 = (const struct rte_flow_item_ipv4 *)flow_item->mask;
+ 	spec_ipv4 = (const struct rte_flow_item_ipv4 *)flow_item->spec;
++
++	filter->fdir_filter.ip_type = HINIC3_FDIR_IP_TYPE_IPV4;
++	filter->fdir_filter.tunnel_type = HINIC3_FDIR_TUNNEL_MODE_NORMAL;
++
++	if (!mask_ipv4 && !spec_ipv4)  {
++		return 0;
++	}
++
+ 	if (!mask_ipv4 || !spec_ipv4) {
+ 		rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ITEM, flow_item,
+ 			"Invalid fdir filter ipv4 mask or spec");
+@@ -441,8 +588,6 @@ static int hinic3_flow_fdir_ipv4(const struct rte_flow_item *flow_item,
+ 		return -rte_errno;
+ 	}
+ 
+-	filter->fdir_filter.ip_type = HINIC3_FDIR_IP_TYPE_IPV4;
+-	filter->fdir_filter.tunnel_type = HINIC3_FDIR_TUNNEL_MODE_NORMAL;
+ 	filter->fdir_filter.key_mask.ipv4.src_ip = rte_be_to_cpu_32(mask_ipv4->hdr.src_addr);
+ 	filter->fdir_filter.key_spec.ipv4.src_ip = rte_be_to_cpu_32(spec_ipv4->hdr.src_addr);
+ 	filter->fdir_filter.key_mask.ipv4.dst_ip = rte_be_to_cpu_32(mask_ipv4->hdr.dst_addr);
+@@ -460,6 +605,14 @@ static int hinic3_flow_fdir_ipv6(const struct rte_flow_item *flow_item,
+ 
+ 	mask_ipv6 = (const struct rte_flow_item_ipv6 *)flow_item->mask;
+ 	spec_ipv6 = (const struct rte_flow_item_ipv6 *)flow_item->spec;
++
++	filter->fdir_filter.ip_type = HINIC3_FDIR_IP_TYPE_IPV6;
++	filter->fdir_filter.tunnel_type = HINIC3_FDIR_TUNNEL_MODE_NORMAL;
++
++	if (!mask_ipv6 && !spec_ipv6) {
++		return 0;
++	}
++
+ 	if (!mask_ipv6 || !spec_ipv6) {
+ 		rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ITEM, flow_item,
+ 			"Invalid fdir filter ipv6 mask or spec");
+@@ -473,9 +626,6 @@ static int hinic3_flow_fdir_ipv6(const struct rte_flow_item *flow_item,
+ 		return -rte_errno;
+ 	}
+ 
+-	filter->fdir_filter.ip_type = HINIC3_FDIR_IP_TYPE_IPV6;
+-	filter->fdir_filter.tunnel_type = HINIC3_FDIR_TUNNEL_MODE_NORMAL;
+-
+ 	net_addr_to_host(filter->fdir_filter.key_mask.ipv6.src_ip, (const uint32_t *)mask_ipv6->hdr.src_addr, 4);
+ 	net_addr_to_host(filter->fdir_filter.key_spec.ipv6.src_ip, (const uint32_t *)spec_ipv6->hdr.src_addr, 4);
+ 	net_addr_to_host(filter->fdir_filter.key_mask.ipv6.dst_ip, (const uint32_t *)mask_ipv6->hdr.dst_addr, 4);
+@@ -570,6 +720,12 @@ static int hinic3_flow_parse_fdir_pattern(__rte_unused struct rte_eth_dev *dev,
+ 		type = flow_item->type;
+ 		switch (type) {
+ 		case HINIC3_FLOW_ITEM_TYPE_ETH:
++#ifdef HINIC3_TRAFFIC_BIFUR
++			err = hinic3_flow_fdir_eth(flow_item, filter, error);
++			if (err != 0) {
++				return -rte_errno;
++			}
++#else
+ 			/* All should be masked. */
+ 			if (flow_item->spec || flow_item->mask) {
+ 				rte_flow_error_set(error, EINVAL,
+@@ -577,6 +733,7 @@ static int hinic3_flow_parse_fdir_pattern(__rte_unused struct rte_eth_dev *dev,
+ 					"Not supported by fdir filter, not support mac");
+ 				return -rte_errno;
+ 			}
++#endif
+ 			break;
+ 
+ 		case HINIC3_FLOW_ITEM_TYPE_IPV4:
+@@ -1411,9 +1568,51 @@ static int hinic3_flow_flush(struct rte_eth_dev *dev,
+ 	return ret;
+ }
+ 
++#ifdef HINIC3_TRAFFIC_BIFUR
++static int hinic3_flow_query(struct rte_eth_dev *dev, struct rte_flow *flow,
++			__rte_unused const struct rte_flow_action *actions,
++			void *data, struct rte_flow_error *error)
++{
++	int ret = -EINVAL;
++	enum rte_filter_type filter_type;
++	struct hinic3_filter_t *filter_rules = NULL;
++	struct rte_flow_query_count *flow_count = NULL;
++
++	if (!flow || !data) {
++		PMD_DRV_LOG(ERR, "Invalid flow paramter.");
++		return -EPERM;
++	}
++
++	flow_count = (struct rte_flow_query_count *)data;
++	filter_type = flow->filter_type;
++	switch (filter_type) {
++		case RTE_ETH_FILTER_ETHERTYPE:
++			PMD_DRV_LOG(ERR, "Ethertype type %d, current not to process", filter_type);
++			break;
++		case RTE_ETH_FILTER_FDIR:
++			filter_rules = (struct hinic3_filter_t *)flow->rule;
++			ret = hinic3_flow_query_fdir_filter(dev, &filter_rules->fdir_filter, &flow_count->hits, &flow_count->bytes);
++			break;
++		default:
++			PMD_DRV_LOG(ERR, "Filter type %d not support to query", filter_type);
++			ret = -EINVAL;
++			break;
++	}
++
++	if (ret) {
++		rte_flow_error_set(error, -ret, HINIC3_FLOW_ERROR_TYPE_HANDLE, NULL, "Failed to query flow.");
++	}
++
++	return ret;
++}
++#endif
++
+ const struct rte_flow_ops hinic3_flow_ops = {
+ 	.validate = hinic3_flow_validate,
+ 	.create = hinic3_flow_create,
+ 	.destroy = hinic3_flow_destroy,
+ 	.flush = hinic3_flow_flush,
++#ifdef HINIC3_TRAFFIC_BIFUR
++	.query = hinic3_flow_query,
++#endif
+ };
+diff --git a/drivers/net/hinic3/hinic3_pmd_rx.c b/drivers/net/hinic3/hinic3_pmd_rx.c
+index bba25fa..21e70d3 100644
+--- a/drivers/net/hinic3/hinic3_pmd_rx.c
++++ b/drivers/net/hinic3/hinic3_pmd_rx.c
+@@ -15,15 +15,15 @@
+ #include "hinic3_pmd_tx.h"
+ #include "hinic3_pmd_rx.h"
+ 
+-#define RQ_CQE_OFFLOAD_TYPE_TUNNEL_PKT_FORMAT_SHIFT 8
+-#define RQ_CQE_OFFLOAD_TYPE_TUNNEL_PKT_FORMAT_MASK 0XFU
++#define RQ_CQE_OFFOLAD_TYPE_TUNNEL_PKT_FORMAT_SHIFT 8
++#define RQ_CQE_OFFOLAD_TYPE_TUNNEL_PKT_FORMAT_MASK 0xFU
+ 
+-#define RQ_CQE_OFFLOAD_TYPE_GET(val, member) \
+-        (((val) >> RQ_CQE_OFFLOAD_TYPE_##member##_SHIFT) & \
+-        RQ_CQE_OFFLOAD_TYPE_##member##_MASK)
++#define RQ_CQE_OFFOLAD_TYPE_GET(val, member) \
++        (((val) >> RQ_CQE_OFFOLAD_TYPE_##member##_SHIFT) & \
++        RQ_CQE_OFFOLAD_TYPE_##member##_MASK)
+ 
+ #define HINIC3_GET_RX_TUNNEL_PKT_FORMAT(offload_type) \
+-        RQ_CQE_OFFLOAD_TYPE_GET(offload_type, TUNNEL_PKT_FORMAT)
++        RQ_CQE_OFFOLAD_TYPE_GET(offload_type, TUNNEL_PKT_FORMAT)
+ 
+ /**
+  * Get receive queue wqe
+@@ -463,6 +463,7 @@ static int hinic3_init_rss_type(struct hinic3_nic_dev *nic_dev,
+ 	rss_type.udp_ipv6 = (rss_hf & ETH_RSS_NONFRAG_IPV6_UDP) ? 1 : 0;
+ 
+ 	err = hinic3_set_rss_type(nic_dev->hwdev, rss_type);
++	nic_dev->rss_type = rss_type;
+ 	return err;
+ }
+ 
+@@ -798,6 +799,40 @@ static inline uint64_t hinic3_rx_vlan(uint32_t offload_type, uint32_t vlan_len,
+ 	return HINIC3_PKT_RX_VLAN | HINIC3_PKT_RX_VLAN_STRIPPED;
+ }
+ 
++#ifdef HINIC3_TRAFFIC_BIFUR
++static int hinic3_rx_packet_type(u32 offload_type)
++{
++	u32 l3_type = 0;
++	u32 l4_type = 0;
++
++	// l3
++	switch (HINIC3_GET_RX_IP_TYPE(offload_type)) {
++		case HINIC3_RX_CQE_L3_IPV4:
++			l3_type = RTE_PTYPE_L3_IPV4;
++			break;
++		case HINIC3_RX_CQE_L3_IPV6:
++			l3_type = RTE_PTYPE_L3_IPV6;
++			break;
++		default:
++			break;
++	}
++
++	switch (HINIC3_GET_RX_PKT_TYPE(offload_type)) {
++		case HINIC3_RX_CQE_L4_TCP:
++			l4_type = RTE_PTYPE_L4_TCP;
++			break;
++		case HINIC3_RX_CQE_L4_UDP:
++			l4_type = RTE_PTYPE_L4_UDP;
++			break;
++		default:
++			break;
++	}
++
++	return l3_type | l4_type;
++}
++
++#endif
++
+ static uint64_t hinic3_rx_csum(uint32_t status, struct hinic3_rxq *rxq)
+ {
+ 	struct hinic3_nic_dev *nic_dev = rxq->nic_dev;
+@@ -1028,6 +1063,9 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
+ 			rxm->tso_segsz = pkt_len / lro_num; /*lint !e40 !e63*/
+ 		}
+ 
++#ifdef HINIC3_TRAFFIC_BIFUR
++	rxm->packet_type = hinic3_rx_packet_type(offload_type);
++#endif
+ 		rx_cqe->status = 0;
+ 
+ 		rx_bytes += pkt_len;
+diff --git a/drivers/net/hinic3/hinic3_pmd_rx.h b/drivers/net/hinic3/hinic3_pmd_rx.h
+index d03cf22..6eeb997 100644
+--- a/drivers/net/hinic3/hinic3_pmd_rx.h
++++ b/drivers/net/hinic3/hinic3_pmd_rx.h
+@@ -9,11 +9,13 @@
+ #include "hinic3_pmd_nic_io.h"
+ 
+ #define RQ_CQE_OFFOLAD_TYPE_PKT_TYPE_SHIFT		0
++#define RQ_CQE_OFFOLAD_TYPE_IP_TYPE_SHIFT 5
+ #define RQ_CQE_OFFOLAD_TYPE_PKT_UMBCAST_SHIFT		19
+ #define RQ_CQE_OFFOLAD_TYPE_VLAN_EN_SHIFT		21
+ #define RQ_CQE_OFFOLAD_TYPE_RSS_TYPE_SHIFT		24
+ 
+-#define RQ_CQE_OFFOLAD_TYPE_PKT_TYPE_MASK		0xFFFU
++#define RQ_CQE_OFFOLAD_TYPE_PKT_TYPE_MASK		0x1FU
++#define RQ_CQE_OFFOLAD_TYPE_IP_TYPE_MASK 0x3U
+ #define RQ_CQE_OFFOLAD_TYPE_PKT_UMBCAST_MASK		0x3U
+ #define RQ_CQE_OFFOLAD_TYPE_VLAN_EN_MASK		0x1U
+ #define RQ_CQE_OFFOLAD_TYPE_RSS_TYPE_MASK		0xFFU
+@@ -27,6 +29,9 @@
+ #define HINIC3_GET_RX_PKT_TYPE(offload_type)	\
+ 		RQ_CQE_OFFOLAD_TYPE_GET(offload_type, PKT_TYPE)
+ 
++#define HINIC3_GET_RX_IP_TYPE(offload_type) \
++		RQ_CQE_OFFOLAD_TYPE_GET(offload_type, IP_TYPE)
++
+ #define HINIC3_GET_RX_PKT_UMBCAST(offload_type)	\
+ 		RQ_CQE_OFFOLAD_TYPE_GET(offload_type, PKT_UMBCAST)
+ 
+@@ -157,6 +162,16 @@
+ 	ETH_RSS_IPV6_TCP_EX | \
+ 	ETH_RSS_IPV6_UDP_EX)
+ 
++enum HINIC3_RX_CQE_PT_L3 {
++	HINIC3_RX_CQE_L3_IPV4 = 0u,
++	HINIC3_RX_CQE_L3_IPV6 = 1u,
++};
++
++enum HINIC3_RX_CQE_PT_L4 {
++	HINIC3_RX_CQE_L4_TCP = 3,
++	HINIC3_RX_CQE_L4_UDP = 4,
++};
++
+ struct hinic3_rxq_stats {
+ 	u64 packets;
+ 	u64 bytes;
+diff --git a/drivers/net/hinic3/meson.build b/drivers/net/hinic3/meson.build
+index 0085301..daddef7 100644
+--- a/drivers/net/hinic3/meson.build
++++ b/drivers/net/hinic3/meson.build
+@@ -15,15 +15,18 @@ endif
+ 
+ cflags += ['-DHW_CONVERT_ENDIAN']
+ cflags += ['-D__HINIC_HUAWEI_SECUREC__']
++cflags += ['-DHINIC3_TRAFFIC_BIFUR']
+ cflags += ['-fPIC']
+ cflags += ['-fstack-protector-strong']
+ 
+ dpdk_version = meson.project_version()
+ if dpdk_version.substring(0,2) == '20'
+ 	cflags += ['-DDPDK_20_11']
++	cflags += ['-DDPDK_20_BIFUR']
+ elif dpdk_version.substring(0,2) == '21'
+ 	cflags += ['-DDPDK_20_11']
+ 	cflags += ['-DDPDK_21_11']
++	cflags += ['-DDPDK_21_BIFUR']
+ endif
+ 
+ subdir('base')
+@@ -37,6 +40,7 @@ sources = files(
+  	'hinic3_pmd_flow.c',
+ 	'hinic3_pmd_nic_io.c',
+ 	'hinic3_pmd_fdir.c',
++	'hinic3_pmd_bifur.c',
+ 	)
+ 
+ if arch_subdir == 'arm' and dpdk_conf.get('RTE_ARCH_64')
+-- 
+2.45.1.windows.1
+

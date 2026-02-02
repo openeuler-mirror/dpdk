@@ -1,0 +1,108 @@
+From ab7357d2d3d2d2bdfb4028fd3b04c11d6c16da6f Mon Sep 17 00:00:00 2001
+From: xiaobai <chenyi19990512@163.com>
+Date: Mon, 19 May 2025 11:37:25 +0800
+Subject: [PATCH 07/12] Normal tso support l4 checnksum offload
+
+---
+ drivers/net/hinic3/hinic3_pmd_ethdev.c |  1 +
+ drivers/net/hinic3/hinic3_pmd_ethdev.h |  1 +
+ drivers/net/hinic3/hinic3_pmd_tx.c     | 36 +++++++++++++-------------
+ 3 files changed, 20 insertions(+), 18 deletions(-)
+
+diff --git a/drivers/net/hinic3/hinic3_pmd_ethdev.c b/drivers/net/hinic3/hinic3_pmd_ethdev.c
+index fdf57ab..40c8c07 100644
+--- a/drivers/net/hinic3/hinic3_pmd_ethdev.c
++++ b/drivers/net/hinic3/hinic3_pmd_ethdev.c
+@@ -391,6 +391,7 @@ static void hinic3_dev_info_get(struct rte_eth_dev_info *info, struct hinic3_nic
+ 				RTE_ETH_TX_OFFLOAD_SCTP_CKSUM |
+ 				RTE_ETH_TX_OFFLOAD_OUTER_IPV4_CKSUM |
+ 				RTE_ETH_TX_OFFLOAD_OUTER_UDP_CKSUM |
++				RTE_ETH_TX_OFFLOAD_VXLAN_TNL_TSO |
+ 				RTE_ETH_TX_OFFLOAD_TCP_TSO |
+ 				RTE_ETH_TX_OFFLOAD_MULTI_SEGS;
+ 
+diff --git a/drivers/net/hinic3/hinic3_pmd_ethdev.h b/drivers/net/hinic3/hinic3_pmd_ethdev.h
+index 7fa3d72..0314f71 100644
+--- a/drivers/net/hinic3/hinic3_pmd_ethdev.h
++++ b/drivers/net/hinic3/hinic3_pmd_ethdev.h
+@@ -65,6 +65,7 @@
+ #define HINIC3_PKT_TX_TUNNEL_MASK        PKT_TX_TUNNEL_MASK
+ #define HINIC3_PKT_TX_TUNNEL_VXLAN       PKT_TX_TUNNEL_VXLAN
+ #define HINIC3_PKT_TX_OUTER_IP_CKSUM     PKT_TX_OUTER_IP_CKSUM
++#define HINIC3_PKT_TX_OUTER_UDP_CKSUM	 PKT_TX_OUTER_UDP_CKSUM
+ #define HINIC3_PKT_TX_OUTER_IPV6         PKT_TX_OUTER_IPV6
+ #define HINIC3_PKT_RX_LRO                PKT_RX_LRO
+ #define HINIC3_PKT_TX_L4_NO_CKSUM        PKT_TX_L4_NO_CKSUM
+diff --git a/drivers/net/hinic3/hinic3_pmd_tx.c b/drivers/net/hinic3/hinic3_pmd_tx.c
+index dfac1d1..97e3737 100644
+--- a/drivers/net/hinic3/hinic3_pmd_tx.c
++++ b/drivers/net/hinic3/hinic3_pmd_tx.c
+@@ -422,7 +422,7 @@ static uint8_t hinic3_ip_phdr_cksum(hinic3_ip_cs_handler_t *ip_handler, uint8_t
+ 	return proto;
+ }
+ 
+-static int hinic3_vxlan_tso_ip_phdr_cksum(struct rte_mbuf *mbuf) {
++static int hinic3_tso_ip_phdr_cksum(struct rte_mbuf *mbuf) {
+ 	struct rte_ether_hdr *eth_hdr = NULL;
+ 	struct rte_vlan_hdr *vlan_hdr = NULL;
+ 	uint8_t *ip_hdr = NULL;
+@@ -446,7 +446,7 @@ static int hinic3_vxlan_tso_ip_phdr_cksum(struct rte_mbuf *mbuf) {
+ 		ip_handler = &g_ip_cs_handlers[version];
+ 		/* 外层UDP的伪头部checksum计算 */
+ 		l4_proto = hinic3_ip_phdr_cksum(ip_handler, ip_hdr, mbuf);
+-		if (unlikely(l4_proto != IPPROTO_UDP)) {
++		if (unlikely((mbuf->ol_flags & HINIC3_PKT_TX_TUNNEL_MASK) && (l4_proto != IPPROTO_UDP))) {
+ 			PMD_DRV_LOG(INFO, "not support outer l4 proto(%u) by vxlan checksum", l4_proto);
+ 			return -EINVAL;
+ 		}
+@@ -455,20 +455,22 @@ static int hinic3_vxlan_tso_ip_phdr_cksum(struct rte_mbuf *mbuf) {
+ 		return -EINVAL;
+ 	}
+ 
+-	offset += ip_handler->hdr_size + sizeof(struct rte_udp_hdr) + sizeof(struct rte_vxlan_hdr) + sizeof(struct rte_ether_hdr);
+-	ip_hdr = (uint8_t *)(pkt_data + offset);
+-	version = (*ip_hdr >> 4) & 0x0F;
+-	if (version == IPV4_VERSION || version == IPV6_VERSION) {
+-		ip_handler = &g_ip_cs_handlers[version];
+-		/* 内层TCP/UDP的伪头部checksum计算 */
+-		l4_proto = hinic3_ip_phdr_cksum(ip_handler, ip_hdr, mbuf);
+-		if (unlikely(l4_proto != IPPROTO_TCP && l4_proto != IPPROTO_UDP)) {
+-			PMD_DRV_LOG(INFO, "not support inner l4 proto(%u) by vxlan checksum", l4_proto);
++	if (mbuf->ol_flags & HINIC3_PKT_TX_TUNNEL_MASK) {
++		offset += ip_handler->hdr_size + sizeof(struct rte_udp_hdr) + sizeof(struct rte_vxlan_hdr) + sizeof(struct rte_ether_hdr);
++		ip_hdr = (uint8_t *)(pkt_data + offset);
++		version = (* ip_hdr >> 4) & 0x0F;
++		if (version == IPV4_VERSION || version == IPV6_VERSION) {
++			ip_handler = &g_ip_cs_handlers[version];
++			/*Calculate the checksum of the inner TCP/UDP pseudo header */
++			l4_proto = hinic3_ip_phdr_cksum(ip_handler, ip_hdr, mbuf);
++			if (unlikely(l4_proto != IPPROTO_TCP)) {
++				PMD_DRV_LOG(INFO, "not support inner l4 proto(%u) by vxlan checksum", l4_proto);
++				return -EINVAL;
++			}
++		} else {
++			PMD_DRV_LOG(INFO, "not support inner l3 proto(%u) bt vxlan checksum", version);
+ 			return -EINVAL;
+ 		}
+-	} else {
+-		PMD_DRV_LOG(INFO, "not support outer l3 version(%u) by vxlan checksum", version);
+-		return -EINVAL;
+ 	}
+ 
+ 	return 0;
+@@ -515,10 +517,8 @@ static int hinic3_set_tx_offload(struct rte_mbuf *mbuf,
+ 		queue_info |= SQ_CTRL_QUEUE_INFO_SET(mbuf->tso_segsz, MSS); /*lint !e40*/
+ 
+ 		/* vxlan TSO场景下，内外层L4里的伪头部的checksum不能包含L4的长度，需要置零 */
+-		if (ol_flags & HINIC3_PKT_TX_TUNNEL_MASK) {
+-			if(unlikely(hinic3_vxlan_tso_ip_phdr_cksum(mbuf))) {
+-				return -EINVAL;
+-			}
++		if (unlikely(hinic3_tso_ip_phdr_cksum(mbuf))) {
++			return -EINVAL;
+ 		}
+ 	} else {
+ 		if (ol_flags & HINIC3_PKT_TX_IP_CKSUM)
+-- 
+2.45.1.windows.1
+

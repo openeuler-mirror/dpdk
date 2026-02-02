@@ -1,0 +1,59 @@
+From 67fac870071eb801eac51a58b53e2d1fcacbd321 Mon Sep 17 00:00:00 2001
+From: Feifei Wang <wangfeifei40@huawei.com>
+Date: Mon, 17 Mar 2025 16:28:04 +0800
+Subject: [PATCH 3/9] net/hinic3: add vxlan packet ptype
+
+Add packet ptype anlysis for vxlan pkts.
+
+Signed-off-by: Huawei <@huawei.com>
+---
+ drivers/net/hinic3/hinic3_pmd_rx.c | 19 +++++++++++++++++--
+ 1 file changed, 17 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/hinic3/hinic3_pmd_rx.c b/drivers/net/hinic3/hinic3_pmd_rx.c
+index 7178439..bba25fa 100644
+--- a/drivers/net/hinic3/hinic3_pmd_rx.c
++++ b/drivers/net/hinic3/hinic3_pmd_rx.c
+@@ -15,6 +15,16 @@
+ #include "hinic3_pmd_tx.h"
+ #include "hinic3_pmd_rx.h"
+ 
++#define RQ_CQE_OFFLOAD_TYPE_TUNNEL_PKT_FORMAT_SHIFT 8
++#define RQ_CQE_OFFLOAD_TYPE_TUNNEL_PKT_FORMAT_MASK 0XFU
++
++#define RQ_CQE_OFFLOAD_TYPE_GET(val, member) \
++        (((val) >> RQ_CQE_OFFLOAD_TYPE_##member##_SHIFT) & \
++        RQ_CQE_OFFLOAD_TYPE_##member##_MASK)
++
++#define HINIC3_GET_RX_TUNNEL_PKT_FORMAT(offload_type) \
++        RQ_CQE_OFFLOAD_TYPE_GET(offload_type, TUNNEL_PKT_FORMAT)
++
+ /**
+  * Get receive queue wqe
+  *
+@@ -935,7 +945,7 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
+ 	volatile struct hinic3_rq_cqe *rx_cqe = NULL;
+ 	struct rte_mbuf *rxm = NULL;
+ 	u16 sw_ci, rx_buf_len, wqebb_cnt = 0, pkts = 0;
+-	u32 status, pkt_len, vlan_len, offload_type, lro_num;
++	u32 status, pkt_len, vlan_len, offload_type, pkt_fmt, lro_num;
+ 	u64 rx_bytes = 0;
+ 	u32 hash_value ;
+ 
+@@ -1002,7 +1012,12 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
+ 		rxm->ol_flags |= hinic3_rx_vlan(offload_type, vlan_len,
+ 						&rxm->vlan_tci);
+ 
+-		/* 6. RSS */
++		/* 6. Packet ptype Vxlan */
++		pkt_fmt = HINIC3_GET_RX_TUNNEL_PKT_FORMAT(offload_type);
++		if (pkt_fmt)
++			rxm->packet_type = RTE_PTYPE_TUNNEL_VXLAN;
++
++		/* 7. RSS */
+ 		hash_value = hinic3_hw_cpu32(rx_cqe->hash_val);
+ 		rxm->ol_flags |= hinic3_rx_rss_hash(offload_type, hash_value,
+ 						    &rxm->hash.rss);
+-- 
+2.45.1.windows.1
+

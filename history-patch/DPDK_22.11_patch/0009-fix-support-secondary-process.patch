@@ -1,0 +1,44 @@
+From 0af63e3eef8b0fc439dea9ff6ab3959732906e85 Mon Sep 17 00:00:00 2001
+From: xiaobai <chenyi19990512@163.com>
+Date: Mon, 19 May 2025 11:49:25 +0800
+Subject: [PATCH 09/12] fix support secondary process
+
+---
+ drivers/net/hinic3/hinic3_pmd_ethdev.c | 21 +++++++++++++++++++++
+ 1 file changed, 21 insertions(+)
+
+diff --git a/drivers/net/hinic3/hinic3_pmd_ethdev.c b/drivers/net/hinic3/hinic3_pmd_ethdev.c
+index 40c8c07..3025472 100644
+--- a/drivers/net/hinic3/hinic3_pmd_ethdev.c
++++ b/drivers/net/hinic3/hinic3_pmd_ethdev.c
+@@ -3380,6 +3380,27 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
+ 		PMD_DRV_LOG(INFO, "Initialize %s in secondary process",
+ 			    eth_dev->data->name);
+ 
++		char name[RTE_ETH_NAME_MAX_LEN];
++		(void)snprintf(name, sizeof(name), "%s", eth_dev->data->name);
++		if (eth_dev == NULL) {
++			PMD_DRV_LOG(ERR, "can not attach rte ethdev, dev_name: %s", name);
++
++			return -ENOMEM;
++		}
++
++		nic_dev = HINIC3_RTE_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
++		if (nic_dev == NULL) {
++			PMD_DRV_LOG(ERR, "nic_dev hwdev is NULL, dev_name: %s", name);
++
++			return -ENOMEM;
++		}
++
++		if (HINIC3_FUNC_TYPE(nic_dev->hwdev) == TYPE_VF) {
++			eth_dev->dev_ops = &hinic3_pmd_vf_ops;
++		} else {
++			eth_dev->dev_ops = &hinic3_pmd_ops;
++		}
++
+ 		return 0;
+ 	}
+ 
+-- 
+2.45.1.windows.1
+
