@@ -473,12 +473,133 @@ struct hinic3_tcam_sec_key_ipv4_mem {
 #endif
 };
 
+struct hinic3_tcam_sec_key_ipv6_mem {
+#if (RTE_BYTE_ORDER == RTE_BIG_ENDIAN)
+	u32 rsvd2 : 16;
+	u32 tunnel_type : 4;
+	u32 rsvd1 : 3;
+	u32 vlan_flag : 1;
+	u32 rsvd0 : 8;
+
+	u32 func_id : 15;
+	u32 ip_type : 1;
+	u32 vlan_pri : 3;
+	u32 vlan_cfi : 1;
+	u32 vlan_vid : 12;
+
+	u32 dmac_h : 16;
+	u32 dmac_m : 16;
+
+	u32 dmac_l : 16;
+	u32 smac_h : 16;
+
+	u32 smac_m : 16;
+	u32 smac_l : 16;
+
+	u32 eth_type : 16;
+	u32 tcp_flag : 8;
+	u32 ip_proto : 8;
+
+	u32 sip0_h : 16;
+	u32 sip0_l : 16;
+
+	u32 sip1_h : 16;
+	u32 sip1_l : 16;
+
+	u32 sip2_h : 16;
+	u32 sip2_l : 16;
+
+	u32 sip3_h : 16;
+	u32 sip3_l : 16;
+
+	u32 dip0_h : 16;
+	u32 dip0_l : 16;
+
+	u32 dip1_h : 16;
+	u32 dip1_l : 16;
+
+	u32 dip2_h : 16;
+	u32 dip2_l : 16;
+
+	u32 dip3_h : 16;
+	u32 dip3_l : 16;
+
+	u32 dport : 16;
+	u32 sport : 16;
+
+	u32 rsvd[5];
+
+	u32 rsvd3 : 14;
+	u32 key_width : 2;
+	u32 rsvd4 : 16;
+#else
+	u32 rsvd0 : 8;
+	u32 vlan_flag : 1;
+	u32 rsvd1 : 3;
+	u32 tunnel_type: 4;
+	u32 rsvd2 : 16;
+
+	u32 vlan_vid : 12;
+	u32 vlan_cfi : 1;
+	u32 vlan_pri : 3;
+	u32 ip_type : 1;
+	u32 func_id : 15;
+
+	u32 dmac_m : 16;
+	u32 dmac_h : 16;
+
+	u32 smac_h : 16;
+	u32 dmac_l : 16;
+
+	u32 smac_l : 16;
+	u32 smac_m : 16;
+
+	u32 ip_proto : 8;
+	u32 tcp_flag : 8;
+	u32 eth_type : 16;
+
+	u32 sip0_l : 16;
+	u32 sip0_h : 16;
+
+	u32 sip1_l : 16;
+	u32 sip1_h : 16;
+
+	u32 sip2_l : 16;
+	u32 sip2_h : 16;
+
+	u32 sip3_l : 16;
+	u32 sip3_h : 16;
+
+	u32 dip0_l : 16;
+	u32 dip0_h : 16;
+
+	u32 dip1_l : 16;
+	u32 dip1_h : 16;
+
+	u32 dip2_l : 16;
+	u32 dip2_h : 16;
+
+	u32 dip3_l : 16;
+	u32 dip3_h : 16;
+
+	u32 sport : 16;
+	u32 dport : 16;
+
+	u32 rsvd[5];
+
+	u32 rsvd3 : 16;
+	u32 key_width : 2;
+	u32 rsvd4 : 14;
+#endif
+};
+
 struct hinic3_tcam_key {
 	union {
 		struct hinic3_tcam_key_mem key_info;
 		struct hinic3_tcam_key_ipv6_mem key_info_ipv6;
 		struct hinic3_tcam_key_vxlan_ipv6_mem key_info_vxlan_ipv6;
 		struct hinic3_tcam_sec_key_ipv4_mem key_info_sec;
+		struct hinic3_tcam_sec_key_ipv6_mem key_info_sec_ipv6;
 	};
 
 	union {
@@ -486,6 +607,7 @@ struct hinic3_tcam_key {
 		struct hinic3_tcam_key_ipv6_mem key_mask_ipv6;
 		struct hinic3_tcam_key_vxlan_ipv6_mem key_mask_vxlan_ipv6;
 		struct hinic3_tcam_sec_key_ipv4_mem key_mask_sec;
+		struct hinic3_tcam_sec_key_ipv6_mem key_mask_sec_ipv6;
 	};
 };
 

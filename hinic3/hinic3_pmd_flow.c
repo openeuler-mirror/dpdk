@@ -1101,8 +1101,8 @@ static hinic3_parse_filter_t hinic3_find_parse_filter_func( struct rte_eth_dev *
 
 	if (sec_tcam_en == 1) {
 		if (hinic3_match_sec_pattern(pattern))
-			return hinic3_flow_parse_sec_fdir_filter;
-		return NULL;
+			parse_filter = hinic3_flow_parse_sec_fdir_filter;
+		return parse_filter;
 	}
 
 	for (i = 0; i < RTE_DIM(hinic3_supported_patterns); i++) {
