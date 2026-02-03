@@ -1090,8 +1090,8 @@ static hinic3_parse_filter_t hinic3_find_parse_filter_func( struct rte_eth_dev *
 {
 	hinic3_parse_filter_t parse_filter = NULL;
 	struct hinic3_nic_dev *nic_dev = NULL;
-	uint8_t i;
 	uint8_t sec_tcam_en = 0;
+	uint8_t i;
 
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	if (hinic3_fdir_cfg_sec_tcam(nic_dev->hwdev, &sec_tcam_en) != 0) {

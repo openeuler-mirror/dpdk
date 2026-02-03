@@ -62,6 +62,10 @@ struct hinic3_sec_fdir_filter {
     struct rte_ether_hdr ether_mask;
     struct hinic3_fdir_rule_key key_mask;
     struct hinic3_fdir_rule_key key_spec;
+    uint16_t outer_sport_mask;
+    uint16_t outer_sport_spec;
+    uint16_t outer_dport_mask;
+    uint16_t outer_dport_spec;
     uint16_t vlan_tci_spec;
     uint16_t vlan_tci_mask;
     bool has_vlan;
@@ -593,6 +597,578 @@ struct hinic3_tcam_sec_key_ipv6_mem {
 #endif
 };
 
+struct hinic3_tcam_sec_key_ipv6_ipv4_mem {
+#if (RTE_BYTE_ORDER == RTE_BIG_ENDIAN)
+	u32 rsvd2 : 16;
+	u32 tunnel_type : 4;
+	u32 rsvd1 : 2;
+	u32 inner_ip_type : 1;
+	u32 vlan_flag : 1;
+	u32 rsvd0 : 8;
+
+	u32 func_id : 15;
+	u32 outer_ip_type : 1;
+	u32 vlan_pri : 3;
+	u32 vlan_cfi : 1;
+	u32 vlan_vid : 12;
+
+	u32 dmac_h : 16;
+	u32 dmac_m : 16;
+
+	u32 dmac_l : 16;
+	u32 smac_h : 16;
+
+	u32 smac_m : 16;
+	u32 smac_l : 16;
+
+	u32 eth_type : 16;
+	u32 outer_tcp_flag : 8;
+	u32 outer_ip_proto : 8;
+
+	u32 inner_sipv4_h : 16;
+	u32 inner_sipv4_l : 16;
+
+	u32 inner_dipv4_h : 16;
+	u32 inner_dipv4_l : 16;
+
+	u32 inner_dport : 16;
+	u32 inner_sport : 16;
+
+	u32 vni_h : 16;
+	u32 vni_l : 16;
+
+	u32 inner_tcp_flag : 8;
+	u32 inner_ip_proto : 8;
+	u32 rsvd3 : 16;
+
+	u32 outer_sip0_h : 16;
+	u32 outer_sip0_l : 16;
+
+	u32 outer_sip1_h : 16;
+	u32 outer_sip1_l : 16;
+
+	u32 outer_sip2_h : 16;
+	u32 outer_sip2_l : 16;
+
+	u32 outer_sip3_h : 16;
+	u32 outer_sip3_l : 16;
+
+	u32 outer_dip0_h : 16;
+	u32 outer_dip0_l : 16;
+
+	u32 outer_dip1_h : 16;
+	u32 outer_dip1_l : 16;
+
+	u32 outer_dip2_h : 16;
+	u32 outer_dip2_l : 16;
+
+	u32 outer_dip3_h : 16;
+	u32 outer_dip3_l : 16;
+
+	u32 outer_dport : 16;
+	u32 outer_sport : 16;
+
+	u32 rsvd4 : 14;
+	u32 key_width : 2;
+	u32 rsvd5 : 16;
+#else
+	u32 rsvd0 : 8;
+	u32 vlan_flag : 1;
+	u32 inner_ip_type : 1;
+	u32 rsvd1 : 2;
+	u32 tunnel_type : 4;
+	u32 rsvd2 : 16;
+
+	u32 vlan_vid : 12;
+	u32 vlan_cfi : 1;
+	u32 vlan_pri : 3;
+	u32 outer_ip_type : 1;
+	u32 func_id : 15;
+
+	u32 dmac_m : 16;
+	u32 dmac_h : 16;
+
+	u32 smac_h : 16;
+	u32 dmac_l : 16;
+
+	u32 smac_l : 16;
+	u32 smac_m : 16;
+
+	u32 outer_ip_proto : 8;
+	u32 outer_tcp_flag : 8;
+	u32 eth_type : 16;
+
+	u32 inner_sipv4_l : 16;
+	u32 inner_sipv4_h : 16;
+
+	u32 inner_dipv4_l : 16;
+	u32 inner_dipv4_h : 16;
+
+	u32 inner_sport : 16;
+	u32 inner_dport : 16;
+
+	u32 vni_l : 16;
+	u32 vni_h : 16;
+
+	u32 rsvd3 : 16;
+	u32 inner_ip_proto : 8;
+	u32 inner_tcp_flag : 8;
+
+	u32 outer_sip0_l : 16;
+	u32 outer_sip0_h : 16;
+
+	u32 outer_sip1_l : 16;
+	u32 outer_sip1_h : 16;
+
+	u32 outer_sip2_l : 16;
+	u32 outer_sip2_h : 16;
+
+	u32 outer_sip3_l : 16;
+	u32 outer_sip3_h : 16;
+
+	u32 outer_dip0_l : 16;
+	u32 outer_dip0_h : 16;
+
+	u32 outer_dip1_l : 16;
+	u32 outer_dip1_h : 16;
+
+	u32 outer_dip2_l : 16;
+	u32 outer_dip2_h : 16;
+
+	u32 outer_dip3_l : 16;
+	u32 outer_dip3_h : 16;
+
+	u32 outer_sport : 16;
+	u32 outer_dport : 16;
+
+	u32 rsvd5 : 16;
+	u32 key_width : 2;
+	u32 rsvd4 : 14;
+#endif
+};
+
+struct hinic3_tcam_sec_key_ipv4_ipv6_mem {
+#if (RTE_BYTE_ORDER == RTE_BIG_ENDIAN)
+	u32 rsvd2 : 16;
+	u32 tunnel_type : 4;
+	u32 rsvd1 : 2;
+	u32 inner_ip_type : 1;
+	u32 vlan_flag : 1;
+	u32 rsvd0 : 8;
+
+	u32 func_id : 15;
+	u32 outer_ip_type : 1;
+	u32 vlan_vid : 12;
+	u32 vlan_cfi : 1;
+	u32 vlan_pri : 3;
+
+	u32 dmac_h : 16;
+	u32 dmac_m : 16;
+
+	u32 dmac_l : 16;
+	u32 smac_h : 16;
+
+	u32 smac_m : 16;
+	u32 smac_l : 16;
+
+	u32 eth_type : 16;
+	u32 outer_tcp_flag : 8;
+	u32 outer_ip_proto : 8;
+
+	u32 sipv4_h : 16;
+	u32 sipv4_l : 16;
+
+	u32 dipv4_h : 16;
+	u32 dipv4_l : 16;
+
+	u32 outer_dport : 16;
+	u32 outer_sport : 16;
+
+	u32 vni_h : 16;
+	u32 vni_l : 16;
+
+	u32 inner_tcp_flag : 8;
+	u32 inner_ip_proto : 8;
+	u32 rsvd3 : 16;
+
+	u32 inner_sip0_h : 16;
+	u32 inner_sip0_l : 16;
+
+	u32 inner_sip1_h : 16;
+	u32 inner_sip1_l : 16;
+
+	u32 inner_sip2_h : 16;
+	u32 inner_sip2_l : 16;
+
+	u32 inner_sip3_h : 16;
+	u32 inner_sip3_l : 16;
+
+	u32 inner_dip0_h : 16;
+	u32 inner_dip0_l : 16;
+
+	u32 inner_dip1_h : 16;
+	u32 inner_dip1_l : 16;
+
+	u32 inner_dip2_h : 16;
+	u32 inner_dip2_l : 16;
+
+	u32 inner_dip3_h : 16;
+	u32 inner_dip3_l : 16;
+
+	u32 inner_dport : 16;
+	u32 inner_sport : 16;
+
+	u32 rsvd4 : 14;
+	u32 key_width : 2;
+	u32 rsvd5 : 16;
+#else
+	u32 rsvd0 : 8;
+	u32 vlan_flag : 1;
+	u32 inner_ip_type : 1;
+	u32 rsvd1 : 2;
+	u32 tunnel_type : 4;
+	u32 rsvd2 : 16;
+
+	u32 vlan_vid : 12;
+	u32 vlan_cfi : 1;
+	u32 vlan_pri : 3;
+
+	u32 outer_ip_type : 1;
+	u32 func_id : 15;
+
+	u32 dmac_m : 16;
+	u32 dmac_h : 16;
+
+	u32 smac_h : 16;
+	u32 dmac_l : 16;
+
+	u32 smac_l : 16;
+	u32 smac_m : 16;
+
+	u32 outer_ip_proto : 8;
+	u32 outer_tcp_flag : 8;
+	u32 eth_type : 16;
+
+	u32 sipv4_l : 16;
+	u32 sipv4_h : 16;
+
+	u32 dipv4_l : 16;
+	u32 dipv4_h : 16;
+
+	u32 outer_sport : 16;
+	u32 outer_dport : 16;
+
+	u32 vni_l : 16;
+	u32 vni_h : 16;
+
+	u32 rsvd3 : 16;
+	u32 inner_ip_proto : 8;
+	u32 inner_tcp_flag : 8;
+
+	u32 inner_sip0_l : 16;
+	u32 inner_sip0_h : 16;
+
+	u32 inner_sip1_l : 16;
+	u32 inner_sip1_h : 16;
+
+	u32 inner_sip2_l : 16;
+	u32 inner_sip2_h : 16;
+
+	u32 inner_sip3_l : 16;
+	u32 inner_sip3_h : 16;
+
+	u32 inner_dip0_l : 16;
+	u32 inner_dip0_h : 16;
+
+	u32 inner_dip1_l : 16;
+	u32 inner_dip1_h : 16;
+
+	u32 inner_dip2_l : 16;
+	u32 inner_dip2_h : 16;
+
+	u32 inner_dip3_l : 16;
+	u32 inner_dip3_h : 16;
+
+	u32 inner_sport : 16;
+	u32 inner_dport : 16;
+
+	u32 rsvd5 : 16;
+	u32 key_width : 2;
+	u32 rsvd4 : 14;
+#endif
+};
+
+struct hinic3_tcam_sec_key_ipv4_ipv4_mem {
+#if (RTE_BYTE_ORDER == RTE_BIG_ENDIAN)
+	u32 rsvd2 : 16;
+	u32 tunnel_type : 4;
+	u32 rsvd1 : 2;
+	u32 inner_ip_type : 1;
+	u32 vlan_flag : 1;
+	u32 rsvd0 : 8;
+
+	u32 func_id : 15;
+	u32 outer_ip_type : 1;
+	u32 vlan_pri : 3;
+	u32 vlan_cfi : 1;
+	u32 vlan_vid : 12;
+
+	u32 dmac_h : 16;
+	u32 dmac_m : 16;
+
+	u32 dmac_l : 16;
+	u32 smac_h : 16;
+
+	u32 smac_m : 16;
+	u32 smac_l : 16;
+
+	u32 eth_type : 16;
+	u32 outer_tcp_flag : 8;
+	u32 outer_ip_proto : 8;
+
+	u32 sipv4_h : 16;
+	u32 sipv4_l : 16;
+
+	u32 dipv4_h : 16;
+	u32 dipv4_l : 16;
+
+	u32 outer_dport : 16;
+	u32 outer_sport : 16;
+
+	u32 vni_h : 16;
+	u32 vni_l : 16;
+
+	u32 inner_tcp_flag : 8;
+	u32 inner_ip_proto : 8;
+	u32 rsvd6 : 16;
+
+	u32 inner_sipv4_h : 16;
+	u32 inner_sipv4_l : 16;
+
+	u32 inner_dipv4_h : 16;
+	u32 inner_dipv4_l : 16;
+
+	u32 inner_dport : 16;
+	u32 inner_sport : 16;
+
+	u32 rsvd5[6];
+
+	u32 rsdv8 : 14;
+	u32 key_width : 2;
+	u32 rsvd7 : 16;
+#else
+	u32 rsvd0 : 8;
+	u32 vlan_flag : 1;
+	u32 inner_ip_type : 1;
+	u32 rsvd1 : 2;
+	u32 tunnel_type : 4;
+	u32 rsvd2 : 16;
+
+	u32 vlan_vid : 12;
+	u32 vlan_cfi : 1;
+	u32 vlan_pri : 3;
+	u32 outer_ip_type : 1;
+	u32 func_id : 15;
+
+	u32 dmac_m : 16;
+	u32 dmac_h : 16;
+
+	u32 smac_h : 16;
+	u32 dmac_l : 16;
+
+	u32 smac_l : 16;
+	u32 smac_m : 16;
+
+	u32 outer_ip_proto : 8;
+	u32 outer_tcp_flag : 8;
+	u32 eth_type : 16;
+
+	u32 sipv4_l : 16;
+	u32 sipv4_h : 16;
+
+	u32 dipv4_l : 16;
+	u32 dipv4_h : 16;
+
+	u32 outer_sport : 16;
+	u32 outer_dport : 16;
+
+	u32 vni_l : 16;
+	u32 vni_h : 16;
+
+	u32 rsvd6 : 16;
+	u32 inner_ip_proto : 8;
+	u32 inner_tcp_flag : 8;
+
+	u32 inner_sipv4_l : 16;
+	u32 inner_sipv4_h : 16;
+
+	u32 inner_dipv4_l : 16;
+	u32 inner_dipv4_h : 16;
+
+	u32 inner_sport : 16;
+	u32 inner_dport : 16;
+
+	u32 rsvd5[6];
+
+	u32 rsvd7 : 16;
+	u32 key_width : 2;
+	u32 rsdv8 : 14;
+#endif
+};
+
+struct hinic3_tcam_sec_key_ipv6_ipv6_mem
+{
+#if (RTE_BYTE_ORDER == RTE_BIG_ENDIAN)
+	u32 rsvd2 : 16;
+	u32 tunnel_type : 4;
+	u32 rsvd1 : 2;
+	u32 inner_ip_type : 1;
+	u32 vlan_flag : 1;
+	u32 rsvd0 : 8;
+
+	u32 func_id : 15;
+	u32 outer_ip_type : 1;
+	u32 vlan_pri : 3;
+	u32 vlan_cfi: 1;
+	u32 vlan_vid : 12;
+
+	u32 outer_sip0_h : 16;
+	u32 outer_sip0_l : 16;
+
+	u32 outer_sip1_h : 16;
+	u32 outer_sip1_l : 16;
+
+	u32 outer_sport : 16;
+	u32 outer_sip2_l : 16;
+
+	u32 eth_type : 16;
+	u32 outer_tcp_flag : 8;
+	u32 outer_ip_proto : 8;
+
+	u32 outer_dip0_h : 16;
+	u32 outer_dip0_l : 16;
+
+	u32 outer_dip1_h : 16;
+	u32 outer_dip1_l : 16;
+
+	u32 outer_dport : 16;
+	u32 outer_dip2_l : 16;
+
+	u32 vni_h : 16;
+	u32 vni_l : 16;
+
+	u32 inner_tcp_flag : 8;
+	u32 inner_ip_proto : 8;
+	u32 outer_dip2_h : 8;
+	u32 outer_sip2_h : 8;
+
+	u32 inner_sip0_h : 16;
+	u32 inner_sip0_l : 16;
+
+	u32 inner_sip1_h : 16;
+	u32 inner_sip1_l : 16;
+
+	u32 inner_sip2_h : 16;
+	u32 inner_sip2_l : 16;
+
+	u32 inner_sip3_h : 16;
+	u32 inner_sip3_l : 16;
+
+	u32 inner_dip0_h : 16;
+	u32 inner_dip0_l : 16;
+
+	u32 inner_dip1_h : 16;
+	u32 inner_dip1_l : 16;
+
+	u32 inner_dip2_h : 16;
+	u32 inner_dip2_l : 16;
+
+	u32 inner_dip3_h : 16;
+	u32 inner_dip3_l : 16;
+
+	u32 inner_dport : 16;
+	u32 inner_sport : 16;
+
+	u32 rsvd4 : 14;
+	u32 key_width : 2;
+	u32 rsvd3 : 16;
+#else
+	u32 rsvd0 : 8;
+	u32 vlan_flag : 1;
+	u32 inner_ip_type : 1;
+	u32 rsvd1 : 2;
+	u32 tunnel_type : 4;
+	u32 rsvd2 : 16;
+
+	u32 vlan_vid : 12;
+	u32 vlan_cfi : 1;
+	u32 vlan_pri : 3;
+	u32 outer_ip_type : 1;
+	u32 func_id : 15;
+
+	u32 outer_sip0_l : 16;
+	u32 outer_sip0_h : 16;
+
+	u32 outer_sip1_l : 16;
+	u32 outer_sip1_h : 16;
+
+	u32 outer_sip2_l : 16;
+	u32 outer_sport : 16;
+
+	u32 outer_ip_proto : 8;
+	u32 outer_tcp_flag : 8;
+	u32 eth_type : 16;
+
+	u32 outer_dip0_l : 16;
+	u32 outer_dip0_h : 16;
+
+	u32 outer_dip1_l : 16;
+	u32 outer_dip1_h : 16;
+
+	u32 outer_dip2_l : 16;
+	u32 outer_dport : 16;
+
+	u32 vni_l : 16;
+	u32 vni_h : 16;
+
+	u32 outer_sip2_h : 8;
+	u32 outer_dip2_h : 8;
+	u32 inner_ip_proto : 8;
+	u32 inner_tcp_flag : 8;
+
+	u32 inner_sip0_l : 16;
+	u32 inner_sip0_h : 16;
+
+	u32 inner_sip1_l : 16;
+	u32 inner_sip1_h : 16;
+
+	u32 inner_sip2_l : 16;
+	u32 inner_sip2_h : 16;
+
+	u32 inner_sip3_l : 16;
+	u32 inner_sip3_h : 16;
+
+	u32 inner_dip0_l : 16;
+	u32 inner_dip0_h : 16;
+
+	u32 inner_dip1_l : 16;
+	u32 inner_dip1_h : 16;
+
+	u32 inner_dip2_l : 16;
+	u32 inner_dip2_h : 16;
+
+	u32 inner_dip3_l : 16;
+	u32 inner_dip3_h : 16;
+
+	u32 inner_sport : 16;
+	u32 inner_dport : 16;
+
+	u32 rsvd3 : 16;
+	u32 key_width : 2;
+	u32 rsvd4 : 14;
+#endif
+};
+
 struct hinic3_tcam_key {
 	union {
 		struct hinic3_tcam_key_mem key_info;
@@ -600,6 +1176,10 @@ struct hinic3_tcam_key {
 		struct hinic3_tcam_key_vxlan_ipv6_mem key_info_vxlan_ipv6;
 		struct hinic3_tcam_sec_key_ipv4_mem key_info_sec;
 		struct hinic3_tcam_sec_key_ipv6_mem key_info_sec_ipv6;
+		struct hinic3_tcam_sec_key_ipv6_ipv4_mem key_info_sec_ipv6_ipv4;
+		struct hinic3_tcam_sec_key_ipv4_ipv6_mem key_info_sec_ipv4_ipv6;
+		struct hinic3_tcam_sec_key_ipv4_ipv4_mem key_info_sec_ipv4_ipv4;
+		struct hinic3_tcam_sec_key_ipv6_ipv6_mem key_info_sec_ipv6_ipv6;
 	};
 
 	union {
@@ -608,6 +1188,10 @@ struct hinic3_tcam_key {
 		struct hinic3_tcam_key_vxlan_ipv6_mem key_mask_vxlan_ipv6;
 		struct hinic3_tcam_sec_key_ipv4_mem key_mask_sec;
 		struct hinic3_tcam_sec_key_ipv6_mem key_mask_sec_ipv6;
+		struct hinic3_tcam_sec_key_ipv6_ipv4_mem key_mask_sec_ipv6_ipv4;
+		struct hinic3_tcam_sec_key_ipv4_ipv6_mem key_mask_sec_ipv4_ipv6;
+		struct hinic3_tcam_sec_key_ipv4_ipv4_mem key_mask_sec_ipv4_ipv4;
+		struct hinic3_tcam_sec_key_ipv6_ipv6_mem key_mask_sec_ipv6_ipv6;
 	};
 };
 
