@@ -22,6 +22,7 @@
 #include "base/hinic3_pmd_nic_cfg.h"
 #include "hinic3_pmd_ethdev.h"
 #include "hinic3_pmd_fdir.h"
+#include "hinic3_pmd_flow_sec.h"
 #include "hinic3_pmd_flow.h"
 #include "hinic3_pmd_rx.h"
 
@@ -840,6 +841,14 @@ static int hinic3_flow_parse_fdir_vxlan_geneve_filter(
 	const struct rte_flow_action actions[], struct rte_flow_error *error,
 	struct hinic3_filter_t *filter);
 
+static int
+hinic3_flow_parse_sec_fdir_filter(struct rte_eth_dev	  *dev,
+			      const struct rte_flow_attr  *attr,
+			      const struct rte_flow_item   pattern[],
+			      const struct rte_flow_action actions[],
+			      struct rte_flow_error	  *error,
+			      struct hinic3_filter_t	  *filter);
+
 static const struct hinic3_valid_pattern hinic3_supported_patterns[] = {
 	/* support ethertype */
 	{ pattern_ethertype, hinic3_flow_parse_ethertype_filter },
@@ -985,12 +994,116 @@ hinic3_match_pattern(enum rte_flow_item_type *	 item_array,
 		item->type == HINIC3_FLOW_ITEM_TYPE_END);
 }
 
+static enum rte_flow_item_type sec_first_items[] = {
+	HINIC3_FLOW_ITEM_TYPE_ETH,
+	HINIC3_FLOW_ITEM_TYPE_IPV4,
+	HINIC3_FLOW_ITEM_TYPE_IPV6,
+	HINIC3_FLOW_ITEM_TYPE_TCP,
+	HINIC3_FLOW_ITEM_TYPE_UDP,
+	HINIC3_FLOW_ITEM_TYPE_VXLAN,
+	HINIC3_FLOW_ITEM_TYPE_GENEVE
+};
+
+static enum rte_flow_item_type sec_l2_next_items[] = {
+	HINIC3_FLOW_ITEM_TYPE_VLAN,
+	HINIC3_FLOW_ITEM_TYPE_IPV4,
+	HINIC3_FLOW_ITEM_TYPE_IPV6
+};
+
+static enum rte_flow_item_type sec_l3_next_items[] = {
+	HINIC3_FLOW_ITEM_TYPE_TCP,
+	HINIC3_FLOW_ITEM_TYPE_UDP
+};
+
+static enum rte_flow_item_type sec_l4_next_items[] = {
+	HINIC3_FLOW_ITEM_TYPE_VXLAN,
+	HINIC3_FLOW_ITEM_TYPE_GENEVE
+};
+
+static enum rte_flow_item_type sec_tunnel_next_items[] = {
+	HINIC3_FLOW_ITEM_TYPE_ETH,
+	HINIC3_FLOW_ITEM_TYPE_VLAN,
+	HINIC3_FLOW_ITEM_TYPE_IPV4,
+	HINIC3_FLOW_ITEM_TYPE_IPV6
+};
+
+static bool
+hinic3_item_in_step(enum rte_flow_item_type type,
+		    enum rte_flow_item_type *items,
+		    size_t count)
+{
+	size_t i;
+
+	for (i = 0; i < count; i++) {
+		if (items[i] == type)
+			return true;
+	}
+
+	return false;
+}
+
+static bool
+hinic3_match_sec_pattern(const struct rte_flow_item *pattern)
+{
+	const struct rte_flow_item *item = pattern;
+	enum rte_flow_item_type *items = sec_first_items;
+	size_t count = RTE_DIM(sec_first_items);
+
+	for (; item->type != HINIC3_FLOW_ITEM_TYPE_END; item++) {
+		if (item->type == HINIC3_FLOW_ITEM_TYPE_VOID)
+			continue;
+
+		if (!hinic3_item_in_step(item->type, items, count))
+			return false;
+
+		switch (item->type) {
+		case HINIC3_FLOW_ITEM_TYPE_ETH:
+		case HINIC3_FLOW_ITEM_TYPE_VLAN:
+			items = sec_l2_next_items;
+			count = RTE_DIM(sec_l2_next_items);
+			break;
+		case HINIC3_FLOW_ITEM_TYPE_IPV4:
+		case HINIC3_FLOW_ITEM_TYPE_IPV6:
+			items = sec_l3_next_items;
+			count = RTE_DIM(sec_l3_next_items);
+			break;
+		case HINIC3_FLOW_ITEM_TYPE_TCP:
+		case HINIC3_FLOW_ITEM_TYPE_UDP:
+			items = sec_l4_next_items;
+			count = RTE_DIM(sec_l4_next_items);
+			break;
+		case HINIC3_FLOW_ITEM_TYPE_VXLAN:
+		case HINIC3_FLOW_ITEM_TYPE_GENEVE:
+			items = sec_tunnel_next_items;
+			count = RTE_DIM(sec_tunnel_next_items);
+			break;
+		default:
+			return false;
+		}
+	}
+
+	return true;
+}
+
 /* Find if there's parse filter function matched */
-static hinic3_parse_filter_t hinic3_find_parse_filter_func(
-		const struct rte_flow_item *pattern)
+static hinic3_parse_filter_t hinic3_find_parse_filter_func( struct rte_eth_dev *dev, const struct rte_flow_item *pattern)
 {
 	hinic3_parse_filter_t parse_filter = NULL;
+	struct hinic3_nic_dev *nic_dev = NULL;
 	uint8_t i;
+	uint8_t sec_tcam_en = 0;
+
+	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+	if (hinic3_fdir_cfg_sec_tcam(nic_dev->hwdev, &sec_tcam_en) != 0) {
+		PMD_DRV_LOG(ERR, "hinic3 get port table second tcam enable status failed.");
+		return parse_filter;
+	}
+
+	if (sec_tcam_en == 1) {
+		if (hinic3_match_sec_pattern(pattern))
+			return hinic3_flow_parse_sec_fdir_filter;
+		return NULL;
+	}
 
 	for (i = 0; i < RTE_DIM(hinic3_supported_patterns); i++) {
 		if (hinic3_match_pattern(hinic3_supported_patterns[i].items,
@@ -2214,6 +2327,35 @@ hinic3_flow_parse_fdir_vxlan_geneve_filter(
 }
 
 static int
+hinic3_flow_parse_sec_fdir_filter(struct rte_eth_dev	  *dev,
+			      const struct rte_flow_attr  *attr,
+			      const struct rte_flow_item   pattern[],
+			      const struct rte_flow_action actions[],
+			      struct rte_flow_error	  *error,
+			      struct hinic3_filter_t	  *filter)
+{
+	int ret;
+
+	ret = hinic3_flow_parse_sec_fdir_pattern(dev, pattern, error,
+					   filter);
+	if (ret)
+		return ret;
+
+	ret = hinic3_flow_parse_action(dev, actions, error, filter);
+	if (ret)
+		return ret;
+
+	ret = hinic3_flow_parse_attr(attr, error);
+	if (ret)
+		return ret;
+
+	filter->filter_type = RTE_ETH_FILTER_FDIR;
+	filter->is_sec_fdir = true;
+
+	return 0;
+}
+
+static int
 hinic3_flow_parse(struct rte_eth_dev          *dev,
 		  const struct rte_flow_attr  *attr,
 		  const struct rte_flow_item   pattern[],
@@ -2256,7 +2398,7 @@ hinic3_flow_parse(struct rte_eth_dev          *dev,
 		}
 	}
 
-	parse_filter = hinic3_find_parse_filter_func(pattern);
+	parse_filter = hinic3_find_parse_filter_func(dev, pattern);
 	if (!parse_filter) {
 		rte_flow_error_set(error, EINVAL,
 				   HINIC3_FLOW_ERROR_TYPE_ITEM,
@@ -2364,8 +2506,15 @@ hinic3_flow_create(struct rte_eth_dev          *dev,
 		break;
 
 	case RTE_ETH_FILTER_FDIR:
-		ret = hinic3_flow_add_del_fdir_filter(dev,
-				&filter_rules->fdir_filter, true);
+		if (filter_rules->is_sec_fdir) {
+			ret = hinic3_flow_add_del_sec_fdir_filter(dev,
+					&filter_rules->sec_fdir_filter,
+					&filter_rules->fdir_filter, true);
+		} else {
+			ret = hinic3_flow_add_del_fdir_filter(dev,
+					&filter_rules->fdir_filter, true);
+		}
+
 		if (ret) {
 			rte_flow_error_set(error,
 				   EINVAL, HINIC3_FLOW_ERROR_TYPE_HANDLE,

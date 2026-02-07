@@ -1977,6 +1977,7 @@ static void hinic3_dev_close(struct rte_eth_dev *eth_dev)
 {
 	struct hinic3_nic_dev *nic_dev =
 		HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
+	u8 sec_tcam_en = 0;
 
 	if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
 #ifdef DPDK_20_11
@@ -1997,15 +1998,19 @@ static void hinic3_dev_close(struct rte_eth_dev *eth_dev)
 		return 0;
 #endif
 	}
-
+	(void)hinic3_fdir_cfg_sec_tcam(nic_dev->hwdev, &sec_tcam_en);
 #ifdef DPDK_20_11
 	ret = hinic3_dev_stop(eth_dev);
 	if (ret == 0) {
 		(void)hinic3_flush_tcam_rule(nic_dev->hwdev);
+		if (sec_tcam_en == 1)
+			(void)hinic3_fdir_flush_sec_tcam_rule(nic_dev->hwdev);
 	}
 #else
 	hinic3_dev_stop(eth_dev);
 	(void)hinic3_flush_tcam_rule(nic_dev->hwdev);
+	if (sec_tcam_en == 1)
+		(void)hinic3_fdir_flush_sec_tcam_rule(nic_dev->hwdev);
 #endif
 
 	hinic3_dev_release(eth_dev);
