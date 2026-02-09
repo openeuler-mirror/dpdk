@@ -210,6 +210,8 @@ int hinic3_start_all_sqs(struct rte_eth_dev *eth_dev)
 
 	for (i = 0; i < nic_dev->num_sqs; i++) {
 		txq = eth_dev->data->tx_queues[i];
+		if (txq == NULL)
+			continue;
 		HINIC3_SET_TXQ_STARTED(txq);
 		eth_dev->data->tx_queue_state[i] = RTE_ETH_QUEUE_STATE_STARTED;
 	}
@@ -316,8 +318,10 @@ void hinic3_free_all_txq_mbufs(struct hinic3_nic_dev *nic_dev)
 {
 	u16 qid;
 
-	for (qid = 0; qid < nic_dev->num_sqs; qid++)
-		hinic3_free_txq_mbufs(nic_dev->txqs[qid]);
+	for (qid = 0; qid < nic_dev->num_sqs; qid++) {
+		if (nic_dev->txqs[qid] != NULL)
+			hinic3_free_txq_mbufs(nic_dev->txqs[qid]);
+	}
 }
 
 int hinic3_tx_done_cleanup(void *txq, u32 free_cnt)
@@ -1426,7 +1430,7 @@ u16 hinic3_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, u16 nb_pkts)
 
 int hinic3_stop_sq(struct hinic3_txq *txq)
 {
-	if (txq->is_hairpin)
+	if (txq == NULL || txq->is_hairpin)
 		return 0;
 	struct hinic3_nic_dev *nic_dev = txq->nic_dev;
 	unsigned long timeout;

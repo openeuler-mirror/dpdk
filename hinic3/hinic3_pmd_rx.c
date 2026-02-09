@@ -382,8 +382,10 @@ void hinic3_free_all_rxq_mbufs(struct hinic3_nic_dev *nic_dev)
 {
 	u16 qid;
 
-	for (qid = 0; qid < nic_dev->num_rqs; qid++)
-		hinic3_free_rxq_mbufs(nic_dev->rxqs[qid]);
+	for (qid = 0; qid < nic_dev->num_rqs; qid++) {
+		if (nic_dev->rxqs[qid] != NULL)
+			hinic3_free_rxq_mbufs(nic_dev->rxqs[qid]);
+	}
 }
 
 static u32 hinic3_rx_alloc_mbuf_bulk(struct hinic3_rxq *rxq,

@@ -21,4 +21,8 @@ int hinic3_tx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 								  uint16_t nb_desc,
 								  const struct rte_eth_hairpin_conf *conf);
 
+int hinic3_hairpin_bind(struct rte_eth_dev *dev, uint16_t rx_port);
+
+int hinic3_hairpin_unbind(struct rte_eth_dev *dev, uint16_t rx_port);
+
 #endif /* _HINIC3_PMD_HAIRPIN_H_ */

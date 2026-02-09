@@ -1308,7 +1308,6 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 	const struct rte_flow_action_queue *act_q;
 	const struct rte_flow_action *act = actions;
 	const struct rte_flow_action_rss *act_r;
-	struct hinic3_rxq *rxq;
 	uint32_t i;
 	int err;
 #ifdef HINIC3_TRAFFIC_BIFUR
@@ -1333,6 +1332,7 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 		return -rte_errno;
 	}
 	act = last_act;
+	filter->fdir_filter.action = act->type;
 
 	switch (act->type) {
 	case RTE_FLOW_ACTION_TYPE_QUEUE:
@@ -1342,17 +1342,13 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 #ifdef HINIC3_TRAFFIC_BIFUR
 		filter->fdir_filter.queue_num = 1;
 #endif
-		if (filter->fdir_filter.rq_index >=
-			dev->data->nb_rx_queues) {
+		if (act_q->index >= dev->data->nb_rx_queues ||
+			dev->data->rx_queues[act_q->index] == NULL) {
 			rte_flow_error_set(error, EINVAL,
 					   HINIC3_FLOW_ERROR_TYPE_ACTION,
 					   act, "Invalid action param.");
 			return -rte_errno;
 		}
-		rxq = (struct hinic3_rxq *)dev->data->rx_queues[act_q->index];
-		if (rxq->is_hairpin)
-			filter->fdir_filter.is_hairpin = 1;
-
 		break;
 /* RSS process */
 #ifdef HINIC3_TRAFFIC_BIFUR
@@ -1405,12 +1401,10 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 
 		filter->fdir_filter.q_grp_id = filter->template_entry->q_grp_id;
  	 	filter->fdir_filter.level = act_r->level;
- 	 	filter->fdir_filter.action = RTE_FLOW_ACTION_TYPE_RSS;
 		break;
 #endif
 
 	case RTE_FLOW_ACTION_TYPE_DROP:
- 	 	filter->fdir_filter.action = RTE_FLOW_ACTION_TYPE_DROP;
  	 	break;
 
 	default:
