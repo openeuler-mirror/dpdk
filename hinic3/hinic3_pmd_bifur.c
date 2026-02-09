@@ -217,7 +217,8 @@ hinic3_bifur_pci_unmap_device(struct rte_pci_device *dev)
 }
 
 static int
-hinic3_bifur_func_pair_from_kernel(struct rte_pci_addr *target_pci_addr, struct rte_pci_addr *pair_pci_addr)
+hinic3_bifur_func_pair_from_kernel(struct rte_pci_addr *target_pci_addr,
+				   struct rte_pci_addr *pair_pci_addr)
 {
 	int ret;
 	u32 dbdf;
@@ -507,8 +508,7 @@ hinic3_bifur_parse_sysfs_resource(const char *filename, struct rte_pci_device *d
 
 	for (i = 0; i < PCI_MAX_RESOURCE; i++) {
 		if (fgets(buf, sizeof(buf), f) == NULL) {
-			PMD_DRV_LOG(ERR,
-				    "Cannot read resource");
+			PMD_DRV_LOG(ERR, "Cannot read resource");
 			goto error;
 		}
 		if (hinic3_bifur_parse_one_sysfs_resource(buf, sizeof(buf), &phys_addr,

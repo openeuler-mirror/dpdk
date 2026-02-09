@@ -32,12 +32,11 @@ struct hinic3_dcb {
 int hinic3_dcb_init(struct hinic3_nic_dev *nic_dev);
 int hinic3_dcb_alloc(struct hinic3_nic_dev *nic_dev);
 int hinic3_get_dcb_info(struct rte_eth_dev *dev,
-		     struct rte_eth_dcb_info *dcb_info);
+			struct rte_eth_dcb_info *dcb_info);
 
 u8 hinic3_get_dev_user_cos_num(struct hinic3_nic_dev *nic_dev);
 void hinic3_update_qp_cos_cfg(struct hinic3_nic_dev *nic_dev, u8 num_cos);
-void hinic3_set_txq_cos(struct hinic3_nic_dev *nic_dev, u16 start_qid, u16 q_num,
-		     u8 cos);
+void hinic3_set_txq_cos(struct hinic3_nic_dev *nic_dev, u16 start_qid, u16 q_num, u8 cos);
 void hinic3_update_tx_db_cos(struct hinic3_nic_dev *nic_dev, u8 dcb_en);
 u8 hinic3_get_dev_user_cos_num(struct hinic3_nic_dev *nic_dev);
 int hinic3_configure_dcb_hw(struct hinic3_nic_dev *nic_dev, u8 dcb_en);
