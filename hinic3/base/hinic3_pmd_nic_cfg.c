@@ -397,13 +397,7 @@ int hinic3_get_link_state(void *hwdev, u8 *link_state)
 		return -EINVAL;
 
 	memset(&get_link, 0, sizeof(get_link));
-	get_link.port_id = hinic3_physical_port_id(hwdev);
-#ifdef HINIC3_TRAFFIC_BIFUR
-	if (hinic3_func_type(hwdev) &&
-		hinic3_bifur_is_shared_dev(((struct hinic3_hwdev*)hwdev)->pci_dev)) {
-		get_link.port_id = hinic3_bifur_get_physical_port(((struct hinic3_hwdev*)hwdev)->pci_dev);
-	}
-#endif
+
 	err = mag_msg_to_mgmt_sync(hwdev, MAG_CMD_GET_LINK_STATUS,
 				     &get_link, sizeof(get_link),
 				     &get_link, &out_size);

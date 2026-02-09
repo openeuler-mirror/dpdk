@@ -71,8 +71,7 @@ hinic3_tc_queue_mapping_cfg(struct hinic3_nic_dev *nic_dev, uint16_t nb_tx_q)
 }
 
 static int
-hinic3_queue_to_tc_mapping(struct hinic3_nic_dev *nic_dev, uint16_t nb_rx_q,
-			uint16_t nb_tx_q)
+hinic3_queue_to_tc_mapping(struct hinic3_nic_dev *nic_dev, uint16_t nb_rx_q, uint16_t nb_tx_q)
 {
 	struct hinic3_ets *ets = nic_dev->ets;
 
@@ -208,10 +207,9 @@ hinic3_dcb_init_tm(struct hinic3_nic_dev *nic_dev)
 	default_tqp_num = ets->tqps_num / HINIC3_MAX_TC_NUM;
 	ets->num_tc = HINIC3_MAX_TC_NUM;
 	ret = hinic3_queue_to_tc_mapping(nic_dev, default_tqp_num,
-				      default_tqp_num);
+					 default_tqp_num);
 	if (ret) {
-		PMD_DRV_LOG(ERR, "update tc queue mapping failed, ret = %d.",
-			    ret);
+		PMD_DRV_LOG(ERR, "update tc queue mapping failed, ret = %d.", ret);
 		return ret;
 	}
 
@@ -428,7 +426,7 @@ hinic3_set_hw_rss_parameters(struct hinic3_nic_dev *nic_dev, u8 rss_en, u8 cos_n
 
 	err = hinic3_rss_set_hash_key(nic_dev->hwdev, nic_dev->rss_key, HINIC3_RSS_KEY_SIZE);
 
-	err = hinic3_rss_get_indir_tbl(nic_dev->hwdev, indirtbl, HINIC3_RSS_INDIR_SIZE);
+	err = hinic3_rss_get_indir_tbl(nic_dev->hwdev, indirtbl);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Get rss indir tbl failed");
 		return err;
@@ -439,7 +437,7 @@ hinic3_set_hw_rss_parameters(struct hinic3_nic_dev *nic_dev, u8 rss_en, u8 cos_n
 	else
 		hinic3_fillout_indir_tbl(nic_dev, cos_num, indirtbl);
 
-	err = hinic3_rss_set_indir_tbl(nic_dev->hwdev, indirtbl, HINIC3_RSS_INDIR_SIZE);
+	err = hinic3_rss_set_indir_tbl(nic_dev->hwdev, indirtbl);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Set rss indir tbl failed");
 		return err;

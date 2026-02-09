@@ -758,15 +758,13 @@ hinic3_tm_node_add(struct rte_eth_dev *dev, uint32_t node_id,
 		return -EINVAL;
 	}
 
-	ret = hinic3_tm_node_param_check(dev, node_id, priority, weight, params,
-				      error);
+	ret = hinic3_tm_node_param_check(dev, node_id, priority, weight, params, error);
 	if (ret)
 		return ret;
 
 	/* root node who don't have a parent */
 	if (parent_node_id == RTE_TM_NODE_ID_NULL)
-		return hinic3_tm_port_node_add(dev, node_id, level_id, params,
-					    error);
+		return hinic3_tm_port_node_add(dev, node_id, level_id, params, error);
 
 	parent_node =
 		hinic3_tm_node_search(dev, parent_node_id, &parent_node_type);
@@ -786,19 +784,19 @@ hinic3_tm_node_add(struct rte_eth_dev *dev, uint32_t node_id,
 
 	if (parent_node_type == HINIC3_TM_NODE_TYPE_PORT)
 		return hinic3_tm_tc_node_add(dev, node_id, weight, level_id,
-					  parent_node, params, error);
+					     parent_node, params, error);
 	else if (parent_node_type == HINIC3_TM_NODE_TYPE_TC)
 		return hinic3_tm_cos_node_add(dev, node_id, weight, level_id,
-					   parent_node, params, error);
+					      parent_node, params, error);
 	else
 		return hinic3_tm_queue_node_add(dev, node_id, weight, level_id,
-					     parent_node, params, error);
+					        parent_node, params, error);
 }
 
 static void
 hinic3_tm_node_do_delete(struct hinic3_nic_dev *nic_dev,
-		      enum hinic3_tm_node_type node_type,
-		      struct hinic3_tm_node *tm_node)
+			 enum hinic3_tm_node_type node_type,
+			 struct hinic3_tm_node *tm_node)
 {
 	struct hinic3_ets *ets = nic_dev->ets;
 	struct hinic3_tm_conf *tm_conf = &ets->tm_conf;
@@ -876,7 +874,7 @@ hinic3_tm_node_delete(struct rte_eth_dev *dev, uint32_t node_id,
  */
 static int
 hinic3_tm_node_type_get(struct rte_eth_dev *dev, uint32_t node_id, int *is_leaf,
-		     struct rte_tm_error *error)
+			struct rte_tm_error *error)
 {
 	enum hinic3_tm_node_type node_type = HINIC3_TM_NODE_TYPE_MAX;
 	struct hinic3_tm_node *tm_node;
@@ -901,8 +899,8 @@ hinic3_tm_node_type_get(struct rte_eth_dev *dev, uint32_t node_id, int *is_leaf,
 
 static void
 hinic3_tm_nonleaf_level_capabilities_get(struct rte_eth_dev *dev,
-				      uint32_t level_id,
-				      struct rte_tm_level_capabilities *cap)
+					 uint32_t level_id,
+					 struct rte_tm_level_capabilities *cap)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_ets *ets = nic_dev->ets;
@@ -940,7 +938,7 @@ hinic3_tm_nonleaf_level_capabilities_get(struct rte_eth_dev *dev,
 
 static void
 hinic3_tm_leaf_level_capabilities_get(struct rte_eth_dev *dev,
-				   struct rte_tm_level_capabilities *cap)
+				      struct rte_tm_level_capabilities *cap)
 {
 	uint32_t max_tx_queues = hinic3_tm_max_tx_queues_get(dev);
 
@@ -969,8 +967,8 @@ hinic3_tm_leaf_level_capabilities_get(struct rte_eth_dev *dev,
  */
 static int
 hinic3_tm_level_capabilities_get(struct rte_eth_dev *dev, uint32_t level_id,
-			      struct rte_tm_level_capabilities *cap,
-			      struct rte_tm_error *error)
+				 struct rte_tm_level_capabilities *cap,
+				 struct rte_tm_error *error)
 {
 	if (cap == NULL || error == NULL)
 		return -EINVAL;
@@ -993,8 +991,8 @@ hinic3_tm_level_capabilities_get(struct rte_eth_dev *dev, uint32_t level_id,
 
 static void
 hinic3_tm_nonleaf_node_capabilities_get(struct rte_eth_dev *dev,
-				     enum hinic3_tm_node_type node_type,
-				     struct rte_tm_node_capabilities *cap)
+					enum hinic3_tm_node_type node_type,
+					struct rte_tm_node_capabilities *cap)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_ets *ets = nic_dev->ets;
@@ -1043,8 +1041,8 @@ hinic3_tm_leaf_node_capabilities_get(struct rte_eth_dev *dev __rte_unused,
  */
 static int
 hinic3_tm_node_capabilities_get(struct rte_eth_dev *dev, uint32_t node_id,
-			     struct rte_tm_node_capabilities *cap,
-			     struct rte_tm_error *error)
+				struct rte_tm_node_capabilities *cap,
+				struct rte_tm_error *error)
 {
 	enum hinic3_tm_node_type node_type;
 	struct hinic3_tm_node *tm_node;
@@ -1082,8 +1080,7 @@ hinic3_tm_configure_check(struct rte_eth_dev *dev, struct rte_tm_error *error)
 
 	/* TC */
 	TAILQ_FOREACH (tm_node, tc_list, node) {
-		if (hinic3_tm_calc_node_tc_no(tm_conf, tm_node->id) >=
-		    ets->num_tc) {
+		if (hinic3_tm_calc_node_tc_no(tm_conf, tm_node->id) >= ets->num_tc) {
 			error->type = RTE_TM_ERROR_TYPE_NODE_ID;
 			error->message = "node's TC not exist";
 			return false;
@@ -1092,8 +1089,7 @@ hinic3_tm_configure_check(struct rte_eth_dev *dev, struct rte_tm_error *error)
 
 	/* COS */
 	TAILQ_FOREACH (tm_node, cos_list, node) {
-		if (hinic3_tm_calc_node_cos_no(tm_conf, tm_node->id) >=
-		    ets->num_tc) {
+		if (hinic3_tm_calc_node_cos_no(tm_conf, tm_node->id) >= ets->num_tc) {
 			error->type = RTE_TM_ERROR_TYPE_NODE_ID;
 			error->message = "node's COS not exist";
 			return false;
@@ -1225,9 +1221,9 @@ fail_clear:
 
 static int
 hinic3_tm_node_shaper_do_update(struct hinic3_nic_dev *nic_dev, uint32_t node_id,
-			     enum hinic3_tm_node_type node_type,
-			     struct hinic3_tm_shaper_profile *shaper_profile,
-			     struct rte_tm_error *error)
+				enum hinic3_tm_node_type node_type,
+				struct hinic3_tm_shaper_profile *shaper_profile,
+				struct rte_tm_error *error)
 {
 	struct hinic3_hwdev *hwdev = nic_dev->hwdev;
 	struct hinic3_ets *ets = nic_dev->ets;
@@ -1325,7 +1321,7 @@ hinic3_tm_node_shaper_update(struct rte_eth_dev *dev, uint32_t node_id,
 
 static int
 hinic3_tm_mark_vlan_dei(struct rte_eth_dev *dev, int mark_green, int mark_yellow,
-		     int mark_red, struct rte_tm_error *error)
+			int mark_red, struct rte_tm_error *error)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_hwdev *hwdev = nic_dev->hwdev;
@@ -1344,7 +1340,7 @@ hinic3_tm_mark_vlan_dei(struct rte_eth_dev *dev, int mark_green, int mark_yellow
 
 static int
 hinic3_tm_mark_ip_dscp(struct rte_eth_dev *dev, int mark_green, int mark_yellow,
-		    int mark_red, struct rte_tm_error *error)
+		       int mark_red, struct rte_tm_error *error)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_hwdev *hwdev = nic_dev->hwdev;
