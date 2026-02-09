@@ -64,6 +64,14 @@ extern int hinic3_logtype;
 #define HINIC3_ETHER_HDR_SRC_ADDR(hdr) ((hdr)->s_addr)
 #endif
 
+#if (RTE_VERSION >= RTE_VERSION_NUM(24, 11, 0, 0))
+#define HINIC3_IPV6_HDR_SRC_ADDR(hdr) ((hdr)->src_addr.a)
+#define HINIC3_IPV6_HDR_DST_ADDR(hdr) ((hdr)->dst_addr.a)
+#else
+#define HINIC3_IPV6_HDR_SRC_ADDR(hdr) ((hdr)->src_addr)
+#define HINIC3_IPV6_HDR_DST_ADDR(hdr) ((hdr)->dst_addr)
+#endif
+
 #if (RTE_VERSION >= RTE_VERSION_NUM(20, 11, 0, 0))
 #define HINIC3_FLOW_ITEM_ETH_HAS_VLAN 1
 #else
