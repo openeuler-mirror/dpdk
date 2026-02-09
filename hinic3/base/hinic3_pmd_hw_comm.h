@@ -129,7 +129,7 @@ struct hinic3_cmd_root_ctxt {
 	u8  cmdq_depth;
 	u16 rx_buf_sz;
 	u8  lro_en;
-	u8  rsvd1;
+	u8  cmdq_mode;
 	u16 sq_depth;
 	u16 rq_depth;
 	u64 rsvd2;
@@ -146,14 +146,13 @@ enum hinic3_fw_ver_type {
 #define MGMT_MSG_CMD_OP_SET	1
 #define MGMT_MSG_CMD_OP_GET	0
 
-#define COMM_MAX_FEATURE_QWORD	4
 struct comm_cmd_feature_nego {
 	struct mgmt_msg_head head;
 
 	u16 func_id;
 	u8 opcode; /* 1: set, 0: get */
 	u8 rsvd;
-	u64 s_feature[COMM_MAX_FEATURE_QWORD];
+	u64 s_feature[HINIC3_MAX_FEATURE_QWORD];
 };
 
 #define HINIC3_FW_VERSION_LEN		16

@@ -28,7 +28,7 @@
 #define HINIC3_MBOX_INT_TX_SIZE_MASK				0x1F
 #define HINIC3_MBOX_INT_STAT_DMA_SO_RO_MASK			0x3
 #define HINIC3_MBOX_INT_WB_EN_MASK				0x1
-#define SPU_HOST_ID                             4
+#define SPU_HOST_ID						4
 
 #define HINIC3_MBOX_INT_SET(val, field)	\
 			(((val) & HINIC3_MBOX_INT_##field##_MASK) << \
@@ -909,7 +909,6 @@ static int hinic3_mbox_to_func_no_ack(struct hinic3_hwdev *hwdev, u16 func_idx,
 	err = hinic3_mutex_lock(&func_to_func->mbox_send_mutex);
 	if (err)
 		return err;
-
 
 #ifdef HINIC3_TRAFFIC_BIFUR
 	if (IS_TLP_MBX(func_idx) && (hinic3_pcie_itf_id(func_to_func->hwdev) != SPU_HOST_ID))

@@ -15,6 +15,7 @@
 #include "hinic3_pmd_nic_cfg.h"
 #include "hinic3_pmd_hw_cfg.h"
 #include "hinic3_pmd_ethdev.h"
+#include "hinic3_pmd_nic_io.h"
 #ifdef HINIC3_TRAFFIC_BIFUR
 #include "hinic3_pmd_bifur.h"
 #endif
@@ -397,6 +398,12 @@ int hinic3_get_link_state(void *hwdev, u8 *link_state)
 
 	memset(&get_link, 0, sizeof(get_link));
 	get_link.port_id = hinic3_physical_port_id(hwdev);
+#ifdef HINIC3_TRAFFIC_BIFUR
+	if (hinic3_func_type(hwdev) &&
+		hinic3_bifur_is_shared_dev(((struct hinic3_hwdev*)hwdev)->pci_dev)) {
+		get_link.port_id = hinic3_bifur_get_physical_port(((struct hinic3_hwdev*)hwdev)->pci_dev);
+	}
+#endif
 	err = mag_msg_to_mgmt_sync(hwdev, MAG_CMD_GET_LINK_STATUS,
 				     &get_link, sizeof(get_link),
 				     &get_link, &out_size);
@@ -420,10 +427,13 @@ int hinic3_set_vport_enable(void *hwdev, bool enable)
 	if (!hwdev)
 		return -EINVAL;
 
+	struct hinic3_nic_dev *nic_dev = (struct hinic3_nic_dev*)((struct hinic3_hwdev *)hwdev)->dev_handle;
 	memset(&en_state, 0, sizeof(en_state));
 	en_state.func_id = hinic3_global_func_id(hwdev);
 	en_state.state = enable ? 1 : 0;
-
+	en_state.num_qps = nic_dev->num_rqs;
+	en_state.rx_compact_wqe_en = HINIC3_SUPPORT_RX_SW_COMPACT_CQE(nic_dev);
+	
 	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_SET_VPORT_ENABLE,
 				     &en_state, sizeof(en_state),
 				     &en_state, &out_size);
@@ -811,7 +821,7 @@ void hinic3_free_nic_hwdev(void *hwdev)
 		return;
 
 	if (hinic3_func_type(hwdev) != TYPE_VF)
-        (void)hinic3_set_link_status_follow(hwdev, HINIC3_LINK_FOLLOW_DEFAULT);
+		(void)hinic3_set_link_status_follow(hwdev, HINIC3_LINK_FOLLOW_DEFAULT);
 
 	hinic3_vf_func_free(hwdev);
 }
@@ -943,7 +953,7 @@ static int hinic3_set_rx_lro_timer(void *hwdev, u32 timer_value)
 	return 0;
 }
 
-int hinic3_set_rx_lro_state(void *hwdev, u8 lro_en, u32 lro_timer,
+int hinic3_set_rx_lro_state(void *hwdev, bool lro_en, u32 lro_timer,
 			    u32 lro_max_pkt_len)
 {
 	u8 ipv4_en = 0, ipv6_en = 0;
@@ -962,8 +972,8 @@ int hinic3_set_rx_lro_state(void *hwdev, u8 lro_en, u32 lro_timer,
 	if (err)
 		return err;
 
-	/* We don't set LRO timer for VF */
-	if (hinic3_func_type(hwdev) == TYPE_VF)
+	/* We don't set LRO timer for VF or lro is disable*/
+	if (hinic3_func_type(hwdev) == TYPE_VF || (lro_en == false))
 		return 0;
 
 	PMD_DRV_LOG(INFO, "Set LRO timer to %u", lro_timer);
@@ -1075,12 +1085,12 @@ int hinic3_rss_set_hash_key(void *hwdev, u8 *key, u16 key_size)
 	return hinic3_rss_cfg_hash_key(hwdev, HINIC3_CMD_OP_SET, key, key_size);
 }
 
-int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table, u32 indir_table_size)
+int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table)
 {
 	struct hinic3_cmd_buf *cmd_buf = NULL;
-	u16 *indir_tbl = NULL;
+	struct hinic3_nic_dev *nic_dev = NULL;
+	u8 cmd;
 	int err;
-	u32 i;
 
 	if (!hwdev || !indir_table)
 		return -EINVAL;
@@ -1090,33 +1100,31 @@ int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table, u32 indir_table_size
 		PMD_DRV_LOG(ERR, "Allocate cmd buf failed");
 		return -ENOMEM;
 	}
-
 	cmd_buf->size = sizeof(struct nic_rss_indirect_tbl);
-	err = hinic3_cmdq_detail_resp(hwdev, HINIC3_MOD_L2NIC,
-				      HINIC3_UCODE_CMD_GET_RSS_INDIR_TABLE,
-				      cmd_buf, cmd_buf, 0);
+	nic_dev = (struct hinic3_nic_dev *)(((struct hinic3_hwdev *)hwdev)->dev_handle);
+	cmd = nic_dev->cmdq_ops->prepare_cmd_buf_get_rss_indir_table(nic_dev, cmd_buf);
+	err = hinic3_cmdq_detail_resp(hwdev, HINIC3_MOD_L2NIC, cmd, cmd_buf, cmd_buf, 0);
+
 	if (err) {
 		PMD_DRV_LOG(ERR, "Get rss indir table failed");
 		hinic3_free_cmd_buf(cmd_buf);
 		return err;
 	}
 
-	indir_tbl = (u16 *)cmd_buf->buf;
-	for (i = 0; i < indir_table_size; i++)
-		indir_table[i] = *(indir_tbl + i);
+	nic_dev->cmdq_ops->cmd_buf_to_rss_indir_table(cmd_buf,indir_table);
 
 	hinic3_free_cmd_buf(cmd_buf);
 	return 0;
 }
 
-int hinic3_rss_set_indir_tbl(void *hwdev, const u32 *indir_table, u32 indir_table_size)
+int hinic3_rss_set_indir_tbl(void *hwdev, const u32 *indir_table)
 {
-	struct nic_rss_indirect_tbl *indir_tbl = NULL;
 	struct hinic3_cmd_buf *cmd_buf = NULL;
-	u32 i, size;
-	u32 *temp = NULL;
+	struct hinic3_nic_dev *nic_dev = NULL;
+	u8 cmd;
 	u64 out_param = 0;
 	int err;
+
 
 	if (!hwdev || !indir_table)
 		return -EINVAL;
@@ -1127,22 +1135,10 @@ int hinic3_rss_set_indir_tbl(void *hwdev, const u32 *indir_table, u32 indir_tabl
 		return -ENOMEM;
 	}
 
-	cmd_buf->size = sizeof(struct nic_rss_indirect_tbl);
-	indir_tbl = (struct nic_rss_indirect_tbl *)cmd_buf->buf;
-	memset(indir_tbl, 0, sizeof(*indir_tbl));
+	nic_dev = (struct hinic3_nic_dev *)(((struct hinic3_hwdev *)hwdev)->dev_handle);
+	cmd = nic_dev->cmdq_ops->prepare_cmd_buf_set_rss_indir_table(nic_dev, indir_table, cmd_buf);
 
-	for (i = 0; i < indir_table_size; i++)
-		indir_tbl->entry[i] = (u16)(*(indir_table + i));
-
-	rte_mb();
-	size = sizeof(indir_tbl->entry) / sizeof(u32);
-	temp = (u32 *)indir_tbl->entry;
-	for (i = 0; i < size; i++)
-		temp[i] = cpu_to_be32(temp[i]);
-
-	err = hinic3_cmdq_direct_resp(hwdev, HINIC3_MOD_L2NIC,
-				      HINIC3_UCODE_CMD_SET_RSS_INDIR_TABLE,
-				      cmd_buf, &out_param, 0);
+	err = hinic3_cmdq_direct_resp(hwdev, HINIC3_MOD_L2NIC, cmd, cmd_buf, &out_param, 0);
 	if (err || out_param != 0) {
 		PMD_DRV_LOG(ERR, "Set rss indir table failed");
 		err = -EFAULT;
@@ -1366,39 +1362,7 @@ int hinic3_vf_get_default_cos(void *hwdev, u8 *cos_id)
 		return -EIO;
 	}
 
-	*cos_id = vf_dcb.state.default_cos;
-
-	return 0;
-}
-
-int hinic3_set_fdir_ethertype_filter(void *hwdev, u8 pkt_type, struct rte_eth_ethertype_filter *ethertype_filter, u8 en)
-{
-	struct hinic3_set_fdir_ethertype_rule ethertype_cmd;
-	u16 out_size = sizeof(ethertype_cmd);
-	int err;
-
-	if (!hwdev)
-		return -EINVAL;
-
-	memset(&ethertype_cmd, 0, sizeof(struct hinic3_set_fdir_ethertype_rule));
-	ethertype_cmd.func_id = hinic3_global_func_id(hwdev);
-	ethertype_cmd.pkt_type = pkt_type;
-	ethertype_cmd.pkt_type_en = en;
-	ethertype_cmd.qid = (u8)ethertype_filter->queue;
-	if (en == 0)
-		ethertype_cmd.flags = 0;
-	else
- 		ethertype_cmd.flags = (u8)ethertype_filter->flags;
-
-	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_SET_FDIR_STATUS,
-				     &ethertype_cmd, sizeof(ethertype_cmd),
-				     &ethertype_cmd, &out_size);
-	if (err || ethertype_cmd.head.status || !out_size) {
-		PMD_DRV_LOG(ERR,
-			    "set fdir ethertype rule failed, err: %d, status: 0x%x, out size: 0x%x func_id %d",
-			    err, ethertype_cmd.head.status, out_size, ethertype_cmd.func_id);
-		return -EIO;
-	}
+	*cos_id = vf_dcb.state.default_cos % HINIC3_COS_NUM_MAX_HTN;
 
 	return 0;
 }
@@ -1810,8 +1774,7 @@ hinic3_set_tm_config_tc_rate(void *hwdev, u8 tc_no, u8 rate)
 }
 
 int
-hinic3_set_tm_hierarchy_do_commit(void *hwdev, u8 *cos_tc, u8 *tc_bw,
-			       u8 *rate_limit)
+hinic3_set_tm_hierarchy_do_commit(void *hwdev, u8 *cos_tc, u8 *tc_bw, u8 *rate_limit)
 {
 	struct hinic3_cmd_ets_cfg ets;
 	u16 out_size = sizeof(ets);
@@ -1841,8 +1804,8 @@ hinic3_set_tm_hierarchy_do_commit(void *hwdev, u8 *cos_tc, u8 *tc_bw,
 	return err;
 }
 
-int
-hinic3_get_bifur_enable(void *hwdev, u8 *bifur_en, u8 *iso_en)
+#ifdef HINIC3_TRAFFIC_BIFUR
+int hinic3_get_bifur_enable(void *hwdev, u8 *bifur_en, u8 *iso_en)
 {
 	struct hinic3_port_flow_bifur_en_cmd bifur_cmd;
 	u16 out_size = sizeof(bifur_cmd);
@@ -1852,11 +1815,12 @@ hinic3_get_bifur_enable(void *hwdev, u8 *bifur_en, u8 *iso_en)
 		return -EINVAL;
 
 	memset(&bifur_cmd, 0, sizeof(struct hinic3_port_flow_bifur_en_cmd));
-	bifur_cmd.port_id     = hinic3_physical_port_id(hwdev);
+	bifur_cmd.port_id = hinic3_physical_port_id(hwdev);
 	bifur_cmd.config_flag = PORT_BIFUR_CMD_GET;
 
-	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_SET_PORT_FLOW_BIFUR_ENABLE, &bifur_cmd,
-				     sizeof(bifur_cmd), &bifur_cmd, &out_size);
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_SET_PORT_FLOW_BIFUR_ENABLE,
+				     &bifur_cmd, sizeof(bifur_cmd),
+				     &bifur_cmd, &out_size);
 	if (err || bifur_cmd.msg_head.status || !out_size) {
 		PMD_DRV_LOG(ERR, "get bifur status failed, err: %d, status: 0x%x, out size: 0x%x",
 			    err, bifur_cmd.msg_head.status, out_size);
@@ -1867,10 +1831,11 @@ hinic3_get_bifur_enable(void *hwdev, u8 *bifur_en, u8 *iso_en)
 		*bifur_en = bifur_cmd.flow_bifur_en;
 
 	if (iso_en != NULL)
-		*iso_en	  = bifur_cmd.iso_en;
+		*iso_en = bifur_cmd.iso_en;
 
 	return 0;
 }
+#endif
 
 int
 hinic3_cmdq_set_rss_queue_type(void *hwdev, struct hinic3_rss_type rss_type, u16 q_grp_id, u16 cmd_type)

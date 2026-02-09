@@ -5,6 +5,7 @@ sources = [
 	'hinic3_pmd_hw_cfg.c',
 	'hinic3_pmd_hw_comm.c',
 	'hinic3_pmd_cmdq.c',
+	'hinic3_pmd_cmdq_enhance.c',
 	'hinic3_pmd_eqs.c',
 	'hinic3_pmd_hwdev.c',
 	'hinic3_pmd_hwif.c',

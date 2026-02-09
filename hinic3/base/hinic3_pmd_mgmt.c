@@ -14,8 +14,8 @@
 #define MAX_PF_MGMT_BUF_SIZE		2048UL
 #define SEGMENT_LEN			48
 #define ASYNC_MSG_FLAG			0x20
-#define MGMT_MSG_MAX_SEQ_ID	(RTE_ALIGN(HINIC3_MSG_TO_MGMT_MAX_LEN, \
-					   SEGMENT_LEN) / SEGMENT_LEN)
+#define MGMT_MSG_MAX_SEQ_ID (RTE_ALIGN(HINIC3_MSG_TO_MGMT_MAX_LEN, SEGMENT_LEN) / SEGMENT_LEN)
+#define MGMT_MSG_LAST_SEG_MAX_LEN (MAX_PF_MGMT_BUF_SIZE - SEGMENT_LEN * MGMT_MSG_MAX_SEQ_ID)
 
 #define BUF_OUT_DEFAULT_SIZE		1
 
@@ -75,7 +75,8 @@ static void send_mgmt_ack(struct hinic3_msg_pf_to_mgmt *pf_to_mgmt,
 static bool check_mgmt_seq_id_and_seg_len(struct hinic3_recv_msg *recv_msg,
 					  u8 seq_id, u8 seg_len, u16 msg_id)
 {
-	if (seq_id > MGMT_MSG_MAX_SEQ_ID || seg_len > SEGMENT_LEN)
+	if (seq_id > MGMT_MSG_MAX_SEQ_ID || seg_len > SEGMENT_LEN ||
+	   (seq_id == MGMT_MSG_MAX_SEQ_ID && seg_len > MGMT_MSG_LAST_SEG_MAX_LEN))
 		return false;
 
 	if (seq_id == 0) {
