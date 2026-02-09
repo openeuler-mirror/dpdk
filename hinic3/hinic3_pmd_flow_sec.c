@@ -330,7 +330,6 @@ hinic3_flow_parse_sec_fdir_pattern(__rte_unused struct rte_eth_dev *dev,
     enum rte_flow_item_type type;
     int err;
 
-    enum hinic3_fdir_tunnel_mode tunnel_mode = HINIC3_FDIR_TUNNEL_MODE_NORMAL;
     filter->sec_fdir_filter.ip_type = HINIC3_FDIR_IP_TYPE_ANY;
     filter->sec_fdir_filter.has_ip_flag = false;
 
@@ -496,12 +495,168 @@ hinic3_sec_fdir_tcam_key_init_ipv4(struct rte_eth_dev *dev,
 	key_info->sport = sec_fdir->key_spec.src_port;
 }
 
+static void
+hinic3_sec_fdir_tcam_key_init_ipv6(struct rte_eth_dev *dev,
+				   const struct hinic3_sec_fdir_filter *sec_fdir,
+				   struct hinic3_tcam_key *tcam_key)
+{
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+	struct hinic3_tcam_sec_key_ipv6_mem *key_mask =
+		&tcam_key->key_mask_sec_ipv6;
+	struct hinic3_tcam_sec_key_ipv6_mem *key_info =
+		&tcam_key->key_info_sec_ipv6;
+	u16 dmac_h, dmac_m, dmac_l;
+	u16 smac_h, smac_m, smac_l;
+	u16 dmac_h_mask, dmac_m_mask, dmac_l_mask;
+	u16 smac_h_mask, smac_m_mask, smac_l_mask;
+	u16 vlan_spec = sec_fdir->vlan_tci_spec;
+	u16 vlan_mask = sec_fdir->vlan_tci_mask;
+
+	key_mask->func_id = HINIC3_UINT15_MAX;
+	key_info->func_id =
+		hinic3_global_func_id(nic_dev->hwdev) & HINIC3_UINT15_MAX;
+
+	key_mask->ip_type = HINIC3_UINT1_MAX;
+	key_info->ip_type = sec_fdir->ip_type;
+
+	key_mask->key_width = HINIC3_UINT2_MAX;
+	key_info->key_width = 1;
+
+	key_mask->tunnel_type = HINIC3_UINT4_MAX;
+	key_info->tunnel_type = HINIC3_FDIR_TUNNEL_MODE_NORMAL;
+
+	if (sec_fdir->has_vlan || vlan_mask != 0) {
+		key_mask->vlan_flag = HINIC3_UINT1_MAX;
+		key_info->vlan_flag = sec_fdir->has_vlan ? 1 : 0;
+
+		key_mask->vlan_vid = vlan_mask & RTE_VLAN_ID_MASK;
+		key_mask->vlan_cfi =
+			(u16)((vlan_mask & RTE_VLAN_CFI_MASK) >> RTE_VLAN_CFI_SHIFT);
+		key_mask->vlan_pri =
+			(u16)((vlan_mask & RTE_VLAN_PRI_MASK) >> RTE_VLAN_PRI_SHIFT);
+
+		key_info->vlan_vid = vlan_spec & RTE_VLAN_ID_MASK;
+		key_info->vlan_cfi =
+			(u16)((vlan_spec & RTE_VLAN_CFI_MASK) >> RTE_VLAN_CFI_SHIFT);
+		key_info->vlan_pri =
+			(u16)((vlan_spec & RTE_VLAN_PRI_MASK) >> RTE_VLAN_PRI_SHIFT);
+	}
+
+	hinic3_sec_fdir_mac_to_u16(&HINIC3_ETHER_HDR_DST_ADDR(&sec_fdir->ether_mask),
+				   &dmac_h_mask, &dmac_m_mask, &dmac_l_mask);
+	hinic3_sec_fdir_mac_to_u16(&HINIC3_ETHER_HDR_SRC_ADDR(&sec_fdir->ether_mask),
+				   &smac_h_mask, &smac_m_mask, &smac_l_mask);
+	hinic3_sec_fdir_mac_to_u16(&HINIC3_ETHER_HDR_DST_ADDR(&sec_fdir->ether_spec),
+				   &dmac_h, &dmac_m, &dmac_l);
+	hinic3_sec_fdir_mac_to_u16(&HINIC3_ETHER_HDR_SRC_ADDR(&sec_fdir->ether_spec),
+				   &smac_h, &smac_m, &smac_l);
+
+	key_mask->dmac_h = dmac_h_mask;
+	key_mask->dmac_m = dmac_m_mask;
+	key_mask->dmac_l = dmac_l_mask;
+	key_mask->smac_h = smac_h_mask;
+	key_mask->smac_m = smac_m_mask;
+	key_mask->smac_l = smac_l_mask;
+
+	key_info->dmac_h = dmac_h;
+	key_info->dmac_m = dmac_m;
+	key_info->dmac_l = dmac_l;
+	key_info->smac_h = smac_h;
+	key_info->smac_m = smac_m;
+	key_info->smac_l = smac_l;
+
+	key_mask->eth_type = sec_fdir->key_mask.ether_type;
+	key_info->eth_type = sec_fdir->key_spec.ether_type;
+
+	key_mask->tcp_flag = sec_fdir->tcp_flags_mask;
+	key_info->tcp_flag = sec_fdir->tcp_flags_spec;
+
+	key_mask->ip_proto = sec_fdir->key_mask.proto;
+	key_info->ip_proto = sec_fdir->key_spec.proto;
+
+	key_mask->sip0_h =
+		HINIC3_32_UPPER_16_BITS(sec_fdir->key_mask.ipv6.src_ip[0]);
+	key_mask->sip0_l =
+		HINIC3_32_LOWER_16_BITS(sec_fdir->key_mask.ipv6.src_ip[0]);
+	key_mask->sip1_h =
+		HINIC3_32_UPPER_16_BITS(sec_fdir->key_mask.ipv6.src_ip[1]);
+	key_mask->sip1_l =
+		HINIC3_32_LOWER_16_BITS(sec_fdir->key_mask.ipv6.src_ip[1]);
+	key_mask->sip2_h =
+		HINIC3_32_UPPER_16_BITS(sec_fdir->key_mask.ipv6.src_ip[2]);
+	key_mask->sip2_l =
+		HINIC3_32_LOWER_16_BITS(sec_fdir->key_mask.ipv6.src_ip[2]);
+	key_mask->sip3_h =
+		HINIC3_32_UPPER_16_BITS(sec_fdir->key_mask.ipv6.src_ip[3]);
+	key_mask->sip3_l =
+		HINIC3_32_LOWER_16_BITS(sec_fdir->key_mask.ipv6.src_ip[3]);
+
+	key_info->sip0_h =
+		HINIC3_32_UPPER_16_BITS(sec_fdir->key_spec.ipv6.src_ip[0]);
+	key_info->sip0_l =
+		HINIC3_32_LOWER_16_BITS(sec_fdir->key_spec.ipv6.src_ip[0]);
+	key_info->sip1_h =
+		HINIC3_32_UPPER_16_BITS(sec_fdir->key_spec.ipv6.src_ip[1]);
+	key_info->sip1_l =
+		HINIC3_32_LOWER_16_BITS(sec_fdir->key_spec.ipv6.src_ip[1]);
+	key_info->sip2_h =
+		HINIC3_32_UPPER_16_BITS(sec_fdir->key_spec.ipv6.src_ip[2]);
+	key_info->sip2_l =
+		HINIC3_32_LOWER_16_BITS(sec_fdir->key_spec.ipv6.src_ip[2]);
+	key_info->sip3_h =
+		HINIC3_32_UPPER_16_BITS(sec_fdir->key_spec.ipv6.src_ip[3]);
+	key_info->sip3_l =
+		HINIC3_32_LOWER_16_BITS(sec_fdir->key_spec.ipv6.src_ip[3]);
+
+	key_mask->dip0_h =
+		HINIC3_32_UPPER_16_BITS(sec_fdir->key_mask.ipv6.dst_ip[0]);
+	key_mask->dip0_l =
+		HINIC3_32_LOWER_16_BITS(sec_fdir->key_mask.ipv6.dst_ip[0]);
+	key_mask->dip1_h =
+		HINIC3_32_UPPER_16_BITS(sec_fdir->key_mask.ipv6.dst_ip[1]);
+	key_mask->dip1_l =
+		HINIC3_32_LOWER_16_BITS(sec_fdir->key_mask.ipv6.dst_ip[1]);
+	key_mask->dip2_h =
+		HINIC3_32_UPPER_16_BITS(sec_fdir->key_mask.ipv6.dst_ip[2]);
+	key_mask->dip2_l =
+		HINIC3_32_LOWER_16_BITS(sec_fdir->key_mask.ipv6.dst_ip[2]);
+	key_mask->dip3_h =
+		HINIC3_32_UPPER_16_BITS(sec_fdir->key_mask.ipv6.dst_ip[3]);
+	key_mask->dip3_l =
+		HINIC3_32_LOWER_16_BITS(sec_fdir->key_mask.ipv6.dst_ip[3]);
+
+	key_info->dip0_h =
+		HINIC3_32_UPPER_16_BITS(sec_fdir->key_spec.ipv6.dst_ip[0]);
+	key_info->dip0_l =
+		HINIC3_32_LOWER_16_BITS(sec_fdir->key_spec.ipv6.dst_ip[0]);
+	key_info->dip1_h =
+		HINIC3_32_UPPER_16_BITS(sec_fdir->key_spec.ipv6.dst_ip[1]);
+	key_info->dip1_l =
+		HINIC3_32_LOWER_16_BITS(sec_fdir->key_spec.ipv6.dst_ip[1]);
+	key_info->dip2_h =
+		HINIC3_32_UPPER_16_BITS(sec_fdir->key_spec.ipv6.dst_ip[2]);
+	key_info->dip2_l =
+		HINIC3_32_LOWER_16_BITS(sec_fdir->key_spec.ipv6.dst_ip[2]);
+	key_info->dip3_h =
+		HINIC3_32_UPPER_16_BITS(sec_fdir->key_spec.ipv6.dst_ip[3]);
+	key_info->dip3_l =
+		HINIC3_32_LOWER_16_BITS(sec_fdir->key_spec.ipv6.dst_ip[3]);
+
+	key_mask->dport = sec_fdir->key_mask.dst_port;
+	key_info->dport = sec_fdir->key_spec.dst_port;
+	key_mask->sport = sec_fdir->key_mask.src_port;
+	key_info->sport = sec_fdir->key_spec.src_port;
+}
+
 static void hinic3_sec_fdir_tcam_key_init(struct rte_eth_dev *dev,
 			      const struct hinic3_sec_fdir_filter *sec_rule,
 			      __rte_unused const struct hinic3_fdir_filter *rule,
 			      struct hinic3_tcam_key *tcam_key)
 {
-	hinic3_sec_fdir_tcam_key_init_ipv4(dev, sec_rule, tcam_key);
+	if (sec_rule->ip_type == HINIC3_FDIR_IP_TYPE_IPV6)
+		hinic3_sec_fdir_tcam_key_init_ipv6(dev, sec_rule, tcam_key);
+	else
+		hinic3_sec_fdir_tcam_key_init_ipv4(dev, sec_rule, tcam_key);
 }
 
 static struct hinic3_tcam_dynamic_block *
@@ -517,29 +672,30 @@ hinic3_dynamic_lookup_sec_tcam_filter(struct rte_eth_dev *dev,
 	int block_alloc_flag = 0;
 	u16 dynamic_block_id = 0;
 	u16 index;
-	u16 block_size = (key_width == HINIC3_FDIR_EXT_640) ? HINIC3_640_TCAM_DYNAMIC_BLOCK_SIZE : HINIC3_TCAM_DYNAMIC_BLOCK_SIZE;
+	u16 block_index_range = HINIC3_TCAM_DYNAMIC_BLOCK_SIZE;
+	u16 block_capacity = (key_width == HINIC3_FDIR_EXT_640) ? HINIC3_640_TCAM_DYNAMIC_BLOCK_SIZE : HINIC3_TCAM_DYNAMIC_BLOCK_SIZE;
 	bool require_even_index = (key_width == HINIC3_FDIR_EXT_640);
 	int err;
 
 	TAILQ_FOREACH(tmp, &tcam_info->tcam_dynamic_info.tcam_dynamic_list, entries) {
 		if (tmp->key_width != key_width)
 			continue;
-		if (tmp->dynamic_index_cnt >= block_size)
+		if (tmp->dynamic_index_cnt >= block_capacity)
 			continue;
-		for (index = 0; index < block_size; index++) {
+		for (index = 0; index < block_index_range; index++) {
 			if (require_even_index && (index & 0x1))
 				continue;
 			if (tmp->dynamic_index[index] == 0)
 				break;
 		}
-		if (index < block_size)
+		if (index < block_index_range)
 			break;
 	}
 
 	if (tmp == NULL) {
 		if (tcam_info->tcam_dynamic_info.dynamic_block_cnt >=
 			(HINIC3_TCAM_DYNAMIC_MAX_FILTERS /
-			block_size)) {
+			block_capacity)) {
 			PMD_DRV_LOG(ERR, "Dynamic tcam block is full, alloc failed!");
 			goto failed;
 		}
@@ -559,7 +715,7 @@ hinic3_dynamic_lookup_sec_tcam_filter(struct rte_eth_dev *dev,
 			goto block_alloc_failed;
 		}
 		tmp = dynamic_block_ptr;
-		for (index = 0; index < block_size; index++) {
+		for (index = 0; index < block_index_range; index++) {
 			if (require_even_index && (index & 0x1))
 				continue;
 			if (tmp->dynamic_index[index] == 0)
@@ -567,7 +723,7 @@ hinic3_dynamic_lookup_sec_tcam_filter(struct rte_eth_dev *dev,
 		}
 	}
 
-	if (index == block_size) {
+	if (index == block_index_range) {
 		PMD_DRV_LOG(ERR, "tcam block 0x%x supports filter rules is full!",
 			tmp->dynamic_block_id);
 		goto look_up_failed;
