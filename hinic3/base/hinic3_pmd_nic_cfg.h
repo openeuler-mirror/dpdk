@@ -5,6 +5,8 @@
 #ifndef _HINIC3_PMD_NIC_CFG_H_
 #define _HINIC3_PMD_NIC_CFG_H_
 
+#include "hinic3_pmd_mgmt.h"
+
 #ifndef ETH_ALEN
 #define ETH_ALEN			6
 #endif
@@ -22,6 +24,7 @@
 #define HINIC3_MIN_MTU_SIZE		256
 
 #define HINIC3_COS_NUM_MAX		8
+#define HINIC3_COS_NUM_MAX_HTN		4
 
 #define HINIC3_VLAN_TAG_SIZE		4
 #define HINIC3_ETH_OVERHEAD \
@@ -63,11 +66,26 @@
 #define HINIC3_RSS_KEY_SIZE		40
 #define HINIC3_RSS_ENABLE		0x01
 #define HINIC3_RSS_DISABLE		0x00
-#define HINIC3_INVAILD_QID_BASE       0xffff
+#define HINIC3_INVALID_QID_BASE       0xffff
 
 #ifndef ETH_SPEED_NUM_200G
 #define ETH_SPEED_NUM_200G    200000 /* < 200 Gbps */
 #endif
+
+#define HINIC3_SUPPORT_FEATURE(dev, feature) \
+	((hinic3_get_driver_feature(dev) & NIC_F_##feature) != 0)
+#define HINIC3_SUPPORT_RX_HW_COMPACT_CQE(dev) \
+	HINIC3_SUPPORT_FEATURE(dev, RX_HW_COMPACT_CQE)
+#define HINIC3_SUPPORT_RX_SW_COMPACT_CQE(dev) \
+	HINIC3_SUPPORT_FEATURE(dev, RX_SW_COMPACT_CQE)	
+#define HINIC3_SUPPORT_TX_WQE_COMPACT_TASK(dev) \
+	HINIC3_SUPPORT_FEATURE(dev, TX_WQE_COMPACT_TASK)
+#define HINIC3_SUPPORT_VXLAN_OFFLOAD(dev) \
+	HINIC3_SUPPORT_FEATURE(dev, VXLAN_OFFLOAD)
+#define HINIC3_SUPPORT_GENEVE_OFFLOAD(dev) \
+	HINIC3_SUPPORT_FEATURE(dev, GENEVE_OFFLOAD)
+#define HINIC3_SUPPORT_IPXIP_OFFLOAD(dev) \
+	HINIC3_SUPPORT_FEATURE(dev, IPXIP_OFFLOAD)
 
 #define NIC_VF_DCB_COS_MAX 0x4
 #define NIC_DCB_COS_MAX	   0x8
@@ -251,23 +269,23 @@ enum hilink_fec_type {
 };
 
 enum mag_cmd_port_an {
-    PORT_AN_NOT_SET = 0,
-    PORT_CFG_AN_ON = 1,
-    PORT_CFG_AN_OFF = 2
+	PORT_AN_NOT_SET = 0,
+	PORT_CFG_AN_ON = 1,
+	PORT_CFG_AN_OFF = 2
 };
 
 enum mag_cmd_port_speed {
-    PORT_SPEED_NOT_SET = 0,
-    PORT_SPEED_10MB = 1,
-    PORT_SPEED_100MB = 2,
-    PORT_SPEED_1GB = 3,
-    PORT_SPEED_10GB = 4,
-    PORT_SPEED_25GB = 5,
-    PORT_SPEED_40GB = 6,
-    PORT_SPEED_50GB = 7,
-    PORT_SPEED_100GB = 8,
-    PORT_SPEED_200GB = 9,
-    PORT_SPEED_UNKNOWN
+	PORT_SPEED_NOT_SET = 0,
+	PORT_SPEED_10MB = 1,
+	PORT_SPEED_100MB = 2,
+	PORT_SPEED_1GB = 3,
+	PORT_SPEED_10GB = 4,
+	PORT_SPEED_25GB = 5,
+	PORT_SPEED_40GB = 6,
+	PORT_SPEED_50GB = 7,
+	PORT_SPEED_100GB = 8,
+	PORT_SPEED_200GB = 9,
+	PORT_SPEED_UNKNOWN
 };
 
 struct hinic3_sq_attr {
@@ -315,38 +333,38 @@ struct hinic3_port_mac_update {
 };
 
 struct hinic3_ppa_cfg_state_cmd {
-    struct mgmt_msg_head msg_head;
+	struct mgmt_msg_head msg_head;
 
-    u16 func_id;
-    u8 ppa_state;
-    u8 rsvd;
+	u16 func_id;
+	u8 ppa_state;
+	u8 rsvd;
 };
 
 struct hinic3_ppa_cfg_mode_cmd {
-    struct mgmt_msg_head msg_head;
+	struct mgmt_msg_head msg_head;
 
-    u16 rsvd0;
-    u8 ppa_mode;
-    u8 qpc_func_nums;
-    u16 base_qpc_func_id;
-    u16 rsvd1;
+	u16 rsvd0;
+	u8 ppa_mode;
+	u8 qpc_func_nums;
+	u16 base_qpc_func_id;
+	u16 rsvd1;
 };
 
 struct hinic3_ppa_cfg_flush_cmd {
-    struct mgmt_msg_head msg_head;
+	struct mgmt_msg_head msg_head;
 
-    u16 rsvd0;
-    u8 flush_en; /* 0:flush done 1:in flush operation */
-    u8 rsvd1;
+	u16 rsvd0;
+	u8 flush_en; /* 0:flush done 1:in flush operation */
+	u8 rsvd1;
 };
 
 struct hinic3_ppa_fdir_query_cmd {
-    struct mgmt_msg_head msg_head;
+	struct mgmt_msg_head msg_head;
 
-    u32 index;
-    u32 rsvd;
-    u64 pkt_nums;
-    u64 pkt_bytes;
+	u32 index;
+	u32 rsvd;
+	u64 pkt_nums;
+	u64 pkt_bytes;
 };
 
 #define HINIC3_CMD_OP_ADD	1
@@ -413,13 +431,13 @@ struct hinic3_cmd_pause_config {
 };
 
 struct hinic3_cmd_pfc_config {
-       struct mgmt_msg_head msg_head;
+	struct mgmt_msg_head msg_head;
 
-       u8 port_id;
-       u8 op_code;  /* 0: get 1: set pfc_en 2: set pfc_bitmap 3: set all */
-       u8 pfc_en;   /* pfc_en and pfc_bitmap must set at same time. */
-       u8 pfc_bitmap;
-       u8 rsvd[4];
+	u8 port_id;
+	u8 op_code;  /* 0: get 1: set pfc_en 2: set pfc_bitmap 3: set all */
+	u8 pfc_en;   /* pfc_en and pfc_bitmap must set at same time. */
+	u8 pfc_bitmap;
+	u8 rsvd[4];
 };
 
 struct hinic3_vport_state {
@@ -428,7 +446,9 @@ struct hinic3_vport_state {
 	u16 func_id;
 	u16 rsvd1;
 	u8 state;  /* 0--disable, 1--enable */
-	u8 rsvd2[3];
+	u8 num_qps;
+	u8 rx_compact_wqe_en;
+	u8 rsvd2;
 };
 
 #define MAG_CMD_PORT_DISABLE  0x0
@@ -646,116 +666,116 @@ struct mag_cmd_get_port_stat {
 };
 
 struct param_head {
-    u8 valid_len;
-    u8 info_type;
-    u8 rsvd[2];
+	u8 valid_len;
+	u8 info_type;
+	u8 rsvd[2];
 };
 
 struct mag_port_link_param {
-    struct param_head head;
+	struct param_head head;
 
-    u8 an;
-    u8 fec;
-    u8 speed;
-    u8 rsvd0;
+	u8 an;
+	u8 fec;
+	u8 speed;
+	u8 rsvd0;
 
-    u32 used;
-    u32 an_fec_ability;
-    u32 an_speed_ability;
-    u32 an_pause_ability;
+	u32 used;
+	u32 an_fec_ability;
+	u32 an_speed_ability;
+	u32 an_pause_ability;
 };
 
 struct mag_port_wire_info {
-    struct param_head head;
+	struct param_head head;
 
-    u8 status;
-    u8 rsvd0[3];
+	u8 status;
+	u8 rsvd0[3];
 
-    u8 wire_type;
-    u8 default_fec;
-    u8 speed;
-    u8 rsvd1;
-    u32 speed_ability;
+	u8 wire_type;
+	u8 default_fec;
+	u8 speed;
+	u8 rsvd1;
+	u32 speed_ability;
 };
 
 struct mag_port_adapt_info {
-    struct param_head head;
+	struct param_head head;
 
-    u32 adapt_en;
-    u32 flash_adapt;
-    u32 rsvd0[2];
+	u32 adapt_en;
+	u32 flash_adapt;
+	u32 rsvd0[2];
 
-    u32 wire_node;
-    u32 an_en;
-    u32 speed;
-    u32 fec;
+	u32 wire_node;
+	u32 an_en;
+	u32 speed;
+	u32 fec;
 };
 
 struct mag_port_param_info {
-    u8 parameter_cnt;
-    u8 lane_id;
-    u8 lane_num;
-    u8 rsvd0;
+	u8 parameter_cnt;
+	u8 lane_id;
+	u8 lane_num;
+	u8 rsvd0;
 
-    struct mag_port_link_param default_cfg;
-    struct mag_port_link_param bios_cfg;
-    struct mag_port_link_param tool_cfg;
-    struct mag_port_link_param final_cfg;
+	struct mag_port_link_param default_cfg;
+	struct mag_port_link_param bios_cfg;
+	struct mag_port_link_param tool_cfg;
+	struct mag_port_link_param final_cfg;
 
-    struct mag_port_wire_info wire_info;
-    struct mag_port_adapt_info adapt_info;
+	struct mag_port_wire_info wire_info;
+	struct mag_port_adapt_info adapt_info;
 };
 
 #define XSFP_VENDOR_NAME_LEN 16
 struct mag_cmd_event_port_info {
-    struct mgmt_msg_head head;
+	struct mgmt_msg_head head;
 
-    u8 port_id;
-    u8 event_type;
-    u8 rsvd0[2];
+	u8 port_id;
+	u8 event_type;
+	u8 rsvd0[2];
 
-    // 光模块相关
-    u8 vendor_name[XSFP_VENDOR_NAME_LEN];
-    u32 port_type;     /* fiber / copper */
-    u32 port_sub_type; /* sr / lr */
-    u32 cable_length;  /* 1/3/5m */
-    u8 cable_temp;     /* 温度 */
-    u8 max_speed;      /* 光模块最大速率 */
-    u8 sfp_type;       /* sfp/qsfp */
-    u8 rsvd1;
-    u32 power[4]; /* 光功率 */
+	// 光模块相关
+	u8 vendor_name[XSFP_VENDOR_NAME_LEN];
+	u32 port_type;     /* fiber / copper */
+	u32 port_sub_type; /* sr / lr */
+	u32 cable_length;  /* 1/3/5m */
+	u8 cable_temp;     /* 温度 */
+	u8 max_speed;      /* 光模块最大速率 */
+	u8 sfp_type;       /* sfp/qsfp */
+	u8 rsvd1;
+	u32 power[4]; /* 光功率 */
 
-    u8 an_state;
-    u8 fec;
-    u16 speed;
+	u8 an_state;
+	u8 fec;
+	u16 speed;
 
-    u8 gpio_insert; /* 0:present  1:absent */
-    u8 alos;
-    u8 rx_los;
-    u8 pma_ctrl;
+	u8 gpio_insert; /* 0:present  1:absent */
+	u8 alos;
+	u8 rx_los;
+	u8 pma_ctrl;
 
-    u32 pma_fifo_reg;
-    u32 pma_signal_ok_reg;
-    u32 pcs_64_66b_reg;
-    u32 rf_lf;
-    u8 pcs_link;
-    u8 pcs_mac_link;
-    u8 tx_enable;
-    u8 rx_enable;
-    u32 pcs_err_cnt;
+	u32 pma_fifo_reg;
+	u32 pma_signal_ok_reg;
+	u32 pcs_64_66b_reg;
+	u32 rf_lf;
+	u8 pcs_link;
+	u8 pcs_mac_link;
+	u8 tx_enable;
+	u8 rx_enable;
+	u32 pcs_err_cnt;
 
-    u8 eq_data[38];
-    u8 rsvd2[2];
+	u8 eq_data[38];
+	u8 rsvd2[2];
 
-    u32 his_link_machine_state;
-    u32 cur_link_machine_state;
-    u8 his_machine_state_data[128];
-    u8 cur_machine_state_data[128];
-    u8 his_machine_state_length;
-    u8 cur_machine_state_length;
+	u32 his_link_machine_state;
+	u32 cur_link_machine_state;
+	u8 his_machine_state_data[128];
+	u8 cur_machine_state_data[128];
+	u8 his_machine_state_length;
+	u8 cur_machine_state_length;
 
-    struct mag_port_param_info param_info;
-    u8 rsvd3[360];
+	struct mag_port_param_info param_info;
+	u8 rsvd3[360];
 };
 
 struct hinic3_port_stats {
@@ -789,12 +809,15 @@ enum hinic3_func_tbl_cfg_bitmap {
 	FUNC_CFG_INIT,
 	FUNC_CFG_RX_BUF_SIZE,
 	FUNC_CFG_MTU,
+	FUNC_CFG_RX_COMPACT_WQE_EN, /**< RX 8Byte wqe 使能 */
 };
 
 struct hinic3_func_tbl_cfg {
 	u16 rx_wqe_buf_size;
 	u16 mtu;
-	u32 rsvd[9];
+	u8 rx_compact_wqe_en; /**< rx 8Byte wqe(合一cqe) 使能 */
+	u8 rsvd0[3];
+	u32 rsvd1[8];
 };
 
 struct hinic3_cmd_set_func_tbl {
@@ -1005,7 +1028,7 @@ struct hinic3_tcam_cfg_rule {
 #define TCAM_RULE_Q_GROUP_TYPE 2
 
 enum hinic3_port_flow_bifur_cmd_type {
-    PORT_BIFUR_CMD_SET,
+	PORT_BIFUR_CMD_SET,
 	PORT_BIFUR_CMD_GET,
 };
 
@@ -1019,13 +1042,13 @@ struct hinic3_fdir_add_rule {
 };
 
 struct hinic3_port_flow_bifur_en_cmd {
-    struct mgmt_msg_head msg_head;
-    u16 port_id;
-    u8 flow_bifur_en;
-    u8 flow_bifur_type; /* 0->vf bifur, 2->traffic bifur */
-    u8 config_flag; /* 0-> set, 1-> get */
-    u8 iso_en; /* 0 -> off, 1 -> on */
-    u8 rsvd[2];
+	struct mgmt_msg_head msg_head;
+	u16 port_id;
+	u8 flow_bifur_en;
+	u8 flow_bifur_type; /* 0->vf bifur, 2->traffic bifur */
+	u8 config_flag; /* 0-> set, 1-> get */
+	u8 iso_en; /* 0 -> off, 1 -> on */
+	u8 rsvd[2];
 };
 
 struct hinic3_fdir_del_rule {
@@ -1068,13 +1091,12 @@ struct hinic3_set_fdir_ethertype_rule {
 	struct mgmt_msg_head head;
 
 	u16 func_id;
-	u16 rsvd1;
+	u16 index;
 	u8 pkt_type_en;
 	u8 pkt_type;
 	u8 qid;
 	u8 flags;
 };
-
 
 struct hinic3_cmd_set_rq_flush {
 	union {
@@ -1094,11 +1116,11 @@ enum hinic3_link_follow_status {
 };
 
 struct mag_cmd_set_link_follow {
-    struct mgmt_msg_head head;
-    u16 function_id;
-    u16 rsvd0;
-    u8 follow;
-    u8 rsvd1[3];
+	struct mgmt_msg_head head;
+	u16 function_id;
+	u16 rsvd0;
+	u8 follow;
+	u8 rsvd1[3];
 };
 
 struct hinic3_cmd_ets_cfg {
@@ -1408,7 +1430,7 @@ int hinic3_set_rx_vlan_offload(void *hwdev, u8 en);
  * @retval zero : Success
  * @retval non-zero : Failure
  */
-int hinic3_set_rx_lro_state(void *hwdev, u8 lro_en, u32 lro_timer,
+int hinic3_set_rx_lro_state(void *hwdev, bool lro_en, u32 lro_timer,
 			    u32 lro_max_pkt_len);
 
 /**
@@ -1455,13 +1477,11 @@ int hinic3_rss_template_free(void *hwdev, u16 q_grp_id);
  *   Device pointer to hwdev
  * @param[in] indir_table
  *   RSS indirect table
- * @param[in] indir_table_size
- *   RSS indirect table size
  *
  * @retval zero : Success
  * @retval non-zero : Failure
  */
-int hinic3_rss_set_indir_tbl(void *hwdev, const u32 *indir_table, u32 indir_table_size);
+int hinic3_rss_set_indir_tbl(void *hwdev, const u32 *indir_table);
 
 /**
  * Get RSS indirect table
@@ -1470,13 +1490,11 @@ int hinic3_rss_set_indir_tbl(void *hwdev, const u32 *indir_table, u32 indir_tabl
  *   Device pointer to hwdev
  * @param[out] indir_table
  *   RSS indirect table
- * @param[in] indir_table_size
- *   RSS indirect table size
  *
  * @retval zero : Success
  * @retval non-zero : Failure
  */
-int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table, u32 indir_table_size);
+int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table);
 
 /**
  * Set RSS type
@@ -1726,8 +1744,6 @@ int hinic3_get_feature_from_hw(void *hwdev, u64 *s_feature, u16 size);
  */
 int hinic3_set_feature_to_hw(void *hwdev, u64 *s_feature, u16 size);
 
-int hinic3_set_fdir_ethertype_filter(void *hwdev, u8 pkt_type, struct rte_eth_ethertype_filter *ethertype_filter, u8 en);
-
 int hinic3_set_link_status_follow(void *hwdev, enum hinic3_link_follow_status status);
 int hinic3_sync_dcb_state(void *hwdev, u8 op_code, u8 state);
 int hinic3_sync_qos_map(void *hwdev, struct hinic3_dcb_config *dcb_cfg);
@@ -1736,8 +1752,7 @@ int hinic3_set_qos_port_trust(void *hwdev, u8 trust);
 
 int hinic3_set_tm_config_tc_rate(void *hwdev, u8 tc_no, u8 rate);
 
-int hinic3_set_tm_hierarchy_do_commit(void *hwdev, u8 *cos_tc, u8 *tc_bw,
-				   u8 *rate_limit);
+int hinic3_set_tm_hierarchy_do_commit(void *hwdev, u8 *cos_tc, u8 *tc_bw, u8 *rate_limit);
 
 int hinic3_get_bifur_enable(void *hwdev, u8 *bifur_enable, u8 *iso_enable);
 
