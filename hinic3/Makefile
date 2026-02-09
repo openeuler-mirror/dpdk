@@ -21,7 +21,7 @@ CFLAGS += -fPIC -fstack-protector-strong
 
 EXTRA_LDFLAGS += -z,relro -z,now -z,noexecstack -s
 
-#LDFLAGS += -fPIC  
+#LDFLAGS += -fPIC
 
 CFLAGS += $(WERROR_FLAGS)
 
@@ -48,6 +48,8 @@ CFLAGS += -Wno-cast-qual
 CFLAGS += -I$(RTE_SDK)/drivers/net/hinic3/
 CFLAGS += -I$(RTE_SDK)/drivers/net/hinic3/base
 CFLAGS += -I$(RTE_SDK)/drivers/net/hinic3/mml
+CFLAGS += -I$(RTE_SDK)/drivers/net/hinic3/htn_adapt
+CFLAGS += -I$(RTE_SDK)/drivers/net/hinic3/comm_adapt
 
 LDLIBS += -lrte_eal -lrte_mbuf -lrte_mempool -lrte_ring
 LDLIBS += -lrte_ethdev -lrte_net -lrte_hash
@@ -77,6 +79,9 @@ endif
 
 VPATH += $(SRCDIR)/base
 VPATH += $(SRCDIR)/mml
+VPATH += $(SRCDIR)/htn_adapt
+VPATH += $(SRCDIR)/comm_adapt
+
 #
 # all source are stored in SRCS-y
 #
@@ -107,5 +112,12 @@ SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_mml_lib.c
 SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_mml_main.c
 SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_mml_queue.c
 SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_hairpin.c
+
+SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_cmdq_adapt.c
+SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += htn_cmdq_ops.c
+SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += htn_fdir_ops.c
+SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += comm_cmdq_ops.c
+SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_enhance_cmdq.c
+
 
 include $(RTE_SDK)/mk/rte.lib.mk

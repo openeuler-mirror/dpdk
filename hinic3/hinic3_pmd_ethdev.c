@@ -458,7 +458,7 @@ void hinic3_dev_info_get(struct rte_eth_dev_info *info, struct hinic3_nic_dev *n
 				DEV_TX_OFFLOAD_MULTI_SEGS |
 				DEV_TX_OFFLOAD_QINQ_INSERT;
 
-	if (nic->feature_cap & NIC_F_HTN_CMDQ)
+	if (nic_dev->feature_cap & NIC_F_HTN_CMDQ)
 		hinic3_dev_tnl_tso_support(info, nic_dev);
 	info->hash_key_size = HINIC3_RSS_KEY_SIZE;
 	info->reta_size = HINIC3_RSS_INDIR_SIZE;
