@@ -21,13 +21,16 @@ cflags += ['-fstack-protector-strong']
 dpdk_version = meson.project_version()
 if dpdk_version.substring(0,2) == '20'
 	cflags += ['-DDPDK_20_11']
+	cflags += ['-DDPDK_20_BIFUR']
 elif dpdk_version.substring(0,2) == '21'
 	cflags += ['-DDPDK_20_11']
 	cflags += ['-DDPDK_21_11']
+	cflags += ['-DDPDK_21_BIFUR']
 elif dpdk_version.substring(0,2) == '22'
 	cflags += ['-DDPDK_20_11']
 	cflags += ['-DDPDK_21_11']
 	cflags += ['-DDPDK_22_11']
+	cflags += ['-DDPDK_22_BIFUR']
 elif dpdk_version.substring(0,2) == '23'
 	cflags += ['-DDPDK_20_11']
 	cflags += ['-DDPDK_21_11']
@@ -60,8 +63,12 @@ sources = files(
 	'hinic3_pmd_dcb.c',
 	'hinic3_pmd_tm.c',
 	'hinic3_pmd_telemetry.c',
+	'hinic3_pmd_cmdq_adapt.c',
 	'hinic3_pmd_hairpin.c',
 )
+
+subdir('stn_adapt')
+subdir('htn_adapt')
 
 if arch_subdir == 'arm' and dpdk_conf.get('RTE_ARCH_64')
 	cflags  += ['-D__ARM64_NEON__']
