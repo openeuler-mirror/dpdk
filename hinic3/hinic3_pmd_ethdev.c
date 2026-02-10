@@ -3653,7 +3653,7 @@ static void hinic3_nic_tx_rx_ops_init(struct hinic3_nic_dev *nic_dev)
 		nic_dev->tx_rx_ops.nic_tx_set_wqe_offload = hinic3_tx_set_normal_task_offload;
 
 	if (HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev) ||
-	    HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev)) {
+	    HINIC3_SUPPORT_RX_SW_COMPACT_CQE(nic_dev)) {
 		nic_dev->tx_rx_ops.nic_rx_get_cqe_info = hinic3_rx_get_compact_cqe_info;
 		nic_dev->tx_rx_ops.nic_rx_cqe_done = rx_integrated_cqe_done;
 		nic_dev->tx_rx_ops.nic_rx_poll_rq_empty = hinic3_poll_integrated_cqe_rq_empty;
