@@ -1635,6 +1635,60 @@ static void hinic3_disable_queue_intr(struct rte_eth_dev *dev)
 	return;
 }
 
+static int hinic3_refill_hairpinq(struct rte_eth_dev *dev)
+{
+	struct hinic3_rxq *rxq = NULL;
+	struct hinic3_txq *txq = NULL;
+	struct rte_eth_hairpin_conf conf;
+	int ret;
+	int i;
+#ifdef DPDK_20_11
+	conf.manual_bind = 1;
+	conf.tx_explicit = 1;
+#endif
+#ifdef DPDK_22_11
+	conf.use_locked_device_memory = 0;
+	conf.use_rte_memory = 0;
+	conf.force_memory = 0;
+#endif
+	conf.peer_count = 0;
+	for (i=0; i < dev->data->nb_rx_queues; i++) {
+		rxq = dev->data->rx_queues[i];
+		if (rxq == NULL) {
+			ret = hinic3_rx_hairpin_queue_setup(dev, i, HINIC3_MIN_QUEUE_DEPTH, &conf);
+			if (ret != 0)
+				return ret;
+		}
+	}
+	for (i=0; i < dev->data->nb_tx_queues; i++) {
+		txq = dev->data->tx_queues[i];
+		if (txq == NULL) {
+			ret = hinic3_tx_hairpin_queue_setup(dev, i, HINIC3_MIN_QUEUE_DEPTH, &conf);
+			if (ret != 0)
+				return ret;
+		}
+	}
+	return 0;
+}
+
+static void hinic3_print_hairpin_map(struct rte_eth_dev *dev)
+{
+	struct hinic3_rxq *rxq = NULL;
+	struct rte_eth_hairpin_conf *conf;
+	int i;
+	for (i=0; i < dev->data->nb_rx_queues; i++) {
+		rxq = dev->data->rx_queues[i];
+		if (rxq == NULL || !rxq->is_hairpin)
+			continue;
+		conf = &rxq->hairpin_conf;
+		if (conf->peer_count == 0)
+			PMD_DRV_LOG(INFO, "Port %u rxq %u usable", dev->data->port_id, i);
+		else
+			PMD_DRV_LOG(INFO, "Port %u rxq %u -> Port %u txq %u",
+						dev->data->port_id, i, conf->peers[0].port, conf->peers[0].queue);
+	}
+}
+
 /**
  * Start the device.
  *
@@ -1664,6 +1718,14 @@ static int hinic3_dev_start(struct rte_eth_dev *eth_dev)
 	}
 	hinic3_update_msix_info(nic_dev->hwdev->hwif);
 	hinic3_disable_interrupt(eth_dev);
+	
+	err = hinic3_refill_hairpinq(eth_dev);
+	if (err) {
+		PMD_DRV_LOG(ERR, "Refill hairpinq fail, dev_name: %s",
+			 eth_dev->data->name);
+		goto refill_hairpin_fail;
+	}
+	hinic3_print_hairpin_map(eth_dev);
 	err = hinic3_init_rxq_intr(eth_dev);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Init rxq intr fail, eth_dev:%s",
@@ -1792,6 +1854,7 @@ get_feature_err:
 init_func_tbl_fail:
     hinic3_deinit_rxq_intr(eth_dev);
 init_rxq_intr_fail:
+refill_hairpin_fail:
 	hinic3_copy_mempool_uninit(nic_dev);
 init_mpool_fail:
 	return err;

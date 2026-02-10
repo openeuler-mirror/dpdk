@@ -381,9 +381,10 @@ void hinic3_free_rxq_mbufs(struct hinic3_rxq *rxq)
 void hinic3_free_all_rxq_mbufs(struct hinic3_nic_dev *nic_dev)
 {
 	u16 qid;
-
+	struct hinic3_rxq *rxq;
 	for (qid = 0; qid < nic_dev->num_rqs; qid++) {
-		if (nic_dev->rxqs[qid] != NULL)
+		rxq = nic_dev->rxqs[qid];
+		if (rxq != NULL && !rxq->is_hairpin)
 			hinic3_free_rxq_mbufs(nic_dev->rxqs[qid]);
 	}
 }
@@ -1071,16 +1072,17 @@ static void hinic3_recv_jumbo_pkt(struct hinic3_rxq *rxq,
 int hinic3_start_all_rqs(struct rte_eth_dev *eth_dev)
 {
 	struct hinic3_nic_dev *nic_dev = NULL;
-	struct hinic3_rxq *rxq = NULL;
+	struct hinic3_rxq *tmp = NULL, *rxq = NULL;
 	int err = 0;
 	int i;
 
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
 
 	for (i = 0; i < nic_dev->num_rqs; i++) {
-		rxq = eth_dev->data->rx_queues[i];
-		if (rxq->is_hairpin)
+		tmp = eth_dev->data->rx_queues[i];
+		if (tmp == NULL || tmp->is_hairpin)
 			break;
+		rxq = tmp;
 		hinic3_add_rq_to_rx_queue_list(nic_dev, rxq->q_id);
 		err = hinic3_rearm_rxq_mbuf(rxq);
 		if (err) {

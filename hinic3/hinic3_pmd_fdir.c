@@ -553,6 +553,8 @@ hinic3_fdir_tcam_action_init(struct rte_eth_dev *dev,
 			     struct hinic3_tcam_cfg_rule *fdir_tcam_rule)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+	struct rte_eth_dev *dst_dev = NULL;
+	struct hinic3_nic_dev *dst_nic = NULL;
 
 	fdir_tcam_rule->data.dw0.qid = rule->rq_index;
 #ifdef HINIC3_TRAFFIC_BIFUR
@@ -570,8 +572,10 @@ hinic3_fdir_tcam_action_init(struct rte_eth_dev *dev,
 		case RTE_FLOW_ACTION_TYPE_QUEUE:
 			rxq = dev->data->rx_queues[rule->rq_index];
 			if(rxq != NULL&& rxq->is_hairpin) {
+				dst_dev = &rte_eth_devices[rxq->hairpin_conf.peers[0].port];
+				dst_nic = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dst_dev);
 				fdir_tcam_rule->data.dw1.bs.action = HINIC3_ACTION_PORT;
-				fdir_tcam_rule->data.dw1.bs.func_id = rxq->hairpin_conf.peers[0].port;
+				fdir_tcam_rule->data.dw1.bs.func_id = hinic3_physical_port_id(dst_nic->hwdev);
 			}
 			break;
  	 	case RTE_FLOW_ACTION_TYPE_DROP:

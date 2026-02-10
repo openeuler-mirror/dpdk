@@ -77,7 +77,7 @@ hinic3_hairpin_get_peer_ports(struct rte_eth_dev *dev, uint16_t *peer_ports,
 
 	if (direction) {
 		for (i = 0; i < txq_num; i++) {
-			if (!rxq[i]->is_hairpin)
+			if (rxq[i] == NULL || !rxq[i]->is_hairpin || rxq[i]->hairpin_conf.peer_count == 0)
 				continue;
 
 			if (peer_cnt >= len) {
@@ -90,9 +90,9 @@ hinic3_hairpin_get_peer_ports(struct rte_eth_dev *dev, uint16_t *peer_ports,
 		}
 	} else {
 		for (i = 0; i < rxq_num; i++) {
-			if (!txq[i]->is_hairpin) {
+			if (txq[i] == NULL || !txq[i]->is_hairpin || txq[i]->hairpin_conf.peer_count == 0)
 				continue;
-			}
+
 			if (peer_cnt >= len) {
 				rte_errno = ERANGE;
 				PMD_DRV_LOG(ERR, "port %u queue %u peer port out of range %lu",
@@ -144,7 +144,7 @@ hinic3_rx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 		return -EINVAL;
 	}
 
-    if (conf->peer_count != 1) {
+    if (conf->peer_count > 1) {
 		rte_errno = EINVAL;
 		PMD_DRV_LOG(ERR, "port %u unable to setup Rx hairpin queue index %u"
 			" peer count is %u", dev->data->port_id,
@@ -192,10 +192,6 @@ hinic3_rx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
     dev->data->rx_queues[qid] = rxq;
 	dev->data->rx_queue_state[qid] = RTE_ETH_QUEUE_STATE_HAIRPIN;
 
-	PMD_DRV_LOG(INFO, "Port %u Queue %u -> Port %u Queue %u",
-				dev->data->port_id, qid,
-				conf->peers[0].port,
-				conf->peers[0].queue);
     return 0;
 }
 
@@ -242,7 +238,7 @@ hinic3_tx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 			    (int)dev->data->port_id, (int)qid);
 		return -EINVAL;
 	}
-    if (conf->peer_count != 1) {
+    if (conf->peer_count > 1) {
 		rte_errno = EINVAL;
 		PMD_DRV_LOG(ERR, "port %u unable to setup Rx hairpin queue index %u"
 			" peer count is %u", dev->data->port_id,
@@ -294,14 +290,14 @@ hinic3_tx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 
 int hinic3_hairpin_bind(struct rte_eth_dev *dev, uint16_t rx_port)
 {
-	(void) dev;
-	(void) rx_port;
+	(void)dev;
+	(void)rx_port;
 	return 0;
 }
 
 int hinic3_hairpin_unbind(struct rte_eth_dev *dev, uint16_t rx_port)
 {
-	(void) dev;
-	(void) rx_port;
+	(void)dev;
+	(void)rx_port;
 	return 0;
 }

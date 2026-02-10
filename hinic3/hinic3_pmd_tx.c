@@ -210,7 +210,7 @@ int hinic3_start_all_sqs(struct rte_eth_dev *eth_dev)
 
 	for (i = 0; i < nic_dev->num_sqs; i++) {
 		txq = eth_dev->data->tx_queues[i];
-		if (txq == NULL)
+		if (txq == NULL || txq->is_hairpin)
 			continue;
 		HINIC3_SET_TXQ_STARTED(txq);
 		eth_dev->data->tx_queue_state[i] = RTE_ETH_QUEUE_STATE_STARTED;
@@ -317,9 +317,10 @@ void hinic3_free_txq_mbufs(struct hinic3_txq *txq)
 void hinic3_free_all_txq_mbufs(struct hinic3_nic_dev *nic_dev)
 {
 	u16 qid;
-
+	struct hinic3_txq *txq;
 	for (qid = 0; qid < nic_dev->num_sqs; qid++) {
-		if (nic_dev->txqs[qid] != NULL)
+		txq = nic_dev->txqs[qid];
+		if (txq != NULL && !txq->is_hairpin)
 			hinic3_free_txq_mbufs(nic_dev->txqs[qid]);
 	}
 }
