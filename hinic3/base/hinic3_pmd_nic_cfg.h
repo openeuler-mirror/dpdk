@@ -1004,7 +1004,7 @@ struct hinic3_tcam_result {
 			u32 rsvd1 : 8;
 		} bs;
 	}dw1;
-	};
+};
 
 #define HINIC3_TCAM_FLOW_KEY_SIZE	44
 #define HINIC3_MAX_TCAM_RULES_NUM	4096
