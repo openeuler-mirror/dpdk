@@ -322,9 +322,9 @@ static void cmdq_set_lcmd_wqe(struct hinic3_cmdq_wqe *wqe,
 }
 
 static void cmdq_sync_wqe_prepare(struct hinic3_cmdq *cmdq, u8 mod, u8 cmd,
-								struct hinic3_cmd_buf *buf_in, struct hinic3_cmd_buf *buf_out,
-								struct hinic3_cmdq_wqe *curr_wqe, u16 curr_pi,
-								enum hinic3_cmdq_cmd_type nic_cmd_type)
+				  struct hinic3_cmd_buf *buf_in, struct hinic3_cmd_buf *buf_out,
+				  struct hinic3_cmdq_wqe *curr_wqe, u16 curr_pi,
+				  enum hinic3_cmdq_cmd_type nic_cmd_type)
 {
 	struct hinic3_cmdq_wqe wqe = {0};
 	int wrapped, wqe_size;

@@ -1389,8 +1389,7 @@ hinic3_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
 		 * For wqe compact type, no need to prepare
 		 * sq ctrl info.
 		 */
-		if (wqe_combo.wqe_type != SQ_WQE_COMPACT_TYPE)
-			hinic3_prepare_sq_ctrl(&wqe_combo, &wqe_info);
+		hinic3_prepare_sq_ctrl(&wqe_combo, &wqe_info);
 
 		tx_bytes += mbuf_pkt->pkt_len;
 	}
