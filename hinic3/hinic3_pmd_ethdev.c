@@ -2753,6 +2753,8 @@ hinic3_dev_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 			nic_dev->num_rqs : RTE_ETHDEV_QUEUE_STAT_CNTRS;
 	for (i = 0; i < q_num; i++) {
 		rxq = nic_dev->rxqs[i];
+		if (rxq == NULL)
+			continue;
 #ifdef HINIC3_XSTAT_MBUF_USE
 		rxq->rxq_stats.left_mbuf = rxq->rxq_stats.alloc_mbuf - rxq->rxq_stats.free_mbuf;
 #endif
@@ -2780,6 +2782,8 @@ hinic3_dev_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 		nic_dev->num_sqs : RTE_ETHDEV_QUEUE_STAT_CNTRS;
 	for (i = 0; i < q_num; i++) {
 		txq = nic_dev->txqs[i];
+		if (txq == NULL)
+			continue;
 #ifdef DPDK_25_11
 		if (qstats) {
 			qstats->q_opackets[i] = txq->txq_stats.packets;
@@ -2840,11 +2844,15 @@ static int hinic3_dev_stats_reset(struct rte_eth_dev *dev)
 
 	for (qid = 0; qid < nic_dev->num_rqs; qid++) {
 		rxq = nic_dev->rxqs[qid];
+		if (rxq == NULL)
+			continue;
 		memset(&rxq->rxq_stats, 0, sizeof(struct hinic3_rxq_stats));
 	}
 
 	for (qid = 0; qid < nic_dev->num_sqs; qid++) {
 		txq = nic_dev->txqs[qid];
+		if (txq == NULL)
+			continue;
 		memset(&txq->txq_stats, 0, sizeof(struct hinic3_txq_stats));
 	}
 
@@ -2887,6 +2895,8 @@ static int hinic3_dev_xstats_get(struct rte_eth_dev *dev,
 
 	/* Get stats from rxq stats structure */
 	for (qid = 0; qid < nic_dev->num_rqs; qid++) {
+		if (rxq == NULL)
+			continue;
 		rxq = nic_dev->rxqs[qid];
 
 #ifdef HINIC3_XSTAT_RXBUF_INFO
@@ -2913,6 +2923,8 @@ static int hinic3_dev_xstats_get(struct rte_eth_dev *dev,
 	/* Get stats from txq stats structure */
 	for (qid = 0; qid < nic_dev->num_sqs; qid++) {
 		txq = nic_dev->txqs[qid];
+		if (txq == NULL)
+			continue;
 		memcpy((void *)&txq_stats, (void *)&txq->txq_stats,
 		       sizeof(txq->txq_stats));
 

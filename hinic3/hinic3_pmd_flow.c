@@ -1345,7 +1345,7 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 		filter->fdir_filter.queue_num = 1;
 #endif
 		rxq = dev->data->rx_queues[act_q->index];
-		if (act_q->index >= dev->data->nb_rx_queues ||
+		if (act_q->index >= dev->data->nb_rx_queues || rxq == NULL ||
 			(rxq->is_hairpin && rxq->hairpin_conf.peer_count == 0)) {
 			rte_flow_error_set(error, EINVAL,
 					   HINIC3_FLOW_ERROR_TYPE_ACTION,
