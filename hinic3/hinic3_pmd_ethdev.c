@@ -2895,9 +2895,9 @@ static int hinic3_dev_xstats_get(struct rte_eth_dev *dev,
 
 	/* Get stats from rxq stats structure */
 	for (qid = 0; qid < nic_dev->num_rqs; qid++) {
+		rxq = nic_dev->rxqs[qid];
 		if (rxq == NULL)
 			continue;
-		rxq = nic_dev->rxqs[qid];
 
 #ifdef HINIC3_XSTAT_RXBUF_INFO
 		hinic3_get_stats(rxq);
