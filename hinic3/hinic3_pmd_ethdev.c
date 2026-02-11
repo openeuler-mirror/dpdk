@@ -3663,7 +3663,7 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 		} else {
 			eth_dev->dev_ops = &hinic3_pmd_ops;
 		}
-
+		nic_dev->hwdev->eth_dev = eth_dev;
 		return 0;
 	}
 
