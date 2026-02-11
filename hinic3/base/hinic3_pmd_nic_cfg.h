@@ -1739,7 +1739,7 @@ int hinic3_set_tm_config_tc_rate(void *hwdev, u8 tc_no, u8 rate);
 int hinic3_set_tm_hierarchy_do_commit(void *hwdev, u8 *cos_tc, u8 *tc_bw,
 				   u8 *rate_limit);
 
-int hinic3_get_bifur_enable(void *hwdev, u8 *bifur_enable, u8 *iso_enable);
+int hinic3_get_bifur_enable(void *hwdev, u8 *bifur_enable, u8 *iso_enable, u8 *bifur_type);
 
 int hinic3_cmdq_set_rss_queue_type(void *hwdev, struct hinic3_rss_type rss_type, u16 q_grp_id, u16 cmd_type);
 

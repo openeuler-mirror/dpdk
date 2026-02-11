@@ -229,12 +229,10 @@ static void hinic3_fdir_tcam_notunnel_init(struct rte_eth_dev *dev,
 
 	tcam_key->key_mask.function_id = HINIC3_UINT15_MAX;
 
-	tcam_key->key_mask.vlan_flag = 1;
-	tcam_key->key_info.vlan_flag = 0;
 #ifdef HINIC3_TRAFFIC_BIFUR
-    u8 bifur_en, iso_en;
+    u8 bifur_en, iso_en, bifur_type;
     u8 er_id = nic_dev->hwdev->cfg_mgmt->svc_cap.er_id;
-    if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &iso_en) != 0) {
+    if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &iso_en, &bifur_type) != 0) {
         PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable staus failed!");
     }
 
@@ -242,7 +240,8 @@ static void hinic3_fdir_tcam_notunnel_init(struct rte_eth_dev *dev,
 		tcam_key->key_info.function_id = HINIC3_UINT15_MAX;
 		tcam_key->key_mask.ether_type = rule->key_mask.ether_type;
 		tcam_key->key_info.ether_type = rule->key_spec.ether_type;
-		tcam_key->key_info.vlan_flag = 1;
+		tcam_key->key_info.vlan_flag = !(tcam_key->key_info.vlan_flag | (bifur_type >> 1));
+		tcam_key->key_mask.vlan_flag = tcam_key->key_mask.vlan_flag;
     } else {
         tcam_key->key_info.function_id =
             hinic3_global_func_id(nic_dev->hwdev) & HINIC3_UINT15_MAX;
@@ -431,7 +430,7 @@ hinic3_fdir_tcam_ipv6_vxlan_geneve_init(struct rte_eth_dev *	   dev,
 	tcam_key->key_mask_ipv6.function_id = HINIC3_UINT15_MAX;
 	tcam_key->key_mask_ipv6.vlan_flag = 1;
 
-    if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &iso_en) != 0) {
+    if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &iso_en, 0) != 0) {
         PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable staus failed!");
     }
 
@@ -509,7 +508,7 @@ hinic3_fdir_tcam_vxlan_geneve_init(struct rte_eth_dev *	      dev,
 	tcam_key->key_mask.vlan_flag = 1;
 	tcam_key->key_mask.function_id = HINIC3_UINT15_MAX;
 
-    if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &iso_en) != 0) {
+    if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &iso_en, 0) != 0) {
         PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable staus failed!");
     }
 
@@ -546,7 +545,7 @@ hinic3_fdir_tcam_info_init(struct rte_eth_dev	       *dev,
 #ifdef HINIC3_TRAFFIC_BIFUR
 	u8 bifur_en, iso_en;
 
-	if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &iso_en) != 0)
+	if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &iso_en, 0) != 0)
 		PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable status failed.");
 
 	if (bifur_en)
