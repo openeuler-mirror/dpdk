@@ -1404,7 +1404,7 @@ int hinic3_set_fdir_ethertype_filter(void *hwdev, u8 pkt_type, struct rte_eth_et
 	return 0;
 }
 
-int hinic3_add_tcam_rule(void *hwdev, struct hinic3_tcam_cfg_rule *tcam_rule, u8 tcam_rule_type, bool is_hairpin)
+int hinic3_add_tcam_rule(void *hwdev, struct hinic3_tcam_cfg_rule *tcam_rule, u8 tcam_rule_type)
 {
 	struct hinic3_fdir_add_rule tcam_cmd;
 	u16 out_size = sizeof(tcam_cmd);
@@ -1420,8 +1420,6 @@ int hinic3_add_tcam_rule(void *hwdev, struct hinic3_tcam_cfg_rule *tcam_rule, u8
 
 	memset(&tcam_cmd, 0, sizeof(struct hinic3_fdir_add_rule));
 	tcam_cmd.func_id = hinic3_global_func_id(hwdev);
-	if (is_hairpin)
-		tcam_cmd.bifur_rss_en |= HAIRPIN_FLAG;
 
 #ifdef HINIC3_TRAFFIC_BIFUR
 	/* Process of enabling group ext_info in the MPU */

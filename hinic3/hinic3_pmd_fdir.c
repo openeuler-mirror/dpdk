@@ -29,6 +29,7 @@
 #endif
 #include "hinic3_pmd_flow_sec.h"
 #include "hinic3_pmd_fdir.h"
+#include "hinic3_pmd_rx.h"
 
 #define HINIC3_UINT1_MAX          0x1
 #define HINIC3_UINT2_MAX          0x3
@@ -551,6 +552,8 @@ hinic3_fdir_tcam_action_init(struct rte_eth_dev *dev,
 			     struct hinic3_tcam_cfg_rule *fdir_tcam_rule)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+	struct rte_eth_dev *dst_dev = NULL;
+	struct hinic3_nic_dev *dst_nic = NULL;
 
 	fdir_tcam_rule->data.dw0.qid = rule->rq_index;
 #ifdef HINIC3_TRAFFIC_BIFUR
@@ -562,29 +565,35 @@ hinic3_fdir_tcam_action_init(struct rte_eth_dev *dev,
 	if (bifur_en)
 		fdir_tcam_rule->data.dw1.queue_num = rule->queue_num;
 #else
-	u16 rss_temp_id, rss_node_id, rss_inst_id;
-
-	switch (rule->action) {
-	case RTE_FLOW_ACTION_TYPE_DROP:
-		fdir_tcam_rule->data.dw1.bs.action = HINIC3_ACTION_DROP;
-		break;
-
-	case RTE_FLOW_ACTION_TYPE_RSS:
-		hinic3_mgmt_get_rss_id(nic_dev->hwdev, rule->q_grp_id,
-				       &rss_temp_id, &rss_node_id, &rss_inst_id);
-		fdir_tcam_rule->data.dw0.q_grp.rss_level = rule->level;
-		fdir_tcam_rule->data.dw1.bs.action = HINIC3_ACTION_RSS;
-		fdir_tcam_rule->data.dw1.bs.func_id =
-			hinic3_global_func_id(nic_dev->hwdev);
-		fdir_tcam_rule->data.dw0.q_grp.rss_instance_id = rss_inst_id;
-		fdir_tcam_rule->data.dw0.q_grp.rss_node_id = rss_node_id;
-		fdir_tcam_rule->data.dw0.q_grp.rss_temp_id = rss_temp_id;
-		PMD_DRV_LOG(INFO, "rss_instance_id:%d, rss_node_id: %d, rss_temp_id: %d",
-			    rss_inst_id, rss_node_id, rss_temp_id);
-
-	default:
-		break;
-	}
+		struct hinic3_rxq *rxq;
+ 	 	u16 rss_temp_id, rss_node_id, rss_inst_id;
+ 	 	switch (rule->action) {
+		case RTE_FLOW_ACTION_TYPE_QUEUE:
+			rxq = dev->data->rx_queues[rule->rq_index];
+			if(rxq != NULL&& rxq->is_hairpin) {
+				dst_dev = &rte_eth_devices[rxq->hairpin_conf.peers[0].port];
+				dst_nic = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dst_dev);
+				fdir_tcam_rule->data.dw1.bs.action = HINIC3_ACTION_PORT;
+				fdir_tcam_rule->data.dw1.bs.func_id = hinic3_physical_port_id(dst_nic->hwdev);
+			}
+			break;
+ 	 	case RTE_FLOW_ACTION_TYPE_DROP:
+ 	 		fdir_tcam_rule->data.dw1.bs.action = HINIC3_ACTION_DROP;
+ 	 		break;
+ 	 	case RTE_FLOW_ACTION_TYPE_RSS:
+			hinic3_mgmt_get_rss_id(nic_dev->hwdev, rule->q_grp_id,
+						&rss_temp_id, &rss_node_id, &rss_inst_id);
+ 	 		fdir_tcam_rule->data.dw0.q_grp.rss_level = rule->level;
+ 	 		fdir_tcam_rule->data.dw1.bs.action = HINIC3_ACTION_RSS;
+ 	 		fdir_tcam_rule->data.dw1.bs.func_id = hinic3_global_func_id(nic_dev->hwdev);
+ 	 		fdir_tcam_rule->data.dw0.q_grp.rss_instance_id = rss_inst_id;
+ 	 		fdir_tcam_rule->data.dw0.q_grp.rss_node_id = rss_node_id;
+ 	 		fdir_tcam_rule->data.dw0.q_grp.rss_temp_id = rss_temp_id;
+			PMD_DRV_LOG(INFO, "rss_instance_id:%d, rss_node_id: %d, rss_temp_id: %d",
+					rss_inst_id, rss_node_id, rss_temp_id);
+ 	 	default:
+ 	 		break;
+ 	 	}
 #endif
 }
 
@@ -785,7 +794,7 @@ failed:
 
 static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
 				struct hinic3_tcam_key *tcam_key,
-				struct hinic3_tcam_cfg_rule *fdir_tcam_rule, bool is_hairpin)
+				struct hinic3_tcam_cfg_rule *fdir_tcam_rule)
 {
 	struct hinic3_tcam_info *tcam_info =
 		HINIC3_DEV_PRIVATE_TO_TCAM_INFO(dev->data->dev_private);
@@ -834,7 +843,7 @@ static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
  	else
  	 	tcam_rule_type = TCAM_RULE_FDIR_TYPE;
 
-	err = hinic3_add_tcam_rule(nic_dev->hwdev, fdir_tcam_rule, tcam_rule_type, is_hairpin);
+	err = hinic3_add_tcam_rule(nic_dev->hwdev, fdir_tcam_rule, tcam_rule_type);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Fdir_tcam_rule add failed!");
 		goto add_tcam_rules_failed;
@@ -977,8 +986,7 @@ int hinic3_flow_add_del_fdir_filter(struct rte_eth_dev *dev,
 			return -EEXIST;
 		}
 
-		ret = hinic3_add_tcam_filter(dev, &tcam_key,
-				&fdir_tcam_rule, fdir_filter->is_hairpin);
+		ret = hinic3_add_tcam_filter(dev, &tcam_key, &fdir_tcam_rule);
 		if (ret)
 			goto cfg_tcam_filter_err;
 
@@ -1034,7 +1042,7 @@ int hinic3_enable_rxq_fdir_filter(struct rte_eth_dev *dev, u32 queue_id, u32 abl
 				fdir_tcam_rule.data.dw0.qid = queue_id;
 				tcam_key_calculate(&it->tcam_key, &fdir_tcam_rule, HINIC3_TCAM_FLOW_KEY_SIZE);
 
-				ret = hinic3_add_tcam_rule(nic_dev->hwdev, &fdir_tcam_rule, TCAM_RULE_FDIR_TYPE, 0);
+				ret = hinic3_add_tcam_rule(nic_dev->hwdev, &fdir_tcam_rule, TCAM_RULE_FDIR_TYPE);
 				if (ret) {
 					PMD_DRV_LOG(ERR, "add correct tcam rule failed!");
 					return -EFAULT;
@@ -1060,7 +1068,7 @@ int hinic3_enable_rxq_fdir_filter(struct rte_eth_dev *dev, u32 queue_id, u32 abl
 				fdir_tcam_rule.data.dw0.qid = queue_res;
 				tcam_key_calculate(&it->tcam_key, &fdir_tcam_rule, HINIC3_TCAM_FLOW_KEY_SIZE);
 
-				ret = hinic3_add_tcam_rule(nic_dev->hwdev, &fdir_tcam_rule, TCAM_RULE_FDIR_TYPE, 0);
+				ret = hinic3_add_tcam_rule(nic_dev->hwdev, &fdir_tcam_rule, TCAM_RULE_FDIR_TYPE);
 				if (ret) {
 					PMD_DRV_LOG(ERR, "add invalid tcam rule failed!");
 					return -EFAULT;

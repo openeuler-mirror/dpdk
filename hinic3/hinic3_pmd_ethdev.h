@@ -115,20 +115,21 @@ enum hinic3_tx_cvlan_type {
 };
 
 enum nic_feature_cap {
-    NIC_F_CSUM = BIT(0),
-    NIC_F_SCTP_CRC = BIT(1),
-    NIC_F_TSO = BIT(2),
-    NIC_F_LRO = BIT(3),
-    NIC_F_UFO = BIT(4),
-    NIC_F_RSS = BIT(5),
-    NIC_F_RX_VLAN_FILTER = BIT(6),
-    NIC_F_RX_VLAN_STRIP = BIT(7),
-    NIC_F_TX_VLAN_INSERT = BIT(8),
-    NIC_F_VXLAN_OFFLOAD = BIT(9),
-    NIC_F_IPSEC_OFFLOAD = BIT(10),
-    NIC_F_FDIR = BIT(11),
-    NIC_F_PROMISC = BIT(12),
-    NIC_F_ALLMULTI = BIT(13),
+	NIC_F_CSUM = LBIT(0),
+	NIC_F_SCTP_CRC = LBIT(1),
+	NIC_F_TSO = LBIT(2),
+	NIC_F_LRO = LBIT(3),
+	NIC_F_UFO = LBIT(4),
+	NIC_F_RSS = LBIT(5),
+	NIC_F_RX_VLAN_FILTER = LBIT(6),
+	NIC_F_RX_VLAN_STRIP = LBIT(7),
+	NIC_F_TX_VLAN_INSERT = LBIT(8),
+	NIC_F_VXLAN_OFFLOAD = LBIT(9),
+	NIC_F_IPSEC_OFFLOAD = LBIT(10),
+	NIC_F_FDIR = LBIT(11),
+	NIC_F_PROMISC = LBIT(12),
+	NIC_F_ALLMULTI = LBIT(13),
+	NIC_F_HAIRPIN = LBIT(32),
 };
 
 enum hinic3_function_mode {

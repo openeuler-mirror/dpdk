@@ -956,8 +956,11 @@ struct hinic3_cmd_register_vf {
 	u8 rsvd[39];
 };
 
-#define HINIC3_ACTION_DROP 5
-#define HINIC3_ACTION_RSS 1
+enum {
+	HINIC3_ACTION_RSS = 1,
+	HINIC3_ACTION_PORT = 2,
+	HINIC3_ACTION_DROP = 5,
+};
 
 struct hinic3_tcam_result {
 	union {
@@ -1685,13 +1688,11 @@ int hinic3_vf_get_default_cos(void *hwdev, u8 *cos_id);
  *   Tcam rule, including tcam rule index, tcam action, tcam key and etc
  * @param[in] tcam_rule_type
  *   Tcam rule type
- * @param[in] is_hairpin
- *   Whether this rule is for hairpin
  *
  * @retval zero : Success
  * @retval non-zero : Failure
  */
-int hinic3_add_tcam_rule(void *hwdev, struct hinic3_tcam_cfg_rule *tcam_rule, u8 tcam_rule_type, bool is_hairpin);
+int hinic3_add_tcam_rule(void *hwdev, struct hinic3_tcam_cfg_rule *tcam_rule, u8 tcam_rule_type);
 
 /**
  * Del tcam rules

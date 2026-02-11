@@ -43,6 +43,10 @@ typedef uint64_t  u64;
 #define BIT(n) (1U << (n))
 #endif
 
+#ifndef LBIT
+#define LBIT(n) (1ULL << (n))
+#endif
+
 #define upper_32_bits(n) ((u32)(((n) >> 16) >> 16))
 #define lower_32_bits(n) ((u32)(n))
 
