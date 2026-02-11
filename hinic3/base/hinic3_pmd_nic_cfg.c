@@ -2018,8 +2018,9 @@ hinic3_rss_queue_set_indir_tbl(void *hwdev, const u32 *indir_table, u32 indir_ta
 	cmd_buf->size = sizeof(struct nic_rss_indirect_tbl);
 	indir_tbl = (struct nic_rss_indirect_tbl *)cmd_buf->buf;
 	memset(indir_tbl, 0, sizeof(*indir_tbl));
-	indir_tbl->dw0.bs.qgrp_id = cpu_to_be16(q_grp_id - HINIC3_QGRP_START_INDEX);
+	indir_tbl->dw0.bs.qgrp_id = q_grp_id - HINIC3_QGRP_START_INDEX;
 	indir_tbl->dw0.bs.op_code = 1;
+	indir_tbl->dw0.value = cpu_to_be32(indir_tbl->dw0.value);
 
 	for (i = 0; i < indir_table_size; i++)
 		indir_tbl->entry[i] = (u16)(*(indir_table + i));
