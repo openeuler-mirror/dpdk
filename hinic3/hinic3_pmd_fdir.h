@@ -758,9 +758,9 @@ struct hinic3_tcam_sec_key_ipv4_ipv6_mem {
 
 	u32 func_id : 15;
 	u32 outer_ip_type : 1;
-	u32 vlan_vid : 12;
-	u32 vlan_cfi : 1;
 	u32 vlan_pri : 3;
+	u32 vlan_cfi : 1;
+	u32 vlan_vid : 12;
 
 	u32 dmac_h : 16;
 	u32 dmac_m : 16;
