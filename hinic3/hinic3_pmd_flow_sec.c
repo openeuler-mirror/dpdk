@@ -272,8 +272,8 @@ hinic3_tcam_filter_lookup(struct hinic3_tcam_filter_list *filter_list,
 		(key_info)->eth_type = (sec_fdir)->key_spec.ether_type; \
 		(key_mask)->outer_tcp_flag = 0; \
 		(key_info)->outer_tcp_flag = 0; \
-		(key_mask)->outer_ip_proto = HINIC3_UINT8_MAX; \
-		(key_info)->outer_ip_proto = IPPROTO_UDP; \
+		(key_mask)->outer_ip_proto = (sec_fdir)->outer_proto_mask; \
+		(key_info)->outer_ip_proto = (sec_fdir)->outer_proto_spec; \
 	} while (0)
 
 static void
@@ -400,13 +400,6 @@ hinic3_flow_sec_fdir_vlan(const struct rte_flow_item *flow_item,
     filter->sec_fdir_filter.vlan_tci_spec = rte_be_to_cpu_16(vlan_spec->tci);
     filter->sec_fdir_filter.vlan_tci_mask = rte_be_to_cpu_16(vlan_mask->tci);
 
-    if (vlan_mask->inner_type) {
-        filter->sec_fdir_filter.key_mask.ether_type =
-            (u16)rte_be_to_cpu_16(vlan_mask->inner_type);
-        filter->sec_fdir_filter.key_spec.ether_type =
-            (u16)rte_be_to_cpu_16(vlan_spec->inner_type);
-    }
-
     return 0;
 }
 
@@ -445,9 +438,9 @@ hinic3_flow_sec_fdir_ipv4(const struct rte_flow_item *flow_item,
 		if (mask_ipv4->hdr.version_ihl || mask_ipv4->hdr.type_of_service ||
 		    mask_ipv4->hdr.total_length || mask_ipv4->hdr.packet_id ||
 		    mask_ipv4->hdr.fragment_offset || mask_ipv4->hdr.time_to_live ||
-		    mask_ipv4->hdr.next_proto_id || mask_ipv4->hdr.hdr_checksum) {
+		    mask_ipv4->hdr.hdr_checksum) {
 			rte_flow_error_set(error, EINVAL,HINIC3_FLOW_ERROR_TYPE_ITEM, flow_item,
-				"Not supported by sec fdir filter, tunnel outer ipv4 only support src ip,dst ip");
+				"Not supported by sec fdir filter, tunnel outer ipv4 only support src ip,dst ip, proto");
 			return -rte_errno;
 		}
 
@@ -459,6 +452,8 @@ hinic3_flow_sec_fdir_ipv4(const struct rte_flow_item *flow_item,
 			rte_be_to_cpu_32(mask_ipv4->hdr.dst_addr);
 		filter->sec_fdir_filter.key_spec.ipv4.dst_ip =
 			rte_be_to_cpu_32(spec_ipv4->hdr.dst_addr);
+		filter->sec_fdir_filter.outer_proto_mask = mask_ipv4->hdr.next_proto_id;
+		filter->sec_fdir_filter.outer_proto_spec = spec_ipv4->hdr.next_proto_id;
 		return 0;
 	}
 
@@ -527,11 +522,10 @@ hinic3_flow_sec_fdir_ipv6(const struct rte_flow_item *flow_item,
 	}
 
 	if (is_outer) {
-		/* Only support dst addresses, src addresses */
 		if (mask_ipv6->hdr.vtc_flow || mask_ipv6->hdr.payload_len ||
-		    mask_ipv6->hdr.hop_limits || mask_ipv6->hdr.proto) {
+		    mask_ipv6->hdr.hop_limits) {
 			rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ITEM, flow_item,
-				"Not supported by sec fdir filter, tunnel outer ipv6 only support src ip,dst ip");
+				"Not supported by sec fdir filter, tunnel outer ipv6 only support src ip,dst ip, proto");
 			return -rte_errno;
 			}
 
@@ -541,6 +535,9 @@ hinic3_flow_sec_fdir_ipv6(const struct rte_flow_item *flow_item,
 			filter->sec_fdir_filter.key_spec.ipv6.src_ip,
 			filter->sec_fdir_filter.key_spec.ipv6.dst_ip,
 			&mask_ipv6->hdr, &spec_ipv6->hdr);
+
+		filter->sec_fdir_filter.outer_proto_mask = mask_ipv6->hdr.proto;
+		filter->sec_fdir_filter.outer_proto_spec = spec_ipv6->hdr.proto;
 
 		return 0;
 	}
@@ -672,6 +669,8 @@ hinic3_flow_sec_fdir_vxlan_geneve(struct rte_flow_error	  *error,
 	uint16_t expected_dport;
 	uint16_t outer_dport_mask;
 	uint16_t outer_dport_spec;
+	uint8_t outer_proto_mask;
+	uint8_t outer_proto_spec;
 
 	spec_vxlan = (const struct rte_flow_item_vxlan *)flow_item->spec;
 	mask_vxlan = (const struct rte_flow_item_vxlan *)flow_item->mask;
@@ -685,6 +684,8 @@ hinic3_flow_sec_fdir_vxlan_geneve(struct rte_flow_error	  *error,
 
 	outer_dport_mask = filter->sec_fdir_filter.outer_dport_mask;
 	outer_dport_spec = filter->sec_fdir_filter.outer_dport_spec;
+	outer_proto_mask = filter->sec_fdir_filter.outer_proto_mask;
+	outer_proto_spec = filter->sec_fdir_filter.outer_proto_spec;
 
 	if (outer_dport_mask != 0 &&
 	    (outer_dport_spec & outer_dport_mask) != (expected_dport & outer_dport_mask)) {
@@ -696,6 +697,13 @@ hinic3_flow_sec_fdir_vxlan_geneve(struct rte_flow_error	  *error,
 				"Invalid sec fdir filter outer UDP dport, geneve expects 6081");
 		}
 
+		return -rte_errno;
+	}
+
+	if (outer_proto_mask != 0 &&
+	    (outer_proto_spec & outer_proto_mask) != (IPPROTO_UDP & outer_proto_mask)) {
+		rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ITEM, flow_item,
+			"Invalid sec fdir filter outer IP proto, vxlan/geneve expects UDP");
 		return -rte_errno;
 	}
 
@@ -730,6 +738,8 @@ hinic3_flow_parse_sec_fdir_pattern(__rte_unused struct rte_eth_dev *dev,
     bool is_tunnel = false;
     filter->sec_fdir_filter.ip_type = HINIC3_FDIR_IP_TYPE_ANY;
     filter->sec_fdir_filter.has_ip_flag = false;
+	filter->sec_fdir_filter.outer_proto_mask = HINIC3_UINT8_MAX;
+    filter->sec_fdir_filter.outer_proto_spec = IPPROTO_UDP;
     filter->fdir_filter.outer_ip_type = HINIC3_FDIR_IP_TYPE_ANY;
     filter->fdir_filter.tunnel_type = HINIC3_FDIR_TUNNEL_MODE_NORMAL;
 

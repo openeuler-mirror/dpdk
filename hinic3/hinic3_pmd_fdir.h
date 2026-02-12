@@ -62,6 +62,8 @@ struct hinic3_sec_fdir_filter {
     struct rte_ether_hdr ether_mask;
     struct hinic3_fdir_rule_key key_mask;
     struct hinic3_fdir_rule_key key_spec;
+	uint8_t outer_proto_mask;
+	uint8_t outer_proto_spec;
     uint16_t outer_sport_mask;
     uint16_t outer_sport_spec;
     uint16_t outer_dport_mask;
