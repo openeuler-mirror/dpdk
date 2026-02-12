@@ -1641,6 +1641,9 @@ hinic3_sync_dcb_state(void *hwdev, u8 op_code, u8 state)
 	u16 out_size = sizeof(dcb_state);
 	int err;
 
+	if(HINIC3_IS_VF((struct hinic3_hwdev *)hwdev))
+		return -EPERM;
+
 	if (!hwdev)
 		return -EINVAL;
 
@@ -1670,6 +1673,9 @@ hinic3_sync_qos_map(void *hwdev, struct hinic3_dcb_config *dcb_cfg)
 	u16 out_size = sizeof(qos_cfg);
 	u8 i;
 	int err;
+
+	if(HINIC3_IS_VF((struct hinic3_hwdev *)hwdev))
+		return -EPERM;
 
 	if (!hwdev)
 		return -EINVAL;

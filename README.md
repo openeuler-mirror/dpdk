@@ -111,3 +111,6 @@ sh install.sh ../dpdk-stable-21.11.9 build
 sh install.sh ../dpdk-stable-21.11.9 install bifur
 sh install.sh ../dpdk-stable-21.11.9 build generic
 ```
+
+## 5. 其它示例
+- [QoS 使用示例](docs/qos/qos.md)

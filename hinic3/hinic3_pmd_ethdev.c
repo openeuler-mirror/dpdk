@@ -1906,7 +1906,7 @@ static void hinic3_dev_stop(struct rte_eth_dev *dev)
 #endif
 	}
 
-	if (nic_dev->dcb->dcb_on)
+	if (!HINIC3_IS_VF(nic_dev->hwdev) && nic_dev->dcb->dcb_on)
 		hinic3_sync_dcb_state(nic_dev->hwdev, 1, 0);
 
 	hinic3_tm_dev_stop_proc(dev);
