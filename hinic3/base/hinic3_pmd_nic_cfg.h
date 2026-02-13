@@ -493,6 +493,7 @@ struct hinic3_vport_stats {
 	u64 rx_err_vport;
 
 	u64 rx_mtu_err_vport;
+	u64 rx_out_of_buffer; /* fw: rx_nowqe */
 };
 
 struct hinic3_cmd_vport_stats {
@@ -501,7 +502,7 @@ struct hinic3_cmd_vport_stats {
 	u32 stats_size;
 	u32 rsvd1;
 	struct hinic3_vport_stats stats;
-	u64 rsvd2[5];
+	u64 rsvd2[4];
 };
 
 struct hinic3_phy_port_stats {
