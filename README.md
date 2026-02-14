@@ -1,16 +1,8 @@
 # openEuler 开源仓 `hinic3` PMD使用指导
 
 ## 1. 简介
-  `hinic3` PMD为hinic3网卡的DPDK驱动层，旨在基于DPDK使能hinic3网卡，最大化释放hinic3网卡能力。同时提供便携的使用工具，支持一键式安装部署。
+hinic3 driver是华为SPx系列网卡在DPDK框架下的用户态驱动，旨在基于DPDK使能SPx系列网卡，最大化释放SPx系列网卡能力。同时提供便携的使用工具，支持一键式安装部署。
 
-> **说明**：
-> DPU场景下发以下流规则时，会导致管理口的SSH登录报文被送到用户态，导致DPU断链。
->  ```
->    flow create port_id ingress pattern eth / ipv4 / end actions queue index queue_id / end
->    flow create port_id ingress pattern eth / ipv4 / tcp / end actions queue index queue_id / end
->    flow create port_id ingress pattern eth / ipv4 / end actions rss queues queue_num end / end
->    flow create port_id ingress pattern eth / ipv4 / tcp / end actions rss queues queue_num end / end
->  ```
 ---
 
 ## 2. 安装使用
@@ -67,6 +59,7 @@ sh install.sh ../dpdk-stable-21.11.9 install bifur
 sh install.sh ../dpdk-stable-21.11.9 build generic
 ```
 安装脚本会自动检测目标DPDK目录是否为Git仓库，如果不是，会自动初始化Git。
+
 安装脚本会自动判断 DPDK 版本：
   - DPDK版本 = 19.11时，使用 `make` 编译。
   - DPDK版本 ≥ 20.11， 使用 `meson + ninja` 编译。
@@ -74,7 +67,7 @@ sh install.sh ../dpdk-stable-21.11.9 build generic
 ---
 
 ## 3. 特性列表
-以下支持的特性清单，关于特性的详细介绍请参见[DPDK社区](https://doc.dpdk.org/guides/nics/features.html#)。
+以下为支持的特性清单，关于特性的详细介绍请参见[DPDK社区](https://doc.dpdk.org/guides/nics/features.html#)。
 ### 通用特性
 | Feature                    | PF | VF | Feature               | PF | VF | Feature              | PF | VF  |
 |----------------------------|----|----|-----------------------|----|----|----------------------|----|-----|
@@ -113,5 +106,11 @@ sh install.sh ../dpdk-stable-21.11.9 build generic
 | Hairpin       | Y | Y  |
 
 
-
-
+## 4. 特别说明
+DPU场景下发以下流规则时，会导致管理口的SSH登录报文被送到用户态，导致DPU断链。
+```
+flow create port_id ingress pattern eth / ipv4 / end actions queue index queue_id / end
+flow create port_id ingress pattern eth / ipv4 / tcp / end actions queue index queue_id / end
+flow create port_id ingress pattern eth / ipv4 / end actions rss queues queue_num end / end
+flow create port_id ingress pattern eth / ipv4 / tcp / end actions rss queues queue_num end / end
+```
