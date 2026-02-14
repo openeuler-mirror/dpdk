@@ -1,98 +1,53 @@
-# OpenEuler 开源仓 `hinic3` PMD 使用简介
+# openEuler 开源仓 `hinic3` PMD使用指导
 
-本文以 **DPDK 21.11** 为例，介绍如何在 DPDK 中集成并编译 `hinic3` PMD。
+## 1. 简介
+  `hinic3` PMD为hinic3网卡的DPDK驱动层，旨在基于DPDK使能hinic3网卡，最大化释放hinic3网卡能力。同时提供便携的使用工具，支持一键式安装部署。
 
-PMD 已归一到本项目的 hinic3 目录中，使用方式由原先的每个版本单独打 patch，变为了使用 `install.sh` 脚本自动安装 hinic3 到源码目录中。
-
-- 当前 `hinic3` PMD 支持的 DPDK 版本：**19.11 ~ 25.11**
-- 分流功能支持的 DPDK 版本：**19.11 ~ 22.11**
-- 注意点：
-  - DPU场景下发以下流规则时，会导致管理口的SSH登录报文被送到用户态，导致DPU断链
-  ```
-    flow create port_id ingress pattern eth / ipv4 / end actions queue index queue_id / end
-    flow create port_id ingress pattern eth / ipv4 / tcp / end actions queue index queue_id / end
-    flow create port_id ingress pattern eth / ipv4 / end actions rss queues queue_num end / end
-    flow create port_id ingress pattern eth / ipv4 / tcp / end actions rss queues queue_num end / end
-  ```
+> **说明**：
+> DPU场景下发以下流规则时，会导致管理口的SSH登录报文被送到用户态，导致DPU断链。
+>  ```
+>    flow create port_id ingress pattern eth / ipv4 / end actions queue index queue_id / end
+>    flow create port_id ingress pattern eth / ipv4 / tcp / end actions queue index queue_id / end
+>    flow create port_id ingress pattern eth / ipv4 / end actions rss queues queue_num end / end
+>    flow create port_id ingress pattern eth / ipv4 / tcp / end actions rss queues queue_num end / end
+>  ```
 ---
 
-## 1. 环境准备
-### 1.1 安装编译依赖
-`yum install -y git gcc libatomic python3-devel meson ninja-build python3-pyelftools libibverbs numactl numactl-devel zlib-devel`
+## 2. 安装使用
+本章节以DPDK 21.11为例，介绍如何在DPDK中集成并编译`hinic3` PMD。
+PMD已归一到本项目的hinic3目录中，使用方式由原先的每个版本单独打patch，变为使用`install.sh`脚本自动安装hinic3到源码目录中。
 
-### 1.2 下载 DPDK
+- 当前`hinic3` PMD支持的DPDK版本：19.11 ~ 25.11
+- 分流功能支持的DPDK版本：19.11 ~ 22.11
+### 2.1 安装编译依赖
+```bash
+yum install -y git gcc libatomic python3-devel meson ninja-build python3-pyelftools libibverbs numactl numactl-devel zlib-devel`
+```
 
-DPDK 官方源码包下载链接可在 [https://core.dpdk.org/download/](https://core.dpdk.org/download/) 获取，例如下载 **DPDK 21.11.9**：
+### 2.2 下载DPDK
+
+DPDK官方源码包下载链接可在[https://core.dpdk.org/download/](https://core.dpdk.org/download/) 获取，例如下载DPDK 21.11.9：
 ```bash
 wget https://fast.dpdk.org/rel/dpdk-21.11.9.tar.xz
 tar -xf dpdk-21.11.9.tar.xz
 # 解压后目录名：dpdk-stable-21.11.9
 ```
 
-### 1.3 获取 hinic3 PMD 源码
-方法一：直接下载
-下载后解压
-```bash
-unzip dpdk-hinic3.zip
-# 解压后目录名：dpdk-hinic3
-```
-方法二：Git 克隆
-```bash
-git clone https://atomgit.com/openeuler/dpdk.git -b hinic3 dpdk-hinic3
-# 默认目录名是dpdk，这里指定为了：dpdk-hinic3
-```
+### 2.3 获取hinic3 PMD源码
+- 方法一：直接下载
+  下载后解压
+  ```bash
+  unzip dpdk-hinic3.zip
+  # 解压后目录名：dpdk-hinic3
+  ```
+- 方法二：Git克隆
+  ```bash
+  git clone https://atomgit.com/openeuler/dpdk.git -b hinic3 dpdk-hinic3
+  # 默认目录名是dpdk，这里指定为了：dpdk-hinic3
+  ```
 
----
-
-## 2. 安装 hinic3 PMD 到 DPDK
-进入 dpdk-hinic3 目录，以下按需二选一执行
-```bash
-# 直接安装
-sh install.sh ../dpdk-stable-21.11.9 install
-
-# 如果需要使用分流功能
-sh install.sh ../dpdk-stable-21.11.9 install bifur
-```
-
-如果是 BPNIC 需要再执行
-```bash
-sh install.sh ../dpdk-stable-21.11.9 replace $nic_name
-```
-
-安装脚本会自动检测目标 DPDK 目录是否为 Git 仓库，如果不是，会自动初始化 Git。
-
----
-
-## 3. 编译
-以下按需二选一执行
-```bash
-# 直接编译
-sh install.sh ../dpdk-stable-21.11.9 build
-
-# 如果是 DPU 场景编译
-sh install.sh ../dpdk-stable-21.11.9 build generic
-```
-
-安装脚本会自动判断 DPDK 版本：
-  - **DPDK 19.11** 使用 `make` 编译
-  - **DPDK ≥ 20.11** 使用 `meson + ninja` 编译
-
----
-
-## 4. 快速示例
-### 依赖下载
-```bash
-# 安装 DPDK 依赖
-yum install -y git gcc libatomic python3-devel meson ninja-build python3-pyelftools libibverbs numactl numactl-devel zlib-devel
-
-# 下载并解压 DPDK
-wget https://fast.dpdk.org/rel/dpdk-21.11.9.tar.xz
-tar -xf dpdk-21.11.9.tar.xz
-
-# 获取 hinic3 PMD
-git clone https://atomgit.com/openeuler/dpdk.git -b hinic3 dpdk-hinic3
-cd dpdk-hinic3
-```
+### 2.4 编译
+进入dpdk-hinic3目录，请用户按需选择进行安装编译：
 
 ### SP200&SP600 网卡
 ```bash
@@ -111,3 +66,52 @@ sh install.sh ../dpdk-stable-21.11.9 build
 sh install.sh ../dpdk-stable-21.11.9 install bifur
 sh install.sh ../dpdk-stable-21.11.9 build generic
 ```
+安装脚本会自动检测目标DPDK目录是否为Git仓库，如果不是，会自动初始化Git。
+安装脚本会自动判断 DPDK 版本：
+  - DPDK版本 = 19.11时，使用 `make` 编译。
+  - DPDK版本 ≥ 20.11， 使用 `meson + ninja` 编译。
+
+---
+
+## 3. 特性列表
+以下支持的特性清单，关于特性的详细介绍请参见[DPDK社区](https://doc.dpdk.org/guides/nics/features.html#)。
+### 通用特性
+| Feature                    | PF | VF | Feature               | PF | VF | Feature              | PF | VF  |
+|----------------------------|----|----|-----------------------|----|----|----------------------|----|-----|
+| Speed capabilities         | Y  | Y  | RSS key update        | Y  | Y  | Rx descriptor status |    |     |
+| Link speed configuration   | Y  | Y  | RSS reta update       | Y  | Y  | Tx descriptor status |    |     |
+| Link status                | Y  | Y  | Inner RSS             |    |    | Tx queue count       |    |     |
+| Link status event          |    |    | VMDq                  |    |    | Basic stats          | Y  | Y   |
+| Removal event              |    |    | SR-IOV                | Y  | Y  | Extended stats       | Y  | Y   |
+| Queue status event         |    |    | DCB                   | Y  | Y  | Stats per queue      | Y  | Y   |
+| Rx interrupt               | Y  | Y  | VLAN filter           | Y  | Y  | FW version           | Y  | Y   |
+| Lock-free Tx queue         |    |    | Flow control          | P  | P  | EEPROM dump          |    |     |
+| Fast mbuf free             |    |    | Rate limitation       |    |    | Module EEPROM dump   |    |     |
+| Free Tx mbuf on demand     |    |    | Congestion management |    |    | Registers dump       |    |     |
+| Queue start/stop           | Y  | Y  | Traffic manager       |    |    | LED                  |    |     |
+| Runtime Rx queue setup     |    |    | Inline crypto         |    |    | Multiprocess aware   | Y  | Y   |
+| Runtime Tx queue setup     |    |    | Inline protocol       |    |    | FreeBSD              |    |     |
+| Shared Rx queue            |    |    | CRC offload           |    |    | Linux                | Y  | Y   |
+| Burst mode info            |    |    | VLAN offload          | Y  | Y  | Windows              |    |     |
+| Power mgmt address monitor |    |    | QinQ offload          | Y  | Y  | ARMv7                |    |     |
+| MTU update                 | Y  | Y  | FEC                   | Y  | Y  | ARMv8                | Y  | Y   |
+| Buffer split on Rx         |    |    | IP reassembly         |    |    | LoongArch64          |    |     |
+| Scattered Rx               | Y  | Y  | L3 checksum offload   | Y  | Y  | Power8               |    |     |
+| LRO                  | Y | Y | L4 checksum offload | Y | Y | rv64       |   |    |
+| TSO                  | Y | Y | Timestamp offload   |   |   | x86-32     |   |    |
+| Promiscuous mode     | Y | Y | MACsec offload      |   |   | x86-64     | Y | Y  |
+| Allmulticast mode    | Y | Y | Inner L3 checksum   | Y | Y | Usage doc  |   |    |
+| Unicast MAC filter   |   |   | Inner L4 checksum   | Y | Y | Design doc |   |    |
+| Multicast MAC filter |   |   | Packet type parsing | Y | Y | Perf doc   |   |    |
+| RSS hash             | Y | Y | Timesync            |   |   |            |   |    |
+### 自定义特性
+| Feature         | PF  | VF |
+|---------------|---|----|
+| Traffic bifur | Y |    |
+| Queue pool    | Y | Y  |
+| VF Flow spilt | Y |    |
+| Hairpin       | Y | Y  |
+
+
+
+
