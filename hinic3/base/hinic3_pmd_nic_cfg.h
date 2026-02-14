@@ -879,9 +879,15 @@ struct hinic3_rss_indir_table {
 struct nic_rss_indirect_tbl {
 	union {
 		struct {
+#if (RTE_BYTE_ORDER == RTE_BIG_ENDIAN)
 			u32 op_code : 8; /* 1: new fdir_rss */
 			u32 qgrp_id : 8; /* The value of qgrp_id must be 2048 less */
 			u32 rsvd1 : 16;
+#else
+			u32 rsvd1 : 16;
+			u32 qgrp_id : 8; /* The value of qgrp_id must be 2048 less */
+			u32 op_code : 8; /* 1: new fdir_rss */
+#endif
 		} bs;
 		u32 value;
 	} dw0;
