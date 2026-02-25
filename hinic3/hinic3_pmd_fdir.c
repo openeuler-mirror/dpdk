@@ -65,12 +65,12 @@ void tcam_key_calculate(struct hinic3_tcam_key *tcam_key, void *fdir_tcam_rule, 
 			(struct hinic3_tcam_cfg_rule *)fdir_tcam_rule;
 
 		tcam_translate_key_y(tcam_rule->key.y,
-			(u8 *)(&tcam_key->key_info),
-			(u8 *)(&tcam_key->key_mask),
+		(u8 *)(&tcam_key->key_info),
+		(u8 *)(&tcam_key->key_mask),
 			key_len);
 		tcam_translate_key_x(tcam_rule->key.x,
 			tcam_rule->key.y,
-			(u8 *)(&tcam_key->key_mask),
+		(u8 *)(&tcam_key->key_mask),
 			key_len);
 	} else {
 		struct hinic3_ext_tcam_cfg_rule *tcam_rule =
@@ -247,6 +247,8 @@ static void hinic3_fdir_tcam_notunnel_init(struct rte_eth_dev *dev,
 
 	tcam_key->key_mask.function_id = HINIC3_UINT15_MAX;
 
+	tcam_key->key_mask.vlan_flag = 1;
+	tcam_key->key_info.vlan_flag = 0;
 #ifdef HINIC3_TRAFFIC_BIFUR
     u8 bifur_en, iso_en, bifur_type;
     u8 er_id = nic_dev->hwdev->cfg_mgmt->svc_cap.er_id;
@@ -552,8 +554,6 @@ hinic3_fdir_tcam_action_init(struct rte_eth_dev *dev,
 			     struct hinic3_tcam_cfg_rule *fdir_tcam_rule)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
-	struct rte_eth_dev *dst_dev = NULL;
-	struct hinic3_nic_dev *dst_nic = NULL;
 
 	fdir_tcam_rule->data.dw0.qid = rule->rq_index;
 #ifdef HINIC3_TRAFFIC_BIFUR
@@ -565,35 +565,38 @@ hinic3_fdir_tcam_action_init(struct rte_eth_dev *dev,
 	if (bifur_en)
 		fdir_tcam_rule->data.dw1.queue_num = rule->queue_num;
 #else
-		struct hinic3_rxq *rxq;
- 	 	u16 rss_temp_id, rss_node_id, rss_inst_id;
- 	 	switch (rule->action) {
-		case RTE_FLOW_ACTION_TYPE_QUEUE:
-			rxq = dev->data->rx_queues[rule->rq_index];
-			if(rxq != NULL&& rxq->is_hairpin) {
-				dst_dev = &rte_eth_devices[rxq->hairpin_conf.peers[0].port];
-				dst_nic = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dst_dev);
-				fdir_tcam_rule->data.dw1.bs.action = HINIC3_ACTION_PORT;
-				fdir_tcam_rule->data.dw1.bs.func_id = hinic3_physical_port_id(dst_nic->hwdev);
-			}
-			break;
- 	 	case RTE_FLOW_ACTION_TYPE_DROP:
- 	 		fdir_tcam_rule->data.dw1.bs.action = HINIC3_ACTION_DROP;
- 	 		break;
- 	 	case RTE_FLOW_ACTION_TYPE_RSS:
-			hinic3_mgmt_get_rss_id(nic_dev->hwdev, rule->q_grp_id,
-						&rss_temp_id, &rss_node_id, &rss_inst_id);
- 	 		fdir_tcam_rule->data.dw0.q_grp.rss_level = rule->level;
- 	 		fdir_tcam_rule->data.dw1.bs.action = HINIC3_ACTION_RSS;
- 	 		fdir_tcam_rule->data.dw1.bs.func_id = hinic3_global_func_id(nic_dev->hwdev);
- 	 		fdir_tcam_rule->data.dw0.q_grp.rss_instance_id = rss_inst_id;
- 	 		fdir_tcam_rule->data.dw0.q_grp.rss_node_id = rss_node_id;
- 	 		fdir_tcam_rule->data.dw0.q_grp.rss_temp_id = rss_temp_id;
-			PMD_DRV_LOG(INFO, "rss_instance_id:%d, rss_node_id: %d, rss_temp_id: %d",
-					rss_inst_id, rss_node_id, rss_temp_id);
- 	 	default:
- 	 		break;
- 	 	}
+	struct rte_eth_dev *dst_dev = NULL;
+	struct hinic3_nic_dev *dst_nic = NULL;
+	struct hinic3_rxq *rxq;
+ 	u16 rss_temp_id, rss_node_id, rss_inst_id;
+
+ 	switch (rule->action) {
+	case RTE_FLOW_ACTION_TYPE_QUEUE:
+		rxq = dev->data->rx_queues[rule->rq_index];
+		if(rxq != NULL&& rxq->is_hairpin) {
+			dst_dev = &rte_eth_devices[rxq->hairpin_conf.peers[0].port];
+			dst_nic = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dst_dev);
+			fdir_tcam_rule->data.dw1.bs.action = HINIC3_ACTION_PORT;
+			fdir_tcam_rule->data.dw1.bs.func_id = hinic3_physical_port_id(dst_nic->hwdev);
+		}
+		break;
+ 	case RTE_FLOW_ACTION_TYPE_DROP:
+ 		fdir_tcam_rule->data.dw1.bs.action = HINIC3_ACTION_DROP;
+ 		break;
+ 	case RTE_FLOW_ACTION_TYPE_RSS:
+		hinic3_mgmt_get_rss_id(nic_dev->hwdev, rule->q_grp_id,
+					&rss_temp_id, &rss_node_id, &rss_inst_id);
+ 		fdir_tcam_rule->data.dw0.q_grp.rss_level = rule->level;
+ 		fdir_tcam_rule->data.dw1.bs.action = HINIC3_ACTION_RSS;
+ 		fdir_tcam_rule->data.dw1.bs.func_id = hinic3_global_func_id(nic_dev->hwdev);
+ 		fdir_tcam_rule->data.dw0.q_grp.rss_instance_id = rss_inst_id;
+ 		fdir_tcam_rule->data.dw0.q_grp.rss_node_id = rss_node_id;
+ 		fdir_tcam_rule->data.dw0.q_grp.rss_temp_id = rss_temp_id;
+		PMD_DRV_LOG(INFO, "rss_instance_id:%d, rss_node_id: %d, rss_temp_id: %d",
+				rss_inst_id, rss_node_id, rss_temp_id);
+ 	default:
+ 		break;
+ 	}
 #endif
 }
 
@@ -838,10 +841,14 @@ static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
 		goto lookup_tcam_index_failed;
 	}
 
-	if (fdir_tcam_rule->data.dw1.bs.action != 0)
- 	 	tcam_rule_type =  TCAM_RULE_Q_GROUP_TYPE;
- 	else
- 	 	tcam_rule_type = TCAM_RULE_FDIR_TYPE;
+	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL)
+		tcam_rule_type = TCAM_RULE_Q_GROUP_TYPE;
+	else {
+		if (fdir_tcam_rule->data.dw1.bs.action != 0)
+			tcam_rule_type = TCAM_RULE_Q_GROUP_TYPE;
+		else
+			tcam_rule_type = TCAM_RULE_FDIR_TYPE;
+	}
 
 	err = hinic3_add_tcam_rule(nic_dev->hwdev, fdir_tcam_rule, tcam_rule_type);
 	if (err) {

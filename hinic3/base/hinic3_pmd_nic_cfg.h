@@ -465,6 +465,16 @@ struct hinic3_cmd_clear_qp_resource {
 	u16 rsvd1;
 };
 
+#define FUNC_MAX_CLEAR_QP_NUM 256
+struct hinic3_cmd_clear_assign_qp_res {
+	struct mgmt_msg_head msg_head;
+
+	u16 func_id;
+	u16 qp_num;
+	u32 rsvd[4];
+	u16 qp[FUNC_MAX_CLEAR_QP_NUM];
+};
+
 struct hinic3_port_stats_info {
 	struct mgmt_msg_head msg_head;
 
@@ -876,25 +886,6 @@ struct hinic3_rss_indir_table {
 
 #define HINIC3_QGRP_START_INDEX 2048
 
-struct nic_rss_indirect_tbl {
-	union {
-		struct {
-#if (RTE_BYTE_ORDER == RTE_BIG_ENDIAN)
-			u32 op_code : 8; /* 1: new fdir_rss */
-			u32 qgrp_id : 8; /* The value of qgrp_id must be 2048 less */
-			u32 rsvd1 : 16;
-#else
-			u32 rsvd1 : 16;
-			u32 qgrp_id : 8; /* The value of qgrp_id must be 2048 less */
-			u32 op_code : 8; /* 1: new fdir_rss */
-#endif
-		} bs;
-		u32 value;
-	} dw0;
-	u32 rsvd[3]; /* Make sure that 16B beyond entry[] */
-	u16 entry[HINIC3_RSS_INDIR_SIZE];
-};
-
 enum hinic3_qpool_subcmd {
 	HINIC3_NIC_QPOOL_CMD_CFG_QGRP_ID = 0x0,         /** < alloc/free q_grp_id */
 	HINIC3_NIC_QPOOL_CMD_GET_RSS_ID,                /** < get temp_id/inst_id/node_id */
@@ -964,6 +955,7 @@ struct hinic3_cmd_register_vf {
 };
 
 enum {
+	HINIC3_ACTION_QUEUE = 0,
 	HINIC3_ACTION_RSS = 1,
 	HINIC3_ACTION_PORT = 2,
 	HINIC3_ACTION_DROP = 5,
@@ -1359,6 +1351,8 @@ int hinic3_get_link_state(void *hwdev, u8 *link_state);
  */
 int hinic3_flush_qps_res(void *hwdev);
 
+int hinic3_flush_assign_qps_res(void *hwdev);
+
 /**
  * Set pause info
  *
@@ -1530,6 +1524,8 @@ int hinic3_rss_template_free(void *hwdev, u16 q_grp_id);
  * @retval non-zero : Failure
  */
 int hinic3_rss_set_indir_tbl(void *hwdev, const u32 *indir_table, u32 indir_table_size);
+
+int hinic3_rss_set_indir_tbl_qpool(void *hwdev, const u32 *indir_table, u32 indir_table_size);
 
 /**
  * Get RSS indirect table
