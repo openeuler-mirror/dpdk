@@ -1276,10 +1276,8 @@ static int hinic3_mbuf_dma_map_sge(struct hinic3_txq *txq,
 
 static int hinic3_mbuf_dma_map_single(struct hinic3_txq *txq, 
 					struct rte_mbuf *mbuf, 
-					struct hinic3_sq_wqe_combo *wqe_combo, 
-					struct hinic3_wqe_info *wqe_info)
+					struct hinic3_sq_wqe_combo *wqe_combo)
 {
-	uint16_t nb_segs = wqe_info->sge_cnt - wqe_info->cpy_mbuf_cnt;
 	struct hinic3_sq_wqe_desc *wqe_desc = wqe_combo->hdr;
 	rte_iova_t dma_addr;
 
@@ -1306,6 +1304,16 @@ static void hinic3_prepare_sq_ctrl(struct hinic3_sq_wqe_combo *wqe_combo,
 				   struct hinic3_wqe_info *wqe_info)
 {
 	struct hinic3_sq_wqe_desc *wqe_desc = wqe_combo->hdr;
+
+	if (wqe_combo->wqe_type == SQ_WQE_COMPACT_TYPE) {
+		wqe_desc->ctrl_len |= SQ_CTRL_SET(SQ_NORMAL_WQE, DATA_FORMAT) |
+				SQ_CTRL_SET(wqe_combo->wqe_type, EXTENDED) |
+				SQ_CTRL_SET(wqe_info->owner, OWNER);
+		wqe_desc->ctrl_len = hinic3_hw_be32(wqe_desc->ctrl_len);
+		/* Compact wqe queue_info will transfer to ucode */
+		wqe_desc->queue_info = 0;
+		return;
+	}
 
 	wqe_desc->ctrl_len |= SQ_CTRL_SET(wqe_info->sge_cnt, BUFDESC_NUM) |
 			SQ_CTRL_SET(wqe_combo->task_type, TASKSECT_LEN) |
@@ -1415,7 +1423,7 @@ u16 hinic3_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, u16 nb_pkts)
 		if (txq->multi_segs || wqe_info.sge_cnt > 1)
 			err = hinic3_mbuf_dma_map_sge(txq, mbuf_pkt, &wqe_combo, &wqe_info);
 		else
-			err = hinic3_mbuf_dma_map_single(txq, mbuf_pkt, &wqe_combo,&wqe_info);
+			err = hinic3_mbuf_dma_map_single(txq, mbuf_pkt, &wqe_combo);
 		if (err) {
 			hinic3_put_sq_wqe(txq, &wqe_info);
 			txq->txq_stats.off_errs++;
@@ -1439,7 +1447,7 @@ u16 hinic3_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, u16 nb_pkts)
 
 	/* Update txq stats */
 	if (nb_tx) {
-		hinic3_write_db(txq->db_addr, txq->q_id, (int)(txq->cos),
+		hinic3_write_db(txq->db_addr, txq->local_qid, (int)(txq->cos),
 				SQ_CFLAG_DP,
 				MASKED_QUEUE_IDX(txq, txq->prod_idx));
 		txq->txq_stats.packets += nb_tx;

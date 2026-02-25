@@ -99,7 +99,7 @@ enum hinic3_db_type {
 #define HINIC3_HWIF_NUM_AEQS(hwif)		((hwif)->attr.num_aeqs)
 #define HINIC3_HWIF_NUM_IRQS(hwif)		((hwif)->attr.num_irqs)
 #define HINIC3_HWIF_GLOBAL_IDX(hwif)		((hwif)->attr.func_global_idx)
-#define HINIC3_HWIF_GLOBAL_VF_OFFSET(hwif) ((hwif)->attr.global_vf_id_of_pf)
+#define HINIC3_HWIF_GLOBAL_VF_OFFSET(hwif)	((hwif)->attr.global_vf_id_of_pf)
 #define HINIC3_HWIF_PPF_IDX(hwif)		((hwif)->attr.ppf_idx)
 #define HINIC3_PCI_INTF_IDX(hwif)		((hwif)->attr.pci_intf_idx)
 

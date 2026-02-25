@@ -2,6 +2,8 @@
  * Copyright(c) 2019 Huawei Technologies Co., Ltd
  */
 
+#include <hinic3_pmd_mgmt.h>
+
 #ifndef _HINIC3_PMD_MBOX_H_
 #define _HINIC3_PMD_MBOX_H_
 
@@ -201,6 +203,13 @@ struct hinic3_mbox {
 	u64 mbox_ack_cnt;
 };
 
+struct msg_module;
+enum module_name;
+void fill_ioctl_msg(struct msg_module *msg, unsigned int module,
+		unsigned int msg_formate,
+		unsigned int in_buff_len, unsigned int out_buff_len,
+		void *in_buf, void *out_buf);
+
 int hinic3_mbox_func_aeqe_handler(void *handle, u8 *header,
 				   __rte_unused u8 size, void *param);
 
@@ -229,5 +238,9 @@ int hinic3_mbox_to_vf(struct hinic3_hwdev *hwdev, enum hinic3_mod_type mod,
 		      u16 vf_id, u16 cmd, void *buf_in, u16 in_size,
 		      void *buf_out, u16 *out_size, u32 timeout);
 
-#endif /* _HINIC3_PMD_MBOX_H_ */
+int hinic3_send_mbox_to_kernel(struct hinic3_hwdev *hwdev,
+			enum hinic3_mod_type mod, u16 cmd, void *buf_in,
+			u16 in_size, void *buf_out, u16 *out_size,
+			enum module_name module, unsigned int msg_formate);
 
+#endif /* _HINIC3_PMD_MBOX_H_ */

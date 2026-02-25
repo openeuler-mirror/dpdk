@@ -175,6 +175,7 @@
 	ETH_RSS_NONFRAG_IPV6_OTHER)
 
 #define HINIC3_L4_PYTPE_SHIFT	16
+
 /* keep same with IPSU_METADATA_L3_TP_E */
 enum HINIC3_RX_CQE_PT_L3 {
     HINIC3_RX_CQE_L3_IPV4 = 0u,
@@ -318,6 +319,7 @@ struct hinic3_rxq {
 	struct hinic3_nic_dev *nic_dev;
 
 	u16 q_id;
+	u16 local_qid;
 	u16 q_depth;
 	u16 q_mask;
 	u16 buf_len;
@@ -393,6 +395,8 @@ int hinic3_stop_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq);
 int hinic3_start_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq);
 
 u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts);
+
+u16 hinic3_recv_pkts_qpool(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts);
 
 void hinic3_add_rq_to_rx_queue_list(struct hinic3_nic_dev *nic_dev,
 				    u16 queue_id);

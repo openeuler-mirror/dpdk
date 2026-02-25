@@ -23,6 +23,13 @@ enum hinic3_set_arm_type {
 	HINIC3_SET_ARM_TYPE_NUM
 };
 
+enum hinic3_qinfo_type {
+	HINIC3_QINFO_TYPE_NORMAL,
+	HINIC3_QINFO_TYPE_BIFUR,
+	HINIC3_QINFO_TYPE_QPOOL,
+	HINIC3_QINFO_TYPE_RSV,
+};
+
 struct hinic3_page_addr {
 	void *virt_addr;
 	u64 phys_addr;
@@ -131,6 +138,10 @@ struct hinic3_hwdev {
 	u16 max_vfs;
 	u16 link_status;
 	u8 vf_valid_status; /* vport_enable: 1, vport_disable: 0 */
+
+	struct rte_mempool *cmd_buf_pool;
+	enum hinic3_qinfo_type qinfo_type;
+	u16 qpool_qgrp_id;
 };
 
 bool hinic3_is_vfio_iommu_enable(const struct rte_eth_dev *rte_dev);

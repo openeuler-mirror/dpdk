@@ -8,10 +8,12 @@
 
 #include <string.h>
 #include <stdint.h>
+#include <net/if.h>
 
 #include "hinic3_pmd_mml_cmd.h"
 #include "hinic3_compat.h"
 #include "hinic3_pmd_mgmt.h"
+#include "hinic3_pmd_nic_cfg.h"
 
 #define MAX_DEV_LEN	      16
 #define TRGET_UNKNOWN_BUS_NUM (-1)
@@ -83,6 +85,16 @@ enum driver_cmd_type {
 	RX_INFO,
 	RX_WQE_INFO,
 	RX_CQE_INFO
+};
+
+/* 队列池化 */
+enum nic_driver_qpool_cmd_type {
+	GET_USER_QUEUE_ID,    /**< 队列池化中获取用户态队列ID */
+	DEL_USER_QUEUE_ID,    /**< 队列池化中删除用户态队列ID */
+	CFG_RSS_TEMPLATE,     /**< 队列池化中申请/释放q group id以及RSS模板 */
+	SET_RSS_INDIR_TBL,    /**< 队列池化中设置RSS间接表 */
+	GET_TXRX_QUEUE_DEPTH, /**< 队列池化中获取tx rx 队列 */
+	GET_NIC_DEV_MTU,      /**< 队列池化中获取mtu  */
 };
 
 struct tool_target {
@@ -164,7 +176,7 @@ struct mpu_cmd_st {
 };
 
 struct msg_module {
-	char device_name[DEV_NAME_LEN];
+	char device_name[IFNAMSIZ];
 	uint32_t module;
 	union {
 		uint32_t msg_formate; /* for driver */
@@ -179,6 +191,80 @@ struct msg_module {
 	void *out_buf;
 	int bus_num;
 	uint32_t rsvd2[5];
+};
+
+struct cdev_msg_head {
+	int status;
+	u32 rsvd;
+};
+
+struct nic_rss_indirect_tbl {
+	union {
+		struct {
+#if defined(BYTE_ORDER) && (BYTE_ORDER == BIG_ENDIAN)
+			u32 op_code : 8; /* 0:old option 1:new fdir-rss */
+			u32 qgrp_id : 8; /* The value of qgrp_id must be 2048 less */
+			u32 rsvd : 16;
+#else
+			u32 rsvd : 16;
+			u32 qgrp_id : 8; /* The value of qgrp_id must be 2048 less */
+			u32 op_code : 8; /* 0:old option 1:new fdir-rss */
+#endif
+		} bs;
+		u32 value;
+	} dw0;
+	union {
+		struct {
+#if defined(BYTE_ORDER) && (BYTE_ORDER == BIG_ENDIAN)
+			u32 rss_temp_id : 12;
+			u32 rss_instance_id : 6;
+			u32 rss_node_id : 5;
+			u32 rsvd0 : 1;
+			u32 rss_level : 2;
+			u32 rsvd1 : 6;
+#else
+			u32 rsvd1 : 6;
+			u32 rss_level : 2;
+			u32 rsvd0 : 1;
+			u32 rss_node_id : 5;
+			u32 rss_instance_id : 6;
+			u32 rss_temp_id : 12;
+#endif
+		} fdir_rss;
+		u32 value;
+	} dw1;
+	u32 rsvd0[2]; /* Make sure that 16B before entry[] */
+	u16 entry[HINIC3_RSS_INDIR_SIZE];
+};
+
+struct drv_cmd_rss_indir_tbl {
+	struct cdev_msg_head head;
+	struct nic_rss_indirect_tbl rss_indir;
+};
+
+struct drv_cmd_user_queue_get {
+	struct cdev_msg_head head;
+	u16 qid;
+	u16 local_qid;
+	u32 rsvd[15];
+};
+
+struct drv_cmd_cfg_rss_temp {
+	struct cdev_msg_head head;
+	u16 opcode;
+	u16 q_grp_id;
+	u32 rsvd1[15];
+};
+
+struct drv_cmd_txrx_queue_depth {
+	struct cdev_msg_head head;
+	u32 rx_q_depth;
+	u32 tx_q_depth;
+};
+
+struct drv_cmd_nic_dev_mtu {
+	struct cdev_msg_head head;
+	u16 mtu;
 };
 
 /*
@@ -209,15 +295,14 @@ hinic3_pmd_mml_log(char *show_str, int *show_len, const char *fmt, ...)
 	va_list args;
 	int ret = 0;
 
-	va_start(args, fmt);				 //lint !e530
-	ret = vsprintf(show_str + *show_len, fmt, args); /*lint !e776*/
+	va_start(args, fmt);
+	ret = vsprintf(show_str + *show_len, fmt, args);
 	va_end(args);
 
-	if (ret > 0) {
+	if (ret > 0)
 		*show_len += ret;
-	} else {
-		PMD_DRV_LOG(ERR, "MML show string snprintf failed, err: %d\n", ret);
-	}
+	else
+		PMD_DRV_LOG(ERR, "MML show string snprintf failed, err: %d", ret);
 }
 
 int tool_get_valid_target(char *name, struct tool_target *target);
