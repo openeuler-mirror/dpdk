@@ -47,7 +47,7 @@ static u8 prepare_cmd_buf_qp_context_multi_store(struct hinic3_nic_dev *nic_dev,
 
 	qp_prepare_cmdq_header(&qp_ctxt_block->cmdq_hdr, ctxt_type,
 				   max_ctxts, start_qid);
-
+	
 	for (i = 0; i < max_ctxts; i++) {
 		if (ctxt_type == HINIC3_QP_CTXT_TYPE_RQ)
 			hinic3_rq_prepare_ctxt(nic_dev->rxqs[start_qid + i],

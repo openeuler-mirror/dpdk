@@ -569,7 +569,8 @@ static int hinic3_rearm_rxq_mbuf(struct hinic3_rxq *rxq)
 	rxq->delta -= rearm_wqebbs;
 
 #ifndef HINIC3_RQ_DB
-	hinic3_write_db(rxq->db_addr, rxq->q_id, 0, RQ_CFLAG_DP,
+
+	hinic3_write_db(rxq->db_addr, nic_dev->hwdev->bifur_mode != HINIC3_BIFUR_MODE_QPOOL ? rxq->q_id : rxq->local_qid , 0, RQ_CFLAG_DP,
 			((pi + rearm_wqebbs) & rxq->q_mask) << rxq->wqe_type);
 #else
 	/* Update rq hw_pi */
@@ -1037,14 +1038,15 @@ hinic3_start_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq)
 {
 	struct hinic3_nic_dev *nic_dev = rxq->nic_dev;
 	int err = 0;
-
+	u16 local_qid = 
+		nic_dev->hwdev->bifur_mode != HINIC3_BIFUR_MODE_QPOOL ? rxq->q_id : rxq->local_qid;
 	/* Lock dev queue switch.  */
 	rte_spinlock_lock(&nic_dev->queue_list_lock);
 	hinic3_add_rq_to_rx_queue_list(nic_dev, rxq->q_id);
 
 	if (nic_dev->rss_state == HINIC3_RSS_ENABLE) {
 		if ((hinic3_get_driver_feature(nic_dev) & NIC_F_HTN_FDIR) != 0)
-			err = hinic3_set_rq_enable(nic_dev, rxq->q_id, true);
+			err = hinic3_set_rq_enable(nic_dev, local_qid, true);
 		if (err) {
 			PMD_DRV_LOG(ERR, "Flush rq failed, eth_dev:%s, queue_idx:%d\n",
 				    nic_dev->dev_name, rxq->q_id);
@@ -1052,7 +1054,7 @@ hinic3_start_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq)
 			err = hinic3_refill_indir_rqid(rxq);
 			if (err) {
 				PMD_DRV_LOG(ERR, "Refill rq to indirect table failed,eth_dev:%s, queue_idx:%d err:%d",
-					    nic_dev->dev_name, rxq->q_id, err);
+					    nic_dev->dev_name, local_qid, err);
 				hinic3_remove_rq_from_rx_queue_list(nic_dev, rxq->q_id);
 			}
 		}
@@ -1197,12 +1199,14 @@ int hinic3_start_all_rqs(struct rte_eth_dev *eth_dev)
 				i, rxq->q_id, rxq->q_depth);
 			goto out;
 		}
-		hinic3_dev_rx_queue_intr_enable(eth_dev, rxq->q_id);
+		if (nic_dev->hwdev->bifur_mode != HINIC3_BIFUR_MODE_QPOOL) 
+			hinic3_dev_rx_queue_intr_enable(eth_dev, rxq->q_id);
 		eth_dev->data->rx_queue_state[i] = RTE_ETH_QUEUE_STATE_STARTED;
 	}
 
 	if (nic_dev->rss_state == HINIC3_RSS_ENABLE &&
-	    nic_dev->dcb->dcb_on == 0) {
+	    nic_dev->dcb->dcb_on == 0 &&
+	    nic_dev->hwdev->bifur_mode != HINIC3_BIFUR_MODE_QPOOL) {
 		err = hinic3_refill_indir_rqid(rxq);
 		if (err) {
 			PMD_DRV_LOG(ERR, "Refill rq to indrect table failed, eth_dev:%s, queue_idx:%d err:%d\n",

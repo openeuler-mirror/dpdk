@@ -23,6 +23,13 @@ enum hinic3_set_arm_type {
 	HINIC3_SET_ARM_TYPE_NUM
 };
 
+enum hinic3_bifur_mode {
+	HINIC3_BIFUR_MODE_NORMAL,
+	HINIC3_BIFUR_MODE_BIFUR,
+	HINIC3_BIFUR_MODE_QPOOL,
+	HINIC3_BIFUR_MODE_RSV
+};
+
 enum {
 	HINIC3_F_API_CHAIN = 1U << 0,
 	HINIC3_F_CLP = 1U << 1,
@@ -149,6 +156,8 @@ struct hinic3_hwdev {
 	u16 max_vfs;
 	u16 link_status;
 	u64 features[HINIC3_MAX_FEATURE_QWORD];
+	struct rte_mempool *cmd_buf_pool;
+	enum hinic3_bifur_mode bifur_mode;
 };
 
 bool hinic3_is_vfio_iommu_enable(const struct rte_eth_dev *rte_dev);
