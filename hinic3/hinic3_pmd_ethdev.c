@@ -3281,6 +3281,28 @@ hinic3_dev_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 				  txq->txq_stats.off_errs);
 	}
 
+	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
+		q_num = (nic_dev->num_rqs < RTE_ETHDEV_QUEUE_STAT_CNTRS) ?
+			nic_dev->num_rqs : RTE_ETHDEV_QUEUE_STAT_CNTRS;
+		
+		for (i = 0; i < q_num; i++) {
+			rxq = nic_dev->rxqs[i];
+			stats->ipackets += rxq->rxq_stats.packets;
+			stats->ibytes += rxq->rxq_stats.bytes;
+			stats->imissed += rxq->rxq_stats.dropped;
+		}
+
+		q_num = (nic_dev->num_sqs < RTE_ETHDEV_QUEUE_STAT_CNTRS) ?
+			nic_dev->num_sqs :  RTE_ETHDEV_QUEUE_STAT_CNTRS;
+		for (i = 0; i < q_num; i++) {
+			txq = nic_dev->txqs[i];
+			stats->opackets += txq->txq_stats.packets;
+			stats->obytes += txq->txq_stats.bytes;
+		}
+
+		return 0;
+	}
+
 	/* Vport stats */
 	stats->oerrors += vport_stats.tx_discard_vport;
 
