@@ -41,26 +41,6 @@
 #include "hinic3_pmd_bifur.h"
 #endif
 
-#define UP_ALIGN(x, a) UP_ALIGN_MASK(x, (typeof(x))(a) - 1)
-#define UP_ALIGN_MASK(x, mask) (((x) + (mask)) & ~(mask))
-
-#define HINIC3_RQSQ_PAGE_SIZE 0x00001000U
-
-#define HINIC3_QPOOL_SQ_WQEBB_SHIFT 4
-#define HINIC3_QPOOL_RQ_WQEBB_SHIFT 4
-
-#define WQE_BUF_SIZE(wq_buf_size) UP_ALIGN(wq_buf_size, HINIC3_RQSQ_PAGE_SIZE)
-
-#define SQWQE_BUF_SIZE(depth) UP_ALIGN((u32)((depth) << HINIC3_QPOOL_SQ_WQEBB_SHIFT), HINIC3_RQSQ_PAGE_SIZE)
-#define SQCI_BUF_SIZE HINIC3_RQSQ_PAGE_SIZE
-#define RQWQE_BUF_SIZE(depth) UP_ALIGN((u32)((depth) << HINIC3_QPOOL_RQ_WQEBB_SHIFT), HINIC3_RQSQ_PAGE_SIZE)
-#define RQCQE_BUF_SIZE(depth) UP_ALIGN((u32)sizeof(struct hinic3_rq_cqe) * (depth), HINIC3_RQSQ_PAGE_SIZE)
-
-#define SQWQE_OFFSET(q_buf_size, q_id) (u32)((q_buf_size) * (q_id))
-#define SQCI_OFFSET(q_buf_size, q_id, depth) (SQWQE_OFFSET(q_buf_size, q_id) + SQWQE_BUF_SIZE(depth))
-#define RQWQE_OFFSET(q_buf_size, q_id, depth) (SQCI_OFFSET(q_buf_size, q_id, depth) + SQCI_BUF_SIZE)
-#define RQCQE_OFFSET(q_buf_size, q_id, depth) (RQWQE_OFFSET(q_buf_size, q_id, depth) + RQWQE_BUF_SIZE(depth))
-
 #define HINIC3_MIN_RX_BUF_SIZE		1024
 
 #define HINIC3_DEFAULT_BURST_SIZE	32
@@ -653,6 +633,11 @@ static int hinic3_dev_set_link_up(struct rte_eth_dev *dev)
 	struct rte_eth_link link = {0};
 	int err;
 
+	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
+		PMD_DRV_LOG(WARNING, "Qpool mode not support set link status.");
+		return 0;
+	}
+
 	/* Vport enable will set function valid in mpu.
 	   So dev start status need to be checked before vport enable.*/
 	if (hinic3_get_bit(HINIC3_DEV_START, &nic_dev->dev_status)) {
@@ -703,6 +688,11 @@ static int hinic3_dev_set_link_down(struct rte_eth_dev *dev)
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct rte_eth_link link = {0};
 	int err;
+
+	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
+		PMD_DRV_LOG(WARNING, "Qpool mode not support set link status.");
+		return 0;
+	}
 
 	err = hinic3_set_vport_enable(nic_dev->hwdev, false);
 	if (err) {
@@ -2130,9 +2120,6 @@ static int hinic3_dev_start_qpool(struct rte_eth_dev *eth_dev)
 		PMD_DRV_LOG(ERR, "Set rx config failed, dev_name: %s",
 			    eth_dev->data->name);
 	}
-
-	/* enable dev interrupt */
-	hinic3_enable_interrupt(eth_dev);
 
 	err = hinic3_start_all_rqs(eth_dev);
 	if (err) {
@@ -4579,12 +4566,14 @@ static int hinic3_qpool_func_init(struct rte_eth_dev *eth_dev, enum hinic3_qinfo
 
 #ifdef DPDK_21_11
 	err = rte_intr_fd_set(pci_dev->intr_handle, nic_dev->fd);
+	err = rte_intr_type_set(pci_dev->intr_handle, RTE_INTR_HANDLE_EXT);
 	if (err) {
 		PMD_DRV_LOG(ERR, "intr fd set failed, err = %d", err);
 		goto set_default_feature_fail;
 	}
 #else
 	pci_dev->intr_handle.fd = nic_dev->fd;
+	pci_dev->intr_handle.type = RTE_INTR_HANDLE_EXT;
 #endif
 
 	/* Register callback func to eal lib */
