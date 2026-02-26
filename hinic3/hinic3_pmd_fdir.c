@@ -15,10 +15,6 @@
 #include <rte_malloc.h>
 #include <rte_flow.h>
 #include <rte_flow_driver.h>
-#include <fcntl.h>
-#include <stdlib.h>
-#include <sys/ioctl.h>
-#include <sys/mman.h>
 #include "base/hinic3_pmd_cmd.h"
 #include "base/hinic3_compat.h"
 #include "base/hinic3_pmd_hwdev.h"
@@ -754,7 +750,6 @@ hinic3_fdir_tcam_info_htn_init(struct rte_eth_dev *dev,
 		hinic3_fdir_tcam_tunnel_htn_init(rule, tcam_key);
 
 	fdir_tcam_rule->data.dw0.qid = rule->rq_index;
-	fdir_tcam_rule->data.dw1.queue_num = rule->queue_num;
 
 	tcam_key_calculate(tcam_key, fdir_tcam_rule);
 }
@@ -1040,7 +1035,6 @@ static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
 		HINIC3_DEV_PRIVATE_TO_TCAM_INFO(dev->data->dev_private);
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_tcam_filter *tcam_filter;
-	struct nic_ext_tcam_cfg_rule ext_tcam_rule = { 0 };
 	u16 index = 0;
 	u8 tcam_rule_type;
 	int err;
@@ -1066,15 +1060,7 @@ static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
  	 	tcam_rule_type = TCAM_RULE_FDIR_TYPE;
 
 	/* Add a new TCAM rule to the network device. */
-	if (nic_dev->hwdev->bifur_mode == HINIC3_BIFUR_MODE_QPOOL) 
-	{
-		ext_tcam_rule.index = fdir_tcam_rule->index;
-		ext_tcam_rule.key = fdir_tcam_rule->key;
-		ext_tcam_rule.data.ext = fdir_tcam_rule->data.dw1.queue_num;
-		err = hinic3_add_tc_flow_pre_handle(nic_dev->hwdev, &ext_tcam_rule,
-					      TCAM_RULE_FDIR_TYPE, nic_dev->global_id, nic_dev->fd);
-	} else
-		err = hinic3_add_tcam_rule(nic_dev->hwdev, fdir_tcam_rule, tcam_rule_type, is_hairpin);
+	err = hinic3_add_tcam_rule(nic_dev->hwdev, fdir_tcam_rule, tcam_rule_type, is_hairpin);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Fdir_tcam_rule add failed!");
 		goto add_tcam_rules_failed;

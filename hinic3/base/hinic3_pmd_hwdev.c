@@ -460,13 +460,6 @@ get_func_info_err:
 	return err;
 }
 
-static void hinic3_uninit_comm_ch_qpool(struct hinic3_hwdev *hwdev)
-{
-	hinic3_set_pf_status(hwdev->hwif, HINIC3_PF_STATUS_INIT);
-
-	hinic3_set_func_svc_used_state(hwdev, HINIC3_MOD_COMM, 0);
-}
-
 static void hinic3_uninit_comm_ch(struct hinic3_hwdev *hwdev)
 {
 	hinic3_set_pf_status(hwdev->hwif, HINIC3_PF_STATUS_INIT);
@@ -504,18 +497,10 @@ int hinic3_init_hwdev(struct hinic3_hwdev *hwdev)
 		goto init_hwif_err;
 	}
 
-	if (hwdev->bifur_mode == HINIC3_BIFUR_MODE_QPOOL) {
-		err = hinic3_qpool_cmdqs_init(hwdev);
-		if (err) {
-			PMD_DRV_LOG(ERR, "Qpool Init cmdq failed");
-			goto init_qpool_cmdqs_err;
-		}
-	} else {
-		err = hinic3_init_comm_ch(hwdev);
-		if (err) {
-			PMD_DRV_LOG(ERR, "Init communication channel failed");
-			goto init_comm_ch_err;
-		}
+	err = hinic3_init_comm_ch(hwdev);
+	if (err) {
+		PMD_DRV_LOG(ERR, "Init communication channel failed");
+		goto init_comm_ch_err;
 	}
 
 	err = hinic3_init_cfg_mgmt(hwdev);
@@ -538,7 +523,6 @@ init_cfg_err:
 	hinic3_uninit_comm_ch(hwdev);
 
 init_comm_ch_err:
-init_qpool_cmdqs_err:
 	hinic3_free_hwif(hwdev);
 
 init_hwif_err:
@@ -550,10 +534,8 @@ init_hwif_err:
 void hinic3_free_hwdev(struct hinic3_hwdev *hwdev)
 {
 	hinic3_deinit_cfg_mgmt(hwdev);
-	if (hwdev->bifur_mode == HINIC3_BIFUR_MODE_QPOOL)
-		hinic3_uninit_comm_ch_qpool(hwdev);
-	else
-		hinic3_uninit_comm_ch(hwdev);
+
+	hinic3_uninit_comm_ch(hwdev);
 
 	hinic3_free_hwif(hwdev);
 

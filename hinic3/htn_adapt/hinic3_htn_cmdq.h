@@ -6,12 +6,7 @@
 
 #include "hinic3_pmd_nic_io.h"
 
-#define SQ_CTXT_SIZE(num_sqs)	((u16)(sizeof(struct hinic3_qp_ctxt_header_htn) \
-				+ (num_sqs) * sizeof(struct hinic3_sq_ctxt)))
-
-#define RQ_CTXT_SIZE(num_rqs)	((u16)(sizeof(struct hinic3_qp_ctxt_header_htn) \
-				+ (num_rqs) * sizeof(struct hinic3_rq_ctxt)))
-struct hinic3_qp_ctxt_header_htn {
+struct hinic3_qp_ctxt_header {
 	u32 rsvd[2];
 	u16 num_queues;
 	u16 queue_type;
@@ -19,19 +14,19 @@ struct hinic3_qp_ctxt_header_htn {
 	u16 dest_func_id;
 };
 
-struct hinic3_clean_queue_ctxt_htn {
-	struct hinic3_qp_ctxt_header_htn cmdq_hdr;
+struct hinic3_clean_queue_ctxt {
+	struct hinic3_qp_ctxt_header cmdq_hdr;
 };
 
-struct hinic3_qp_ctxt_block_htn {
-	struct hinic3_qp_ctxt_header_htn cmdq_hdr;
+struct hinic3_qp_ctxt_block {
+	struct hinic3_qp_ctxt_header cmdq_hdr;
 	union {
 		struct hinic3_sq_ctxt  sq_ctxt[HINIC3_Q_CTXT_MAX];
 		struct hinic3_rq_ctxt  rq_ctxt[HINIC3_Q_CTXT_MAX];
 	};
 };
 
-struct hinic3_rss_cmd_header_htn {
+struct hinic3_rss_cmd_header {
 	u32 rsv[3];
 	u16 rsv1;
 	u16 dest_func_id;
@@ -47,7 +42,7 @@ enum hinic3_htn_cmd {
 	HINIC3_HTN_CMD_GET_RSS_INDIR_TABLE
 };
 
-struct hinic3_vlan_ctx_htn {
+struct hinic3_vlan_ctx {
 	u32 rsv[2];
 	u16 vlan_tag;
 	u8 vlan_sel;

@@ -76,7 +76,9 @@ struct hinic3_fdir_filter {
 	struct hinic3_fdir_rule_key key_spec;
 	uint32_t rq_index; /**< Queue assigned when matched. */
 	bool is_hairpin;
+#ifdef HINIC3_TRAFFIC_BIFUR
 	uint32_t queue_num;
+#endif
 };
 
 struct hinic3_ethertype_filter {

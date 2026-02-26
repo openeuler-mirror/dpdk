@@ -229,8 +229,7 @@ struct hinic3_nic_dev {
 	struct hinic3_dcb *dcb;
 
 	u8 rss_key[HINIC3_RSS_KEY_SIZE];
-	u16 global_id;
-	int fd;
+
 	unsigned long dev_status;
 
 	bool pause_set;

@@ -4,7 +4,7 @@
 
 #ifndef _HINIC3_PMD_WQ_H_
 #define _HINIC3_PMD_WQ_H_
-#include "hinic3_compat.h"
+
 /* Use 0-level CLA, page size must be: SQ 16B(wqe) * 64k(max_q_depth) */
 #define HINIC3_DEFAULT_WQ_PAGE_SIZE	0x100000
 #define HINIC3_HW_WQ_PAGE_SIZE		0x1000

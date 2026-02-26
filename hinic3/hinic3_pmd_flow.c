@@ -1092,6 +1092,7 @@ static hinic3_parse_filter_t hinic3_find_parse_filter_func(struct rte_eth_dev *d
 	return NULL;
 }
 
+#ifdef HINIC3_TRAFFIC_BIFUR
 static int
 hinic3_flow_set_rss_action_config(struct rte_eth_dev	       *dev,
 				  const struct rte_flow_action *actions,
@@ -1136,9 +1137,7 @@ hinic3_check_rss_queues(struct rte_eth_dev		 *dev,
 
 	for (i = 0; i < act_r->queue_num; i++) {
 		if ((pci_dev->id.device_id == HINIC3_DEV_ID_SP920 && act_r->queue[i] >= HINIC3_QUEUE_MAX) ||
-#ifdef HINIC3_TRAFFIC_BIFUR
 			(hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev) && act_r->queue[i] >= HINIC3_QUEUE_ALLOW_NUM) ||
-#endif
 			(act_r->queue[i] >= dev->data->nb_rx_queues)) {
 			rte_flow_error_set(error, EINVAL,
 					   HINIC3_FLOW_ERROR_TYPE_ACTION,
@@ -1147,20 +1146,18 @@ hinic3_check_rss_queues(struct rte_eth_dev		 *dev,
 		}
 	}
 
-	if (
-#ifdef HINIC3_TRAFFIC_BIFUR
-	    (hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev) && act_r->queue_num > HINIC3_QUEUE_ALLOW_NUM) ||
-#endif
-	    (pci_dev->id.device_id == HINIC3_DEV_ID_SP920 && act_r->queue_num > HINIC3_QUEUE_MAX)) {
-		rte_flow_error_set(error, EINVAL,
-				   HINIC3_FLOW_ERROR_TYPE_ACTION,
-				   act, "Invalid action queue number.");
-		return -rte_errno;
+	if ((hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev) && act_r->queue_num > HINIC3_QUEUE_ALLOW_NUM) ||
+			(pci_dev->id.device_id == HINIC3_DEV_ID_SP920 && act_r->queue_num > HINIC3_QUEUE_MAX)) {
+			rte_flow_error_set(error, EINVAL,
+					   HINIC3_FLOW_ERROR_TYPE_ACTION,
+					   act, "Invalid action queue number.");
+			return -rte_errno;
 	}
 
 	return 0;
 }
 
+#else
 static int hinic3_flow_set_normal_rss_action_config(struct rte_eth_dev *dev,
 							const struct rte_flow_action_rss *act_r,
 							const struct rte_flow_action *act,
@@ -1275,6 +1272,7 @@ static int hinic3_flow_set_normal_rss_action_config(struct rte_eth_dev *dev,
 
 	return ret;
 	}
+#endif
 
 static int
 hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
@@ -1282,19 +1280,20 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 			 struct rte_flow_error	      *error,
 			 struct hinic3_filter_t	      *filter)
 {
-	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
-	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(dev);
 	const struct rte_flow_action_queue *act_q;
 	const struct rte_flow_action *act = actions;
 	const struct rte_flow_action_rss *act_r;
 	struct hinic3_rxq *rxq;
 	uint32_t i;
 	int err;
-	if (nic_dev->hwdev->bifur_mode != HINIC3_BIFUR_MODE_NORMAL) {
-		for (i = 0; i < HINIC3_QUEUE_MAX; i++) {
-			rte_bit_relaxed_clear32(i, &filter->fdir_filter.rq_index);
-		}
+#ifdef HINIC3_TRAFFIC_BIFUR
+	struct rte_pci_device *pci_dev = NULL;
+	pci_dev = RTE_ETH_DEV_TO_PCI(dev);
+
+	for (i = 0; i < HINIC3_QUEUE_MAX; i++) {
+		rte_bit_relaxed_clear32(i, &filter->fdir_filter.rq_index);
 	}
+#endif
 
 	/* find the last non-VOID action before END */
 	const struct rte_flow_action *last_act = NULL;
@@ -1331,68 +1330,70 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 
 		break;
 /* RSS process */
-	case RTE_FLOW_ACTION_TYPE_RSS:
-		if (nic_dev->hwdev->bifur_mode != HINIC3_BIFUR_MODE_NORMAL) {
 #ifdef HINIC3_TRAFFIC_BIFUR
-			uint64_t dr_feature = hinic3_get_driver_feature(nic_dev);
-			if ((dr_feature & NIC_F_HTN_CMDQ)) {
-				PMD_DRV_LOG(ERR, "Port %u not support rss acrion",
-					    dev->data->port_id);
-				return -rte_errno;
-			}
-#endif
-			for (i = 0; i < HINIC3_QUEUE_MAX; i++) {
-				rte_bit_relaxed_clear32(i, &filter->fdir_filter.rq_index);
-			}
-			act_r = (const struct rte_flow_action_rss *)act->conf;
-			err = hinic3_check_rss_queues(dev, pci_dev, act_r, act, error);
-			if (err) {
-				return err;
-			}
-			if (act_r->queue_num > 1) {
-				for (i = 0; i < act_r->queue_num; i++) {
-					if (rte_bit_relaxed_get32(act_r->queue[i], &filter->fdir_filter.rq_index) != 0) {
-						rte_flow_error_set(error, EINVAL,
-								HINIC3_FLOW_ERROR_TYPE_ACTION, act,
-								"Duplicate action queue numbers.");
-						return -rte_errno;
-					}
-					rte_bit_relaxed_set32(act_r->queue[i], &filter->fdir_filter.rq_index);
-				}
-			} else {
-				filter->fdir_filter.rq_index = act_r->queue[0];
-			}
-			filter->fdir_filter.queue_num = act_r->queue_num;
-			if (act_r->key)
-				return hinic3_flow_set_rss_action_config(dev, actions, error);
+	case RTE_FLOW_ACTION_TYPE_RSS:
+		struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);	
+		uint64_t dr_feature;
+		dr_feature = hinic3_get_driver_feature(nic_dev);
+		if ((dr_feature & NIC_F_HTN_CMDQ)) {
+			PMD_DRV_LOG(ERR, "Port %u not support rss acrion",
+				    dev->data->port_id);
+			return -rte_errno;
+		}
 
-			break;
-		} else {
-			act_r = (const struct rte_flow_action_rss *)act->conf;
-
-			if (!act_r || act_r->queue_num == 0) {
-				rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION, act,
-								"Invalid rss queue num is zero");
-				return -rte_errno;
-			}
-
+		for (i = 0; i < HINIC3_QUEUE_MAX; i++) {
+			rte_bit_relaxed_clear32(i, &filter->fdir_filter.rq_index);
+		}
+		act_r = (const struct rte_flow_action_rss *)act->conf;
+		err = hinic3_check_rss_queues(dev, pci_dev, act_r, act, error);
+		if (err) {
+			return err;
+		}
+		if (act_r->queue_num > 1) {
 			for (i = 0; i < act_r->queue_num; i++) {
-				if (act_r->queue[i] >= dev->data->nb_rx_queues) {
-					rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION, act,
-									"Invalid action queue id.");
+				if (rte_bit_relaxed_get32(act_r->queue[i], &filter->fdir_filter.rq_index) != 0) {
+					rte_flow_error_set(error, EINVAL,
+							   HINIC3_FLOW_ERROR_TYPE_ACTION, act,
+							   "Duplicate action queue numbers.");
 					return -rte_errno;
 				}
+				rte_bit_relaxed_set32(act_r->queue[i], &filter->fdir_filter.rq_index);
 			}
-
-			err = hinic3_flow_set_normal_rss_action_config(dev, act_r, act, error, &filter->template_entry);
-			if (err)
-				return err;
-
-			filter->fdir_filter.q_grp_id = filter->template_entry->q_grp_id;
-			filter->fdir_filter.level = act_r->level;
-			filter->fdir_filter.action = RTE_FLOW_ACTION_TYPE_RSS;
-			break;
+		} else {
+			filter->fdir_filter.rq_index = act_r->queue[0];
 		}
+		filter->fdir_filter.queue_num = act_r->queue_num;
+		if (act_r->key)
+			return hinic3_flow_set_rss_action_config(dev, actions, error);
+
+		break;
+#else
+	case RTE_FLOW_ACTION_TYPE_RSS:
+		act_r = (const struct rte_flow_action_rss *)act->conf;
+
+		if (!act_r || act_r->queue_num == 0) {
+ 	 		rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION, act,
+ 	 						   "Invalid rss queue num is zero");
+ 	 		return -rte_errno;
+		}
+
+		for (i = 0; i < act_r->queue_num; i++) {
+ 	 		if (act_r->queue[i] >= dev->data->nb_rx_queues) {
+ 	 			rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION, act,
+								   "Invalid action queue id.");
+ 	 			return -rte_errno;
+ 	 		}
+ 	 	}
+
+		err = hinic3_flow_set_normal_rss_action_config(dev, act_r, act, error, &filter->template_entry);
+ 	 	if (err)
+ 	 		return err;
+
+		filter->fdir_filter.q_grp_id = filter->template_entry->q_grp_id;
+ 	 	filter->fdir_filter.level = act_r->level;
+ 	 	filter->fdir_filter.action = RTE_FLOW_ACTION_TYPE_RSS;
+		break;
+#endif
 
 	case RTE_FLOW_ACTION_TYPE_DROP:
  	 	filter->fdir_filter.action = RTE_FLOW_ACTION_TYPE_DROP;
