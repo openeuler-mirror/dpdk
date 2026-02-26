@@ -416,6 +416,7 @@ struct hinic3_rxq {
 	struct hinic3_nic_dev *nic_dev;
 
 	u16 q_id;
+	u16 local_qid;
 	u16 q_depth;
 	u16 q_mask;
 	u16 buf_len;

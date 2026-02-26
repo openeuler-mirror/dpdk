@@ -6,6 +6,9 @@
 #include "hinic3_pmd_nic_cfg.h"
 #include "hinic3_pmd_hwif.h"
 #include "hinic3_htn_cmdq.h"
+#include "hinic3_pmd_hwdev.h"
+#include "hinic3_pmd_ethdev.h"
+
 
 #define HINIC3_DEAULT_DROP_THD_OFF	0xFFFF
 
@@ -27,7 +30,7 @@
 #define RQ_CTXT_CEQ_ATTR_EN_MASK			0x1U
 #define RQ_CTXT_CEQ_ATTR_INTR_MASK			0x3FFU
 
-static void qp_prepare_cmdq_header(struct hinic3_qp_ctxt_header *qp_ctxt_hdr,
+static void qp_prepare_cmdq_header(struct hinic3_qp_ctxt_header_htn *qp_ctxt_hdr,
 				   enum hinic3_qp_ctxt_type ctxt_type, u16 num_queues,
 				   u16 q_id, u16 func_id)
 {
@@ -40,19 +43,30 @@ static void qp_prepare_cmdq_header(struct hinic3_qp_ctxt_header *qp_ctxt_hdr,
 	hinic3_cpu_to_be32(qp_ctxt_hdr, sizeof(*qp_ctxt_hdr));
 }
 
+static inline u16 get_local_qid(struct hinic3_nic_dev *nic_dev,
+				u16 start_qid,
+				enum hinic3_qp_ctxt_type ctxt_type)
+{
+	return nic_dev->hwdev->bifur_mode == HINIC3_BIFUR_MODE_QPOOL ?
+			ctxt_type == HINIC3_QP_CTXT_TYPE_RQ ?
+			nic_dev->rxqs[start_qid]->local_qid :
+			nic_dev->txqs[start_qid]->local_qid          :
+		start_qid;
+}
+
 static u8 prepare_cmd_buf_qp_context_multi_store(struct hinic3_nic_dev *nic_dev,
 						 struct hinic3_cmd_buf *cmd_buf,
 						 enum hinic3_qp_ctxt_type ctxt_type,
 						 u16 start_qid, u16 max_ctxts)
 {
-	struct hinic3_qp_ctxt_block *qp_ctxt_block = NULL;
+	struct hinic3_qp_ctxt_block_htn *qp_ctxt_block = NULL;
 	u16 func_id;
 	u16 i;
 
 	qp_ctxt_block = cmd_buf->buf;
 	func_id = hinic3_global_func_id(nic_dev->hwdev);
 	qp_prepare_cmdq_header(&qp_ctxt_block->cmdq_hdr, ctxt_type,
-			       max_ctxts, start_qid, func_id);
+			       max_ctxts, get_local_qid(nic_dev, start_qid, ctxt_type), func_id);
 
 	for (i = 0; i < max_ctxts; i++) {
 		if (ctxt_type == HINIC3_QP_CTXT_TYPE_RQ)
@@ -60,7 +74,7 @@ static u8 prepare_cmd_buf_qp_context_multi_store(struct hinic3_nic_dev *nic_dev,
 					       &qp_ctxt_block->rq_ctxt[i]);
 		else
 			hinic3_sq_prepare_ctxt(nic_dev->txqs[start_qid + i],
-					       start_qid + i,
+					       get_local_qid(nic_dev, start_qid + i, ctxt_type),
 					       &qp_ctxt_block->sq_ctxt[i]);
 	}
 
@@ -76,7 +90,7 @@ static u8 prepare_cmd_buf_clean_tso_lro_space(struct hinic3_nic_dev *nic_dev,
 					      struct hinic3_cmd_buf *cmd_buf,
 					      enum hinic3_qp_ctxt_type ctxt_type)
 {
-	struct hinic3_clean_queue_ctxt *ctxt_block = NULL;
+	struct hinic3_clean_queue_ctxt_htn *ctxt_block = NULL;
 
 	ctxt_block = cmd_buf->buf;
 	ctxt_block->cmdq_hdr.num_queues = nic_dev->max_sqs;
@@ -94,7 +108,7 @@ static u8 prepare_cmd_buf_clean_tso_lro_space(struct hinic3_nic_dev *nic_dev,
 static void prepare_rss_indir_table_cmd_header(struct hinic3_nic_dev *nic_dev,
 					       struct hinic3_cmd_buf *cmd_buf)
 {
-	struct hinic3_rss_cmd_header *header = cmd_buf->buf;
+	struct hinic3_rss_cmd_header_htn *header = cmd_buf->buf;
 
 	header->dest_func_id = hinic3_global_func_id(nic_dev->hwdev);
 
@@ -109,8 +123,8 @@ static u8 prepare_cmd_buf_set_rss_indir_table(struct hinic3_nic_dev *nic_dev,
 	u32 i;
 	u8 *indir_tbl = NULL;
 
-	indir_tbl = (u8 *)cmd_buf->buf + sizeof(struct hinic3_rss_cmd_header);
-	cmd_buf->size = sizeof(struct hinic3_rss_cmd_header) + HINIC3_RSS_INDIR_SIZE;
+	indir_tbl = (u8 *)cmd_buf->buf + sizeof(struct hinic3_rss_cmd_header_htn);
+	cmd_buf->size = sizeof(struct hinic3_rss_cmd_header_htn) + HINIC3_RSS_INDIR_SIZE;
 	memset(indir_tbl, 0, HINIC3_RSS_INDIR_SIZE);
 
 	prepare_rss_indir_table_cmd_header(nic_dev, cmd_buf);
@@ -148,13 +162,25 @@ static void cmd_buf_to_rss_indir_table(const struct hinic3_cmd_buf *cmd_buf, u32
 	}
 }
 
+static void cmd_buf_to_rss_indir_table_qpool(const struct hinic3_cmd_buf *cmd_buf, u32 *indir_table)
+{
+	u32 i;
+	u32 *indir_tbl = NULL;
+
+	indir_tbl = (u32 *)cmd_buf->buf;
+	rte_mb();
+	for (i = 0; i < HINIC3_RSS_INDIR_SIZE / 2; i++) {
+		indir_table[i] = indir_tbl[i];
+	}
+}
+
 static u8 prepare_cmd_buf_modify_svlan(struct hinic3_cmd_buf *cmd_buf,
 				       u16 func_id, u16 vlan_tag, u16 q_id, u8 vlan_mode)
 {
-	struct hinic3_vlan_ctx *vlan_ctx = NULL;
+	struct hinic3_vlan_ctx_htn *vlan_ctx = NULL;
 
-	cmd_buf->size = sizeof(struct hinic3_vlan_ctx);
-	vlan_ctx = (struct hinic3_vlan_ctx *)cmd_buf->buf;
+	cmd_buf->size = sizeof(struct hinic3_vlan_ctx_htn);
+	vlan_ctx = (struct hinic3_vlan_ctx_htn *)cmd_buf->buf;
 
 	vlan_ctx->dest_func_id = func_id;
 	vlan_ctx->start_qid = q_id;
@@ -163,7 +189,7 @@ static u8 prepare_cmd_buf_modify_svlan(struct hinic3_cmd_buf *cmd_buf,
 	vlan_ctx->vlan_mode = vlan_mode;
 
 	rte_mb();
-	hinic3_cpu_to_be32(vlan_ctx, sizeof(struct hinic3_vlan_ctx));
+	hinic3_cpu_to_be32(vlan_ctx, sizeof(struct hinic3_vlan_ctx_htn));
 	return HINIC3_HTN_CMD_SVLAN_MODIFY;
 }
 
@@ -198,6 +224,7 @@ struct hinic3_nic_cmdq_ops *hinic3_nic_cmdq_get_htn_ops(void)
 		.prepare_cmd_buf_modify_svlan =           prepare_cmd_buf_modify_svlan,
 		.prepare_cmd_buf_set_rss_indir_table =    prepare_cmd_buf_set_rss_indir_table,
 		.prepare_cmd_buf_get_rss_indir_table =    prepare_cmd_buf_get_rss_indir_table,
+		.cmd_buf_to_rss_indir_table_qpool =       cmd_buf_to_rss_indir_table_qpool,
 		.cmd_buf_to_rss_indir_table =             cmd_buf_to_rss_indir_table,
 		.prepare_sq_ctxt_drop_and_prefetch =       prepare_sq_ctxt_drop_and_prefetch,
 		.prepare_rq_ctxt_ceq_and_prefetch =       prepare_rq_ctxt_ceq_and_prefetch,

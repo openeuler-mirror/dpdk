@@ -260,6 +260,8 @@ int hinic3_cmdq_detail_resp(void *hwdev, enum hinic3_mod_type mod, u8 cmd,
 
 int hinic3_cmdqs_init(struct hinic3_hwdev *hwdev);
 
+int hinic3_qpool_cmdqs_init(struct hinic3_hwdev *hwdev);
+
 void hinic3_cmdqs_free(struct hinic3_hwdev *hwdev);
 
 void hinic3_enhance_cmdq_set_wqe(struct hinic3_cmdq_wqe *wqe, enum cmdq_cmd_type cmd_type,
