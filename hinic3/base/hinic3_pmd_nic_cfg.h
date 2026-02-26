@@ -465,6 +465,16 @@ struct hinic3_cmd_clear_qp_resource {
 	u16 rsvd1;
 };
 
+#define FUNC_MAX_CLEAR_QP_NUM 256
+struct hinic3_cmd_clear_assign_qp_res {
+	struct mgmt_msg_head msg_head;
+
+	u16 func_id;
+	u16 qp_num;
+	u32 rsvd[4];
+	u16 qp[FUNC_MAX_CLEAR_QP_NUM];
+};
+
 struct hinic3_port_stats_info {
 	struct mgmt_msg_head msg_head;
 
@@ -493,6 +503,7 @@ struct hinic3_vport_stats {
 	u64 rx_err_vport;
 
 	u64 rx_mtu_err_vport;
+	u64 rx_out_of_buffer; /* fw: rx_nowqe */
 };
 
 struct hinic3_cmd_vport_stats {
@@ -501,7 +512,7 @@ struct hinic3_cmd_vport_stats {
 	u32 stats_size;
 	u32 rsvd1;
 	struct hinic3_vport_stats stats;
-	u64 rsvd2[5];
+	u64 rsvd2[4];
 };
 
 struct hinic3_phy_port_stats {
@@ -875,19 +886,6 @@ struct hinic3_rss_indir_table {
 
 #define HINIC3_QGRP_START_INDEX 2048
 
-struct nic_rss_indirect_tbl {
-	union {
-		struct {
-			u32 op_code : 8; /* 1: new fdir_rss */
-			u32 qgrp_id : 8; /* The value of qgrp_id must be 2048 less */
-			u32 rsvd1 : 16;
-		} bs;
-		u32 value;
-	} dw0;
-	u32 rsvd[3]; /* Make sure that 16B beyond entry[] */
-	u16 entry[HINIC3_RSS_INDIR_SIZE];
-};
-
 enum hinic3_qpool_subcmd {
 	HINIC3_NIC_QPOOL_CMD_CFG_QGRP_ID = 0x0,         /** < alloc/free q_grp_id */
 	HINIC3_NIC_QPOOL_CMD_GET_RSS_ID,                /** < get temp_id/inst_id/node_id */
@@ -956,8 +954,12 @@ struct hinic3_cmd_register_vf {
 	u8 rsvd[39];
 };
 
-#define HINIC3_ACTION_DROP 5
-#define HINIC3_ACTION_RSS 1
+enum {
+	HINIC3_ACTION_QUEUE = 0,
+	HINIC3_ACTION_RSS = 1,
+	HINIC3_ACTION_PORT = 2,
+	HINIC3_ACTION_DROP = 5,
+};
 
 struct hinic3_tcam_result {
 	union {
@@ -981,9 +983,10 @@ struct hinic3_tcam_result {
 			u32 rsvd1 : 8;
 		} bs;
 	}dw1;
-	};
+};
 
 #define HINIC3_TCAM_FLOW_KEY_SIZE	44
+#define HINIC3_SEC_TCAM_FLOW_KEY_SIZE	84
 #define HINIC3_MAX_TCAM_RULES_NUM	4096
 #define HINIC3_TCAM_BLOCK_ENABLE	1
 #define HINIC3_TCAM_BLOCK_DISABLE	0
@@ -1154,6 +1157,63 @@ struct nic_cmd_get_rss_id {
 	u16 rss_instance_id;
 };
 
+struct hinic3_ext_tcam_key_x_y {
+	u8 x[HINIC3_SEC_TCAM_FLOW_KEY_SIZE];
+	u8 y[HINIC3_SEC_TCAM_FLOW_KEY_SIZE];
+};
+
+struct hinic3_ext_tcam_cfg_rule {
+	u32 index;
+	struct hinic3_tcam_result data;
+	struct hinic3_ext_tcam_key_x_y key;
+};
+
+typedef enum {
+    TCAM_EXTEND_OPCODE_ADD_RULE = 0,
+    TCAM_EXTEND_OPCODE_DEL_RULES,
+    TCAM_EXTEND_OPCODE_GET_RULES,
+    TCAM_EXTEND_OPCODE_FLUSH_TCAM,
+    TCAM_EXTEND_OPCODE_GET_BLOCK_RULES,
+    TCAM_EXTEND_OPCODE_ALLOC_BLOCK,
+    TCAM_EXTEND_OPCODE_FREE_BLOCK,
+    TCAM_EXTEND_OPCODE_ENABLE_TCAM,
+    TCAM_EXTEND_OPCODE_GET_FLAG,
+    TCAM_EXTEND_OPCODE_SET_FLAG
+} tcam_extend_op_code;
+
+struct hinic3_ext_fdir_add_rule {
+	struct mgmt_msg_head msg_head;
+
+	u16 func_id;
+	u8 type;
+	u8 bifur_rss_en;
+	struct hinic3_ext_tcam_cfg_rule rule;
+};
+
+struct hinic3_fdir_cfg_key_mode {
+	struct mgmt_msg_head msg_head;
+	u8 key_mode;
+	u8 rsvd[3];
+};
+
+#define HINIC3_FDIR_EXT_DATA_SIZE 200
+struct nic_cmd_fdir_ext {
+    struct mgmt_msg_head msg_head;
+    u8 op_code;
+    u8 key_width;
+    u8 rsvd0[6];
+    union {
+        struct hinic3_ext_fdir_add_rule tcam_add;
+        struct hinic3_fdir_del_rule tcam_del;
+        struct hinic3_flush_tcam_rules tcam_flush;
+        struct hinic3_tcam_block alloc_block ;
+        struct hinic3_tcam_block free_block;
+        struct hinic3_port_tcam_info tcam_en;
+		struct hinic3_fdir_cfg_key_mode tcam_cfg;
+        u8 tcam_value[HINIC3_FDIR_EXT_DATA_SIZE];
+    } data;
+};
+
 int l2nic_msg_to_mgmt_sync(void *hwdev, u16 cmd, void *buf_in, u16 in_size,
 			   void *buf_out, u16 *out_size);
 
@@ -1290,6 +1350,8 @@ int hinic3_get_link_state(void *hwdev, u8 *link_state);
  * @retval non-zero : Failure
  */
 int hinic3_flush_qps_res(void *hwdev);
+
+int hinic3_flush_assign_qps_res(void *hwdev);
 
 /**
  * Set pause info
@@ -1463,6 +1525,8 @@ int hinic3_rss_template_free(void *hwdev, u16 q_grp_id);
  */
 int hinic3_rss_set_indir_tbl(void *hwdev, const u32 *indir_table, u32 indir_table_size);
 
+int hinic3_rss_set_indir_tbl_qpool(void *hwdev, const u32 *indir_table, u32 indir_table_size);
+
 /**
  * Get RSS indirect table
  *
@@ -1627,13 +1691,11 @@ int hinic3_vf_get_default_cos(void *hwdev, u8 *cos_id);
  *   Tcam rule, including tcam rule index, tcam action, tcam key and etc
  * @param[in] tcam_rule_type
  *   Tcam rule type
- * @param[in] is_hairpin
- *   Whether this rule is for hairpin
  *
  * @retval zero : Success
  * @retval non-zero : Failure
  */
-int hinic3_add_tcam_rule(void *hwdev, struct hinic3_tcam_cfg_rule *tcam_rule, u8 tcam_rule_type, bool is_hairpin);
+int hinic3_add_tcam_rule(void *hwdev, struct hinic3_tcam_cfg_rule *tcam_rule, u8 tcam_rule_type);
 
 /**
  * Del tcam rules
@@ -1739,7 +1801,7 @@ int hinic3_set_tm_config_tc_rate(void *hwdev, u8 tc_no, u8 rate);
 int hinic3_set_tm_hierarchy_do_commit(void *hwdev, u8 *cos_tc, u8 *tc_bw,
 				   u8 *rate_limit);
 
-int hinic3_get_bifur_enable(void *hwdev, u8 *bifur_enable, u8 *iso_enable);
+int hinic3_get_bifur_enable(void *hwdev, u8 *bifur_enable, u8 *iso_enable, u8 *bifur_type);
 
 int hinic3_cmdq_set_rss_queue_type(void *hwdev, struct hinic3_rss_type rss_type, u16 q_grp_id, u16 cmd_type);
 
@@ -1748,5 +1810,20 @@ int hinic3_mgmt_cfg_qgrp_id(void *hwdev, u8 opcode, u16 *q_grp_id);
 void hinic3_mgmt_get_rss_id(void *hwdev, u16 func_id, u16 *rss_temp_id, u16 *rss_node_id, u16 *rss_inst_id);
 
 int hinic3_rss_queue_set_indir_tbl(void *hwdev, const u32 *indir_table, u32 indir_table_size, u16 q_grp_id);
+
+int hinic3_fdir_alloc_sec_tcam_block(void *hwdev, u8 key_width, u16 *index);
+
+int hinic3_fdir_sec_tcam_block_free(void *hwdev, u8 key_width, u16 *index);
+
+int hinic3_fdir_add_sec_tcam_rule(void *hwdev, struct hinic3_ext_tcam_cfg_rule *tcam_rule,
+				  u8 tcam_rule_type, bool is_hairpin, u8 key_width);
+
+int hinic3_fdir_set_fdir_sec_tcam_rule_filter(void *hwdev, bool enable);
+
+int hinic3_fdir_del_sec_tcam_rule(void *hwdev, u32 index, u8 tcam_rule_type,
+				  u8 key_width);
+int hinic3_fdir_flush_sec_tcam_rule(void *hwdev);
+
+int hinic3_fdir_cfg_sec_tcam(void *hwdev, u8 *en);
 
 #endif /* _HINIC3_PMD_NIC_CFG_H_ */

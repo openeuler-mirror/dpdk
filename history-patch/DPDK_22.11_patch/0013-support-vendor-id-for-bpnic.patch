@@ -1,7 +1,7 @@
 From c66b20869005afe81341a3b86e4d4aab36b21566 Mon Sep 17 00:00:00 2001
 From: wangxin679 <wangxin679@h-partners.com>
 Date: Tue, 5 Aug 2025 17:39:38 +0800
-Subject: [PATCH] support vendor id for baidu
+Subject: [PATCH] support vendor id for bpnic
 
 ---
  drivers/net/hinic3/base/hinic3_pmd_csr.h      | 1 +
@@ -17,7 +17,7 @@ index d8cbe61..885a497 100644
  #define HINIC3_DEV_ID_VF			0x9001
  #else
  #define PCI_VENDOR_ID_HUAWEI			0x19e5
-+#define PCI_VENDOR_ID_BAIDU			0x00ff
++#define PCI_VENDOR_ID_BP1			0x00ff
  #define HINIC3_DEV_ID_STANDARD			0x0222
  #define HINIC3_DEV_ID_DPU			0x0224
  #define HINIC3_DEV_ID_VF			0x375F
@@ -29,9 +29,9 @@ index 5a7ac0f..594bcf5 100644
  	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI, HINIC3_DEV_ID_STANDARD) },
  	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI, HINIC3_DEV_ID_DPU) },
  	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI, HINIC3_DEV_ID_VF) },
-+	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_BAIDU, HINIC3_DEV_ID_STANDARD) },
-+	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_BAIDU, HINIC3_DEV_ID_DPU) },
-+	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_BAIDU, HINIC3_DEV_ID_VF) },
++	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_BP1, HINIC3_DEV_ID_STANDARD) },
++	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_BP1, HINIC3_DEV_ID_DPU) },
++	{ RTE_PCI_DEVICE(PCI_VENDOR_ID_BP1, HINIC3_DEV_ID_VF) },
  #endif
  
  	{.vendor_id = 0},
@@ -45,7 +45,7 @@ index 8ee5807..839f21e 100644
  #else
 -        if ((pci_dev->id.vendor_id == PCI_VENDOR_ID_HUAWEI) &&
 +        if ((pci_dev->id.vendor_id == PCI_VENDOR_ID_HUAWEI ||
-+            pci_dev->id.vendor_id == PCI_VENDOR_ID_BAIDU) &&
++            pci_dev->id.vendor_id == PCI_VENDOR_ID_BP1) &&
              (pci_dev->id.device_id == HINIC3_DEV_ID_STANDARD ||
              pci_dev->id.device_id == HINIC3_DEV_ID_DPU ||
              pci_dev->id.device_id == HINIC3_DEV_ID_VF) &&

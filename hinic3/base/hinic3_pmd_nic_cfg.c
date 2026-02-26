@@ -2,6 +2,8 @@
  * Copyright(c) 2019 Huawei Technologies Co., Ltd
  */
 
+#include <sys/ioctl.h>
+
 #include <rte_ether.h>
 
 #include "hinic3_compat.h"
@@ -15,9 +17,12 @@
 #include "hinic3_pmd_nic_cfg.h"
 #include "hinic3_pmd_hw_cfg.h"
 #include "hinic3_pmd_ethdev.h"
+#include "hinic3_pmd_tx.h"
 #ifdef HINIC3_TRAFFIC_BIFUR
 #include "hinic3_pmd_bifur.h"
 #endif
+
+#include "mml/hinic3_pmd_mml_lib.h"
 
 #define HAIRPIN_FLAG (1 << 1)
 
@@ -65,6 +70,7 @@ int l2nic_msg_to_mgmt_sync(void *hwdev, u16 cmd, void *buf_in, u16 in_size,
 {
 	u32 i, cmd_cnt = ARRAY_LEN(vf_cmd_handler);
 	bool cmd_to_pf = false;
+	struct hinic3_nic_dev *nic_dev = ((struct hinic3_hwdev *)hwdev)->dev_handle;
 
 	if (hinic3_func_type(hwdev) == TYPE_VF) {
 		for (i = 0; i < cmd_cnt; i++) {
@@ -73,7 +79,7 @@ int l2nic_msg_to_mgmt_sync(void *hwdev, u16 cmd, void *buf_in, u16 in_size,
 		}
 	}
 
-	if (cmd_to_pf) {
+	if (nic_dev->hwdev->qinfo_type != HINIC3_QINFO_TYPE_QPOOL && cmd_to_pf) {
 		return hinic3_mbox_to_pf(hwdev, HINIC3_MOD_L2NIC, cmd,
 					 buf_in, in_size,
 					 buf_out, out_size, 0);
@@ -433,6 +439,8 @@ int hinic3_set_vport_enable(void *hwdev, bool enable)
 		return -EIO;
 	}
 
+	((struct hinic3_hwdev *)hwdev)->vf_valid_status = enable;
+
 	return 0;
 }
 
@@ -483,6 +491,37 @@ int hinic3_flush_qps_res(void *hwdev)
 	if (err || !out_size || sq_res.msg_head.status) {
 		PMD_DRV_LOG(ERR, "Clear sq resources failed, err: %d, status: 0x%x, out size: 0x%x",
 			    err, sq_res.msg_head.status, out_size);
+		return -EIO;
+	}
+
+	return 0;
+}
+
+int hinic3_flush_assign_qps_res(void *hwdev)
+{
+	struct hinic3_cmd_clear_assign_qp_res sq_res = {0};
+	struct hinic3_nic_dev *nic_dev = NULL;
+	u16 out_size = sizeof(sq_res), q_id;
+	int err;
+
+	if (!hwdev)
+		return -EINVAL;
+
+	memset(&sq_res, 0, sizeof(sq_res));
+
+	nic_dev = ((struct hinic3_hwdev *)hwdev)->dev_handle;
+	sq_res.func_id = hinic3_global_func_id(hwdev);
+	sq_res.qp_num = nic_dev->num_sqs;
+	for (q_id = 0; q_id < nic_dev->num_sqs; q_id++) {
+		sq_res.qp[q_id] = nic_dev->txqs[q_id]->local_qid;
+	}
+
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_CLEAR_ASSIGN_QP_RES,
+				     &sq_res, sizeof(sq_res), &sq_res,
+				     &out_size);
+	if (err || !out_size || sq_res.msg_head.status) {
+		PMD_DRV_LOG(ERR, "Clear sq resources failed, err: %d, status: 0x%x, out size: 0x%x",
+			    errno, sq_res.msg_head.status, out_size);
 		return -EIO;
 	}
 
@@ -825,6 +864,9 @@ int hinic3_set_rx_mode(void *hwdev, u32 enable)
 	if (!hwdev)
 		return -EINVAL;
 
+	if (((struct hinic3_hwdev *)hwdev)->qinfo_type == HINIC3_QINFO_TYPE_QPOOL)
+		return 0;
+
 	memset(&rx_mode_cfg, 0, sizeof(rx_mode_cfg));
 	rx_mode_cfg.func_id = hinic3_global_func_id(hwdev);
 	rx_mode_cfg.rx_mode = enable;
@@ -981,6 +1023,9 @@ int hinic3_rss_template_alloc(void *hwdev, u16 q_grp_id)
 	if (!hwdev)
 		return -EINVAL;
 
+	if (((struct hinic3_hwdev *)hwdev)->qinfo_type == HINIC3_QINFO_TYPE_QPOOL)
+		return 0;
+
 	memset(&template_mgmt, 0, sizeof(struct hinic3_rss_template_mgmt));
 	if (q_grp_id == 0)
 		template_mgmt.func_id = hinic3_global_func_id(hwdev);
@@ -1015,6 +1060,9 @@ int hinic3_rss_template_free(void *hwdev, u16 q_grp_id)
 	if (!hwdev)
 		return -EINVAL;
 
+	if (((struct hinic3_hwdev *)hwdev)->qinfo_type == HINIC3_QINFO_TYPE_QPOOL)
+		return 0;
+
 	memset(&template_mgmt, 0, sizeof(struct hinic3_rss_template_mgmt));
 	if (q_grp_id == 0)
 		template_mgmt.func_id = hinic3_global_func_id(hwdev);
@@ -1045,7 +1093,11 @@ static int hinic3_rss_cfg_hash_key(void *hwdev, u8 opcode, u8 *key, u16 key_size
 		return -EINVAL;
 
 	memset(&hash_key, 0, sizeof(struct hinic3_cmd_rss_hash_key));
-	hash_key.func_id = hinic3_global_func_id(hwdev);
+	if (((struct hinic3_hwdev *)hwdev)->qinfo_type == HINIC3_QINFO_TYPE_QPOOL)
+		hash_key.func_id = ((struct hinic3_hwdev *)hwdev)->qpool_qgrp_id;
+	else
+		hash_key.func_id = hinic3_global_func_id(hwdev);
+
 	hash_key.opcode = opcode;
 	if (opcode == HINIC3_CMD_OP_SET)
 		memcpy(hash_key.key, key, key_size);
@@ -1075,9 +1127,32 @@ int hinic3_rss_set_hash_key(void *hwdev, u8 *key, u16 key_size)
 	return hinic3_rss_cfg_hash_key(hwdev, HINIC3_CMD_OP_SET, key, key_size);
 }
 
+static int hinic3_rss_get_indir_tbl_qpool(struct nic_rss_indirect_tbl *nic_indir_tbl, int fd)
+{
+	struct msg_module msg_to_kernel = {0};
+	int err;
+
+	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NPU, 0,
+			sizeof(struct nic_rss_indirect_tbl),
+			sizeof(struct nic_rss_indirect_tbl),
+			nic_indir_tbl, nic_indir_tbl);
+	msg_to_kernel.npu_cmd.direct_resp = 0;
+	msg_to_kernel.npu_cmd.mod = HINIC3_MOD_L2NIC;
+	msg_to_kernel.npu_cmd.cmd = HINIC3_UCODE_CMD_GET_RSS_INDIR_TABLE;
+	msg_to_kernel.npu_cmd.ack_type = HINIC3_ACK_TYPE_CMDQ;
+
+	err = ioctl(fd, 0, &msg_to_kernel);
+	if (err < 0)
+		PMD_DRV_LOG(ERR, "Get qpool indir tbl err: %d.", errno);
+	return err;
+}
+
 int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table, u32 indir_table_size)
 {
+	struct hinic3_nic_dev *nic_dev = NULL;
 	struct hinic3_cmd_buf *cmd_buf = NULL;
+	struct nic_rss_indirect_tbl *nic_indir_tbl = NULL;
+	u16 rss_temp_id, rss_node_id, rss_inst_id;
 	u16 *indir_tbl = NULL;
 	int err;
 	u32 i;
@@ -1090,11 +1165,27 @@ int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table, u32 indir_table_size
 		PMD_DRV_LOG(ERR, "Allocate cmd buf failed");
 		return -ENOMEM;
 	}
-
 	cmd_buf->size = sizeof(struct nic_rss_indirect_tbl);
-	err = hinic3_cmdq_detail_resp(hwdev, HINIC3_MOD_L2NIC,
+
+	if (((struct hinic3_hwdev *)hwdev)->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
+		nic_dev = ((struct hinic3_hwdev *)hwdev)->dev_handle;
+		nic_indir_tbl = (struct nic_rss_indirect_tbl *)cmd_buf->buf;
+		memset(nic_indir_tbl, 0, sizeof(struct nic_rss_indirect_tbl));
+		hinic3_mgmt_get_rss_id(hwdev, nic_dev->hwdev->qpool_qgrp_id, &rss_temp_id, &rss_node_id, &rss_inst_id);
+		nic_indir_tbl->dw0.bs.op_code = 1;
+		nic_indir_tbl->dw1.fdir_rss.rss_instance_id = rss_inst_id;
+		nic_indir_tbl->dw1.fdir_rss.rss_temp_id = rss_temp_id;
+		nic_indir_tbl->dw1.fdir_rss.rss_node_id = rss_node_id;
+
+		nic_indir_tbl->dw0.value = cpu_to_be32(nic_indir_tbl->dw0.value);
+		nic_indir_tbl->dw1.value = cpu_to_be32(nic_indir_tbl->dw1.value);
+
+		err = hinic3_rss_get_indir_tbl_qpool(nic_indir_tbl, nic_dev->fd);
+	} else {
+		err = hinic3_cmdq_detail_resp(hwdev, HINIC3_MOD_L2NIC,
 				      HINIC3_UCODE_CMD_GET_RSS_INDIR_TABLE,
 				      cmd_buf, cmd_buf, 0);
+	}
 	if (err) {
 		PMD_DRV_LOG(ERR, "Get rss indir table failed");
 		hinic3_free_cmd_buf(cmd_buf);
@@ -1102,6 +1193,11 @@ int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table, u32 indir_table_size
 	}
 
 	indir_tbl = (u16 *)cmd_buf->buf;
+	if (indir_tbl == NULL) {
+		PMD_DRV_LOG(ERR, "Get rss indir table failed, cmd_buf buf is null.");
+		hinic3_free_cmd_buf(cmd_buf);
+		return err;
+	}
 	for (i = 0; i < indir_table_size; i++)
 		indir_table[i] = *(indir_tbl + i);
 
@@ -1149,6 +1245,99 @@ int hinic3_rss_set_indir_tbl(void *hwdev, const u32 *indir_table, u32 indir_tabl
 	}
 
 	hinic3_free_cmd_buf(cmd_buf);
+	return err;
+}
+
+int hinic3_rss_set_indir_tbl_qpool(void *hwdev, const u32 *indir_table, u32 indir_table_size)
+{
+	struct drv_cmd_rss_indir_tbl cmd_indir_tbl = {0};
+	struct msg_module msg_to_kernel = {0};
+	struct nic_rss_indirect_tbl *indir_tbl = &(cmd_indir_tbl.rss_indir);
+	u32 i;
+	int err, fd;
+	int in_size = sizeof(struct drv_cmd_rss_indir_tbl);
+	int out_size = sizeof(struct drv_cmd_rss_indir_tbl);
+
+	if (!hwdev || !indir_table)
+		return -EINVAL;
+
+	struct rte_eth_dev * eth_dev = (struct rte_eth_dev *)(((struct hinic3_hwdev *)hwdev)->eth_dev);
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
+
+	indir_tbl->dw0.bs.qgrp_id = hinic3_global_func_id(nic_dev->hwdev);
+
+	for (i = 0; i < indir_table_size; i++)
+		indir_tbl->entry[i] = (u16)(*(indir_table + i));
+
+	rte_mb();
+
+	fd = nic_dev->fd;
+	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NIC_DRIVER, SET_RSS_INDIR_TBL, in_size, out_size,
+		&cmd_indir_tbl, &cmd_indir_tbl);
+
+	err = ioctl(fd, 0, &msg_to_kernel);
+	if (err < 0) {
+		PMD_DRV_LOG(ERR, "Set qpool indir table error: %d.", err);
+		return -1;
+	}
+	return err;
+}
+
+#define NIC_RSS_CONTEXT_CMD_RSS_QUEUE 1
+
+static int hinic3_cmdq_set_rss_type_ioctl(struct hinic3_nic_dev *nic_dev, struct hinic3_rss_type rss_type)
+{
+	struct msg_module msg_to_kernel = {0};
+	int err;
+	struct nic_rss_context_tbl *ctx_tbl = NULL;
+	struct hinic3_cmd_buf *cmd_buf = NULL;
+	struct hinic3_hwdev *hwdev = NULL;
+	u32 ctx = 0;
+
+	if (!nic_dev->hwdev)
+		return -EINVAL;
+	hwdev = nic_dev->hwdev;
+
+	cmd_buf = hinic3_alloc_cmd_buf(hwdev);
+	if (!cmd_buf) {
+		PMD_DRV_LOG(ERR, "Allocate cmd buf failed");
+		return -ENOMEM;
+	}
+
+	ctx |= HINIC3_RSS_TYPE_SET(1, VALID) |
+	       HINIC3_RSS_TYPE_SET(rss_type.ipv4, IPV4) |
+	       HINIC3_RSS_TYPE_SET(rss_type.ipv6, IPV6) |
+	       HINIC3_RSS_TYPE_SET(rss_type.ipv6_ext, IPV6_EXT) |
+	       HINIC3_RSS_TYPE_SET(rss_type.tcp_ipv4, TCP_IPV4) |
+	       HINIC3_RSS_TYPE_SET(rss_type.tcp_ipv6, TCP_IPV6) |
+	       HINIC3_RSS_TYPE_SET(rss_type.tcp_ipv6_ext, TCP_IPV6_EXT) |
+	       HINIC3_RSS_TYPE_SET(rss_type.udp_ipv4, UDP_IPV4) |
+	       HINIC3_RSS_TYPE_SET(rss_type.udp_ipv6, UDP_IPV6);
+	cmd_buf->size = sizeof(struct nic_rss_context_tbl);
+	ctx_tbl = (struct nic_rss_context_tbl *)cmd_buf->buf;
+	memset(ctx_tbl, 0, sizeof(*ctx_tbl));
+	rte_mb();
+
+	ctx_tbl->q_grp_id = cpu_to_be16(hwdev->qpool_qgrp_id - 2048);
+	ctx_tbl->cmd_type = cpu_to_be16(NIC_RSS_CONTEXT_CMD_RSS_QUEUE);
+	ctx_tbl->ctx = cpu_to_be32(ctx);
+
+	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NPU, 0,
+			sizeof(struct nic_rss_context_tbl),
+			sizeof(struct nic_rss_context_tbl),
+			ctx_tbl, ctx_tbl);
+	msg_to_kernel.npu_cmd.direct_resp = 1;
+	msg_to_kernel.npu_cmd.mod = HINIC3_MOD_L2NIC;
+	msg_to_kernel.npu_cmd.cmd = HINIC3_UCODE_CMD_SET_RSS_CONTEXT_TABLE;
+	msg_to_kernel.npu_cmd.ack_type = HINIC3_ACK_TYPE_CMDQ;
+
+	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
+	if (err < 0)
+		PMD_DRV_LOG(ERR, "Set qpool rss type ctx error: %d.", err);
+
+
+	hinic3_free_cmd_buf(cmd_buf);
+
 	return err;
 }
 
@@ -1235,11 +1424,18 @@ static int hinic3_mgmt_set_rss_type(void *hwdev, struct hinic3_rss_type rss_type
 
 int hinic3_set_rss_type(void *hwdev, struct hinic3_rss_type rss_type)
 {
+	struct hinic3_nic_dev *nic_dev = ((struct hinic3_hwdev *)hwdev)->dev_handle;
 	int err;
+
+	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
+		return hinic3_cmdq_set_rss_type_ioctl(nic_dev, rss_type);
+	}
+
 	err = hinic3_mgmt_set_rss_type(hwdev, rss_type);
-	if (err == HINIC3_MGMT_CMD_UNSUPPORTED)
-		err = hinic3_cmdq_set_rss_type(hwdev, rss_type);
-	return err;
+	if (err != HINIC3_MGMT_CMD_UNSUPPORTED)
+		return err;
+
+	return hinic3_cmdq_set_rss_type(hwdev, rss_type);
 }
 
 int hinic3_get_rss_type(void *hwdev, struct hinic3_rss_type *rss_type)
@@ -1252,7 +1448,12 @@ int hinic3_get_rss_type(void *hwdev, struct hinic3_rss_type *rss_type)
 		return -EINVAL;
 
 	memset(&ctx_tbl, 0, sizeof(struct hinic3_rss_context_table));
-	ctx_tbl.func_id = hinic3_global_func_id(hwdev);
+
+	if (((struct hinic3_hwdev *)hwdev)->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
+		ctx_tbl.func_id = ((struct hinic3_hwdev *)hwdev)->qpool_qgrp_id;
+	} else {
+		ctx_tbl.func_id = hinic3_global_func_id(hwdev);
+	}
 
 	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_GET_RSS_CTX_TBL,
 				     &ctx_tbl, sizeof(ctx_tbl),
@@ -1283,7 +1484,13 @@ static int hinic3_rss_cfg_hash_engine(void *hwdev, u8 opcode, u8 *type)
 		return -EINVAL;
 
 	memset(&hash_type, 0, sizeof(struct hinic3_cmd_rss_engine_type));
-	hash_type.func_id = hinic3_global_func_id(hwdev);
+
+	if (((struct hinic3_hwdev *)hwdev)->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
+		hash_type.func_id = ((struct hinic3_hwdev *)hwdev)->qpool_qgrp_id;
+	} else {
+		hash_type.func_id = hinic3_global_func_id(hwdev);
+	}
+
 	hash_type.opcode = opcode;
 	if (opcode == HINIC3_CMD_OP_SET)
 		hash_type.hash_engine = *type;
@@ -1330,6 +1537,9 @@ int hinic3_rss_cfg(void *hwdev, u8 rss_en, u8 tc_num, u8 *prio_tc)
 	/* Ucode requires number of TC should be power of 2 */
 	if (!hwdev || !prio_tc || (tc_num & (tc_num - 1)))
 		return -EINVAL;
+
+	if (((struct hinic3_hwdev *)hwdev)->qinfo_type == HINIC3_QINFO_TYPE_QPOOL)
+		return 0;
 
 	memset(&rss_cfg, 0, sizeof(struct hinic3_cmd_rss_config));
 	rss_cfg.func_id = hinic3_global_func_id(hwdev);
@@ -1403,7 +1613,7 @@ int hinic3_set_fdir_ethertype_filter(void *hwdev, u8 pkt_type, struct rte_eth_et
 	return 0;
 }
 
-int hinic3_add_tcam_rule(void *hwdev, struct hinic3_tcam_cfg_rule *tcam_rule, u8 tcam_rule_type, bool is_hairpin)
+int hinic3_add_tcam_rule(void *hwdev, struct hinic3_tcam_cfg_rule *tcam_rule, u8 tcam_rule_type)
 {
 	struct hinic3_fdir_add_rule tcam_cmd;
 	u16 out_size = sizeof(tcam_cmd);
@@ -1419,14 +1629,12 @@ int hinic3_add_tcam_rule(void *hwdev, struct hinic3_tcam_cfg_rule *tcam_rule, u8
 
 	memset(&tcam_cmd, 0, sizeof(struct hinic3_fdir_add_rule));
 	tcam_cmd.func_id = hinic3_global_func_id(hwdev);
-	if (is_hairpin)
-		tcam_cmd.bifur_rss_en |= HAIRPIN_FLAG;
 
 #ifdef HINIC3_TRAFFIC_BIFUR
 	/* Process of enabling group ext_info in the MPU */
 	u8 bifur_en, iso_en;
 
-	if (hinic3_get_bifur_enable(hwdev, &bifur_en, &iso_en) != 0)
+	if (hinic3_get_bifur_enable(hwdev, &bifur_en, &iso_en, 0) != 0)
 		PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable status failed.");
 
 	if (bifur_en)
@@ -1451,7 +1659,7 @@ int hinic3_add_tcam_rule(void *hwdev, struct hinic3_tcam_cfg_rule *tcam_rule, u8
 
 int hinic3_del_tcam_rule(void *hwdev, u32 index, u8 tcam_rule_type)
 {
-	struct hinic3_fdir_del_rule tcam_cmd;
+	struct hinic3_fdir_del_rule tcam_cmd = {0};
 	u16 out_size = sizeof(tcam_cmd);
 	int err;
 
@@ -1463,8 +1671,11 @@ int hinic3_del_tcam_rule(void *hwdev, u32 index, u8 tcam_rule_type)
 		return -EINVAL;
 	}
 
-	memset(&tcam_cmd, 0, sizeof(struct hinic3_fdir_del_rule));
-	tcam_cmd.func_id = hinic3_global_func_id(hwdev);
+	if (((struct hinic3_hwdev *)hwdev)->qinfo_type == HINIC3_QINFO_TYPE_QPOOL)
+		tcam_cmd.func_id = ((struct hinic3_hwdev *)hwdev)->qpool_qgrp_id;
+	else
+		tcam_cmd.func_id = hinic3_global_func_id(hwdev);
+
 	tcam_cmd.index_start = index;
 	tcam_cmd.index_num = 1;
 	tcam_cmd.type = tcam_rule_type;
@@ -1484,15 +1695,17 @@ int hinic3_del_tcam_rule(void *hwdev, u32 index, u8 tcam_rule_type)
 
 static int hinic3_cfg_tcam_block(void *hwdev, u8 alloc_en, u16 *index)
 {
-	struct hinic3_tcam_block tcam_block_info;
+	struct hinic3_tcam_block tcam_block_info = {0};
 	u16 out_size = sizeof(tcam_block_info);
 	int err;
 
 	if (!hwdev)
 		return -EINVAL;
 
-	memset(&tcam_block_info, 0, sizeof(struct hinic3_tcam_block));
-	tcam_block_info.func_id = hinic3_global_func_id(hwdev);
+	if (((struct hinic3_hwdev *)hwdev)->qinfo_type == HINIC3_QINFO_TYPE_QPOOL)
+		tcam_block_info.func_id = ((struct hinic3_hwdev *)hwdev)->qpool_qgrp_id;
+	else
+		tcam_block_info.func_id = hinic3_global_func_id(hwdev);
 	tcam_block_info.alloc_en = alloc_en;
 	tcam_block_info.tcam_type = HINIC3_TCAM_BLOCK_NORMAL_TYPE;
 	tcam_block_info.tcam_block_index = *index;
@@ -1527,15 +1740,17 @@ int hinic3_free_tcam_block(void *hwdev, u16 *index)
 
 int hinic3_flush_tcam_rule(void *hwdev)
 {
-	struct hinic3_flush_tcam_rules tcam_flush;
+	struct hinic3_flush_tcam_rules tcam_flush = {0};
 	u16 out_size = sizeof(tcam_flush);
 	int err;
 
 	if (!hwdev)
 		return -EINVAL;
 
-	memset(&tcam_flush, 0, sizeof(struct hinic3_flush_tcam_rules));
-	tcam_flush.func_id = hinic3_global_func_id(hwdev);
+	if (((struct hinic3_hwdev *)hwdev)->qinfo_type == HINIC3_QINFO_TYPE_QPOOL)
+		tcam_flush.func_id = ((struct hinic3_hwdev*)hwdev)->qpool_qgrp_id;
+	else
+		tcam_flush.func_id = hinic3_global_func_id(hwdev);
 
 	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_FLUSH_TCAM,
 				     &tcam_flush,
@@ -1565,7 +1780,11 @@ int hinic3_set_fdir_tcam_rule_filter(void *hwdev, bool enable)
 
 	memset(&port_tcam_cmd, 0, sizeof(port_tcam_cmd));
 	port_tcam_cmd.func_id = hinic3_global_func_id(hwdev);
-	port_tcam_cmd.tcam_enable = (u8)enable;
+
+	if (((struct hinic3_hwdev *)hwdev)->qinfo_type == HINIC3_QINFO_TYPE_QPOOL)
+		port_tcam_cmd.tcam_enable = 1;
+	else
+		port_tcam_cmd.tcam_enable = (u8)enable;
 
 	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_ENABLE_TCAM,
 				     &port_tcam_cmd, sizeof(port_tcam_cmd),
@@ -1626,8 +1845,10 @@ static int _mag_msg_to_mgmt_sync(void *hwdev, u16 cmd, void *buf_in,
 				 u16 in_size, void *buf_out, u16 *out_size)
 {
 	u32 i, cmd_cnt = ARRAY_LEN(vf_mag_cmd_handler);
+	struct hinic3_nic_dev *nic_dev = ((struct hinic3_hwdev *)hwdev)->dev_handle;
 
-	if (hinic3_func_type(hwdev) == TYPE_VF) {
+	if (nic_dev->hwdev->qinfo_type != HINIC3_QINFO_TYPE_QPOOL &&
+	    hinic3_func_type(hwdev) == TYPE_VF) {
 		for (i = 0; i < cmd_cnt; i++) {
 			if (cmd == vf_mag_cmd_handler[i].cmd)
 				return hinic3_mbox_to_pf(hwdev, HINIC3_MOD_HILINK,
@@ -1842,7 +2063,7 @@ hinic3_set_tm_hierarchy_do_commit(void *hwdev, u8 *cos_tc, u8 *tc_bw,
 }
 
 int
-hinic3_get_bifur_enable(void *hwdev, u8 *bifur_en, u8 *iso_en)
+hinic3_get_bifur_enable(void *hwdev, u8 *bifur_en, u8 *iso_en, u8 *bifur_type)
 {
 	struct hinic3_port_flow_bifur_en_cmd bifur_cmd;
 	u16 out_size = sizeof(bifur_cmd);
@@ -1869,7 +2090,31 @@ hinic3_get_bifur_enable(void *hwdev, u8 *bifur_en, u8 *iso_en)
 	if (iso_en != NULL)
 		*iso_en	  = bifur_cmd.iso_en;
 
+	if (bifur_type != NULL)
+		*bifur_type	  = bifur_cmd.flow_bifur_type;
+	
 	return 0;
+}
+
+static int hinic3_cmdq_qpool(struct nic_rss_context_tbl *ctx_tbl, int fd)
+{
+	struct msg_module msg_to_kernel = {0};
+	int err;
+
+	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NPU, 0,
+			sizeof(struct nic_rss_context_tbl),
+			sizeof(struct nic_rss_context_tbl),
+			ctx_tbl, ctx_tbl);
+	msg_to_kernel.npu_cmd.direct_resp = 1;
+	msg_to_kernel.npu_cmd.mod = HINIC3_MOD_L2NIC;
+	msg_to_kernel.npu_cmd.cmd = HINIC3_UCODE_CMD_SET_RSS_CONTEXT_TABLE;
+	msg_to_kernel.npu_cmd.ack_type = HINIC3_ACK_TYPE_CMDQ;
+
+	err = ioctl(fd, 0, &msg_to_kernel);
+	if (err < 0)
+		PMD_DRV_LOG(ERR, "Set qpool rss queue type err: %d.", err);
+
+	return err;
 }
 
 int
@@ -1877,9 +2122,10 @@ hinic3_cmdq_set_rss_queue_type(void *hwdev, struct hinic3_rss_type rss_type, u16
 {
 	struct nic_rss_context_tbl *ctx_tbl = NULL;
 	struct hinic3_cmd_buf *cmd_buf = NULL;
+	struct hinic3_nic_dev *nic_dev = NULL;
 	u32 ctx = 0;
 	u64 out_param = 0;
-	int err;
+	int err = 0;
 
 	if (!hwdev)
 		return -EINVAL;
@@ -1897,19 +2143,26 @@ hinic3_cmdq_set_rss_queue_type(void *hwdev, struct hinic3_rss_type rss_type, u16
 			HINIC3_RSS_TYPE_SET(rss_type.tcp_ipv6, TCP_IPV6) |
 			HINIC3_RSS_TYPE_SET(rss_type.udp_ipv4, UDP_IPV4) |
 			HINIC3_RSS_TYPE_SET(rss_type.udp_ipv6, UDP_IPV6);
-
 	cmd_buf->size = sizeof(struct nic_rss_context_tbl);
 	ctx_tbl = (struct nic_rss_context_tbl *)cmd_buf->buf;
 	memset(ctx_tbl, 0, sizeof(*ctx_tbl));
 	rte_mb();
-	ctx_tbl->ctx = cpu_to_be32(ctx);
-	ctx_tbl->q_grp_id = cpu_to_be16(q_grp_id);
-	ctx_tbl->cmd_type = cpu_to_be16(cmd_type);
 
-	/* Cfg the RSS context table by command queue */
-	err = hinic3_cmdq_direct_resp(hwdev, HINIC3_MOD_L2NIC,
-						HINIC3_UCODE_CMD_SET_RSS_CONTEXT_TABLE,
-						cmd_buf, &out_param, 0);
+	ctx_tbl->ctx = cpu_to_be32(ctx);
+
+	if (((struct hinic3_hwdev *)hwdev)->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
+		nic_dev = ((struct hinic3_hwdev *)hwdev)->dev_handle;
+		ctx_tbl->q_grp_id = nic_dev->hwdev->qpool_qgrp_id;
+		ctx_tbl->cmd_type = NIC_RSS_CONTEXT_CMD_RSS_QUEUE;
+		err = hinic3_cmdq_qpool(ctx_tbl, nic_dev->fd);
+	} else {
+		ctx_tbl->q_grp_id = cpu_to_be16(q_grp_id);
+		ctx_tbl->cmd_type = cpu_to_be16(cmd_type);
+		/* Cfg the RSS context table by command queue */
+		err = hinic3_cmdq_direct_resp(hwdev, HINIC3_MOD_L2NIC,
+					HINIC3_UCODE_CMD_SET_RSS_CONTEXT_TABLE,
+					cmd_buf, &out_param, 0);
+	}
 
 	hinic3_free_cmd_buf(cmd_buf);
 
@@ -1924,16 +2177,16 @@ hinic3_cmdq_set_rss_queue_type(void *hwdev, struct hinic3_rss_type rss_type, u16
 int
 hinic3_mgmt_cfg_qgrp_id(void *hwdev, u8 opcode, u16 *q_grp_id)
 {
-	struct nic_mpu_sub_msg_extend msg_extend;
-	struct hinic3_cmd_cfg_qgrp_id cfg_qgrp;
+	struct nic_mpu_sub_msg_extend msg_extend = {0};
+	struct hinic3_cmd_cfg_qgrp_id cfg_qgrp = {0};
 	u16 out_size = sizeof(msg_extend);
-	int err;
+	int err = 0;
 
 	if (!hwdev)
 		return -EINVAL;
 
-	memset(&msg_extend, 0, sizeof(msg_extend));
-	memset(&cfg_qgrp, 0, sizeof(cfg_qgrp));
+	if (((struct hinic3_hwdev *)hwdev)->qinfo_type == HINIC3_QINFO_TYPE_QPOOL)
+		return 0;
 
 	if (opcode == 0)
 		cfg_qgrp.q_grp_id = *q_grp_id;
@@ -2017,8 +2270,9 @@ hinic3_rss_queue_set_indir_tbl(void *hwdev, const u32 *indir_table, u32 indir_ta
 	cmd_buf->size = sizeof(struct nic_rss_indirect_tbl);
 	indir_tbl = (struct nic_rss_indirect_tbl *)cmd_buf->buf;
 	memset(indir_tbl, 0, sizeof(*indir_tbl));
-	indir_tbl->dw0.bs.qgrp_id = cpu_to_be16(q_grp_id - HINIC3_QGRP_START_INDEX);
+	indir_tbl->dw0.bs.qgrp_id = q_grp_id - HINIC3_QGRP_START_INDEX;
 	indir_tbl->dw0.bs.op_code = 1;
+	indir_tbl->dw0.value = cpu_to_be32(indir_tbl->dw0.value);
 
 	for (i = 0; i < indir_table_size; i++)
 		indir_tbl->entry[i] = (u16)(*(indir_table + i));
@@ -2038,6 +2292,253 @@ hinic3_rss_queue_set_indir_tbl(void *hwdev, const u32 *indir_table, u32 indir_ta
 	}
 
 	hinic3_free_cmd_buf(cmd_buf);
+
+	return err;
+}
+
+int hinic3_fdir_alloc_sec_tcam_block(void *hwdev, u8 key_width, u16 *index)
+{
+	struct nic_cmd_fdir_ext cmd_buf = {0};
+	struct hinic3_tcam_block tcam_block_info = {0};
+	u16 out_size = sizeof(cmd_buf);
+	int err;
+
+	if (!hwdev)
+		return -EINVAL;
+
+	tcam_block_info.func_id = hinic3_global_func_id(hwdev);
+	tcam_block_info.alloc_en = HINIC3_TCAM_BLOCK_ENABLE;
+	tcam_block_info.tcam_type = HINIC3_TCAM_BLOCK_NORMAL_TYPE;
+
+	rte_memcpy(&cmd_buf.data.alloc_block, &tcam_block_info, sizeof(tcam_block_info));
+	cmd_buf.key_width = key_width;
+	cmd_buf.op_code = TCAM_EXTEND_OPCODE_ALLOC_BLOCK;
+
+	err = l2nic_msg_to_mgmt_sync(hwdev,
+				     HINIC3_NIC_CMD_FDIR_EXT,
+				     &cmd_buf, sizeof(cmd_buf),
+				     &cmd_buf, &out_size);
+	if (err || (!out_size) || cmd_buf.msg_head.status) {
+		PMD_DRV_LOG(ERR,
+			    "Set tcam block failed, err: %d, status: 0x%x, out size: 0x%x",
+			    err, cmd_buf.msg_head.status,
+			    out_size);
+		return -EIO;
+	}
+
+	if (index != NULL)
+		*index = cmd_buf.data.alloc_block.tcam_block_index;
+
+	return 0;
+}
+
+int hinic3_fdir_sec_tcam_block_free(void *hwdev, u8 key_width, u16 *index)
+{
+	struct nic_cmd_fdir_ext cmd_buf = {0};
+	struct hinic3_tcam_block tcam_block_info = {0};
+	u16 out_size = sizeof(cmd_buf);
+	int err;
+
+	if (!hwdev)
+		return -EINVAL;
+
+	tcam_block_info.func_id = hinic3_global_func_id(hwdev);
+	tcam_block_info.tcam_type = HINIC3_TCAM_BLOCK_NORMAL_TYPE;
+	tcam_block_info.tcam_block_index = *index;
+	tcam_block_info.alloc_en = HINIC3_TCAM_BLOCK_DISABLE;
+
+	rte_memcpy(&cmd_buf.data.free_block, &tcam_block_info, sizeof(tcam_block_info));
+	cmd_buf.key_width = key_width;
+	cmd_buf.op_code = TCAM_EXTEND_OPCODE_FREE_BLOCK;
+
+	err = l2nic_msg_to_mgmt_sync(hwdev,
+				     HINIC3_NIC_CMD_FDIR_EXT,
+				     &cmd_buf, sizeof(cmd_buf),
+				     &cmd_buf, &out_size);
+	if (err || (!out_size) || cmd_buf.msg_head.status) {
+		PMD_DRV_LOG(ERR,
+			    "Set tcam block failed, err: %d, status: 0x%x, out size: 0x%x",
+			    err, cmd_buf.msg_head.status,
+			    out_size);
+		return -EIO;
+	}
+
+	return 0;
+}
+
+int hinic3_fdir_add_sec_tcam_rule(void *hwdev, struct hinic3_ext_tcam_cfg_rule *tcam_rule,
+				  u8 tcam_rule_type, bool is_hairpin, u8 key_width)
+{
+	struct nic_cmd_fdir_ext cmd_buf = {0};
+	struct hinic3_ext_fdir_add_rule tcam_cmd = {0};
+	u16 out_size = sizeof(cmd_buf);
+	int err;
+
+	if (!hwdev || !tcam_rule)
+		return -EINVAL;
+
+	if (tcam_rule->index >= HINIC3_MAX_TCAM_RULES_NUM) {
+		PMD_DRV_LOG(ERR, "Tcam rules num to add is invalid");
+		return -EINVAL;
+	}
+
+	tcam_cmd.func_id = hinic3_global_func_id(hwdev);
+	if (is_hairpin)
+		tcam_cmd.bifur_rss_en |= HAIRPIN_FLAG;
+
+	rte_memcpy((void *)&tcam_cmd.rule, (void *)tcam_rule,
+		sizeof(struct hinic3_ext_tcam_cfg_rule));
+	tcam_cmd.type = tcam_rule_type;
+
+	rte_memcpy(&cmd_buf.data.tcam_add, &tcam_cmd, sizeof(tcam_cmd));
+	cmd_buf.key_width = key_width;
+	cmd_buf.op_code = TCAM_EXTEND_OPCODE_ADD_RULE;
+
+
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_FDIR_EXT,
+				     &cmd_buf, sizeof(cmd_buf),
+				     &cmd_buf, &out_size);
+	if (err || cmd_buf.msg_head.status || !out_size) {
+		PMD_DRV_LOG(ERR,
+			    "Add tcam rule failed, err: %d, status: 0x%x, out size: 0x%x",
+			    err, cmd_buf.msg_head.status, out_size);
+		return -EIO;
+	}
+
+	return 0;
+}
+
+int hinic3_fdir_set_fdir_sec_tcam_rule_filter(void *hwdev, bool enable)
+{
+	struct nic_cmd_fdir_ext cmd_buf = {0};
+	struct hinic3_port_tcam_info port_tcam_cmd = {0};
+	u16 out_size = sizeof(cmd_buf);
+	int err;
+
+	if (!hwdev)
+		return -EINVAL;
+
+	port_tcam_cmd.func_id = hinic3_global_func_id(hwdev);
+	port_tcam_cmd.tcam_enable = (u8)enable;
+
+	rte_memcpy(&cmd_buf.data.tcam_en, &port_tcam_cmd, sizeof(port_tcam_cmd));
+	cmd_buf.op_code = TCAM_EXTEND_OPCODE_ENABLE_TCAM;
+
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_FDIR_EXT,
+				     &cmd_buf, sizeof(cmd_buf),
+				     &cmd_buf, &out_size);
+	if ((cmd_buf.msg_head.status !=
+		HINIC3_MGMT_CMD_UNSUPPORTED &&
+		cmd_buf.msg_head.status) || err || !out_size) {
+		PMD_DRV_LOG(ERR, "Set fdir tcam filter failed, err: %d, "
+			    "status: 0x%x, out size: 0x%x, enable: 0x%x",
+			    err, cmd_buf.msg_head.status, out_size,
+			    enable);
+		return -EIO;
+	}
+
+	if (cmd_buf.msg_head.status == HINIC3_MGMT_CMD_UNSUPPORTED) {
+		err = HINIC3_MGMT_CMD_UNSUPPORTED;
+		PMD_DRV_LOG(ERR, "Fw doesn't support setting fdir tcam filter");
+	}
+
+	return err;
+}
+
+int hinic3_fdir_del_sec_tcam_rule(void *hwdev, u32 index, u8 tcam_rule_type,
+				  u8 key_width)
+{
+	struct nic_cmd_fdir_ext cmd_buf = {0};
+	struct hinic3_fdir_del_rule tcam_cmd = {0};
+	u16 out_size = sizeof(cmd_buf);
+	int err;
+
+	if (!hwdev)
+		return -EINVAL;
+
+	if (index >= HINIC3_MAX_TCAM_RULES_NUM) {
+		PMD_DRV_LOG(ERR, "Tcam rules num to del is invalid");
+		return -EINVAL;
+	}
+
+	tcam_cmd.func_id = hinic3_global_func_id(hwdev);
+	tcam_cmd.index_start = index;
+	tcam_cmd.index_num = 1;
+	tcam_cmd.type = tcam_rule_type;
+
+	rte_memcpy(&cmd_buf.data.tcam_del, &tcam_cmd, sizeof(tcam_cmd));
+	cmd_buf.key_width = key_width;
+	cmd_buf.op_code = TCAM_EXTEND_OPCODE_DEL_RULES;
+
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_FDIR_EXT,
+				     &cmd_buf, sizeof(cmd_buf),
+				     &cmd_buf, &out_size);
+	if (err || cmd_buf.msg_head.status || !out_size) {
+		PMD_DRV_LOG(ERR,
+			    "Del tcam rule failed, err: %d, status: 0x%x, out size: 0x%x",
+			    err, cmd_buf.msg_head.status, out_size);
+		return -EIO;
+	}
+
+	return 0;
+}
+
+int hinic3_fdir_flush_sec_tcam_rule(void *hwdev)
+{
+	struct nic_cmd_fdir_ext cmd_buf = {0};
+	struct hinic3_flush_tcam_rules tcam_flush = {0};
+	u16 out_size = sizeof(cmd_buf);
+	int err;
+
+	if (!hwdev)
+		return -EINVAL;
+
+	tcam_flush.func_id = hinic3_global_func_id(hwdev);
+
+	rte_memcpy(&cmd_buf.data.tcam_flush, &tcam_flush, sizeof(tcam_flush));
+	cmd_buf.op_code = TCAM_EXTEND_OPCODE_FLUSH_TCAM;
+
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_FDIR_EXT,
+				     &cmd_buf,
+				     sizeof(struct hinic3_flush_tcam_rules),
+				     &cmd_buf, &out_size);
+	if (cmd_buf.msg_head.status == HINIC3_MGMT_CMD_UNSUPPORTED) {
+		err = HINIC3_MGMT_CMD_UNSUPPORTED;
+		PMD_DRV_LOG(ERR, "Firmware/uP doesn't support flush tcam fdir");
+	} else if (err || (!out_size) || cmd_buf.msg_head.status) {
+		PMD_DRV_LOG(ERR,
+			    "Flush tcam fdir rules failed, err: %d, status: 0x%x, out size: 0x%x",
+			    err, cmd_buf.msg_head.status, out_size);
+		err = -EIO;
+	}
+
+	return err;
+}
+
+int hinic3_fdir_cfg_sec_tcam(void *hwdev, u8 *en)
+{
+	struct nic_cmd_fdir_ext cmd_buf = {0};
+	u16 out_size = sizeof(cmd_buf);
+	int err;
+
+	if (!hwdev)
+		return -EINVAL;
+
+	cmd_buf.op_code = TCAM_EXTEND_OPCODE_GET_FLAG;
+
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_FDIR_EXT,
+				     &cmd_buf,
+				     sizeof(struct hinic3_flush_tcam_rules),
+				     &cmd_buf, &out_size);
+	if (err || cmd_buf.msg_head.status || !out_size) {
+		PMD_DRV_LOG(ERR,
+			    "Flush tcam fdir rules failed, err: %d, status: 0x%x, out size: 0x%x",
+			    err, cmd_buf.msg_head.status, out_size);
+		err = -EIO;
+	}
+
+	if (en != NULL)
+		*en = cmd_buf.data.tcam_cfg.key_mode;
 
 	return err;
 }

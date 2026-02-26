@@ -2,6 +2,9 @@
  * Copyright(c) 2019 Huawei Technologies Co., Ltd
  */
 
+#include <fcntl.h>
+#include <sys/ioctl.h>
+#include "mml/hinic3_pmd_mml_lib.h"
 #include "hinic3_compat.h"
 #include "hinic3_pmd_hwdev.h"
 #include "hinic3_pmd_csr.h"
@@ -10,6 +13,7 @@
 #include "hinic3_pmd_eqs.h"
 #include "hinic3_pmd_hw_cfg.h"
 #include "hinic3_pmd_mbox.h"
+#include "hinic3_pmd_ethdev.h"
 #include "hinic3_pmd_nic_event.h"
 
 #define HINIC3_MBOX_INT_DST_FUNC_SHIFT				0
@@ -122,6 +126,19 @@ enum mbox_aeq_trig_type {
 	NOT_TRIGGER,
 	TRIGGER,
 };
+
+void fill_ioctl_msg(struct msg_module *msg, unsigned int module,
+	unsigned int msg_formate,
+	unsigned int in_buff_len, unsigned int out_buff_len,
+	void *in_buf, void *out_buf)
+{
+	msg->module = module;
+	msg->msg_formate = msg_formate;
+	msg->buf_in_size = in_buff_len;
+	msg->buf_out_size = out_buff_len;
+	msg->in_buf = in_buf;
+	msg->out_buf = out_buf;
+}
 
 static int send_mbox_to_func(struct hinic3_mbox *func_to_func,
 			     enum hinic3_mod_type mod, u16 cmd, void *msg,
@@ -933,6 +950,34 @@ static int hinic3_mbox_to_func_no_ack(struct hinic3_hwdev *hwdev, u16 func_idx,
 	return err;
 }
 
+int hinic3_send_mbox_to_kernel(struct hinic3_hwdev *hwdev,
+			enum hinic3_mod_type mod, u16 cmd, void *buf_in,
+			u16 in_size, void *buf_out, u16 *out_size,
+			enum module_name module, unsigned int msg_formate)
+{
+	struct msg_module msg_to_kernel = {0};
+	struct hinic3_nic_dev *nic_dev = hwdev->dev_handle;
+	int err;
+	int fd;
+
+	fill_ioctl_msg(&msg_to_kernel, module, msg_formate, in_size, *out_size,
+		buf_in, buf_out);
+
+	if (module == SEND_TO_MPU) {
+		msg_to_kernel.mpu_cmd.api_type = 1; /**< API_TYPE_MBOX */
+		msg_to_kernel.mpu_cmd.mod = mod;
+		msg_to_kernel.mpu_cmd.cmd = cmd;
+	}
+
+	fd = nic_dev->fd;
+	err = ioctl(fd, 0, &msg_to_kernel);
+	if (err < 0) {
+		return -1;
+	}
+
+	return 0;
+}
+
 int hinic3_send_mbox_to_mgmt(struct hinic3_hwdev *hwdev,
 			     enum hinic3_mod_type mod, u16 cmd, void *buf_in,
 			     u16 in_size, void *buf_out, u16 *out_size,
@@ -940,6 +985,13 @@ int hinic3_send_mbox_to_mgmt(struct hinic3_hwdev *hwdev,
 {
 	struct hinic3_mbox *func_to_func = hwdev->func_to_func;
 	int err;
+
+	enum module_name module;
+	if (hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
+		module = SEND_TO_MPU;
+		return hinic3_send_mbox_to_kernel(hwdev, mod, cmd, buf_in,
+					in_size, buf_out, out_size, module, 0);
+	}
 
 	err = mbox_func_params_valid(func_to_func, buf_in, in_size);
 	if (err)

@@ -278,6 +278,7 @@ struct hinic3_txq {
 	struct hinic3_nic_dev *nic_dev;
 
 	u16 q_id;
+	u16 local_qid;
 	u16 q_depth;
 	u16 q_mask;
 	u16 wqebb_size;
@@ -292,6 +293,7 @@ struct hinic3_txq {
 
 	struct rte_eth_hairpin_conf hairpin_conf;
 	bool is_hairpin;
+	bool multi_segs;
 
 	void *db_addr;
 

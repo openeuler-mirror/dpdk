@@ -210,6 +210,8 @@ int hinic3_start_all_sqs(struct rte_eth_dev *eth_dev)
 
 	for (i = 0; i < nic_dev->num_sqs; i++) {
 		txq = eth_dev->data->tx_queues[i];
+		if (txq == NULL || txq->is_hairpin)
+			continue;
 		HINIC3_SET_TXQ_STARTED(txq);
 		eth_dev->data->tx_queue_state[i] = RTE_ETH_QUEUE_STATE_STARTED;
 	}
@@ -315,9 +317,12 @@ void hinic3_free_txq_mbufs(struct hinic3_txq *txq)
 void hinic3_free_all_txq_mbufs(struct hinic3_nic_dev *nic_dev)
 {
 	u16 qid;
-
-	for (qid = 0; qid < nic_dev->num_sqs; qid++)
-		hinic3_free_txq_mbufs(nic_dev->txqs[qid]);
+	struct hinic3_txq *txq;
+	for (qid = 0; qid < nic_dev->num_sqs; qid++) {
+		txq = nic_dev->txqs[qid];
+		if (txq != NULL && !txq->is_hairpin)
+			hinic3_free_txq_mbufs(nic_dev->txqs[qid]);
+	}
 }
 
 int hinic3_tx_done_cleanup(void *txq, u32 free_cnt)
@@ -1269,10 +1274,46 @@ static int hinic3_mbuf_dma_map_sge(struct hinic3_txq *txq,
 	return 0;
 }
 
+static int hinic3_mbuf_dma_map_single(struct hinic3_txq *txq, 
+					struct rte_mbuf *mbuf, 
+					struct hinic3_sq_wqe_combo *wqe_combo)
+{
+	struct hinic3_sq_wqe_desc *wqe_desc = wqe_combo->hdr;
+	rte_iova_t dma_addr;
+
+	if (unlikely(mbuf == NULL)) {
+		txq->txq_stats.mbuf_null++;
+		return -EINVAL;
+	}
+
+	if (unlikely(mbuf->data_len == 0)) {
+		txq->txq_stats.sge_len0++;
+		return -EINVAL;
+	}
+
+	dma_addr = rte_mbuf_data_iova(mbuf);
+	wqe_desc->hi_addr = hinic3_hw_be32(upper_32_bits(dma_addr));
+	wqe_desc->lo_addr = hinic3_hw_be32(lower_32_bits(dma_addr));
+	wqe_desc->ctrl_len = mbuf->data_len;
+	wqe_desc->queue_info = 0;
+
+	return 0;
+}
+
 static void hinic3_prepare_sq_ctrl(struct hinic3_sq_wqe_combo *wqe_combo,
 				   struct hinic3_wqe_info *wqe_info)
 {
 	struct hinic3_sq_wqe_desc *wqe_desc = wqe_combo->hdr;
+
+	if (wqe_combo->wqe_type == SQ_WQE_COMPACT_TYPE) {
+		wqe_desc->ctrl_len |= SQ_CTRL_SET(SQ_NORMAL_WQE, DATA_FORMAT) |
+				SQ_CTRL_SET(wqe_combo->wqe_type, EXTENDED) |
+				SQ_CTRL_SET(wqe_info->owner, OWNER);
+		wqe_desc->ctrl_len = hinic3_hw_be32(wqe_desc->ctrl_len);
+		/* Compact wqe queue_info will transfer to ucode */
+		wqe_desc->queue_info = 0;
+		return;
+	}
 
 	wqe_desc->ctrl_len |= SQ_CTRL_SET(wqe_info->sge_cnt, BUFDESC_NUM) |
 			SQ_CTRL_SET(wqe_combo->task_type, TASKSECT_LEN) |
@@ -1379,8 +1420,10 @@ u16 hinic3_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, u16 nb_pkts)
 		}
 
 		/* Fill sq_wqe buf_desc and bd_desc */
-		err = hinic3_mbuf_dma_map_sge(txq, mbuf_pkt, &wqe_combo,
-					      &wqe_info);
+		if (txq->multi_segs || wqe_info.sge_cnt > 1)
+			err = hinic3_mbuf_dma_map_sge(txq, mbuf_pkt, &wqe_combo, &wqe_info);
+		else
+			err = hinic3_mbuf_dma_map_single(txq, mbuf_pkt, &wqe_combo);
 		if (err) {
 			hinic3_put_sq_wqe(txq, &wqe_info);
 			txq->txq_stats.off_errs++;
@@ -1404,7 +1447,7 @@ u16 hinic3_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, u16 nb_pkts)
 
 	/* Update txq stats */
 	if (nb_tx) {
-		hinic3_write_db(txq->db_addr, txq->q_id, (int)(txq->cos),
+		hinic3_write_db(txq->db_addr, txq->local_qid, (int)(txq->cos),
 				SQ_CFLAG_DP,
 				MASKED_QUEUE_IDX(txq, txq->prod_idx));
 		txq->txq_stats.packets += nb_tx;
@@ -1426,7 +1469,7 @@ u16 hinic3_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, u16 nb_pkts)
 
 int hinic3_stop_sq(struct hinic3_txq *txq)
 {
-	if (txq->is_hairpin)
+	if (txq == NULL || txq->is_hairpin)
 		return 0;
 	struct hinic3_nic_dev *nic_dev = txq->nic_dev;
 	unsigned long timeout;
@@ -1475,21 +1518,28 @@ hinic3_tx_burst_mode_get(struct rte_eth_dev *dev,
 						 uint16_t tx_queue_id,
 						 struct rte_eth_burst_mode *mode)
 {
-	(void)tx_queue_id;
 	uint16_t tx_offloads = dev->data->dev_conf.txmode.offloads;
+	struct hinic3_nic_dev *nic_dev;
+	struct hinic3_txq *txq = NULL;
+
+	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+	txq = nic_dev->txqs[tx_queue_id];
+	if (!txq) {
+		return -EINVAL;
+	}
 
 	snprintf(mode->info, sizeof(mode->info),
-		"Scalar%s%s%s%s%s%s%s%s%s%s",
-		(tx_offloads & DEV_TX_OFFLOAD_MULTI_SEGS) ? " + MULTI" : " + MULTI",
-		(tx_offloads & DEV_TX_OFFLOAD_TCP_TSO) ? " + TSO" : " + TSO",
-		(tx_offloads & DEV_TX_OFFLOAD_IPV4_CKSUM) ? " + IPV4_CKSUM" : " + IPV4_CKSUM",
-		(tx_offloads & DEV_TX_OFFLOAD_VLAN_INSERT) ? " + VLAN_INSERT" : " + VLAN_INSERT",
-		(tx_offloads & DEV_TX_OFFLOAD_UDP_CKSUM) ? " + UDP_CKSUM" : " + UDP_CKSUM",
-		(tx_offloads & DEV_TX_OFFLOAD_TCP_CKSUM) ? " + TCP_CKSUM" : " + TCP_CKSUM",
-		(tx_offloads & DEV_TX_OFFLOAD_SCTP_CKSUM) ? " + SCTP_CKSUM" : " + SCTP_CKSUM",
-		(tx_offloads & DEV_TX_OFFLOAD_OUTER_IPV4_CKSUM) ? " + OUTER_IPV4_CKSUM" : " + OUTER_IPV4_CKSUM",
-		(tx_offloads & DEV_TX_OFFLOAD_VXLAN_TNL_TSO) ? " + VXLAN_TNL_TSO" : " + VXLAN_TNL_TSO",
-		(tx_offloads & DEV_TX_OFFLOAD_QINQ_INSERT) ? " + QINQ_INSERT" : " + QINQ_INSERT");
+		"Scalar%s%s%s%s%s",
+ 		(tx_offloads & DEV_TX_OFFLOAD_MULTI_SEGS) ? " + MULTI" : "",
+		(tx_offloads & (DEV_TX_OFFLOAD_TCP_TSO |
+				DEV_TX_OFFLOAD_VXLAN_TNL_TSO)) ? " + TSO" : "",
+		(tx_offloads & (DEV_TX_OFFLOAD_IPV4_CKSUM |
+				DEV_TX_OFFLOAD_UDP_CKSUM |
+				DEV_TX_OFFLOAD_TCP_CKSUM |
+				DEV_TX_OFFLOAD_SCTP_CKSUM |
+				DEV_TX_OFFLOAD_OUTER_IPV4_CKSUM)) ? " + CKSUM" : "",
+		(tx_offloads & DEV_TX_OFFLOAD_VLAN_INSERT) ? " + VLAN" : "",
+		(tx_offloads & DEV_TX_OFFLOAD_QINQ_INSERT) ? " + QINQ" : "");
 
 	return 0;
 }

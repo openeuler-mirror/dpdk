@@ -27,7 +27,9 @@
 #ifdef HINIC3_TRAFFIC_BIFUR
 #include "hinic3_pmd_bifur.h"
 #endif
+#include "hinic3_pmd_flow_sec.h"
 #include "hinic3_pmd_fdir.h"
+#include "hinic3_pmd_rx.h"
 
 #define HINIC3_UINT1_MAX          0x1
 #define HINIC3_UINT2_MAX          0x3
@@ -56,17 +58,33 @@ static void tcam_translate_key_x(u8 *key_x, u8 *key_y, u8 *mask, u8 len)
 		key_x[idx] = key_y[idx] ^ mask[idx];
 }
 
-static void tcam_key_calculate(struct hinic3_tcam_key *tcam_key,
-			struct hinic3_tcam_cfg_rule *fdir_tcam_rule)
+void tcam_key_calculate(struct hinic3_tcam_key *tcam_key, void *fdir_tcam_rule, u8 key_len)
 {
-	tcam_translate_key_y(fdir_tcam_rule->key.y,
+	if (key_len == HINIC3_TCAM_FLOW_KEY_SIZE) {
+		struct hinic3_tcam_cfg_rule *tcam_rule =
+			(struct hinic3_tcam_cfg_rule *)fdir_tcam_rule;
+
+		tcam_translate_key_y(tcam_rule->key.y,
 		(u8 *)(&tcam_key->key_info),
 		(u8 *)(&tcam_key->key_mask),
-		HINIC3_TCAM_FLOW_KEY_SIZE);
-	tcam_translate_key_x(fdir_tcam_rule->key.x,
-		fdir_tcam_rule->key.y,
+			key_len);
+		tcam_translate_key_x(tcam_rule->key.x,
+			tcam_rule->key.y,
 		(u8 *)(&tcam_key->key_mask),
-		HINIC3_TCAM_FLOW_KEY_SIZE);
+			key_len);
+	} else {
+		struct hinic3_ext_tcam_cfg_rule *tcam_rule =
+			(struct hinic3_ext_tcam_cfg_rule *)fdir_tcam_rule;
+
+		tcam_translate_key_y(tcam_rule->key.y,
+			(u8 *)(&tcam_key->key_info),
+			(u8 *)(&tcam_key->key_mask),
+			key_len);
+		tcam_translate_key_x(tcam_rule->key.x,
+			tcam_rule->key.y,
+			(u8 *)(&tcam_key->key_mask),
+			key_len);
+	}
 }
 
 
@@ -232,9 +250,9 @@ static void hinic3_fdir_tcam_notunnel_init(struct rte_eth_dev *dev,
 	tcam_key->key_mask.vlan_flag = 1;
 	tcam_key->key_info.vlan_flag = 0;
 #ifdef HINIC3_TRAFFIC_BIFUR
-    u8 bifur_en, iso_en;
+    u8 bifur_en, iso_en, bifur_type;
     u8 er_id = nic_dev->hwdev->cfg_mgmt->svc_cap.er_id;
-    if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &iso_en) != 0) {
+    if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &iso_en, &bifur_type) != 0) {
         PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable staus failed!");
     }
 
@@ -242,7 +260,8 @@ static void hinic3_fdir_tcam_notunnel_init(struct rte_eth_dev *dev,
 		tcam_key->key_info.function_id = HINIC3_UINT15_MAX;
 		tcam_key->key_mask.ether_type = rule->key_mask.ether_type;
 		tcam_key->key_info.ether_type = rule->key_spec.ether_type;
-		tcam_key->key_info.vlan_flag = 1;
+		tcam_key->key_info.vlan_flag = !(tcam_key->key_info.vlan_flag | (bifur_type >> 1));
+		tcam_key->key_mask.vlan_flag = tcam_key->key_mask.vlan_flag;
     } else {
         tcam_key->key_info.function_id =
             hinic3_global_func_id(nic_dev->hwdev) & HINIC3_UINT15_MAX;
@@ -431,7 +450,7 @@ hinic3_fdir_tcam_ipv6_vxlan_geneve_init(struct rte_eth_dev *	   dev,
 	tcam_key->key_mask_ipv6.function_id = HINIC3_UINT15_MAX;
 	tcam_key->key_mask_ipv6.vlan_flag = 1;
 
-    if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &iso_en) != 0) {
+    if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &iso_en, 0) != 0) {
         PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable staus failed!");
     }
 
@@ -509,7 +528,7 @@ hinic3_fdir_tcam_vxlan_geneve_init(struct rte_eth_dev *	      dev,
 	tcam_key->key_mask.vlan_flag = 1;
 	tcam_key->key_mask.function_id = HINIC3_UINT15_MAX;
 
-    if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &iso_en) != 0) {
+    if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &iso_en, 0) != 0) {
         PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable staus failed!");
     }
 
@@ -529,51 +548,71 @@ hinic3_fdir_tcam_vxlan_geneve_init(struct rte_eth_dev *	      dev,
 		hinic3_fdir_tcam_vxlan_geneve_ipv6_init(rule, tcam_key);
 }
 
-static void
-hinic3_fdir_tcam_info_init(struct rte_eth_dev	       *dev,
-			   struct hinic3_fdir_filter   *rule,
-			   struct hinic3_tcam_key      *tcam_key,
-			   struct hinic3_tcam_cfg_rule *fdir_tcam_rule)
+void
+hinic3_fdir_tcam_action_init(struct rte_eth_dev *dev,
+			     const struct hinic3_fdir_filter *rule,
+			     struct hinic3_tcam_cfg_rule *fdir_tcam_rule)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
-
-	if (rule->tunnel_type == HINIC3_FDIR_TUNNEL_MODE_NORMAL)
-		hinic3_fdir_tcam_notunnel_init(dev, rule, tcam_key);
-	else
-		hinic3_fdir_tcam_vxlan_geneve_init(dev, rule, tcam_key);
 
 	fdir_tcam_rule->data.dw0.qid = rule->rq_index;
 #ifdef HINIC3_TRAFFIC_BIFUR
 	u8 bifur_en, iso_en;
 
-	if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &iso_en) != 0)
+	if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &iso_en, 0) != 0)
 		PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable status failed.");
 
 	if (bifur_en)
 		fdir_tcam_rule->data.dw1.queue_num = rule->queue_num;
 #else
- 	 	u16 rss_temp_id, rss_node_id, rss_inst_id;
- 	 	switch (rule->action) {
- 	 	case RTE_FLOW_ACTION_TYPE_DROP:
- 	 		fdir_tcam_rule->data.dw1.bs.action = HINIC3_ACTION_DROP;
- 	 		break;
+	struct rte_eth_dev *dst_dev = NULL;
+	struct hinic3_nic_dev *dst_nic = NULL;
+	struct hinic3_rxq *rxq;
+ 	u16 rss_temp_id, rss_node_id, rss_inst_id;
 
- 	 	case RTE_FLOW_ACTION_TYPE_RSS:
- 	 		hinic3_mgmt_get_rss_id(nic_dev->hwdev, rule->q_grp_id, &rss_temp_id, &rss_node_id, &rss_inst_id);
- 	 		fdir_tcam_rule->data.dw0.q_grp.rss_level = rule->level;
- 	 		fdir_tcam_rule->data.dw1.bs.action = HINIC3_ACTION_RSS;
- 	 		fdir_tcam_rule->data.dw1.bs.func_id = hinic3_global_func_id(nic_dev->hwdev);
- 	 		fdir_tcam_rule->data.dw0.q_grp.rss_instance_id = rss_inst_id;
- 	 		fdir_tcam_rule->data.dw0.q_grp.rss_node_id = rss_node_id;
- 	 		fdir_tcam_rule->data.dw0.q_grp.rss_temp_id = rss_temp_id;
- 	 		PMD_DRV_LOG(INFO, "rss_instance_id:%d, rss_node_id: %d, rss_temp_id: %d", rss_inst_id, rss_node_id, rss_temp_id);
-
- 	 	default:
- 	 		break;
- 	 	}
+ 	switch (rule->action) {
+	case RTE_FLOW_ACTION_TYPE_QUEUE:
+		rxq = dev->data->rx_queues[rule->rq_index];
+		if(rxq != NULL&& rxq->is_hairpin) {
+			dst_dev = &rte_eth_devices[rxq->hairpin_conf.peers[0].port];
+			dst_nic = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dst_dev);
+			fdir_tcam_rule->data.dw1.bs.action = HINIC3_ACTION_PORT;
+			fdir_tcam_rule->data.dw1.bs.func_id = hinic3_physical_port_id(dst_nic->hwdev);
+		}
+		break;
+ 	case RTE_FLOW_ACTION_TYPE_DROP:
+ 		fdir_tcam_rule->data.dw1.bs.action = HINIC3_ACTION_DROP;
+ 		break;
+ 	case RTE_FLOW_ACTION_TYPE_RSS:
+		hinic3_mgmt_get_rss_id(nic_dev->hwdev, rule->q_grp_id,
+					&rss_temp_id, &rss_node_id, &rss_inst_id);
+ 		fdir_tcam_rule->data.dw0.q_grp.rss_level = rule->level;
+ 		fdir_tcam_rule->data.dw1.bs.action = HINIC3_ACTION_RSS;
+ 		fdir_tcam_rule->data.dw1.bs.func_id = hinic3_global_func_id(nic_dev->hwdev);
+ 		fdir_tcam_rule->data.dw0.q_grp.rss_instance_id = rss_inst_id;
+ 		fdir_tcam_rule->data.dw0.q_grp.rss_node_id = rss_node_id;
+ 		fdir_tcam_rule->data.dw0.q_grp.rss_temp_id = rss_temp_id;
+		PMD_DRV_LOG(INFO, "rss_instance_id:%d, rss_node_id: %d, rss_temp_id: %d",
+				rss_inst_id, rss_node_id, rss_temp_id);
+ 	default:
+ 		break;
+ 	}
 #endif
+}
 
-	tcam_key_calculate(tcam_key, fdir_tcam_rule);
+static void
+hinic3_fdir_tcam_info_init(struct rte_eth_dev *dev,
+				struct hinic3_fdir_filter	  *rule,
+				struct hinic3_tcam_key		  *tcam_key,
+				struct hinic3_tcam_cfg_rule	  *fdir_tcam_rule)
+{
+	if (rule->tunnel_type == HINIC3_FDIR_TUNNEL_MODE_NORMAL)
+		hinic3_fdir_tcam_notunnel_init(dev, rule, tcam_key);
+	else
+		hinic3_fdir_tcam_vxlan_geneve_init(dev, rule, tcam_key);
+
+	hinic3_fdir_tcam_action_init(dev, rule, fdir_tcam_rule);
+	tcam_key_calculate(tcam_key, fdir_tcam_rule, HINIC3_TCAM_FLOW_KEY_SIZE);
 }
 
 #ifdef HINIC3_TRAFFIC_BIFUR
@@ -625,9 +664,9 @@ hinic3_tcam_filter_lookup(struct hinic3_tcam_filter_list *filter_list,
 	return NULL;
 }
 
-static struct hinic3_tcam_dynamic_block *
+struct hinic3_tcam_dynamic_block *
 hinic3_alloc_dynamic_block_resource(struct hinic3_tcam_info *tcam_info,
-			u16 dynamic_block_id)
+			u16 dynamic_block_id, u8 key_width, bool is_sec_fdir)
 {
 	struct hinic3_tcam_dynamic_block *dynamic_block_ptr = NULL;
 
@@ -641,6 +680,10 @@ hinic3_alloc_dynamic_block_resource(struct hinic3_tcam_info *tcam_info,
 	}
 
 	dynamic_block_ptr->dynamic_block_id = dynamic_block_id;
+	if (is_sec_fdir)
+		dynamic_block_ptr->key_width = key_width;
+	else
+		dynamic_block_ptr->key_width = HINIC3_TCAM_KEY_WIDTH_INVALID;
 
 	TAILQ_INSERT_TAIL(&tcam_info->tcam_dynamic_info.tcam_dynamic_list,
 			dynamic_block_ptr, entries);
@@ -650,7 +693,7 @@ hinic3_alloc_dynamic_block_resource(struct hinic3_tcam_info *tcam_info,
 	return dynamic_block_ptr;
 }
 
-static void hinic3_free_dynamic_block_resource(
+void hinic3_free_dynamic_block_resource(
 			struct hinic3_tcam_info *tcam_info,
 			struct hinic3_tcam_dynamic_block *dynamic_block_ptr)
 {
@@ -699,8 +742,7 @@ hinic3_dynamic_lookup_tcam_filter(struct rte_eth_dev *dev,
 		block_alloc_flag = 1;
 
 		dynamic_block_ptr =
-			hinic3_alloc_dynamic_block_resource(tcam_info,
-				dynamic_block_id);
+			hinic3_alloc_dynamic_block_resource(tcam_info, dynamic_block_id, 0, false);
 		if (dynamic_block_ptr == NULL) {
 			PMD_DRV_LOG(ERR, "Fdir filter dynamic alloc block memory failed!");
 			goto block_alloc_failed;
@@ -755,7 +797,7 @@ failed:
 
 static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
 				struct hinic3_tcam_key *tcam_key,
-				struct hinic3_tcam_cfg_rule *fdir_tcam_rule, bool is_hairpin)
+				struct hinic3_tcam_cfg_rule *fdir_tcam_rule)
 {
 	struct hinic3_tcam_info *tcam_info =
 		HINIC3_DEV_PRIVATE_TO_TCAM_INFO(dev->data->dev_private);
@@ -785,8 +827,7 @@ static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
 		}
 
 		dynamic_block_ptr =
-			hinic3_alloc_dynamic_block_resource(tcam_info,
-				tcam_block_index);
+			hinic3_alloc_dynamic_block_resource(tcam_info, tcam_block_index, 0, false);
 		if (dynamic_block_ptr == NULL) {
 			PMD_DRV_LOG(ERR, "Fdir filter alloc dynamic first block memory failed!");
 			goto alloc_block_failed;
@@ -800,12 +841,16 @@ static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
 		goto lookup_tcam_index_failed;
 	}
 
-	if (fdir_tcam_rule->data.dw1.bs.action != 0)
- 	 	tcam_rule_type =  TCAM_RULE_Q_GROUP_TYPE;
- 	else
- 	 	tcam_rule_type = TCAM_RULE_FDIR_TYPE;
+	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL)
+		tcam_rule_type = TCAM_RULE_Q_GROUP_TYPE;
+	else {
+		if (fdir_tcam_rule->data.dw1.bs.action != 0)
+			tcam_rule_type = TCAM_RULE_Q_GROUP_TYPE;
+		else
+			tcam_rule_type = TCAM_RULE_FDIR_TYPE;
+	}
 
-	err = hinic3_add_tcam_rule(nic_dev->hwdev, fdir_tcam_rule, tcam_rule_type, is_hairpin);
+	err = hinic3_add_tcam_rule(nic_dev->hwdev, fdir_tcam_rule, tcam_rule_type);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Fdir_tcam_rule add failed!");
 		goto add_tcam_rules_failed;
@@ -948,8 +993,7 @@ int hinic3_flow_add_del_fdir_filter(struct rte_eth_dev *dev,
 			return -EEXIST;
 		}
 
-		ret = hinic3_add_tcam_filter(dev, &tcam_key,
-				&fdir_tcam_rule, fdir_filter->is_hairpin);
+		ret = hinic3_add_tcam_filter(dev, &tcam_key, &fdir_tcam_rule);
 		if (ret)
 			goto cfg_tcam_filter_err;
 
@@ -1003,9 +1047,9 @@ int hinic3_enable_rxq_fdir_filter(struct rte_eth_dev *dev, u32 queue_id, u32 abl
 
 				fdir_tcam_rule.index = index;
 				fdir_tcam_rule.data.dw0.qid = queue_id;
-				tcam_key_calculate(&it->tcam_key, &fdir_tcam_rule);
+				tcam_key_calculate(&it->tcam_key, &fdir_tcam_rule, HINIC3_TCAM_FLOW_KEY_SIZE);
 
-				ret = hinic3_add_tcam_rule(nic_dev->hwdev, &fdir_tcam_rule, TCAM_RULE_FDIR_TYPE, 0);
+				ret = hinic3_add_tcam_rule(nic_dev->hwdev, &fdir_tcam_rule, TCAM_RULE_FDIR_TYPE);
 				if (ret) {
 					PMD_DRV_LOG(ERR, "add correct tcam rule failed!");
 					return -EFAULT;
@@ -1029,9 +1073,9 @@ int hinic3_enable_rxq_fdir_filter(struct rte_eth_dev *dev, u32 queue_id, u32 abl
 
 				fdir_tcam_rule.index = index;
 				fdir_tcam_rule.data.dw0.qid = queue_res;
-				tcam_key_calculate(&it->tcam_key, &fdir_tcam_rule);
+				tcam_key_calculate(&it->tcam_key, &fdir_tcam_rule, HINIC3_TCAM_FLOW_KEY_SIZE);
 
-				ret = hinic3_add_tcam_rule(nic_dev->hwdev, &fdir_tcam_rule, TCAM_RULE_FDIR_TYPE, 0);
+				ret = hinic3_add_tcam_rule(nic_dev->hwdev, &fdir_tcam_rule, TCAM_RULE_FDIR_TYPE);
 				if (ret) {
 					PMD_DRV_LOG(ERR, "add invalid tcam rule failed!");
 					return -EFAULT;
@@ -1046,10 +1090,16 @@ int hinic3_enable_rxq_fdir_filter(struct rte_eth_dev *dev, u32 queue_id, u32 abl
 void hinic3_free_fdir_filter(struct rte_eth_dev *dev)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+	u8 sec_tcam_en = 0;
 
 	(void)hinic3_set_fdir_tcam_rule_filter(nic_dev->hwdev, false);
 
 	(void)hinic3_flush_tcam_rule(nic_dev->hwdev);
+
+	if (hinic3_fdir_cfg_sec_tcam(nic_dev->hwdev, &sec_tcam_en) != 0)
+		return;
+	if (sec_tcam_en == 1)
+		(void)hinic3_fdir_flush_sec_tcam_rule(nic_dev->hwdev);
 }
 
 static int hinic3_flow_set_arp_filter(struct rte_eth_dev *dev, struct rte_eth_ethertype_filter *ethertype_filter,

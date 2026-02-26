@@ -475,6 +475,11 @@ hinic3_dcb_rss_init(struct hinic3_nic_dev *nic_dev, u8 dcb_en)
 	u8 cos_map[NIC_DCB_UP_MAX] = {0};
 	u8 cfg_map[NIC_DCB_UP_MAX] = {0};
 
+	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
+		PMD_DRV_LOG(ERR, "Qpool mode not support DCB config");
+		return -EINVAL;
+	}
+
 	if (dcb_en) {
 		cos_num = hinic3_get_dev_user_cos_num(nic_dev);
 

@@ -18,12 +18,15 @@
 
 #include "base/hinic3_compat.h"
 #include "base/hinic3_pmd_hwdev.h"
+#include "base/hinic3_pmd_hwif.h"
 #include "base/hinic3_pmd_mgmt.h"
 #include "base/hinic3_pmd_nic_cfg.h"
 #include "hinic3_pmd_ethdev.h"
 #include "hinic3_pmd_fdir.h"
+#include "hinic3_pmd_flow_sec.h"
 #include "hinic3_pmd_flow.h"
 #include "hinic3_pmd_rx.h"
+#include "hinic3_pmd_hairpin.h"
 
 #ifdef HINIC3_TRAFFIC_BIFUR
 #ifdef DPDK_20_11
@@ -840,6 +843,14 @@ static int hinic3_flow_parse_fdir_vxlan_geneve_filter(
 	const struct rte_flow_action actions[], struct rte_flow_error *error,
 	struct hinic3_filter_t *filter);
 
+static int
+hinic3_flow_parse_sec_fdir_filter(struct rte_eth_dev	  *dev,
+			      const struct rte_flow_attr  *attr,
+			      const struct rte_flow_item   pattern[],
+			      const struct rte_flow_action actions[],
+			      struct rte_flow_error	  *error,
+			      struct hinic3_filter_t	  *filter);
+
 static const struct hinic3_valid_pattern hinic3_supported_patterns[] = {
 	/* support ethertype */
 	{ pattern_ethertype, hinic3_flow_parse_ethertype_filter },
@@ -985,12 +996,116 @@ hinic3_match_pattern(enum rte_flow_item_type *	 item_array,
 		item->type == HINIC3_FLOW_ITEM_TYPE_END);
 }
 
+static enum rte_flow_item_type sec_first_items[] = {
+	HINIC3_FLOW_ITEM_TYPE_ETH,
+	HINIC3_FLOW_ITEM_TYPE_IPV4,
+	HINIC3_FLOW_ITEM_TYPE_IPV6,
+	HINIC3_FLOW_ITEM_TYPE_TCP,
+	HINIC3_FLOW_ITEM_TYPE_UDP,
+	HINIC3_FLOW_ITEM_TYPE_VXLAN,
+	HINIC3_FLOW_ITEM_TYPE_GENEVE
+};
+
+static enum rte_flow_item_type sec_l2_next_items[] = {
+	HINIC3_FLOW_ITEM_TYPE_VLAN,
+	HINIC3_FLOW_ITEM_TYPE_IPV4,
+	HINIC3_FLOW_ITEM_TYPE_IPV6
+};
+
+static enum rte_flow_item_type sec_l3_next_items[] = {
+	HINIC3_FLOW_ITEM_TYPE_TCP,
+	HINIC3_FLOW_ITEM_TYPE_UDP
+};
+
+static enum rte_flow_item_type sec_l4_next_items[] = {
+	HINIC3_FLOW_ITEM_TYPE_VXLAN,
+	HINIC3_FLOW_ITEM_TYPE_GENEVE
+};
+
+static enum rte_flow_item_type sec_tunnel_next_items[] = {
+	HINIC3_FLOW_ITEM_TYPE_ETH,
+	HINIC3_FLOW_ITEM_TYPE_VLAN,
+	HINIC3_FLOW_ITEM_TYPE_IPV4,
+	HINIC3_FLOW_ITEM_TYPE_IPV6
+};
+
+static bool
+hinic3_item_in_step(enum rte_flow_item_type type,
+		    enum rte_flow_item_type *items,
+		    size_t count)
+{
+	size_t i;
+
+	for (i = 0; i < count; i++) {
+		if (items[i] == type)
+			return true;
+	}
+
+	return false;
+}
+
+static bool
+hinic3_match_sec_pattern(const struct rte_flow_item *pattern)
+{
+	const struct rte_flow_item *item = pattern;
+	enum rte_flow_item_type *items = sec_first_items;
+	size_t count = RTE_DIM(sec_first_items);
+
+	for (; item->type != HINIC3_FLOW_ITEM_TYPE_END; item++) {
+		if (item->type == HINIC3_FLOW_ITEM_TYPE_VOID)
+			continue;
+
+		if (!hinic3_item_in_step(item->type, items, count))
+			return false;
+
+		switch (item->type) {
+		case HINIC3_FLOW_ITEM_TYPE_ETH:
+		case HINIC3_FLOW_ITEM_TYPE_VLAN:
+			items = sec_l2_next_items;
+			count = RTE_DIM(sec_l2_next_items);
+			break;
+		case HINIC3_FLOW_ITEM_TYPE_IPV4:
+		case HINIC3_FLOW_ITEM_TYPE_IPV6:
+			items = sec_l3_next_items;
+			count = RTE_DIM(sec_l3_next_items);
+			break;
+		case HINIC3_FLOW_ITEM_TYPE_TCP:
+		case HINIC3_FLOW_ITEM_TYPE_UDP:
+			items = sec_l4_next_items;
+			count = RTE_DIM(sec_l4_next_items);
+			break;
+		case HINIC3_FLOW_ITEM_TYPE_VXLAN:
+		case HINIC3_FLOW_ITEM_TYPE_GENEVE:
+			items = sec_tunnel_next_items;
+			count = RTE_DIM(sec_tunnel_next_items);
+			break;
+		default:
+			return false;
+		}
+	}
+
+	return true;
+}
+
 /* Find if there's parse filter function matched */
-static hinic3_parse_filter_t hinic3_find_parse_filter_func(
-		const struct rte_flow_item *pattern)
+static hinic3_parse_filter_t hinic3_find_parse_filter_func( struct rte_eth_dev *dev, const struct rte_flow_item *pattern)
 {
 	hinic3_parse_filter_t parse_filter = NULL;
+	struct hinic3_nic_dev *nic_dev = NULL;
+	uint8_t sec_tcam_en = 0;
 	uint8_t i;
+
+	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+	if (hinic3_fdir_cfg_sec_tcam(nic_dev->hwdev, &sec_tcam_en) != 0) {
+		PMD_DRV_LOG(ERR, "hinic3 get port table second tcam enable status failed.");
+		return parse_filter;
+	}
+
+	if (sec_tcam_en == 1) {
+		if (hinic3_match_sec_pattern(pattern))
+			parse_filter = hinic3_flow_parse_sec_fdir_filter;
+		return parse_filter;
+	}
 
 	for (i = 0; i < RTE_DIM(hinic3_supported_patterns); i++) {
 		if (hinic3_match_pattern(hinic3_supported_patterns[i].items,
@@ -1070,6 +1185,53 @@ hinic3_check_rss_queues(struct rte_eth_dev		 *dev,
 }
 
 #else
+
+static int hinic3_flow_set_normal_rss_action_config_qpool(struct hinic3_nic_dev *nic_dev,
+							const struct rte_flow_action_rss *act_r,
+							const struct rte_flow_action *act,
+							struct rte_flow_error *error,
+							struct hinic3_rss_template_entry **template_entry_out) {
+	int ret;
+	struct hinic3_rss_template_entry *template_entry = NULL;
+
+	if (act_r->types == 0) {
+			ret = hinic3_cmdq_set_rss_queue_type(nic_dev->hwdev, nic_dev->rss_type, 0,  0);
+		} else {
+			struct hinic3_rss_type rss_type = {0};
+			rss_type.ipv4 = (act_r->types & (ETH_RSS_IPV4 | ETH_RSS_FRAG_IPV4)) ? 1 : 0;
+			rss_type.tcp_ipv4 = (act_r->types & ETH_RSS_NONFRAG_IPV4_TCP) ? 1 : 0;
+			rss_type.ipv6 = (act_r->types & (ETH_RSS_IPV6 | ETH_RSS_FRAG_IPV6)) ? 1 : 0;
+			rss_type.tcp_ipv6 = (act_r->types & ETH_RSS_NONFRAG_IPV6_TCP) ? 1 : 0;
+			rss_type.udp_ipv4 = (act_r->types & ETH_RSS_NONFRAG_IPV4_UDP) ? 1 : 0;
+			rss_type.udp_ipv6 = (act_r->types & ETH_RSS_NONFRAG_IPV6_UDP) ? 1 : 0;
+			ret = hinic3_cmdq_set_rss_queue_type(nic_dev->hwdev, rss_type, 0, 1);
+	}
+
+	if (ret) {
+			rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION, act,
+					"Failed to set rss queue types");
+			return ret;
+	}
+
+	template_entry = rte_zmalloc("template_entry", sizeof(struct hinic3_rss_template_entry), 0);
+	if (template_entry == NULL) {
+			rte_flow_error_set(error, ENOMEM, HINIC3_FLOW_ERROR_TYPE_ACTION, act,
+						"Failed to alloc memory for template entry");
+			return ret;
+	}
+
+	/* Fill the information in the template_entry */
+	template_entry->q_grp_id = hinic3_global_func_id(nic_dev->hwdev);
+	template_entry->queue_num = act_r->queue_num;
+	template_entry->ref_count = 1;
+	template_entry->types = act_r->types;
+	rte_memcpy(template_entry->queues, act_r->queue, act_r->queue_num * sizeof(uint16_t));
+
+	*template_entry_out = template_entry;
+
+	return 0;
+}
+
 static int hinic3_flow_set_normal_rss_action_config(struct rte_eth_dev *dev,
 							const struct rte_flow_action_rss *act_r,
 							const struct rte_flow_action *act,
@@ -1083,6 +1245,10 @@ static int hinic3_flow_set_normal_rss_action_config(struct rte_eth_dev *dev,
 	u32 template_count = 0;
 	u32 j;
 	u16 q_grp_id = 0;
+
+	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
+		return hinic3_flow_set_normal_rss_action_config_qpool(nic_dev, act_r, act, error, template_entry_out);
+	}
 
 	/* Traverse the existing RSS template list to check if there is already a matching queue configureation */
 	TAILQ_FOREACH(template_entry, &nic_dev->rss_template_list, node) {
@@ -1176,10 +1342,10 @@ static int hinic3_flow_set_normal_rss_action_config(struct rte_eth_dev *dev,
 
 	return 0;
 
-	free_rss_template:
+free_rss_template:
 	hinic3_rss_template_free(nic_dev->hwdev, q_grp_id);
 
-	free_g_grp_id:
+free_g_grp_id:
 	hinic3_mgmt_cfg_qgrp_id(nic_dev->hwdev, HINIC3_QUEUE_GROUP_ID_FREE, &q_grp_id);
 
 	return ret;
@@ -1220,6 +1386,7 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 		return -rte_errno;
 	}
 	act = last_act;
+	filter->fdir_filter.action = act->type;
 
 	switch (act->type) {
 	case RTE_FLOW_ACTION_TYPE_QUEUE:
@@ -1229,17 +1396,14 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 #ifdef HINIC3_TRAFFIC_BIFUR
 		filter->fdir_filter.queue_num = 1;
 #endif
-		if (filter->fdir_filter.rq_index >=
-			dev->data->nb_rx_queues) {
+		rxq = dev->data->rx_queues[act_q->index];
+		if (act_q->index >= dev->data->nb_rx_queues || rxq == NULL ||
+			(rxq->is_hairpin && rxq->hairpin_conf.peer_count == 0)) {
 			rte_flow_error_set(error, EINVAL,
 					   HINIC3_FLOW_ERROR_TYPE_ACTION,
 					   act, "Invalid action param.");
 			return -rte_errno;
 		}
-		rxq = (struct hinic3_rxq *)dev->data->rx_queues[act_q->index];
-		if (rxq->is_hairpin)
-			filter->fdir_filter.is_hairpin = 1;
-
 		break;
 /* RSS process */
 #ifdef HINIC3_TRAFFIC_BIFUR
@@ -1292,12 +1456,10 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 
 		filter->fdir_filter.q_grp_id = filter->template_entry->q_grp_id;
  	 	filter->fdir_filter.level = act_r->level;
- 	 	filter->fdir_filter.action = RTE_FLOW_ACTION_TYPE_RSS;
 		break;
 #endif
 
 	case RTE_FLOW_ACTION_TYPE_DROP:
- 	 	filter->fdir_filter.action = RTE_FLOW_ACTION_TYPE_DROP;
  	 	break;
 
 	default:
@@ -2214,6 +2376,35 @@ hinic3_flow_parse_fdir_vxlan_geneve_filter(
 }
 
 static int
+hinic3_flow_parse_sec_fdir_filter(struct rte_eth_dev	  *dev,
+			      const struct rte_flow_attr  *attr,
+			      const struct rte_flow_item   pattern[],
+			      const struct rte_flow_action actions[],
+			      struct rte_flow_error	  *error,
+			      struct hinic3_filter_t	  *filter)
+{
+	int ret;
+
+	ret = hinic3_flow_parse_sec_fdir_pattern(dev, pattern, error,
+					   filter);
+	if (ret)
+		return ret;
+
+	ret = hinic3_flow_parse_action(dev, actions, error, filter);
+	if (ret)
+		return ret;
+
+	ret = hinic3_flow_parse_attr(attr, error);
+	if (ret)
+		return ret;
+
+	filter->filter_type = RTE_ETH_FILTER_FDIR;
+	filter->is_sec_fdir = true;
+
+	return 0;
+}
+
+static int
 hinic3_flow_parse(struct rte_eth_dev          *dev,
 		  const struct rte_flow_attr  *attr,
 		  const struct rte_flow_item   pattern[],
@@ -2256,7 +2447,7 @@ hinic3_flow_parse(struct rte_eth_dev          *dev,
 		}
 	}
 
-	parse_filter = hinic3_find_parse_filter_func(pattern);
+	parse_filter = hinic3_find_parse_filter_func(dev, pattern);
 	if (!parse_filter) {
 		rte_flow_error_set(error, EINVAL,
 				   HINIC3_FLOW_ERROR_TYPE_ITEM,
@@ -2364,8 +2555,15 @@ hinic3_flow_create(struct rte_eth_dev          *dev,
 		break;
 
 	case RTE_ETH_FILTER_FDIR:
+		if (filter_rules->is_sec_fdir) {
+			ret = hinic3_flow_add_del_sec_fdir_filter(dev,
+					&filter_rules->sec_fdir_filter,
+					&filter_rules->fdir_filter, true);
+		} else {
 		ret = hinic3_flow_add_del_fdir_filter(dev,
 				&filter_rules->fdir_filter, true);
+		}
+
 		if (ret) {
 			rte_flow_error_set(error,
 				   EINVAL, HINIC3_FLOW_ERROR_TYPE_HANDLE,
@@ -2383,7 +2581,10 @@ hinic3_flow_create(struct rte_eth_dev          *dev,
 		template_entry = filter_rules->template_entry;
 		if (template_entry->ref_count == 1) {
 			hinic3_fillout_indir_tbl_by_rss_template(nic_dev, template_entry, indirtbl);
-			ret = hinic3_rss_queue_set_indir_tbl(nic_dev->hwdev, indirtbl, HINIC3_RSS_INDIR_SIZE, template_entry->q_grp_id);
+			if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL)
+				ret = hinic3_rss_set_indir_tbl_qpool(nic_dev->hwdev, indirtbl, HINIC3_RSS_INDIR_SIZE);
+			else
+				ret = hinic3_rss_queue_set_indir_tbl(nic_dev->hwdev, indirtbl, HINIC3_RSS_INDIR_SIZE, template_entry->q_grp_id);
 			if (ret) {
 				PMD_DRV_LOG(ERR, "Set rss queue indir tbl failed");
 				goto free_flow;
@@ -2411,6 +2612,7 @@ free_flow:
 static void hinic3_flow_release_rss_template(struct hinic3_nic_dev *nic_dev,
 						struct hinic3_rss_template_entry *template_entry)
 {
+	struct hinic3_hwdev *hwdev = nic_dev->hwdev;
 	int ret = 0;
 	u16 q_grp_id;
 
@@ -2427,14 +2629,14 @@ static void hinic3_flow_release_rss_template(struct hinic3_nic_dev *nic_dev,
 
 	/* If reference count is 1，delete RSS template and q_grp_id */
 	q_grp_id = template_entry->q_grp_id;
-
 	hinic3_rss_template_free(nic_dev->hwdev, q_grp_id);
 
 	ret = hinic3_mgmt_cfg_qgrp_id(nic_dev->hwdev, HINIC3_QUEUE_GROUP_ID_FREE, &q_grp_id);
 	if (ret != 0)
 		PMD_DRV_LOG(ERR, "Failed to free q_grp_id: %u, ret: %d", q_grp_id, ret);
 
-	TAILQ_REMOVE(&nic_dev->rss_template_list, template_entry, node);
+	if (hwdev->qinfo_type != HINIC3_QINFO_TYPE_QPOOL)
+		TAILQ_REMOVE(&nic_dev->rss_template_list, template_entry, node);
 	rte_free(template_entry);
 	PMD_DRV_LOG(INFO, "RSS template q_grp_id: %u deleted and removed from list", q_grp_id);
 
@@ -2477,7 +2679,7 @@ hinic3_flow_destroy(struct rte_eth_dev *dev, struct rte_flow *flow,
 			TAILQ_REMOVE(&nic_dev->filter_fdir_rule_list, flow, node);
 
 		if (!ret && rules->template_entry != NULL)
- 	 			hinic3_flow_release_rss_template(nic_dev,rules->template_entry);
+ 	 		hinic3_flow_release_rss_template(nic_dev,rules->template_entry);
 
 		break;
 	default:
@@ -2511,14 +2713,18 @@ hinic3_flow_flush_fdir_filter(struct rte_eth_dev *dev)
 		flow = TAILQ_FIRST(&nic_dev->filter_fdir_rule_list);
 		if (flow == NULL)
 			break;
+
 		filter_rules = (struct hinic3_filter_t *)flow->rule;
+		if (filter_rules == NULL)
+			break;
+
 		ret = hinic3_flow_add_del_fdir_filter(dev,
 				&filter_rules->fdir_filter, false);
 		if (ret)
 			return ret;
 
 		if (filter_rules->template_entry != NULL)
- 	 			hinic3_flow_release_rss_template(nic_dev, filter_rules->template_entry);
+ 	 		hinic3_flow_release_rss_template(nic_dev, filter_rules->template_entry);
 
 		TAILQ_REMOVE(&nic_dev->filter_fdir_rule_list, flow, node);
 		rte_free(filter_rules);

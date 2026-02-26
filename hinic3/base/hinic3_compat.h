@@ -29,6 +29,7 @@
 #include <rte_log.h>
 #include <rte_config.h>
 #include <rte_io.h>
+#include <rte_version.h>
 #include "hinic3_base.h"
 
 typedef uint8_t   u8;
@@ -40,6 +41,10 @@ typedef uint64_t  u64;
 
 #ifndef BIT
 #define BIT(n) (1U << (n))
+#endif
+
+#ifndef LBIT
+#define LBIT(n) (1ULL << (n))
 #endif
 
 #define upper_32_bits(n) ((u32)(((n) >> 16) >> 16))
@@ -54,6 +59,28 @@ extern int hinic3_logtype;
 #define PMD_DRV_LOG(level, fmt, args...) \
 	(void)rte_log(RTE_LOG_ ## level, (uint32_t)hinic3_logtype, \
 		      HINIC3_DRIVER_NAME": " fmt "\n", ##args)
+
+#if (RTE_VERSION >= RTE_VERSION_NUM(21, 11, 0, 0))
+#define HINIC3_ETHER_HDR_DST_ADDR(hdr) ((hdr)->dst_addr)
+#define HINIC3_ETHER_HDR_SRC_ADDR(hdr) ((hdr)->src_addr)
+#else
+#define HINIC3_ETHER_HDR_DST_ADDR(hdr) ((hdr)->d_addr)
+#define HINIC3_ETHER_HDR_SRC_ADDR(hdr) ((hdr)->s_addr)
+#endif
+
+#if (RTE_VERSION >= RTE_VERSION_NUM(24, 11, 0, 0))
+#define HINIC3_IPV6_HDR_SRC_ADDR(hdr) ((hdr)->src_addr.a)
+#define HINIC3_IPV6_HDR_DST_ADDR(hdr) ((hdr)->dst_addr.a)
+#else
+#define HINIC3_IPV6_HDR_SRC_ADDR(hdr) ((hdr)->src_addr)
+#define HINIC3_IPV6_HDR_DST_ADDR(hdr) ((hdr)->dst_addr)
+#endif
+
+#if (RTE_VERSION >= RTE_VERSION_NUM(20, 11, 0, 0))
+#define HINIC3_FLOW_ITEM_ETH_HAS_VLAN 1
+#else
+#define HINIC3_FLOW_ITEM_ETH_HAS_VLAN 0
+#endif
 
 /* Bit order interface */
 #define cpu_to_be16(o) rte_cpu_to_be_16(o)

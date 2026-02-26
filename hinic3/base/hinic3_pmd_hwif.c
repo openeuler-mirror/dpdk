@@ -2,11 +2,16 @@
  * Copyright(c) 2019 Huawei Technologies Co., Ltd
  */
 
+#include <fcntl.h>
+#include <stdlib.h>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
 #include <rte_bus_pci.h>
 #include "hinic3_compat.h"
 #include "hinic3_pmd_csr.h"
 #include "hinic3_pmd_hwdev.h"
 #include "hinic3_pmd_hwif.h"
+#include "hinic3_pmd_ethdev.h"
 
 #define WAIT_HWIF_READY_TIMEOUT			10000
 
@@ -560,6 +565,70 @@ static int wait_until_doorbell_and_outbound_enabled(struct hinic3_hwif *hwif)
 	return -EFAULT;
 }
 
+static int hinic3_mmap_bar_addr(struct hinic3_hwdev *hwdev)
+{
+	struct rte_pci_device *pci_dev = hwdev->pci_dev;
+	struct hinic3_hwif *hwif = hwdev->hwif;
+	void *cfg_regs_base = NULL;
+	void *mgmt_reg_base = NULL;
+	void *db_base = NULL;
+	int fd;
+
+	fd = ((struct hinic3_nic_dev *)hwdev->dev_handle)->fd;
+	if (fd < 0) {
+		PMD_DRV_LOG(ERR, "Failed to open fd: %d.", fd);
+		return -EFAULT;
+	}
+
+	if (!HINIC3_IS_VF_DEV(pci_dev)) {
+		cfg_regs_base = mmap(NULL, 65536, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 1 << 12);
+		if (cfg_regs_base == MAP_FAILED) {
+			PMD_DRV_LOG(ERR, "Failed to map cfg reg.");
+			return -EFAULT;
+		}
+
+		mgmt_reg_base = mmap(NULL, 65536, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 3 << 12);
+		if (mgmt_reg_base == MAP_FAILED) {
+			PMD_DRV_LOG(ERR, "Failed to map mgmt reg.");
+			return -EFAULT;
+		}
+
+		db_base = mmap(NULL, 4194304, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 4 << 12);
+		if (db_base == MAP_FAILED) {
+			PMD_DRV_LOG(ERR, "Failed to map db.");
+			return -EFAULT;
+		}
+
+		hwif->db_dwqe_len = pci_dev->mem_resource[HINIC3_PCI_DB_BAR].len;
+	} else {
+		cfg_regs_base = mmap(NULL, 16384, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0 << 12);
+		if (cfg_regs_base == MAP_FAILED) {
+			PMD_DRV_LOG(ERR, "Failed to map cfg reg.");
+			return -EFAULT;
+		}
+
+		mgmt_reg_base = NULL;
+
+		db_base = mmap(NULL, 16384, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 4 << 12);
+		if (db_base == MAP_FAILED) {
+			PMD_DRV_LOG(ERR, "Failed to map db.");
+			return -EFAULT;
+		}
+
+		hwif->db_dwqe_len = 16384;
+	}
+
+	/* If function is VF, mgmt_regs_base will be NULL */
+	if (!mgmt_reg_base)
+		hwif->cfg_regs_base = (u8 *)cfg_regs_base + HINIC3_VF_CFG_REG_OFFSET;
+	else
+		hwif->cfg_regs_base = cfg_regs_base;
+	hwif->mgmt_regs_base = mgmt_reg_base;
+	hwif->db_base = db_base;
+ 
+	return 0;
+}
+
 static int hinic3_get_bar_addr(struct hinic3_hwdev *hwdev)
 {
 	struct rte_pci_device *pci_dev = hwdev->pci_dev;
@@ -627,7 +696,11 @@ int hinic3_init_hwif(void *dev)
 	hwdev = (struct hinic3_hwdev *)dev;
 	hwdev->hwif = hwif;
 
-	err = hinic3_get_bar_addr(hwdev);
+	if (hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL)
+		err = hinic3_mmap_bar_addr(hwdev);
+	else
+		err = hinic3_get_bar_addr(hwdev);
+
 	if (err != 0) {
 		PMD_DRV_LOG(ERR, "get bar addr fail");
 		goto hwif_ready_err;
@@ -650,18 +723,22 @@ int hinic3_init_hwif(void *dev)
 		goto hwif_ready_err;
 	}
 
-	if (!HINIC3_IS_VF(hwdev)) {
-		set_ppf(hwif);
+	if (hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
+		if (!HINIC3_IS_VF(hwdev))
+			get_mpf(hwif);
+	} else {
+		if (!HINIC3_IS_VF(hwdev)) {
+			set_ppf(hwif);
 
-		if (HINIC3_IS_PPF(hwdev))
-			set_mpf(hwif);
+			if (HINIC3_IS_PPF(hwdev))
+				set_mpf(hwif);
 
-		get_mpf(hwif);
+			get_mpf(hwif);
+		}
+		disable_all_msix(hwdev);
+		/* Disable mgmt cpu reporting any event */
+		hinic3_set_pf_status(hwdev->hwif, HINIC3_PF_STATUS_INIT);
 	}
-
-	disable_all_msix(hwdev);
-	/* Disable mgmt cpu reporting any event */
-	hinic3_set_pf_status(hwdev->hwif, HINIC3_PF_STATUS_INIT);
 
 	PMD_DRV_LOG(INFO, "global_func_idx: %d, func_type: %d, host_id: %d, ppf: %d, mpf: %d",
 		    hwif->attr.func_global_idx, hwif->attr.func_type,
