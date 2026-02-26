@@ -2493,9 +2493,15 @@ hinic3_fillout_indir_tbl_by_rss_template(struct hinic3_nic_dev *nic_dev,
 	queue_idx = 0;
 
 	/* fillout indir table used queue list */
-	for (i = 0; i < HINIC3_RSS_INDIR_SIZE; i++) {
-		indir[i] = template_entry->queues[queue_idx];
-		queue_idx = (queue_idx + 1) % queue_num;
+	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
+		for (i = 0; i < HINIC3_RSS_INDIR_SIZE; i++) {
+			indir[i] = i % nic_dev->num_rqs;
+		}
+	} else {
+		for (i = 0; i < HINIC3_RSS_INDIR_SIZE; i++) {
+			indir[i] = template_entry->queues[queue_idx];
+			queue_idx = (queue_idx + 1) % queue_num;
+		}
 	}
 }
 
