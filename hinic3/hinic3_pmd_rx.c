@@ -10,6 +10,7 @@
 #include "base/hinic3_pmd_wq.h"
 #include "base/hinic3_pmd_mgmt.h"
 #include "base/hinic3_pmd_nic_cfg.h"
+#include "mml/hinic3_pmd_mml_lib.h"
 #include "hinic3_pmd_nic_io.h"
 #include "hinic3_pmd_dcb.h"
 #include "hinic3_pmd_ethdev.h"
@@ -227,9 +228,8 @@ int hinic3_rx_fill_wqe(struct hinic3_rxq *rxq)
 	rte_iova_t cqe_dma = 0;
 	u16 pi = 0;
 	int i;
-
-	if (nic_dev->hwdev->qinfo_type != HINIC3_QINFO_TYPE_QPOOL)
-		cqe_dma = rxq->cqe_start_paddr;
+	
+	cqe_dma = rxq->cqe_start_paddr;
 
 	for (i = 0; i < rxq->q_depth; i++) {
 		rq_wqe = hinic3_get_rq_wqe(rxq, &pi);

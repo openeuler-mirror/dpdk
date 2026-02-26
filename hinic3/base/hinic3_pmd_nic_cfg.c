@@ -1807,10 +1807,32 @@ int hinic3_set_fdir_tcam_rule_filter(void *hwdev, bool enable)
 	return err;
 }
 
+static int hinic3_set_rq_flush_qpool(struct hinic3_cmd_set_rq_flush *rq_flush_msg, int fd)
+{
+	struct msg_module msg_to_kernel = {0};
+	int err;
+
+	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NPU, 0,
+			sizeof(struct hinic3_cmd_set_rq_flush),
+			sizeof(struct hinic3_cmd_set_rq_flush),
+			rq_flush_msg, rq_flush_msg);
+	msg_to_kernel.npu_cmd.direct_resp = 1;
+	msg_to_kernel.npu_cmd.mod = HINIC3_MOD_L2NIC;
+	msg_to_kernel.npu_cmd.cmd = HINIC3_UCODE_CMD_SET_RQ_FLUSH;
+	msg_to_kernel.npu_cmd.ack_type = HINIC3_ACK_TYPE_CMDQ;
+
+	err = ioctl(fd, 0, &msg_to_kernel);
+	if (err < 0)
+		PMD_DRV_LOG(ERR, "Set qpool rx flush err : %d.", errno);
+	
+	return err;
+}
+
 int hinic3_set_rq_flush(void *hwdev, u16 q_id)
 {
 	struct hinic3_cmd_set_rq_flush *rq_flush_msg = NULL;
 	struct hinic3_cmd_buf *cmd_buf = NULL;
+	struct hinic3_nic_dev *nic_dev = NULL;
 	u64 out_param = EIO;
 	int err;
 
@@ -1827,9 +1849,15 @@ int hinic3_set_rq_flush(void *hwdev, u16 q_id)
 	rte_mb();
 	rq_flush_msg->value = cpu_to_be32(rq_flush_msg->value);
 
-	err = hinic3_cmdq_direct_resp(hwdev, HINIC3_MOD_L2NIC,
+	if (((struct hinic3_hwdev *)hwdev)->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
+		out_param = 0;
+		nic_dev = ((struct hinic3_hwdev *)hwdev)->dev_handle;
+		err = hinic3_set_rq_flush_qpool(rq_flush_msg, nic_dev->fd);
+	} else {
+		err = hinic3_cmdq_direct_resp(hwdev, HINIC3_MOD_L2NIC,
 				      HINIC3_UCODE_CMD_SET_RQ_FLUSH, cmd_buf,
 				      &out_param, 0);
+	}
 	if ((err) || (out_param != 0)) {
 		PMD_DRV_LOG(ERR, "Failed to set rq flush, err:%d, out_param:0x%lx\n",
 			    err, out_param);

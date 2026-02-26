@@ -100,6 +100,26 @@
 #define HINIC3_VFTA_SIZE                 (4096 / HINIC3_UINT32_BIT_SIZE)
 #define HINIC3_MAX_QUEUE_NUM             256
 
+#define UP_ALIGN(x, a) UP_ALIGN_MASK(x, (typeof(x))(a) - 1)
+#define UP_ALIGN_MASK(x, mask) (((x) + (mask)) & ~(mask))
+
+#define HINIC3_RQSQ_PAGE_SIZE 0x00001000U
+
+#define HINIC3_QPOOL_SQ_WQEBB_SHIFT 4
+#define HINIC3_QPOOL_RQ_WQEBB_SHIFT 4
+
+#define WQE_BUF_SIZE(wq_buf_size) UP_ALIGN(wq_buf_size, HINIC3_RQSQ_PAGE_SIZE)
+
+#define SQWQE_BUF_SIZE(depth) UP_ALIGN((u32)((depth) << HINIC3_QPOOL_SQ_WQEBB_SHIFT), HINIC3_RQSQ_PAGE_SIZE)
+#define SQCI_BUF_SIZE HINIC3_RQSQ_PAGE_SIZE
+#define RQWQE_BUF_SIZE(depth) UP_ALIGN((u32)((depth) << HINIC3_QPOOL_RQ_WQEBB_SHIFT), HINIC3_RQSQ_PAGE_SIZE)
+#define RQCQE_BUF_SIZE(depth) UP_ALIGN((u32)sizeof(struct hinic3_rq_cqe) * (depth), HINIC3_RQSQ_PAGE_SIZE)
+
+#define SQWQE_OFFSET(q_buf_size, q_id) (u32)((q_buf_size) * (q_id))
+#define SQCI_OFFSET(q_buf_size, q_id, depth) (SQWQE_OFFSET(q_buf_size, q_id) + SQWQE_BUF_SIZE(depth))
+#define RQWQE_OFFSET(q_buf_size, q_id, depth) (SQCI_OFFSET(q_buf_size, q_id, depth) + SQCI_BUF_SIZE)
+#define RQCQE_OFFSET(q_buf_size, q_id, depth) (RQWQE_OFFSET(q_buf_size, q_id, depth) + RQWQE_BUF_SIZE(depth))
+
 #define HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev) \
 	((struct hinic3_nic_dev *)(dev)->data->dev_private)
 
