@@ -7,6 +7,7 @@
 
 #define HINIC3_MSG_HANDLER_RES	(-1)
 
+#include "hinic3_compat.h"
 /* Structures for l2nic and mag msg to mgmt sync interface */
 struct mgmt_msg_head {
 	u8 status;

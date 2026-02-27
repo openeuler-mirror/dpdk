@@ -5,7 +5,11 @@
 #define _HINIC3_STN_CMDQ_H_
 
 #include "hinic3_pmd_nic_io.h"
+#define SQ_CTXT_SIZE(num_sqs)	((u16)(sizeof(struct hinic3_qp_ctxt_header) \
+				+ (num_sqs) * sizeof(struct hinic3_sq_ctxt)))
 
+#define RQ_CTXT_SIZE(num_rqs)	((u16)(sizeof(struct hinic3_qp_ctxt_header) \
+				+ (num_rqs) * sizeof(struct hinic3_rq_ctxt)))
 struct hinic3_qp_ctxt_header {
 	u16 num_queues;
 	u16 queue_type;

@@ -11,7 +11,12 @@
 #include <rte_config.h>
 #include <rte_errno.h>
 #include <rte_ether.h>
-
+#include <fcntl.h>
+#include <stdlib.h>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
+#include "../mml/hinic3_pmd_mml_lib.h"
+#include "htn_adapt/hinic3_htn_cmdq.h"
 #include "base/hinic3_compat.h"
 #include "base/hinic3_pmd_cmd.h"
 #include "base/hinic3_pmd_wq.h"
@@ -20,6 +25,7 @@
 #include "base/hinic3_pmd_hwdev.h"
 #include "base/hinic3_pmd_hw_comm.h"
 #include "base/hinic3_pmd_nic_cfg.h"
+#include "base/hinic3_pmd_hwif.h"
 #include "hinic3_pmd_nic_io.h"
 #include "hinic3_pmd_tx.h"
 #include "hinic3_pmd_rx.h"
@@ -314,6 +320,25 @@ void hinic3_rq_prepare_ctxt(struct hinic3_rxq *rq, struct hinic3_rq_ctxt *rq_ctx
 	hinic3_cpu_to_be32(rq_ctxt, sizeof(*rq_ctxt));
 }
 
+static int hinic3_cmd_modify_queue_ctx(struct hinic3_nic_dev *nic_dev,
+				          struct hinic3_qp_ctxt_block_htn *ctxt_block,
+					  int qid, int fd)
+{
+	struct msg_module msg_to_kernel = { 0 };
+	int err;
+	msg_to_kernel.qid = qid;
+	msg_to_kernel.func_idx = hinic3_global_func_id(nic_dev->hwdev);
+	msg_to_kernel.lcore_id = nic_dev->global_id;
+	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NPU, 0, sizeof(struct hinic3_qp_ctxt_block_htn),
+		       sizeof(struct hinic3_qp_ctxt_block_htn), ctxt_block, ctxt_block);
+	msg_to_kernel.npu_cmd.direct_resp = 1;
+	msg_to_kernel.npu_cmd.mod = HINIC3_MOD_L2NIC;
+	msg_to_kernel.npu_cmd.cmd = HINIC3_HTN_CMD_SQ_RQ_CONTEXT_MULTI_ST;
+	msg_to_kernel.npu_cmd.ack_type = HINIC3_ACK_TYPE_CMDQ;
+	err = ioctl(fd, 0, &msg_to_kernel);
+	return err;
+}
+
 static int init_sq_ctxts(struct hinic3_nic_dev *nic_dev)
 {
 	struct hinic3_cmd_buf *cmd_buf = NULL;
@@ -336,9 +361,13 @@ static int init_sq_ctxts(struct hinic3_nic_dev *nic_dev)
 		cmd = nic_dev->cmdq_ops->prepare_cmd_buf_qp_context_multi_store(nic_dev, cmd_buf,
 					HINIC3_QP_CTXT_TYPE_SQ, q_id, max_ctxts);
 		rte_mb();
-		err = hinic3_cmdq_direct_resp(nic_dev->hwdev, HINIC3_MOD_L2NIC, cmd, cmd_buf, &out_param, 0);
+		if (!IS_QPOOL_MODE(nic_dev))
+			err = hinic3_cmdq_direct_resp(nic_dev->hwdev, HINIC3_MOD_L2NIC, cmd, cmd_buf, &out_param, 0);
+		else
+			err = hinic3_cmd_modify_queue_ctx(nic_dev, cmd_buf->buf, nic_dev->txqs[q_id]->local_qid, nic_dev->fd);
 		if (err || out_param != 0) {
 			PMD_DRV_LOG(ERR, "Set SQ ctxts failed, err: %d, out_param: %"PRIu64, err, out_param);
+
 			err = -EFAULT;
 			break;
 		}
@@ -348,6 +377,7 @@ static int init_sq_ctxts(struct hinic3_nic_dev *nic_dev)
 	hinic3_free_cmd_buf(cmd_buf);
 	return err;
 }
+
 
 static int init_rq_ctxts(struct hinic3_nic_dev *nic_dev)
 {
@@ -370,7 +400,10 @@ static int init_rq_ctxts(struct hinic3_nic_dev *nic_dev)
 		cmd = nic_dev->cmdq_ops->prepare_cmd_buf_qp_context_multi_store(nic_dev, cmd_buf,
 					HINIC3_QP_CTXT_TYPE_RQ, q_id, max_ctxts);
 		rte_mb();
-		err = hinic3_cmdq_direct_resp(nic_dev->hwdev, HINIC3_MOD_L2NIC, cmd, cmd_buf, &out_param, 0);
+		if (!IS_QPOOL_MODE(nic_dev))
+			err = hinic3_cmdq_direct_resp(nic_dev->hwdev, HINIC3_MOD_L2NIC, cmd, cmd_buf, &out_param, 0);
+		else
+			err = hinic3_cmd_modify_queue_ctx(nic_dev, cmd_buf->buf, nic_dev->rxqs[q_id]->local_qid, nic_dev->fd);
 		if (err || out_param != 0) {
 			PMD_DRV_LOG(ERR, "Set RQ ctxts failed, err: %d, out_param: %"PRIu64, err, out_param);
 			err = -EFAULT;
@@ -479,7 +512,8 @@ int hinic3_init_rq_cqe_ctxts(struct hinic3_nic_dev *nic_dev)
 
 		cqe_ctx.cqe_type = (rxq->wqe_type == HINIC3_COMPACT_RQ_WQE);
 		cqe_ctx.msix_entry_idx = rxq->msix_entry_idx;
-		cqe_ctx.rq_id = q_id;
+		cqe_ctx.rq_id = hwdev->bifur_mode == HINIC3_BIFUR_MODE_QPOOL ? 
+				rxq->local_qid : q_id;
 
 		err = l2nic_msg_to_mgmt_sync(hwdev, cmd,
 					     &cqe_ctx, sizeof(cqe_ctx),
@@ -494,6 +528,7 @@ int hinic3_init_rq_cqe_ctxts(struct hinic3_nic_dev *nic_dev)
 
 	return 0;
 }
+
 /* Init qps ctxt and set sq ci attr and arm all sq */
 int hinic3_init_qp_ctxts(void *dev)
 {
@@ -522,23 +557,24 @@ int hinic3_init_qp_ctxts(void *dev)
 		PMD_DRV_LOG(ERR, "Init RQ ctxts failed");
 		return err;
 	}
+	if (!IS_QPOOL_MODE(nic_dev)) {
+		err = clean_qp_offload_ctxt(nic_dev);
+		if (err) {
+			PMD_DRV_LOG(ERR, "Clean qp offload ctxts failed");
+			return err;
+		}
 
-	err = clean_qp_offload_ctxt(nic_dev);
-	if (err) {
-		PMD_DRV_LOG(ERR, "Clean qp offload ctxts failed");
-		return err;
-	}
+		if (nic_dev->num_rqs != 0)
+			rq_depth = ((u32)nic_dev->rxqs[0]->q_depth) << nic_dev->rxqs[0]->wqe_type;
 
-	if (nic_dev->num_rqs != 0)
-		rq_depth = ((u32)nic_dev->rxqs[0]->q_depth) << nic_dev->rxqs[0]->wqe_type;
+		if (nic_dev->num_sqs != 0)
+			sq_depth = nic_dev->txqs[0]->q_depth;
 
-	if (nic_dev->num_sqs != 0)
-		sq_depth = nic_dev->txqs[0]->q_depth;
-
-	err = hinic3_set_root_ctxt(hwdev, rq_depth, sq_depth, nic_dev->rx_buff_len);
-	if (err) {
-		PMD_DRV_LOG(ERR, "Set root context failed");
-		return err;
+		err = hinic3_set_root_ctxt(hwdev, rq_depth, sq_depth, nic_dev->rx_buff_len);
+		if (err) {
+			PMD_DRV_LOG(ERR, "Set root context failed");
+			return err;
+		}
 	}
 
 	for (q_id = 0; q_id < nic_dev->num_sqs; q_id++) {
@@ -547,7 +583,8 @@ int hinic3_init_qp_ctxts(void *dev)
 		sq_attr.coalescing_time = HINIC3_DEAULT_TX_CI_COALESCING_TIME;
 		sq_attr.intr_en = 0;
 		sq_attr.intr_idx = 0; /* Tx doesn't need intr */
-		sq_attr.l2nic_sqn = q_id;
+		sq_attr.l2nic_sqn = hwdev->bifur_mode == HINIC3_BIFUR_MODE_QPOOL ? 
+				    nic_dev->txqs[q_id]->local_qid : q_id;
 		sq_attr.dma_attr_off = 0;
 		err = hinic3_set_ci_table(hwdev, &sq_attr);
 		if (err) {

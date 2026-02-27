@@ -3,10 +3,16 @@
  */
 
 #include <rte_bus_pci.h>
+#include <fcntl.h>
+#include <stdlib.h>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
 #include "hinic3_compat.h"
 #include "hinic3_pmd_csr.h"
 #include "hinic3_pmd_hwdev.h"
 #include "hinic3_pmd_hwif.h"
+#include "hinic3_pmd_ethdev.h"
+
 
 #define WAIT_HWIF_READY_TIMEOUT			10000
 
@@ -559,6 +565,34 @@ static int wait_until_doorbell_and_outbound_enabled(struct hinic3_hwif *hwif)
 	return -EFAULT;
 }
 
+static int hinic3_mmap_bar_addr(struct hinic3_hwdev *hwdev)
+{
+	struct hinic3_hwif *hwif = hwdev->hwif;
+	int fd = ((struct hinic3_nic_dev *)hwdev->dev_handle)->fd;
+	void *cfg_regs_base = NULL;
+	void *mgmt_reg_base = NULL;
+	void *db_base = NULL;
+	off_t page_offset;
+
+	page_offset = 1 << 12 | 0xff00000;
+	cfg_regs_base = mmap(NULL, 65536, PROT_READ | PROT_WRITE, MAP_SHARED, fd, page_offset);
+
+	page_offset = 3 << 12 | 0xff00000;
+	mgmt_reg_base = mmap(NULL, 65536, PROT_READ | PROT_WRITE, MAP_SHARED, fd, page_offset);
+
+	page_offset = 4 << 12 | 0xff00000;
+	db_base = mmap(NULL, 4194304, PROT_READ | PROT_WRITE, MAP_SHARED, fd, page_offset);
+	if (!mgmt_reg_base)
+		hwif->cfg_regs_base = (uint8_t *)cfg_regs_base + HINIC3_VF_CFG_REG_OFFSET;
+	else
+		hwif->cfg_regs_base = cfg_regs_base;
+	hwif->mgmt_regs_base = mgmt_reg_base;
+	hwif->db_base = db_base;
+	hwif->db_dwqe_len = 4194304;
+
+	return 0;
+}
+
 static int hinic3_get_bar_addr(struct hinic3_hwdev *hwdev)
 {
 	struct rte_pci_device *pci_dev = hwdev->pci_dev;
@@ -625,8 +659,10 @@ int hinic3_init_hwif(void *dev)
 
 	hwdev = (struct hinic3_hwdev *)dev;
 	hwdev->hwif = hwif;
-
-	err = hinic3_get_bar_addr(hwdev);
+	if (hwdev->bifur_mode == HINIC3_BIFUR_MODE_QPOOL)
+		err = hinic3_mmap_bar_addr(hwdev);
+	else
+		err = hinic3_get_bar_addr(hwdev);
 	if (err != 0) {
 		PMD_DRV_LOG(ERR, "get bar addr fail");
 		goto hwif_ready_err;
@@ -648,19 +684,20 @@ int hinic3_init_hwif(void *dev)
 			    attr4, attr5);
 		goto hwif_ready_err;
 	}
-
-	if (!HINIC3_IS_VF(hwdev)) {
-		set_ppf(hwif);
-
-		if (HINIC3_IS_PPF(hwdev))
-			set_mpf(hwif);
-
-		get_mpf(hwif);
+	if (hwdev->bifur_mode == HINIC3_BIFUR_MODE_QPOOL) {
+		if (!HINIC3_IS_VF(hwdev))
+			get_mpf(hwif);
+	} else {
+		if (!HINIC3_IS_VF(hwdev)) {
+			set_ppf(hwif);
+			if (HINIC3_IS_PPF(hwdev))
+				set_mpf(hwif);
+			get_mpf(hwif);
+		}
+		disable_all_msix(hwdev);
+		/* Disable mgmt cpu reporting any event */
+		hinic3_set_pf_status(hwdev->hwif, HINIC3_PF_STATUS_INIT);
 	}
-
-	disable_all_msix(hwdev);
-	/* Disable mgmt cpu reporting any event */
-	hinic3_set_pf_status(hwdev->hwif, HINIC3_PF_STATUS_INIT);
 
 	PMD_DRV_LOG(INFO, "global_func_idx: %d, func_type: %d, host_id: %d, ppf: %d, mpf: %d",
 		    hwif->attr.func_global_idx, hwif->attr.func_type,

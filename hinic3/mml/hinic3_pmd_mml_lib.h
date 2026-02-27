@@ -23,7 +23,7 @@
 	} while (0)
 
 #ifndef DEV_NAME_LEN
-#define DEV_NAME_LEN 64
+#define DEV_NAME_LEN 16
 #endif
 
 enum {
@@ -73,6 +73,7 @@ enum module_name {
 	SEND_TO_IWAP_DRIVER,
 	SEND_TO_FC_DRIVER,
 	SEND_FCOE_DRIVER,
+	SEND_TO_BIFUR_DRIVER = 23,
 };
 
 enum driver_cmd_type {
@@ -83,6 +84,16 @@ enum driver_cmd_type {
 	RX_INFO,
 	RX_WQE_INFO,
 	RX_CQE_INFO
+};
+
+enum nic_driver_qpool_cmd_type {
+	GET_USER_QUEUE_ID,
+	DEL_USER_QUEUE_ID,
+	CFG_RSS_TEMPLATE,
+	SET_RSS_INDIR_TBL,
+	GET_RSS_INDIR_TBL,
+	GET_QUEUE_START_PA,
+	GET_NIC_DEV_MTU,
 };
 
 struct tool_target {
@@ -178,7 +189,33 @@ struct msg_module {
 	void *in_buf;
 	void *out_buf;
 	int bus_num;
-	uint32_t rsvd2[5];
+	uint32_t lcore_id;
+	uint16_t qid;
+	uint16_t rsvd1;
+	uint32_t rsvd2[3];
+};
+
+struct mag_cmd_user_queue_get {
+	uint16_t lcore_id;
+	uint16_t func_id;
+	uint16_t qid;
+	uint16_t local_qid;
+};
+
+struct mag_cmd_cfg_rss_temp {
+	uint16_t pid;
+	uint16_t func_id;
+	uint16_t opcode;
+	uint16_t rsvd;
+};
+
+struct drv_cmd_cqe_paddr_get {
+	uint16_t lcore_id;
+	uint16_t func_id;
+	uint16_t qid;
+	uint16_t local_qid;
+	unsigned long vm_start;
+	unsigned long vma_size;
 };
 
 /*
@@ -232,4 +269,7 @@ int lib_rx_cqe_info_get(struct tool_target target,
 			struct nic_rq_info *rq_info, int rq_id, int wqe_id, void *nwqe, int nwqe_size);
 int hinic3_pmd_mml_lib(const char *buf_in, uint32_t in_size, char *buf_out, uint32_t *out_len,
 		       uint32_t max_buf_out_len);
+void fill_ioctl_msg(struct msg_module *msg, u32 module, u32 msg_formate, 
+		    u32 in_buf_len, u32 out_buf_len, void *in_buf, void * out_buf);
+
 #endif /* HINIC3_PMD_MML_LIB */
