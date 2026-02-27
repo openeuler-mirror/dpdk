@@ -2590,6 +2590,11 @@ static int hinic3_dev_set_mtu(struct rte_eth_dev *dev, uint16_t mtu)
 	uint32_t frame_size = mtu + HINIC3_ETH_OVERHEAD;
 	int err = 0;
 
+	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
+		PMD_DRV_LOG(WARNING, "Qpool mode not support set mtu.");
+		return 0;
+	}
+
 	PMD_DRV_LOG(INFO, "Set port mtu, port_id: %d, mtu: %d, max_pkt_len: %d",
 		    dev->data->port_id, mtu, HINIC3_MTU_TO_PKTLEN(mtu));
 
@@ -3644,6 +3649,11 @@ static int hinic3_set_mac_addr(struct rte_eth_dev *dev,
 	u16 func_id;
 	int err;
 
+	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
+		PMD_DRV_LOG(WARNING, "Qpool mode not support set mac addr.");
+		return 0;
+	}
+
 #ifdef HINIC3_TRAFFIC_BIFUR
 	if (hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev)) {
 		PMD_DRV_LOG(INFO, "The current mode not support set mac.");
@@ -3686,6 +3696,11 @@ static void hinic3_mac_addr_remove(struct rte_eth_dev *dev, uint32_t index)
 	u16 func_id;
 	int err;
 
+	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
+		PMD_DRV_LOG(WARNING, "Qpool mode not support remove mac addr.");
+		return 0;
+	}
+
 	if (index >= HINIC3_MAX_UC_MAC_ADDRS) {
 		PMD_DRV_LOG(INFO, "Remove MAC index(%u) is out of range",
 			    index);
@@ -3723,6 +3738,11 @@ static int hinic3_mac_addr_add(struct rte_eth_dev *dev,
 	unsigned int i;
 	u16 func_id;
 	int err;
+
+	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
+		PMD_DRV_LOG(WARNING, "Qpool mode not support add mac addr.");
+		return 0;
+	}
 
 	if (!rte_is_valid_assigned_ether_addr(mac_addr)) {
 		PMD_DRV_LOG(ERR, "Add invalid MAC address");
@@ -3790,6 +3810,11 @@ static int hinic3_set_mc_addr_list(struct rte_eth_dev *dev,
 	u16 func_id;
 	int err;
 	u32 i;
+
+	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
+		PMD_DRV_LOG(WARNING, "Qpool mode not support set mac addr list.");
+		return 0;
+	}
 
 	func_id = hinic3_global_func_id(nic_dev->hwdev);
 
