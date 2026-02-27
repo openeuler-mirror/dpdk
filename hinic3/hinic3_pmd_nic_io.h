@@ -27,11 +27,6 @@
 						(q_id) * HINIC3_CI_Q_ADDR_SIZE)
 
 #define HINIC3_Q_CTXT_MAX	((u16)(((HINIC3_CMDQ_BUF_SIZE - 8) - RTE_PKTMBUF_HEADROOM) / 64))
-#define SQ_CTXT_SIZE(num_sqs)	((u16)(sizeof(struct hinic3_qp_ctxt_header) \
-				+ (num_sqs) * sizeof(struct hinic3_sq_ctxt)))
-
-#define RQ_CTXT_SIZE(num_rqs)	((u16)(sizeof(struct hinic3_qp_ctxt_header) \
-				+ (num_rqs) * sizeof(struct hinic3_rq_ctxt)))
 
 #define HINIC3_FLUSH_QUEUE_TIMEOUT	3000
 
@@ -189,6 +184,8 @@ typedef uint8_t  (*prepare_cmd_buf_get_rss_indir_table_t)(struct hinic3_nic_dev 
 /* Configure RSS indir table */
 typedef void     (*cmd_buf_to_rss_indir_table_t)(const struct hinic3_cmd_buf *cmd_buf,
 						 uint32_t *indir_table);
+typedef void     (*cmd_buf_to_rss_indir_table_qpool_t)(const struct hinic3_cmd_buf *cmd_buf,
+						 uint32_t *indir_table);
 typedef void	 (*prepare_rq_ctxt_ceq_and_prefetch_t)(struct hinic3_rq_ctxt *rq_ctxt,
 						       u16 wqe_type,
 						       u16 msix_entry_idx,
@@ -204,6 +201,7 @@ struct hinic3_nic_cmdq_ops {
 	prepare_cmd_buf_set_rss_indir_table_t		prepare_cmd_buf_set_rss_indir_table;
 	prepare_cmd_buf_get_rss_indir_table_t		prepare_cmd_buf_get_rss_indir_table;
 	cmd_buf_to_rss_indir_table_t			cmd_buf_to_rss_indir_table;
+	cmd_buf_to_rss_indir_table_qpool_t		cmd_buf_to_rss_indir_table_qpool;
 	prepare_rq_ctxt_ceq_and_prefetch_t		prepare_rq_ctxt_ceq_and_prefetch;
 	prepare_sq_ctxt_drop_and_prefetch_t		prepare_sq_ctxt_drop_and_prefetch;
 };

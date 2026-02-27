@@ -44,6 +44,11 @@
 
 #define CMDQ_PFN(addr, page_size)	((addr) >> (ilog2(page_size)))
 
+enum hinic3_nic_extcmd {
+	HINIC3_NIC_CMD_CFG_RSS_TEMPLATE = 258,
+	HINIC3_NIC_EXT_CMD_ADD_TC_FLOW,
+};
+
 /* NIC CMDQ MODE */
 typedef enum hinic3_ucode_cmd {
 	HINIC3_UCODE_CMD_MODIFY_QUEUE_CTX = 0,

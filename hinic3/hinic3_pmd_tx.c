@@ -1310,6 +1310,7 @@ hinic3_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
 	u32 offload_err, free_cnt;
 	u64 tx_bytes = 0;
 	u16 free_wqebb_cnt, nb_tx;
+	u16 bifur_mode = txq->nic_dev->hwdev->bifur_mode;
 	int err;
 
 #ifdef HINIC3_XSTAT_PROF_TX
@@ -1396,7 +1397,7 @@ hinic3_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
 
 	/* Update txq stats. */
 	if (nb_tx) {
-		hinic3_write_db(txq->db_addr, txq->q_id, (int)(txq->cos),
+		hinic3_write_db(txq->db_addr, bifur_mode != HINIC3_BIFUR_MODE_QPOOL ? txq->q_id : txq->local_qid, (int)(txq->cos),
 				SQ_CFLAG_DP,
 				MASKED_QUEUE_IDX(txq, txq->prod_idx));
 		txq->txq_stats.packets += nb_tx;

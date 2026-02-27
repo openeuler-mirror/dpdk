@@ -3,7 +3,10 @@
  */
 
 #include <rte_ether.h>
-
+#include  <fcntl.h>
+#include  <stdlib.h>
+#include  <sys/ioctl.h>
+#include  <sys/mman.h>
 #include "hinic3_compat.h"
 #include "hinic3_pmd_cmd.h"
 #include "hinic3_pmd_mgmt.h"
@@ -19,6 +22,8 @@
 #ifdef HINIC3_TRAFFIC_BIFUR
 #include "hinic3_pmd_bifur.h"
 #endif
+
+#include  "../hinic3/mml/hinic3_pmd_mml_lib.h"
 
 #define HAIRPIN_FLAG (1 << 1)
 
@@ -149,6 +154,10 @@ int hinic3_set_mac(void *hwdev, const u8 *mac_addr, u16 vlan_id, u16 func_id)
 
 	if (!hwdev || !mac_addr)
 		return -EINVAL;
+	if (((struct hinic3_hwdev *)hwdev)->bifur_mode == HINIC3_BIFUR_MODE_QPOOL) {
+		PMD_DRV_LOG(WARNING, "Qpool not support set mac");
+		return 0;
+	}
 
 #ifdef HINIC3_TRAFFIC_BIFUR
 	if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
@@ -322,6 +331,10 @@ static int hinic3_config_vlan(void *hwdev, u8 opcode, u16 vlan_id, u16 func_id)
 	struct hinic3_cmd_vlan_config vlan_info;
 	u16 out_size = sizeof(vlan_info);
 	int err;
+	if (((struct hinic3_hwdev *)hwdev)->bifur_mode == HINIC3_BIFUR_MODE_QPOOL) {
+		PMD_DRV_LOG(WARNING, "Qpool not support config vlan");
+		return 0;
+	}
 
 	memset(&vlan_info, 0, sizeof(vlan_info));
 	vlan_info.opcode = opcode;
@@ -420,7 +433,10 @@ int hinic3_set_vport_enable(void *hwdev, bool enable)
 
 	if (!hwdev)
 		return -EINVAL;
-
+	if (((struct hinic3_hwdev *)hwdev)->bifur_mode == HINIC3_BIFUR_MODE_QPOOL) {
+		PMD_DRV_LOG(WARNING, "Qpool not support set vport enable");
+		return 0;
+	}
 	struct hinic3_nic_dev *nic_dev = (struct hinic3_nic_dev*)((struct hinic3_hwdev *)hwdev)->dev_handle;
 	memset(&en_state, 0, sizeof(en_state));
 	en_state.func_id = hinic3_global_func_id(hwdev);
@@ -499,7 +515,10 @@ static int hinic3_cfg_hw_pause(void *hwdev, u8 opcode,
 	struct hinic3_cmd_pause_config pause_info;
 	u16 out_size = sizeof(pause_info);
 	int err;
-
+	if (((struct hinic3_hwdev *)hwdev)->bifur_mode == HINIC3_BIFUR_MODE_QPOOL) {
+		PMD_DRV_LOG(WARNING, "Qpool not support cfg hw pause");
+		return 0;
+	}
 	memset(&pause_info, 0, sizeof(pause_info));
 
 	pause_info.port_id = hinic3_physical_port_id(hwdev);
@@ -828,6 +847,10 @@ int hinic3_set_rx_mode(void *hwdev, u32 enable)
 
 	if (!hwdev)
 		return -EINVAL;
+	if (((struct hinic3_hwdev *)hwdev)->bifur_mode == HINIC3_BIFUR_MODE_QPOOL) {
+		PMD_DRV_LOG(WARNING, "Qpool not support set rx mode");
+		return 0;
+	}
 
 	memset(&rx_mode_cfg, 0, sizeof(rx_mode_cfg));
 	rx_mode_cfg.func_id = hinic3_global_func_id(hwdev);
@@ -852,7 +875,10 @@ int hinic3_set_rx_vlan_offload(void *hwdev, u8 en)
 
 	if (!hwdev)
 		return -EINVAL;
-
+	if (((struct hinic3_hwdev *)hwdev)->bifur_mode == HINIC3_BIFUR_MODE_QPOOL) {
+		PMD_DRV_LOG(WARNING, "Qpool not support set rx vlan offload");
+		return -EIO;
+	}
 	memset(&vlan_cfg, 0, sizeof(vlan_cfg));
 	vlan_cfg.func_id = hinic3_global_func_id(hwdev);
 	vlan_cfg.vlan_offload = en;
@@ -876,7 +902,10 @@ int hinic3_set_vlan_fliter(void *hwdev, u32 vlan_filter_ctrl)
 
 	if (!hwdev)
 		return -EINVAL;
-
+	if (((struct hinic3_hwdev *)hwdev)->bifur_mode == HINIC3_BIFUR_MODE_QPOOL) {
+		PMD_DRV_LOG(WARNING, "Qpool not support set vlan fliter");
+		return -EIO;
+	}
 	memset(&vlan_filter, 0, sizeof(vlan_filter));
 	vlan_filter.func_id = hinic3_global_func_id(hwdev);
 	vlan_filter.vlan_filter_ctrl = vlan_filter_ctrl;
@@ -1079,10 +1108,26 @@ int hinic3_rss_set_hash_key(void *hwdev, u8 *key, u16 key_size)
 	return hinic3_rss_cfg_hash_key(hwdev, HINIC3_CMD_OP_SET, key, key_size);
 }
 
+static int hinic3_rss_get_indir_tbl_qpool(int fd, struct mag_cmd_rss_indir_tbl *cmd_indir_tbl)
+{
+	struct msg_module msg_to_kernel = { 0 };
+	int err;
+
+	fill_ioctl_msg(&msg_to_kernel, SEND_TO_BIFUR_DRIVER, GET_RSS_INDIR_TBL,
+		       sizeof(struct mag_cmd_rss_indir_tbl), sizeof(struct mag_cmd_rss_indir_tbl),
+		       cmd_indir_tbl, cmd_indir_tbl);
+	err = ioctl(fd, 0, &msg_to_kernel);
+	
+	if (err < 0)
+		PMD_DRV_LOG(ERR, "Get qpool indir tbl err: %d.", err);
+	return err;
+}
+
 int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table)
 {
 	struct hinic3_cmd_buf *cmd_buf = NULL;
 	struct hinic3_nic_dev *nic_dev = NULL;
+	struct mag_cmd_rss_indir_tbl cmd_indir_tbl = { 0 };
 	u8 cmd;
 	int err;
 
@@ -1094,18 +1139,27 @@ int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table)
 		PMD_DRV_LOG(ERR, "Allocate cmd buf failed");
 		return -ENOMEM;
 	}
+
 	cmd_buf->size = sizeof(struct nic_rss_indirect_tbl);
 	nic_dev = (struct hinic3_nic_dev *)(((struct hinic3_hwdev *)hwdev)->dev_handle);
-	cmd = nic_dev->cmdq_ops->prepare_cmd_buf_get_rss_indir_table(nic_dev, cmd_buf);
-	err = hinic3_cmdq_detail_resp(hwdev, HINIC3_MOD_L2NIC, cmd, cmd_buf, cmd_buf, 0);
 
+	if (((struct hinic3_hwdev *)hwdev)->bifur_mode == HINIC3_BIFUR_MODE_QPOOL) {
+		err = hinic3_rss_get_indir_tbl_qpool(nic_dev->fd, &cmd_indir_tbl);
+		cmd_buf->buf = cmd_indir_tbl.rss_indir.entry;
+	} else {
+		cmd = nic_dev->cmdq_ops->prepare_cmd_buf_get_rss_indir_table(nic_dev, cmd_buf);
+		err = hinic3_cmdq_detail_resp(hwdev, HINIC3_MOD_L2NIC, cmd, cmd_buf, cmd_buf, 0);
+	}
+	
 	if (err) {
 		PMD_DRV_LOG(ERR, "Get rss indir table failed");
 		hinic3_free_cmd_buf(cmd_buf);
 		return err;
 	}
-
-	nic_dev->cmdq_ops->cmd_buf_to_rss_indir_table(cmd_buf,indir_table);
+	if (((struct hinic3_hwdev *)hwdev)->bifur_mode == HINIC3_BIFUR_MODE_QPOOL)
+		nic_dev->cmdq_ops->cmd_buf_to_rss_indir_table_qpool(cmd_buf,indir_table);
+	else
+		nic_dev->cmdq_ops->cmd_buf_to_rss_indir_table(cmd_buf,indir_table);
 
 	hinic3_free_cmd_buf(cmd_buf);
 	return 0;
@@ -1139,6 +1193,38 @@ int hinic3_rss_set_indir_tbl(void *hwdev, const u32 *indir_table)
 	}
 
 	hinic3_free_cmd_buf(cmd_buf);
+	return err;
+}
+
+int hinic3_rss_set_indir_tbl_qpool(void *hwdev, const u32 *indir_table)
+{
+	struct hinic3_nic_dev * nic_dev = (struct hinic3_nic_dev *)(((struct hinic3_hwdev *)hwdev)->dev_handle);
+	struct mag_cmd_rss_indir_tbl cmd_indir_tbl = { 0 };
+	struct msg_module msg_to_kernel = { 0 };
+	struct nic_rss_indirect_tbl *indir_tbl = &(cmd_indir_tbl.rss_indir);
+	int err;
+	u32 i;
+
+	if (!hwdev || !indir_table)
+		return -EINVAL;
+
+	cmd_indir_tbl.func_id = hinic3_global_func_id(hwdev);
+	cmd_indir_tbl.pid = nic_dev->global_id;
+
+	for (i = 0; i < HINIC3_RSS_INDIR_SIZE; i++)
+		indir_tbl->entry[i] = (u16)(*(indir_table + i));
+
+	rte_mb();
+
+	fill_ioctl_msg(&msg_to_kernel, SEND_TO_BIFUR_DRIVER, SET_RSS_INDIR_TBL,
+		       sizeof(struct mag_cmd_rss_indir_tbl), sizeof(struct mag_cmd_rss_indir_tbl),
+		       &cmd_indir_tbl, &cmd_indir_tbl);
+
+	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
+	if (err < 0) {
+		PMD_DRV_LOG(ERR, "Set qpool indir table error: %d.", err);
+		return -EINVAL;
+	}
 	return err;
 }
 
@@ -1509,6 +1595,31 @@ int hinic3_flush_tcam_rule(void *hwdev)
 		err = -EIO;
 	}
 
+	return err;
+}
+
+int hinic3_add_tcam_rule_by_kernel(void *hwdev, struct nic_ext_tcam_cfg_rule *tcam_rule,
+				   u8 tcam_rule_type, int global_id, int fd)
+{
+	struct nic_extcmd_fdir_add_rule tcam_cmd = {0};
+	struct msg_module msg_to_kernel = {0};
+	int err;
+	tcam_cmd.func_id = hinic3_global_func_id(hwdev);
+	tcam_cmd.type = tcam_rule_type;
+
+	tcam_cmd.rule = *tcam_rule;
+	msg_to_kernel.mpu_cmd.api_type = 1;
+
+	msg_to_kernel.mpu_cmd.cmd = HINIC3_NIC_CMD_ADD_TC_FLOW;
+	msg_to_kernel.mpu_cmd.mod = 1;
+	msg_to_kernel.lcore_id = global_id;
+
+	fill_ioctl_msg(&msg_to_kernel, SEND_TO_MPU, msg_to_kernel.msg_formate, sizeof(tcam_cmd),
+		       sizeof(tcam_cmd), &tcam_cmd, &tcam_cmd);
+	err = ioctl(fd, 0, &msg_to_kernel);
+
+	if (err < 0) 
+		perror("Qpool tcam rule add");
 	return err;
 }
 

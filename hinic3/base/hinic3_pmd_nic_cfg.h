@@ -6,6 +6,7 @@
 #define _HINIC3_PMD_NIC_CFG_H_
 
 #include "hinic3_pmd_mgmt.h"
+#include "hinic3_compat.h"
 
 #ifndef ETH_ALEN
 #define ETH_ALEN			6
@@ -916,6 +917,37 @@ enum hinic3_qpool_subcmd {
 	HINIC3_NIC_QPOOL_CMD_GET_RSS_ID,                /** < get temp_id/inst_id/node_id */
 };
 
+struct mag_cmd_rss_indir_tbl {
+	u16 pid;
+	u16 func_id;
+	struct nic_rss_indirect_tbl rss_indir;
+};
+
+typedef  struct {
+	u32 qid : 10;
+	u32 flag : 1;
+	u32 rsvd : 21;
+}qid_htn_s;
+
+typedef union {
+	qid_htn_s qid_htn;
+	u32 qid;
+}qid_u;
+
+struct tcam_ext_result {
+	union {
+		struct {
+			u32 qid : 16;
+			u32 rsvd : 3;
+			u32 q_grp_id : 12;
+			u32 have_qgrp_id : 1;
+		}bs;
+		u32 qid;
+		qid_u fdir_info;
+	} dw0;
+	u32 ext;
+};
+
 struct nic_rss_context_tbl {
 	u32 rsvd[3];
 	u16 q_grp_id;
@@ -1023,6 +1055,12 @@ struct hinic3_tcam_cfg_rule {
 	struct hinic3_tcam_key_x_y key;
 };
 
+struct nic_ext_tcam_cfg_rule {
+	u32 index;
+	struct tcam_ext_result data;
+	struct hinic3_tcam_key_x_y key;
+};
+
 #define TCAM_RULE_FDIR_TYPE 0
 #define TCAM_RULE_PPA_TYPE  1
 #define TCAM_RULE_Q_GROUP_TYPE 2
@@ -1039,6 +1077,14 @@ struct hinic3_fdir_add_rule {
 	u8 type;
 	u8 bifur_rss_en;
 	struct hinic3_tcam_cfg_rule rule;
+};
+
+struct nic_extcmd_fdir_add_rule {
+	struct mgmt_msg_head head;
+	u16 func_id;
+	u8 type;
+	u8 fdir_ext;
+	struct nic_ext_tcam_cfg_rule rule;
 };
 
 struct hinic3_port_flow_bifur_en_cmd {
@@ -1482,6 +1528,18 @@ int hinic3_rss_template_free(void *hwdev, u16 q_grp_id);
  * @retval non-zero : Failure
  */
 int hinic3_rss_set_indir_tbl(void *hwdev, const u32 *indir_table);
+/**
+ * Set RSS indirect table in QPOOL mode
+ *
+ * @param[in] hwdev
+ *   Device pointer to hwdev
+ * @param[in] indir_table
+ *   RSS indirect table
+ *
+ * @retval zero : Success
+ * @retval non-zero : Failure
+ */
+int hinic3_rss_set_indir_tbl_qpool(void *hwdev, const u32 *indir_table);
 
 /**
  * Get RSS indirect table
@@ -1636,6 +1694,9 @@ int hinic3_set_vlan_fliter(void *hwdev, u32 vlan_filter_ctrl);
  */
 int hinic3_vf_get_default_cos(void *hwdev, u8 *cos_id);
 
+
+int hinic3_add_tcam_rule_by_kernel(void *hwdev, struct nic_ext_tcam_cfg_rule *tcam_rule,
+				   u8 tcam_rule_type, int global_id, int fd);
 /**
  * Add tcam rules
  *

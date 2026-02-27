@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright(c) 2019 Huawei Technologies Co., Ltd
  */
-
+#include <fcntl.h>
+#include <sys/ioctl.h>
 #include "hinic3_compat.h"
 #include "hinic3_pmd_hwdev.h"
 #include "hinic3_pmd_csr.h"
@@ -11,7 +12,8 @@
 #include "hinic3_pmd_hw_cfg.h"
 #include "hinic3_pmd_mbox.h"
 #include "hinic3_pmd_nic_event.h"
-
+#include "hinic3_pmd_ethdev.h"
+#include "../mml/hinic3_pmd_mml_lib.h"
 #define HINIC3_MBOX_INT_DST_FUNC_SHIFT				0
 #define HINIC3_MBOX_INT_DST_AEQN_SHIFT				10
 #define HINIC3_MBOX_INT_SRC_RESP_AEQN_SHIFT			12
@@ -930,6 +932,39 @@ static int hinic3_mbox_to_func_no_ack(struct hinic3_hwdev *hwdev, u16 func_idx,
 	(void)hinic3_mutex_unlock(&func_to_func->mbox_send_mutex);
 
 	return err;
+}
+
+void fill_ioctl_msg(struct msg_module *msg, u32 module, u32 msg_formate,
+		    u32 in_buf_len, u32 out_buf_len, void *in_buf, void *out_buf)
+{
+	msg->module = module;
+	msg->msg_formate = msg_formate;
+	msg->buf_in_size = in_buf_len;
+	msg->buf_out_size = out_buf_len;
+	msg->in_buf = in_buf;
+	msg->out_buf = out_buf;
+}
+
+int hinic3_send_mbox_to_kernel(struct hinic3_hwdev *hwdev,
+			       enum hinic3_mod_type mod, u16 cmd, void *buf_in,
+			       u16 in_size, void *buf_out, u16 *out_size,
+			       __rte_unused u32 timeout)
+{
+	struct hinic3_nic_dev *nic_dev = hwdev->dev_handle;
+	struct msg_module msg_to_kernel = { 0 };
+	int err;
+	fill_ioctl_msg(&msg_to_kernel, SEND_TO_MPU, 0, in_size, *out_size, buf_in, buf_out);
+	msg_to_kernel.mpu_cmd.api_type = 1;
+	msg_to_kernel.mpu_cmd.mod = mod;
+	msg_to_kernel.mpu_cmd.cmd = cmd;
+	msg_to_kernel.lcore_id = nic_dev->global_id;
+
+	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
+	if (err < 0) {
+		perror("Send mbox to kernel fail");
+		return -EINVAL;
+	}
+	return 0;
 }
 
 int hinic3_send_mbox_to_mgmt(struct hinic3_hwdev *hwdev,
