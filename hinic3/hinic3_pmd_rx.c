@@ -883,10 +883,14 @@ int hinic3_stop_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq)
 	rte_spinlock_unlock(&nic_dev->queue_list_lock);
 
 	/* Send flush rq cmd to uCode */
-	err = hinic3_set_rq_flush(nic_dev->hwdev, rxq->q_id);
+	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL)
+		err = hinic3_set_rq_flush(nic_dev->hwdev, rxq->local_qid);
+	else
+		err = hinic3_set_rq_flush(nic_dev->hwdev, rxq->q_id);
+
 	if (err) {
-		PMD_DRV_LOG(ERR, "Flush rq failed, eth_dev:%s, queue_idx:%d\n",
-			    nic_dev->dev_name, rxq->q_id);
+		PMD_DRV_LOG(ERR, "Flush rq failed, eth_dev:%s, q_id:%d, local_qid: %d",
+			    nic_dev->dev_name, rxq->q_id, rxq->local_qid);
 		goto rq_flush_failed;
 	}
 
