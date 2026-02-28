@@ -1184,6 +1184,7 @@ int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table, u32 indir_table_size
 	struct hinic3_nic_dev *nic_dev = NULL;
 	struct hinic3_cmd_buf *cmd_buf = NULL;
 	struct nic_rss_indirect_tbl *nic_indir_tbl = NULL;
+	struct hinic3_indir_tbl_qid_lqid *entry = NULL;
 	u16 rss_temp_id, rss_node_id, rss_inst_id;
 	u16 *indir_tbl = NULL;
 	int err;
@@ -1230,8 +1231,16 @@ int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table, u32 indir_table_size
 		hinic3_free_cmd_buf(cmd_buf);
 		return err;
 	}
-	for (i = 0; i < indir_table_size; i++)
-		indir_table[i] = *(indir_tbl + i);
+
+	if (((struct hinic3_hwdev *)hwdev)->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
+		for (i = 0; i < indir_table_size; i++) {
+			entry = hinic3_find_by_local_qid(*(indir_tbl + i));
+			indir_table[i] = entry ? entry->q_id : 0xFFF;
+		}
+	} else {
+		for (i = 0; i < indir_table_size; i++)
+			indir_table[i] = *(indir_tbl + i);
+	}
 
 	hinic3_free_cmd_buf(cmd_buf);
 	return 0;
