@@ -4783,6 +4783,23 @@ static int hinic3_pci_probe(__rte_unused struct rte_pci_driver *pci_drv,
 	if (ret != 0 || bifur_action == BIFUR_DONE) {
 		return ret;
 	}
+#else
+	char dev_path[PATH_MAX];
+	struct stat st;
+
+	snprintf(dev_path, sizeof(dev_path), "/sys/class/nic_cdev/nic_cdev!" PCI_PRI_FMT "/qinfo_mode",
+		 pci_dev->addr.domain,
+		 pci_dev->addr.bus,
+		 pci_dev->addr.devid,
+		 pci_dev->addr.function);
+	if (stat(dev_path, &st) != 0) {
+		ret = rte_pci_map_device(pci_dev);
+		pci_drv->drv_flags |= RTE_PCI_DRV_NEED_MAPPING;
+		if (ret != 0) {
+			PMD_DRV_LOG(ERR, "hinic3_pci_probe: rte_pci_map_device failed: %d", ret);
+			return ret;
+		}
+	}
 #endif
 	ret = rte_eth_dev_pci_generic_probe(work_pci_dev,
 		sizeof(struct hinic3_nic_dev), hinic3_dev_init);
@@ -4802,18 +4819,9 @@ static int hinic3_pci_remove(struct rte_pci_device *pci_dev)
 	return ret;
 }
 
-static void hinic3_driver_init(struct rte_pci_driver *rte_hinic3_pmd)
-{
-	rte_hinic3_pmd->drv_flags = RTE_PCI_DRV_INTR_LSC;
-}
-
 static struct rte_pci_driver rte_hinic3_pmd = {
 	.id_table = pci_id_hinic3_map,
-#ifdef HINIC3_TRAFFIC_BIFUR
 	.drv_flags = RTE_PCI_DRV_INTR_LSC,
-#else
-	.drv_flags = RTE_PCI_DRV_NEED_MAPPING | RTE_PCI_DRV_INTR_LSC,
-#endif
 	.probe = hinic3_pci_probe,
 	.remove = hinic3_pci_remove,
 };
@@ -4826,9 +4834,4 @@ RTE_INIT(hinic3_init_log)
 	hinic3_logtype = rte_log_register("pmd.net.hinic3");
 	if (hinic3_logtype >= 0)
 		rte_log_set_level(hinic3_logtype, RTE_LOG_INFO);
-}
-
-RTE_INIT(hinic3_pmd_init)
-{
-	hinic3_driver_init(&rte_hinic3_pmd);
 }
