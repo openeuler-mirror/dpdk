@@ -1147,6 +1147,38 @@ static int hinic3_rss_get_indir_tbl_qpool(struct nic_rss_indirect_tbl *nic_indir
 	return err;
 }
 
+int hinic3_indir_set_qid_mmap(u16 q_id, u16 local_qid)
+{
+	struct hinic3_indir_tbl_qid_lqid *entry = NULL;
+
+	TAILQ_FOREACH(entry, &g_qid_lqid_list, entries) {
+		if (entry->q_id == q_id) {
+			return -1;
+		}
+	}
+
+	entry = rte_zmalloc("indir_entry", sizeof(struct hinic3_indir_tbl_qid_lqid), 0);
+
+	entry->q_id = q_id;
+	entry->local_qid = local_qid;
+
+	TAILQ_INSERT_TAIL(&g_qid_lqid_list, entry, entries);
+
+	return 0;
+}
+
+static struct hinic3_indir_tbl_qid_lqid *hinic3_find_by_local_qid(u16 local_qid)
+{
+	struct hinic3_indir_tbl_qid_lqid *entry = NULL;
+
+	TAILQ_FOREACH(entry, &g_qid_lqid_list, entries) {
+		if (entry->local_qid == local_qid)
+			return entry;
+	}
+
+	return NULL;
+}
+
 int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table, u32 indir_table_size)
 {
 	struct hinic3_nic_dev *nic_dev = NULL;
