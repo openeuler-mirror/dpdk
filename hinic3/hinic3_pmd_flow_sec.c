@@ -636,8 +636,10 @@ hinic3_flow_sec_fdir_udp(const struct rte_flow_item *flow_item,
 	mask_udp = (const struct rte_flow_item_udp *)flow_item->mask;
 	spec_udp = (const struct rte_flow_item_udp *)flow_item->spec;
 
-	filter->sec_fdir_filter.key_mask.proto = HINIC3_UINT8_MAX;
-	filter->sec_fdir_filter.key_spec.proto = IPPROTO_UDP;
+	if (!is_outer) {
+		filter->sec_fdir_filter.key_mask.proto = HINIC3_UINT8_MAX;
+		filter->sec_fdir_filter.key_spec.proto = IPPROTO_UDP;
+	}
 
 	if (!mask_udp && !spec_udp)
 		return 0;
@@ -736,9 +738,10 @@ hinic3_flow_parse_sec_fdir_pattern(__rte_unused struct rte_eth_dev *dev,
 
     enum hinic3_fdir_tunnel_mode tunnel_mode = HINIC3_FDIR_TUNNEL_MODE_NORMAL;
     bool is_tunnel = false;
+    bool vlan_precessed = false;
     filter->sec_fdir_filter.ip_type = HINIC3_FDIR_IP_TYPE_ANY;
     filter->sec_fdir_filter.has_ip_flag = false;
-	filter->sec_fdir_filter.outer_proto_mask = HINIC3_UINT8_MAX;
+    filter->sec_fdir_filter.outer_proto_mask = HINIC3_UINT8_MAX;
     filter->sec_fdir_filter.outer_proto_spec = IPPROTO_UDP;
     filter->fdir_filter.outer_ip_type = HINIC3_FDIR_IP_TYPE_ANY;
     filter->fdir_filter.tunnel_type = HINIC3_FDIR_TUNNEL_MODE_NORMAL;
@@ -769,11 +772,12 @@ hinic3_flow_parse_sec_fdir_pattern(__rte_unused struct rte_eth_dev *dev,
             break;
 
         case HINIC3_FLOW_ITEM_TYPE_VLAN:
-            if (is_tunnel && tunnel_mode != HINIC3_FDIR_TUNNEL_MODE_NORMAL)
+            if ((is_tunnel && tunnel_mode != HINIC3_FDIR_TUNNEL_MODE_NORMAL) || vlan_precessed)
                 break;
             err = hinic3_flow_sec_fdir_vlan(flow_item, filter, error);
             if (err != 0)
                 return -rte_errno;
+	    vlan_precessed = true;
             break;
 
         case HINIC3_FLOW_ITEM_TYPE_IPV4:
