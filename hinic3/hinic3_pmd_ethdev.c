@@ -635,7 +635,7 @@ static int hinic3_dev_set_link_up(struct rte_eth_dev *dev)
 
 	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
 		PMD_DRV_LOG(WARNING, "Qpool mode not support set link status.");
-		return 0;
+		return -EAGAIN;
 	}
 
 	/* Vport enable will set function valid in mpu.
@@ -691,7 +691,7 @@ static int hinic3_dev_set_link_down(struct rte_eth_dev *dev)
 
 	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
 		PMD_DRV_LOG(WARNING, "Qpool mode not support set link status.");
-		return 0;
+		return -EAGAIN;
 	}
 
 	err = hinic3_set_vport_enable(nic_dev->hwdev, false);
@@ -1195,6 +1195,9 @@ static int hinic3_get_tx_user_queue(struct hinic3_nic_dev *nic_dev, struct hinic
 		PMD_DRV_LOG(ERR, "Get tx user queue error: %d.", errno);
 
 	txq->local_qid = queueinfo.local_qid;
+
+	hinic3_indir_set_qid_mmap(txq->q_id, txq->local_qid);
+
 	return err;
 }
 
@@ -2592,7 +2595,7 @@ static int hinic3_dev_set_mtu(struct rte_eth_dev *dev, uint16_t mtu)
 
 	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
 		PMD_DRV_LOG(WARNING, "Qpool mode not support set mtu.");
-		return 0;
+		return -EINVAL;
 	}
 
 	PMD_DRV_LOG(INFO, "Set port mtu, port_id: %d, mtu: %d, max_pkt_len: %d",
@@ -2755,6 +2758,11 @@ static int hinic3_dev_allmulticast_enable(struct rte_eth_dev *dev)
 	u32 rx_mode;
 	int err;
 
+	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
+		PMD_DRV_LOG(WARNING, "Qpool mode not support set allmulticast enable.");
+		return -EINVAL;
+	}
+
 	err = hinic3_mutex_lock(&nic_dev->rx_mode_mutex);
 	if (err)
 		return err;
@@ -2792,6 +2800,11 @@ static int hinic3_dev_allmulticast_disable(struct rte_eth_dev *dev)
 	u32 rx_mode;
 	int err;
 
+	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
+		PMD_DRV_LOG(WARNING, "Qpool mode not support set allmulticast disable.");
+		return -EINVAL;
+	}
+
 	err = hinic3_mutex_lock(&nic_dev->rx_mode_mutex);
 	if (err)
 		return err;
@@ -2828,6 +2841,11 @@ static int hinic3_dev_promiscuous_enable(struct rte_eth_dev *dev)
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	u32 rx_mode;
 	int err;
+
+	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
+		PMD_DRV_LOG(WARNING, "Qpool mode not support set promiscuous enable.");
+		return -EINVAL;
+	}
 
 	if (!(nic_dev->feature_cap & NIC_F_PROMISC)) {
 		PMD_DRV_LOG(ERR, "nic_dev: %s, port_id: %d, do not support vf promisc: %" PRIu64 "",
@@ -2873,6 +2891,12 @@ static int hinic3_dev_promiscuous_disable(struct rte_eth_dev *dev)
 	u32 rx_mode;
 	int err;
 
+	
+	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
+		PMD_DRV_LOG(WARNING, "Qpool mode not support set promiscuous disable.");
+		return -EINVAL;
+	}
+	
 	if (!(nic_dev->feature_cap & NIC_F_PROMISC)) {
 		PMD_DRV_LOG(ERR, "nic_dev: %s, port_id: %d, do not support vf promisc: %" PRIu64 "",
 			nic_dev->dev_name, dev->data->port_id, nic_dev->feature_cap);
@@ -3203,7 +3227,12 @@ static int hinic3_rss_reta_update(struct rte_eth_dev *dev,
 		}
 	}
 
-	err = hinic3_rss_set_indir_tbl(nic_dev->hwdev, indirtbl, HINIC3_RSS_INDIR_SIZE);
+	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
+		err = hinic3_rss_set_indir_tbl_qpool(nic_dev->hwdev, indirtbl, HINIC3_RSS_INDIR_SIZE);
+	} else {
+		err = hinic3_rss_set_indir_tbl(nic_dev->hwdev, indirtbl, HINIC3_RSS_INDIR_SIZE);
+	}
+
 	if (err)
 		PMD_DRV_LOG(ERR, "Set RSS reta table failed");
 
@@ -3651,7 +3680,7 @@ static int hinic3_set_mac_addr(struct rte_eth_dev *dev,
 
 	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
 		PMD_DRV_LOG(WARNING, "Qpool mode not support set mac addr.");
-		return 0;
+		return -EINVAL;
 	}
 
 #ifdef HINIC3_TRAFFIC_BIFUR
@@ -3698,7 +3727,7 @@ static void hinic3_mac_addr_remove(struct rte_eth_dev *dev, uint32_t index)
 
 	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
 		PMD_DRV_LOG(WARNING, "Qpool mode not support remove mac addr.");
-		return 0;
+		return -EINVAL;
 	}
 
 	if (index >= HINIC3_MAX_UC_MAC_ADDRS) {
@@ -3741,7 +3770,7 @@ static int hinic3_mac_addr_add(struct rte_eth_dev *dev,
 
 	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
 		PMD_DRV_LOG(WARNING, "Qpool mode not support add mac addr.");
-		return 0;
+		return -EINVAL;
 	}
 
 	if (!rte_is_valid_assigned_ether_addr(mac_addr)) {
@@ -3813,7 +3842,7 @@ static int hinic3_set_mc_addr_list(struct rte_eth_dev *dev,
 
 	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
 		PMD_DRV_LOG(WARNING, "Qpool mode not support set mac addr list.");
-		return 0;
+		return -EINVAL;
 	}
 
 	func_id = hinic3_global_func_id(nic_dev->hwdev);

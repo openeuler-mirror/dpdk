@@ -349,6 +349,18 @@ struct hinic3_ppa_fdir_query_cmd {
     u64 pkt_bytes;
 };
 
+
+struct hinic3_indir_tbl_qid_lqid {
+	TAILQ_ENTRY(hinic3_indir_tbl_qid_lqid) entries;
+	u16 q_id;
+	u16 local_qid;
+};
+
+TAILQ_HEAD(hinic3_indir_qid_lqid_list, hinic3_indir_tbl_qid_lqid);
+
+static struct hinic3_indir_qid_lqid_list g_qid_lqid_list = 
+	TAILQ_HEAD_INITIALIZER(g_qid_lqid_list);
+
 #define HINIC3_CMD_OP_ADD	1
 #define HINIC3_CMD_OP_DEL	0
 
@@ -1825,5 +1837,7 @@ int hinic3_fdir_del_sec_tcam_rule(void *hwdev, u32 index, u8 tcam_rule_type,
 int hinic3_fdir_flush_sec_tcam_rule(void *hwdev);
 
 int hinic3_fdir_cfg_sec_tcam(void *hwdev, u8 *en);
+
+int hinic3_indir_set_qid_mmap(u16 q_id, u16 local_qid);
 
 #endif /* _HINIC3_PMD_NIC_CFG_H_ */
