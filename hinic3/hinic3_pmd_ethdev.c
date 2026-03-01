@@ -2079,8 +2079,6 @@ static int hinic3_dev_start_qpool(struct rte_eth_dev *eth_dev)
 	int i;
 	int err;
 
-	hinic3_disable_interrupt(eth_dev);
-
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
 	hinic3_get_func_rx_buf_size(nic_dev);
 
@@ -2752,7 +2750,7 @@ static int hinic3_dev_allmulticast_enable(struct rte_eth_dev *dev)
 
 	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
 		PMD_DRV_LOG(WARNING, "Qpool mode not support set allmulticast enable.");
-		return 0;
+		return -ENOTSUP;
 	}
 
 	err = hinic3_mutex_lock(&nic_dev->rx_mode_mutex);
@@ -2794,7 +2792,7 @@ static int hinic3_dev_allmulticast_disable(struct rte_eth_dev *dev)
 
 	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
 		PMD_DRV_LOG(WARNING, "Qpool mode not support set allmulticast disable.");
-		return 0;
+		return -ENOTSUP;
 	}
 
 	err = hinic3_mutex_lock(&nic_dev->rx_mode_mutex);
@@ -2836,7 +2834,7 @@ static int hinic3_dev_promiscuous_enable(struct rte_eth_dev *dev)
 
 	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
 		PMD_DRV_LOG(WARNING, "Qpool mode not support set promiscuous enable.");
-		return 0;
+		return -ENOTSUP;
 	}
 
 	if (!(nic_dev->feature_cap & NIC_F_PROMISC)) {
@@ -2886,7 +2884,7 @@ static int hinic3_dev_promiscuous_disable(struct rte_eth_dev *dev)
 	
 	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
 		PMD_DRV_LOG(WARNING, "Qpool mode not support set promiscuous disable.");
-		return 0;
+		return -ENOTSUP;
 	}
 	
 	if (!(nic_dev->feature_cap & NIC_F_PROMISC)) {
