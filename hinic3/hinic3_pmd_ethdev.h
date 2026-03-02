@@ -20,6 +20,8 @@
 #define HINIC3_MAX_QUEUE_DEPTH		16384
 #define HINIC3_MIN_QUEUE_DEPTH		128
 
+#define HINIC3_QUEUE_STAT_CNTRS     256
+
 #ifdef DPDK_21_11
 #define PCI_DEV_TO_INTR_HANDLE(pci_dev) (pci_dev->intr_handle)
 
