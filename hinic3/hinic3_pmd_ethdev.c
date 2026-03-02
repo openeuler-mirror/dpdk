@@ -3322,8 +3322,8 @@ hinic3_dev_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 	}
 
 	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
-		q_num = (nic_dev->num_rqs < RTE_ETHDEV_QUEUE_STAT_CNTRS) ?
-			nic_dev->num_rqs : RTE_ETHDEV_QUEUE_STAT_CNTRS;
+		q_num = (nic_dev->num_rqs < HINIC3_QUEUE_STAT_CNTRS) ?
+			nic_dev->num_rqs : HINIC3_QUEUE_STAT_CNTRS;
 		
 		for (i = 0; i < q_num; i++) {
 			rxq = nic_dev->rxqs[i];
@@ -3332,8 +3332,8 @@ hinic3_dev_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 			stats->imissed += rxq->rxq_stats.dropped;
 		}
 
-		q_num = (nic_dev->num_sqs < RTE_ETHDEV_QUEUE_STAT_CNTRS) ?
-			nic_dev->num_sqs :  RTE_ETHDEV_QUEUE_STAT_CNTRS;
+		q_num = (nic_dev->num_sqs < HINIC3_QUEUE_STAT_CNTRS) ?
+			nic_dev->num_sqs :  HINIC3_QUEUE_STAT_CNTRS;
 		for (i = 0; i < q_num; i++) {
 			txq = nic_dev->txqs[i];
 			stats->opackets += txq->txq_stats.packets;
