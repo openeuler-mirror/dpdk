@@ -1412,7 +1412,7 @@ u16 hinic3_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, u16 nb_pkts)
 		}
 
 		/* Fill sq_wqe buf_desc and bd_desc */
-		if (txq->multi_segs || wqe_info.sge_cnt > 1)
+		if (txq->multi_segs)
 			err = hinic3_mbuf_dma_map_sge(txq, mbuf_pkt, &wqe_combo, &wqe_info);
 		else
 			err = hinic3_mbuf_dma_map_single(txq, mbuf_pkt, &wqe_combo,&wqe_info);
