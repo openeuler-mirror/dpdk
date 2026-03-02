@@ -1508,10 +1508,11 @@ static void hinic3_tx_queue_release(struct rte_eth_dev *dev, uint16_t queue_id)
 #endif
 }
 
-static int hinic3_dev_rx_queue_start(__rte_unused struct rte_eth_dev *dev,
-				     __rte_unused uint16_t rq_id)
+static int 
+hinic3_dev_rx_queue_start(struct rte_eth_dev *dev, uint16_t rq_id)
 {
 	struct hinic3_rxq *rxq = NULL;
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	int rc;
 
 	if (rq_id < dev->data->nb_rx_queues) {
@@ -1526,18 +1527,23 @@ static int hinic3_dev_rx_queue_start(__rte_unused struct rte_eth_dev *dev,
 
 		dev->data->rx_queue_state[rq_id] = RTE_ETH_QUEUE_STATE_STARTED;
 	}
-	rc = hinic3_enable_rxq_fdir_filter(dev, (u32)rq_id, (u32)true); /*lint !e746*/
-	if (rc) {
-		PMD_DRV_LOG(ERR, "Failed to enable rq : %d fdir filter.", rq_id);
-		return rc;
+
+	if (nic_dev->hwdev->qinfo_type != HINIC3_QINFO_TYPE_QPOOL) {
+		rc = hinic3_enable_rxq_fdir_filter(dev, (u32)rq_id, (u32)true);
+		if (rc) {
+			PMD_DRV_LOG(ERR, "Failed to enable rq : %d fdir filter.", rq_id);
+			return rc;
+		}
 	}
+
 	return 0;
 }
 
-static int hinic3_dev_rx_queue_stop(__rte_unused struct rte_eth_dev *dev,
-				    __rte_unused uint16_t rq_id)
+static int 
+hinic3_dev_rx_queue_stop(struct rte_eth_dev *dev, uint16_t rq_id)
 {
 	struct hinic3_rxq *rxq = NULL;
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	int rc;
 
 	if (rq_id < dev->data->nb_rx_queues) {
@@ -1552,10 +1558,13 @@ static int hinic3_dev_rx_queue_stop(__rte_unused struct rte_eth_dev *dev,
 
 		dev->data->rx_queue_state[rq_id] = RTE_ETH_QUEUE_STATE_STOPPED;
 	}
-	rc = hinic3_enable_rxq_fdir_filter(dev, (u32)rq_id, (u32)false); /*lint !e746*/
-	if (rc) {
-		PMD_DRV_LOG(ERR, "Failed to disable rq : %d fdir filter.", rq_id);
-		return rc;
+
+	if (nic_dev->hwdev->qinfo_type != HINIC3_QINFO_TYPE_QPOOL) {
+		rc = hinic3_enable_rxq_fdir_filter(dev, (u32)rq_id, (u32)false);
+		if (rc) {
+			PMD_DRV_LOG(ERR, "Failed to disable rq : %d fdir filter.", rq_id);
+			return rc;
+		}
 	}
 
 	return 0;
@@ -3725,7 +3734,7 @@ static void hinic3_mac_addr_remove(struct rte_eth_dev *dev, uint32_t index)
 
 	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
 		PMD_DRV_LOG(WARNING, "Qpool mode not support remove mac addr.");
-		return -EINVAL;
+		return;
 	}
 
 	if (index >= HINIC3_MAX_UC_MAC_ADDRS) {

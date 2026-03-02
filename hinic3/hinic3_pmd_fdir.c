@@ -858,14 +858,11 @@ static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
 		goto lookup_tcam_index_failed;
 	}
 
-	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL)
+	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL ||
+	    fdir_tcam_rule->data.dw1.bs.action != 0)
 		tcam_rule_type = TCAM_RULE_Q_GROUP_TYPE;
-	else {
-		if (fdir_tcam_rule->data.dw1.bs.action != 0)
-			tcam_rule_type = TCAM_RULE_Q_GROUP_TYPE;
-		else
-			tcam_rule_type = TCAM_RULE_FDIR_TYPE;
-	}
+	else
+		tcam_rule_type = TCAM_RULE_FDIR_TYPE;
 
 	err = hinic3_add_tcam_rule(nic_dev->hwdev, fdir_tcam_rule, tcam_rule_type);
 	if (err) {
@@ -1042,12 +1039,10 @@ int hinic3_enable_rxq_fdir_filter(struct rte_eth_dev *dev, u32 queue_id, u32 abl
 	struct hinic3_tcam_info *tcam_info = HINIC3_DEV_PRIVATE_TO_TCAM_INFO(dev->data->dev_private);
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_tcam_filter *it;
-	struct hinic3_tcam_cfg_rule fdir_tcam_rule;
+	struct hinic3_tcam_cfg_rule fdir_tcam_rule = {0};
 	int ret = 0;
 	u32 queue_res;
 	uint16_t index;
-
-	memset(&fdir_tcam_rule, 0, sizeof(struct hinic3_tcam_cfg_rule));
 
 	if (able) {
 		TAILQ_FOREACH (it, &tcam_info->tcam_list, entries) {
