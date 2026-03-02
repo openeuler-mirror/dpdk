@@ -1500,10 +1500,11 @@ static void hinic3_tx_queue_release(struct rte_eth_dev *dev, uint16_t queue_id)
 #endif
 }
 
-static int hinic3_dev_rx_queue_start(__rte_unused struct rte_eth_dev *dev,
-				     __rte_unused uint16_t rq_id)
+static int 
+hinic3_dev_rx_queue_start(struct rte_eth_dev *dev, uint16_t rq_id)
 {
 	struct hinic3_rxq *rxq = NULL;
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	int rc;
 
 	if (rq_id < dev->data->nb_rx_queues) {
@@ -1518,18 +1519,23 @@ static int hinic3_dev_rx_queue_start(__rte_unused struct rte_eth_dev *dev,
 
 		dev->data->rx_queue_state[rq_id] = RTE_ETH_QUEUE_STATE_STARTED;
 	}
-	rc = hinic3_enable_rxq_fdir_filter(dev, (u32)rq_id, (u32)true); /*lint !e746*/
-	if (rc) {
-		PMD_DRV_LOG(ERR, "Failed to enable rq : %d fdir filter.", rq_id);
-		return rc;
+
+	if (nic_dev->hwdev->qinfo_type != HINIC3_QINFO_TYPE_QPOOL) {
+		rc = hinic3_enable_rxq_fdir_filter(dev, (u32)rq_id, (u32)true);
+		if (rc) {
+			PMD_DRV_LOG(ERR, "Failed to enable rq : %d fdir filter.", rq_id);
+			return rc;
+		}
 	}
+
 	return 0;
 }
 
-static int hinic3_dev_rx_queue_stop(__rte_unused struct rte_eth_dev *dev,
-				    __rte_unused uint16_t rq_id)
+static int 
+hinic3_dev_rx_queue_stop(struct rte_eth_dev *dev, uint16_t rq_id)
 {
 	struct hinic3_rxq *rxq = NULL;
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	int rc;
 
 	if (rq_id < dev->data->nb_rx_queues) {
@@ -1544,10 +1550,13 @@ static int hinic3_dev_rx_queue_stop(__rte_unused struct rte_eth_dev *dev,
 
 		dev->data->rx_queue_state[rq_id] = RTE_ETH_QUEUE_STATE_STOPPED;
 	}
-	rc = hinic3_enable_rxq_fdir_filter(dev, (u32)rq_id, (u32)false); /*lint !e746*/
-	if (rc) {
-		PMD_DRV_LOG(ERR, "Failed to disable rq : %d fdir filter.", rq_id);
-		return rc;
+
+	if (nic_dev->hwdev->qinfo_type != HINIC3_QINFO_TYPE_QPOOL) {
+		rc = hinic3_enable_rxq_fdir_filter(dev, (u32)rq_id, (u32)false);
+		if (rc) {
+			PMD_DRV_LOG(ERR, "Failed to disable rq : %d fdir filter.", rq_id);
+			return rc;
+		}
 	}
 
 	return 0;
@@ -3717,7 +3726,7 @@ static void hinic3_mac_addr_remove(struct rte_eth_dev *dev, uint32_t index)
 
 	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
 		PMD_DRV_LOG(WARNING, "Qpool mode not support remove mac addr.");
-		return -EINVAL;
+		return;
 	}
 
 	if (index >= HINIC3_MAX_UC_MAC_ADDRS) {
@@ -4783,6 +4792,23 @@ static int hinic3_pci_probe(__rte_unused struct rte_pci_driver *pci_drv,
 	if (ret != 0 || bifur_action == BIFUR_DONE) {
 		return ret;
 	}
+#else
+	char dev_path[PATH_MAX];
+	struct stat st;
+
+	snprintf(dev_path, sizeof(dev_path), "/sys/class/nic_cdev/nic_cdev!" PCI_PRI_FMT "/qinfo_mode",
+		 pci_dev->addr.domain,
+		 pci_dev->addr.bus,
+		 pci_dev->addr.devid,
+		 pci_dev->addr.function);
+	if (stat(dev_path, &st) != 0) {
+		ret = rte_pci_map_device(pci_dev);
+		pci_drv->drv_flags |= RTE_PCI_DRV_NEED_MAPPING;
+		if (ret != 0) {
+			PMD_DRV_LOG(ERR, "hinic3_pci_probe: rte_pci_map_device failed: %d", ret);
+			return ret;
+		}
+	}
 #endif
 	ret = rte_eth_dev_pci_generic_probe(work_pci_dev,
 		sizeof(struct hinic3_nic_dev), hinic3_dev_init);
@@ -4802,18 +4828,9 @@ static int hinic3_pci_remove(struct rte_pci_device *pci_dev)
 	return ret;
 }
 
-static void hinic3_driver_init(struct rte_pci_driver *rte_hinic3_pmd)
-{
-	rte_hinic3_pmd->drv_flags = RTE_PCI_DRV_INTR_LSC;
-}
-
 static struct rte_pci_driver rte_hinic3_pmd = {
 	.id_table = pci_id_hinic3_map,
-#ifdef HINIC3_TRAFFIC_BIFUR
 	.drv_flags = RTE_PCI_DRV_INTR_LSC,
-#else
-	.drv_flags = RTE_PCI_DRV_NEED_MAPPING | RTE_PCI_DRV_INTR_LSC,
-#endif
 	.probe = hinic3_pci_probe,
 	.remove = hinic3_pci_remove,
 };
@@ -4826,9 +4843,4 @@ RTE_INIT(hinic3_init_log)
 	hinic3_logtype = rte_log_register("pmd.net.hinic3");
 	if (hinic3_logtype >= 0)
 		rte_log_set_level(hinic3_logtype, RTE_LOG_INFO);
-}
-
-RTE_INIT(hinic3_pmd_init)
-{
-	hinic3_driver_init(&rte_hinic3_pmd);
 }
