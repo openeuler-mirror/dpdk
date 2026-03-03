@@ -43,6 +43,8 @@
 #define HINIC3_RSS_TYPE_GET(val, member)	\
 	(((u32)(val) >> HINIC3_RSS_TYPE_##member##_SHIFT) & 0x1)
 
+#define CMDQ_PFN(addr, page_size)	((addr) >> (ilog2(page_size)))
+
 /* NIC CMDQ MODE */
 typedef enum hinic3_ucode_cmd {
 	HINIC3_UCODE_CMD_MODIFY_QUEUE_CTX = 0,
@@ -174,6 +176,7 @@ enum hinic3_mgmt_cmd {
 	HINIC3_MGMT_CMD_CFG_MSIX_CTRL_REG,
 	HINIC3_MGMT_CMD_SET_CEQ_CTRL_REG,
 	HINIC3_MGMT_CMD_SET_DMA_ATTR,
+	HINIC3_MGMT_CMD_SET_ENHANCE_CMDQ_CTXT,
 
 	HINIC3_MGMT_CMD_GET_MQM_FIX_INFO = 40,
 	HINIC3_MGMT_CMD_SET_MQM_CFG_INFO,

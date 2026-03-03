@@ -429,6 +429,12 @@ static int hinic3_init_comm_ch(struct hinic3_hwdev *hwdev)
 		goto func_reset_err;
 	}
 
+	err = hinic3_get_comm_features(hwdev, hwdev->features, HINIC3_MAX_FEATURE_QWORD);
+	if (err) {
+		PMD_DRV_LOG(ERR, "Get comm features failed");
+		goto get_common_features_err;
+	}
+
 	err = hinic3_set_func_svc_used_state(hwdev, HINIC3_MOD_COMM, 1);
 	if (err)
 		goto set_used_state_err;
@@ -446,6 +452,7 @@ static int hinic3_init_comm_ch(struct hinic3_hwdev *hwdev)
 init_cmdqs_channel_err:
 	hinic3_set_func_svc_used_state(hwdev, HINIC3_MOD_COMM, 0);
 set_used_state_err:
+get_common_features_err:
 func_reset_err:
 get_func_info_err:
 	free_mgmt_channel(hwdev);
@@ -498,7 +505,7 @@ int hinic3_init_hwdev(struct hinic3_hwdev *hwdev)
 	}
 
 	if (hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
-		err = hinic3_cmdqs_init_new(hwdev);
+		err = hinic3_init_qpool_cmdqs(hwdev);
 		if (err) {
 			PMD_DRV_LOG(ERR, "Qpool Init cmdq failed");
 			return err;
