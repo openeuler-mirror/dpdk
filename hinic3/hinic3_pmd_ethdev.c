@@ -340,6 +340,8 @@ static bool hinic3_offload_initialized = false;
 #define NETDEV_CHANGEMTU	0x0007
 #define NETDEV_CHANGEADDR	0x0008
 
+#define MAX_PROCESS 64
+
 struct netdev_event {
 	u32 type;
 	u8 data[32];
@@ -358,6 +360,7 @@ static void hinic3_dev_interrupt_handler_qpool(void *param)
 	int ret;
 	ssize_t bytes_read;
 	u8 link_state = 0;
+	int processed = 0;
 
 	if (!hinic3_get_bit(HINIC3_DEV_INTR_EN, &nic_dev->dev_status)) {
 		PMD_DRV_LOG(WARNING,
@@ -366,52 +369,38 @@ static void hinic3_dev_interrupt_handler_qpool(void *param)
 		return;
 	}
 
-	pfd.fd = intr_handle->fd;
-	pfd.events = POLLIN;
 
-	while (true) {
-		ret = poll(&pfd, 1, -1);
-		if (ret < 0) {
-			PMD_DRV_LOG(ERR, "interrupt handler poll error: %d.", ret);
-			break;
-		}
 
-		if (!(pfd.revents & POLLIN))
-			continue;
-
-		while ((bytes_read = read(intr_handle->fd, &event, sizeof(event))) == sizeof(event)) {
-			if (event.type == NETDEV_UP) {
-				link_state = 1;
-				get_port_info(nic_dev->hwdev, link_state, &link);
-				rte_eth_linkstatus_set(dev, &link);
-			} else if (event.type == NETDEV_DOWN) {
-				link_state = 0;
-				get_port_info(nic_dev->hwdev, link_state, &link);
-				rte_eth_linkstatus_set(dev, &link);
-			} else if (event.type == NETDEV_CHANGEADDR) {
-				u8 addr_bytes[RTE_ETHER_ADDR_LEN];
-				memmove(addr_bytes, event.data, RTE_ETHER_ADDR_LEN);
-				rte_ether_addr_copy((struct rte_ether_addr *)addr_bytes,
-					&dev->data->mac_addrs[0]);
-				if (rte_is_zero_ether_addr(&dev->data->mac_addrs[0]))
-					PMD_DRV_LOG(INFO, "mac addr is zero");
-			} else if (event.type == NETDEV_CHANGEMTU) {
-				PMD_DRV_LOG(INFO, "Set new mtu address");
-				nic_dev->mtu_size = event.data_mtu;
-				dev->data->mtu = event.data_mtu;
-			} else {
-				PMD_DRV_LOG(INFO, "event type not support");
-			}
-		}
-
-		if (bytes_read < 0 && errno != EAGAIN) {
-			PMD_DRV_LOG(ERR, "interrupt handler fd read error: %d.", errno);
-			break;
+	while (processed < < MAX_PROCESS &&
+		(bytes_read = read(intr_handle->fd, &event, sizeof(event))) == sizeof(event)) {
+		if (event.type == NETDEV_UP) {
+			link_state = 1;
+			get_port_info(nic_dev->hwdev, link_state, &link);
+			rte_eth_linkstatus_set(dev, &link);
+		} else if (event.type == NETDEV_DOWN) {
+			link_state = 0;
+			get_port_info(nic_dev->hwdev, link_state, &link);
+			rte_eth_linkstatus_set(dev, &link);
+		} else if (event.type == NETDEV_CHANGEADDR) {
+			u8 addr_bytes[RTE_ETHER_ADDR_LEN];
+			memmove(addr_bytes, event.data, RTE_ETHER_ADDR_LEN);
+			rte_ether_addr_copy((struct rte_ether_addr *)addr_bytes,
+				&dev->data->mac_addrs[0]);
+			if (rte_is_zero_ether_addr(&dev->data->mac_addrs[0]))
+				PMD_DRV_LOG(INFO, "mac addr is zero");
+		} else if (event.type == NETDEV_CHANGEMTU) {
+			PMD_DRV_LOG(INFO, "Set new mtu address");
+			nic_dev->mtu_size = event.data_mtu;
+			dev->data->mtu = event.data_mtu;
+		} else {
+			PMD_DRV_LOG(INFO, "event type not support");
 		}
 	}
 
-	/* Aeq0 msg handler */
-	hinic3_dev_handle_aeq_event(nic_dev->hwdev, param);
+	if (bytes_read < 0 && errno != EAGAIN) {
+		PMD_DRV_LOG(ERR, "interrupt handler fd read error: %d.", errno);
+		break;
+	}
 }
 
 static void hinic3_dev_interrupt_handler(void *param)
