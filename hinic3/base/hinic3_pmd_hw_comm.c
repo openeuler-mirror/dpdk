@@ -330,6 +330,10 @@ int hinic3_set_cmdq_depth(void *hwdev, u16 cmdq_depth)
 	root_ctxt.func_idx = hinic3_global_func_id(hwdev);
 	root_ctxt.set_cmdq_depth = 1;
 	root_ctxt.cmdq_depth = (u8)ilog2(cmdq_depth);
+	root_ctxt.cmdq_mode = ((struct hinic3_hwdev *)hwdev)->cmdqs->cmdq_mode;
+
+	if (root_ctxt.cmdq_mode == HINIC3_ENHANCE_CMDQ)
+		root_ctxt.cmdq_depth--;
 
 	err = hinic3_msg_to_mgmt_sync(hwdev, HINIC3_MOD_COMM,
 				      HINIC3_MGMT_CMD_SET_VAT,

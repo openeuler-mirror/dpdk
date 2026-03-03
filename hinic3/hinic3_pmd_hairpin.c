@@ -21,16 +21,16 @@ int
 hinic3_hairpin_cap_get(struct rte_eth_dev *dev, struct rte_eth_hairpin_cap *cap)
 {
 	struct hinic3_nic_dev *nic_dev;
-    nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	if (!(nic_dev->feature_cap & NIC_F_HAIRPIN)) {
 		PMD_DRV_LOG(ERR, "current firmware not support hairpin");
 		rte_errno = ENOTSUP;
 		return -rte_errno;
 	}
-    cap->max_nb_queues = UINT16_MAX;
-    cap->max_rx_2_tx = 1;
-    cap->max_tx_2_rx = 1;
-    cap->max_nb_desc = HINIC3_MAX_QUEUE_DEPTH;
+	cap->max_nb_queues = UINT16_MAX;
+	cap->max_rx_2_tx = 1;
+	cap->max_tx_2_rx = 1;
+	cap->max_nb_desc = HINIC3_MAX_QUEUE_DEPTH;
 #ifdef DPDK_22_11
 	/*not support yet*/
 	cap->rx_cap.locked_device_memory = 0;

@@ -2519,13 +2519,14 @@ static void hinic3_dev_close(struct rte_eth_dev *eth_dev)
 {
 	struct hinic3_nic_dev *nic_dev =
 		HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
+	struct rte_pci_device *pci_dev = nic_dev->hwdev->pci_dev;
 	u8 sec_tcam_en = 0;
 
 	if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
 #ifdef DPDK_20_11
-	return 0;
+		return 0;
 #else
-	return;
+		return;
 #endif
 	}
 
@@ -2536,7 +2537,7 @@ static void hinic3_dev_close(struct rte_eth_dev *eth_dev)
 	if (nic_dev->hwdev->qinfo_type != HINIC3_QINFO_TYPE_QPOOL) {
 		if (hinic3_test_and_set_bit(HINIC3_DEV_CLOSE, &nic_dev->dev_status)) {
 			PMD_DRV_LOG(WARNING, "Device %s already closed",
-			    	nic_dev->dev_name);
+				    nic_dev->dev_name);
 #ifdef DPDK_20_11
 			return 0;
 #endif

@@ -2431,7 +2431,7 @@ int hinic3_fdir_sec_tcam_block_free(void *hwdev, u8 key_width, u16 *index)
 				     &cmd_buf, &out_size);
 	if (err || (!out_size) || cmd_buf.msg_head.status) {
 		PMD_DRV_LOG(ERR,
-			    "Set tcam block failed, err: %d, status: 0x%x, out size: 0x%x",
+			    "Set sec tcam block failed, err: %d, status: 0x%x, out size: 0x%x",
 			    err, cmd_buf.msg_head.status,
 			    out_size);
 		return -EIO;
@@ -2581,7 +2581,7 @@ int hinic3_fdir_flush_sec_tcam_rule(void *hwdev)
 		PMD_DRV_LOG(ERR, "Firmware/uP doesn't support flush tcam fdir");
 	} else if (err || (!out_size) || cmd_buf.msg_head.status) {
 		PMD_DRV_LOG(ERR,
-			    "Flush tcam fdir rules failed, err: %d, status: 0x%x, out size: 0x%x",
+			    "Flush sec tcam fdir rules failed, err: %d, status: 0x%x, out size: 0x%x",
 			    err, cmd_buf.msg_head.status, out_size);
 		err = -EIO;
 	}
@@ -2591,12 +2591,16 @@ int hinic3_fdir_flush_sec_tcam_rule(void *hwdev)
 
 int hinic3_fdir_cfg_sec_tcam(void *hwdev, u8 *en)
 {
+	struct hinic3_nic_dev *nic_dev = ((struct hinic3_hwdev *)hwdev)->dev_handle;
 	struct nic_cmd_fdir_ext cmd_buf = {0};
 	u16 out_size = sizeof(cmd_buf);
 	int err;
 
 	if (!hwdev)
 		return -EINVAL;
+
+	if(nic_dev->feature_cap != SP600_NIC_FEATURE)
+		return 0;
 
 	cmd_buf.op_code = TCAM_EXTEND_OPCODE_GET_FLAG;
 
@@ -2606,7 +2610,7 @@ int hinic3_fdir_cfg_sec_tcam(void *hwdev, u8 *en)
 				     &cmd_buf, &out_size);
 	if (err || cmd_buf.msg_head.status || !out_size) {
 		PMD_DRV_LOG(ERR,
-			    "Flush tcam fdir rules failed, err: %d, status: 0x%x, out size: 0x%x",
+			    "Config sec tcam fdir rules failed, err: %d, status: 0x%x, out size: 0x%x",
 			    err, cmd_buf.msg_head.status, out_size);
 		err = -EIO;
 	}
