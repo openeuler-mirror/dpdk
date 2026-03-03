@@ -1946,6 +1946,11 @@ int hinic3_set_link_status_follow(void *hwdev, enum hinic3_link_follow_status st
 	if (!hwdev)
 		return -EINVAL;
 
+	if (((struct hinic3_hwdev *)hwdev)->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
+		PMD_DRV_LOG(WARNING, "Qpool mode not support set link status flow.");
+		return 0;
+	}
+
 	if (status >= HINIC3_LINK_FOLLOW_STATUS_MAX) {
 		PMD_DRV_LOG(ERR, "Invalid link follow status: %d\n", status);
 		return -EINVAL;
