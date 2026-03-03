@@ -369,7 +369,7 @@ static void hinic3_dev_interrupt_handler_qpool(void *param)
 
 
 
-	while (processed < < MAX_PROCESS &&
+	while (processed < MAX_PROCESS &&
 		(bytes_read = read(intr_handle->fd, &event, sizeof(event))) == sizeof(event)) {
 		if (event.type == NETDEV_UP) {
 			link_state = 1;
@@ -397,7 +397,6 @@ static void hinic3_dev_interrupt_handler_qpool(void *param)
 
 	if (bytes_read < 0 && errno != EAGAIN) {
 		PMD_DRV_LOG(ERR, "interrupt handler fd read error: %d.", errno);
-		break;
 	}
 }
 
