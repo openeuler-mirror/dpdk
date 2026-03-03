@@ -24,8 +24,9 @@
 #define NIC_UP_RSS_EN				0x01
 #define NIC_UP_RSS_INVALID_GROUP_ID		0x7F
 
-#define NIC_RSS_CMD_TEMP_FREE			0x00
+#define NIC_RSS_CMD_TEMP_QPOOL_FREE		0x00
 #define NIC_RSS_CMD_TEMP_ALLOC			0x01
+#define NIC_RSS_CMD_TEMP_FREE			0x02
 
 #define HINIC3_RSS_TYPE_VALID_SHIFT		23
 #define HINIC3_RSS_TYPE_TCP_IPV6_EXT_SHIFT	24
@@ -41,6 +42,8 @@
 
 #define HINIC3_RSS_TYPE_GET(val, member)	\
 	(((u32)(val) >> HINIC3_RSS_TYPE_##member##_SHIFT) & 0x1)
+
+#define CMDQ_PFN(addr, page_size)	((addr) >> (ilog2(page_size)))
 
 /* NIC CMDQ MODE */
 typedef enum hinic3_ucode_cmd {
@@ -173,6 +176,7 @@ enum hinic3_mgmt_cmd {
 	HINIC3_MGMT_CMD_CFG_MSIX_CTRL_REG,
 	HINIC3_MGMT_CMD_SET_CEQ_CTRL_REG,
 	HINIC3_MGMT_CMD_SET_DMA_ATTR,
+	HINIC3_MGMT_CMD_SET_ENHANCE_CMDQ_CTXT,
 
 	HINIC3_MGMT_CMD_GET_MQM_FIX_INFO = 40,
 	HINIC3_MGMT_CMD_SET_MQM_CFG_INFO,

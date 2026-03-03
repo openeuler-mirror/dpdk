@@ -30,6 +30,19 @@ enum hinic3_qinfo_type {
 	HINIC3_QINFO_TYPE_RSV,
 };
 
+enum {
+	HINIC3_F_API_CHAIN = 1U << 0,
+	HINIC3_F_CLP = 1U << 1,
+	HINIC3_F_CHANNEL_DETECT = 1U << 2,
+	HINIC3_F_MBOX_SEGMENT = 1U << 3,
+	HINIC3_F_CMDQ_NUM = 1U << 4,
+	HINIC3_F_VIRTIO_VQ_SIZE = 1U << 5,
+	HINIC3_F_EXTEND_CAP = 1U << 6,
+	HINIC3_F_SMF_CACHE_INVALID = 1U << 7,
+	HINIC3_F_ONLY_ENHANCE_CMDQ = 1U << 8,
+	HINIC3_F_USE_REAL_RX_BUF_SIZE = 1U << 9,
+};
+
 struct hinic3_page_addr {
 	void *virt_addr;
 	u64 phys_addr;
@@ -85,6 +98,9 @@ struct hinic3_hw_stats {
 #define HINIC3_CHIP_FAULT_SIZE		(110 * 1024)
 #define MAX_DRV_BUF_SIZE		4096
 
+#define HINIC3_SUPPORT_ONLY_ENHANCE_CMDQ(hwdev) \
+	(((struct hinic3_hwdev *)hwdev)->features[0] & HINIC3_F_ONLY_ENHANCE_CMDQ)
+
 struct nic_cmd_chip_fault_stats {
 	u32 offset;
 	u8 chip_fault_stats[MAX_DRV_BUF_SIZE];
@@ -139,6 +155,7 @@ struct hinic3_hwdev {
 	u16 link_status;
 	u8 vf_valid_status; /* vport_enable: 1, vport_disable: 0 */
 
+	u64 features[HINIC3_MAX_FEATURE_QWORD];
 	struct rte_mempool *cmd_buf_pool;
 	enum hinic3_qinfo_type qinfo_type;
 	u16 qpool_qgrp_id;

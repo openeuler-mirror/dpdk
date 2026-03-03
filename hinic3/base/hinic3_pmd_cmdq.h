@@ -6,15 +6,24 @@
 #define _HINIC3_PMD_CMDQ_H_
 
 #include "hinic3_pmd_mgmt.h"
+#include "hinic3_pmd_cmdq_enhance.h"
 
 #define HINIC3_SCMD_DATA_LEN		16
 
 /* Pmd driver uses 64, kernel l2nic uses 4096 */
 #define HINIC3_CMDQ_DEPTH		64
 
-#define HINIC3_CMDQ_BUF_SIZE		2048U
+#define HINIC3_CMDQ_BUF_SIZE		1024U
 
 #define HINIC3_CEQ_ID_CMDQ		0
+
+#define WQ_BLOCK_PFN_SHIFT		9
+#define WQ_BLOCK_PFN(page_addr)		((page_addr) >> WQ_BLOCK_PFN_SHIFT)
+
+enum hinic3_cmdq_mode {
+	HINIC3_NORMAL_CMDQ,
+	HINIC3_ENHANCE_CMDQ,
+};
 
 enum cmdq_scmd_type {
 	CMDQ_SET_ARM_CMD = 2,
@@ -150,6 +159,7 @@ struct hinic3_cmdq_wqe {
 	union {
 		struct hinic3_cmdq_inline_wqe inline_wqe;
 		struct hinic3_cmdq_wqe_lcmd wqe_lcmd;
+		struct enhanced_cmdq_wqe enhanced_cmdq_wqe;
 	};
 };
 
@@ -167,7 +177,10 @@ struct hinic3_cmd_cmdq_ctxt {
 	u8  cmdq_id;
 	u8  rsvd1[5];
 
-	struct hinic3_cmdq_ctxt_info ctxt_info;
+	union {
+		struct hinic3_cmdq_ctxt_info ctxt_info;
+		struct enhance_cmdq_ctxt_info enhance_ctxt_info;
+	};
 };
 
 enum hinic3_cmdq_status {
@@ -197,8 +210,10 @@ struct hinic3_cmdq {
 	rte_spinlock_t cmdq_lock;
 
 	struct hinic3_cmdq_ctxt_info cmdq_ctxt;
+	struct enhance_cmdq_ctxt_info cmdq_enhance_ctxt;
 
 	struct hinic3_cmdq_cmd_info *cmd_infos;
+	struct hinic3_cmdqs *cmdqs;
 };
 
 struct hinic3_cmdqs {
@@ -212,6 +227,7 @@ struct hinic3_cmdqs {
 	struct hinic3_cmdq cmdq[HINIC3_MAX_CMDQ_TYPES];
 
 	u32 status;
+	enum hinic3_cmdq_mode cmdq_mode;
 };
 
 struct hinic3_cmd_buf {
@@ -243,8 +259,16 @@ int hinic3_cmdq_detail_resp(void *hwdev, enum hinic3_mod_type mod, u8 cmd,
 
 int hinic3_cmdqs_init(struct hinic3_hwdev *hwdev);
 
-int hinic3_cmdqs_init_new(struct hinic3_hwdev *hwdev);
+int hinic3_init_qpool_cmdqs(struct hinic3_hwdev *hwdev);
 
 void hinic3_cmdqs_free(struct hinic3_hwdev *hwdev);
+
+void hinic3_enhance_cmdq_set_wqe(struct hinic3_cmdq_wqe *wqe,
+				 enum cmdq_cmd_type cmd_type,
+				 const struct hinic3_cmd_buf *buf_in,
+				 const struct hinic3_cmd_buf *buf_out,
+				 int wrapped, uint8_t mod, uint8_t cmd);
+
+void hinic3_enhance_cmdq_init_queue_ctxt(struct hinic3_cmdq *cmdq);
 
 #endif /* _HINIC3_PMD_CMDQ_H_ */

@@ -291,10 +291,8 @@ struct hinic3_clean_queue_ctxt {
 #define SIZE_16BYTES(size)		(RTE_ALIGN((size), 16) >> 4)
 
 #define	WQ_PAGE_PFN_SHIFT				12
-#define	WQ_BLOCK_PFN_SHIFT				9
 
 #define WQ_PAGE_PFN(page_addr)		((page_addr) >> WQ_PAGE_PFN_SHIFT)
-#define WQ_BLOCK_PFN(page_addr)		((page_addr) >> WQ_BLOCK_PFN_SHIFT)
 
 static void hinic3_qp_prepare_cmdq_header(
 	struct hinic3_qp_ctxt_header *qp_ctxt_hdr,
