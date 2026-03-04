@@ -1336,8 +1336,9 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 #ifdef HINIC3_TRAFFIC_BIFUR
 			uint64_t dr_feature = hinic3_get_driver_feature(nic_dev);
 			if ((dr_feature & NIC_F_HTN_CMDQ)) {
-				PMD_DRV_LOG(ERR, "Port %u not support rss acrion",
-					    dev->data->port_id);
+				rte_flow_error_set(error, EINVAL, 
+						   HINIC3_FLOW_ERROR_TYPE_ACTION, act,
+						   "Not support rss acrion.");
 				return -rte_errno;
 			}
 #endif
@@ -1368,6 +1369,11 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 
 			break;
 		} else {
+			if (hinic3_get_driver_feature(nic_dev) & NIC_F_HTN_CMDQ) {
+				rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION, act,
+						   "Not support rss acrion.");
+				return -rte_errno;
+			}
 			act_r = (const struct rte_flow_action_rss *)act->conf;
 
 			if (!act_r || act_r->queue_num == 0) {
@@ -1395,6 +1401,11 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 		}
 
 	case RTE_FLOW_ACTION_TYPE_DROP:
+		if (hinic3_get_driver_feature(nic_dev) & NIC_F_HTN_CMDQ) {
+			rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION, act,
+					   "Not support drop acrion.");
+			return -rte_errno;
+		}
  	 	filter->fdir_filter.action = RTE_FLOW_ACTION_TYPE_DROP;
  	 	break;
 

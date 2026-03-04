@@ -333,6 +333,7 @@ enum netdev_event_type {
 	NETDEV_MTUCHANGE_EVENT = 7,
 	NETDEV_MACCHANGE_EVENT = 8,
 };
+
 #define HINIC3_DEV_ETHER_ADDR_LEN     32
 struct netdev_event {
 	enum netdev_event_type type;
@@ -1689,13 +1690,14 @@ static void hinic3_disable_interrupt(struct rte_eth_dev *dev)
 		return;
 
 	/* disable rte interrupt */
-	rte_intr_disable(PCI_DEV_TO_INTR_HANDLE(pci_dev));
-	if (IS_QPOOL_MODE(nic_dev))
+	if (IS_QPOOL_MODE(nic_dev)) {
 		rte_intr_callback_unregister(PCI_DEV_TO_INTR_HANDLE(pci_dev),
 				             hinic3_dev_interrupt_handler_qpool, (void *)dev);
-	else
+	} else {
+		rte_intr_disable(PCI_DEV_TO_INTR_HANDLE(pci_dev));
 		rte_intr_callback_unregister(PCI_DEV_TO_INTR_HANDLE(pci_dev),
 					     hinic3_dev_interrupt_handler, (void *)dev);
+	}
 }
 
 static void hinic3_enable_interrupt(struct rte_eth_dev *dev)
@@ -1707,13 +1709,15 @@ static void hinic3_enable_interrupt(struct rte_eth_dev *dev)
 		return;
 
 	/* enable rte interrupt */
-	rte_intr_enable(PCI_DEV_TO_INTR_HANDLE(pci_dev));
-	if (IS_QPOOL_MODE(nic_dev))
+	
+	if (IS_QPOOL_MODE(nic_dev)) {
 		rte_intr_callback_unregister(PCI_DEV_TO_INTR_HANDLE(pci_dev),
 				             hinic3_dev_interrupt_handler_qpool, (void *)dev);
-	else
+	} else {
+		rte_intr_enable(PCI_DEV_TO_INTR_HANDLE(pci_dev));
 		rte_intr_callback_register(PCI_DEV_TO_INTR_HANDLE(pci_dev),
 					   hinic3_dev_interrupt_handler, (void *)dev);
+	}
 }
 
 #define HINIC3_RX_VEC_START RTE_INTR_VEC_RXTX_OFFSET
@@ -2255,15 +2259,17 @@ static void hinic3_dev_release(struct rte_eth_dev *eth_dev)
 
 	hinic3_clear_bit(HINIC3_DEV_INTR_EN, &nic_dev->dev_status);
 	hinic3_set_msix_state(nic_dev->hwdev, 0, HINIC3_MSIX_DISABLE);
-	rte_intr_disable(PCI_DEV_TO_INTR_HANDLE(pci_dev));
-	if (IS_QPOOL_MODE(nic_dev))
+	
+	if (IS_QPOOL_MODE(nic_dev)) {	
 		(void)rte_intr_callback_unregister(PCI_DEV_TO_INTR_HANDLE(pci_dev),
 					   hinic3_dev_interrupt_handler_qpool,
 					   (void *)eth_dev);
-	else
+	} else {
+		rte_intr_disable(PCI_DEV_TO_INTR_HANDLE(pci_dev));
 		(void)rte_intr_callback_unregister(PCI_DEV_TO_INTR_HANDLE(pci_dev),
 						hinic3_dev_interrupt_handler,
 						(void *)eth_dev);
+	}
 
 	/* Destroy rx mode mutex */
 	hinic3_mutex_destroy(&nic_dev->rx_mode_mutex);
@@ -2510,6 +2516,14 @@ static int hinic3_dev_allmulticast_enable(struct rte_eth_dev *dev)
 	u32 rx_mode;
 	int err;
 
+	if (!nic_dev || !nic_dev->hwdev)
+		return -EINVAL;
+
+	if (IS_QPOOL_MODE(nic_dev)) {
+		PMD_DRV_LOG(DEBUG, "Qpool not support set allmulticast");
+		return -ENOTSUP;
+	}
+
 	err = hinic3_mutex_lock(&nic_dev->rx_mode_mutex);
 	if (err)
 		return err;
@@ -2546,6 +2560,13 @@ static int hinic3_dev_allmulticast_disable(struct rte_eth_dev *dev)
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	u32 rx_mode;
 	int err;
+	if (!nic_dev || !nic_dev->hwdev)
+		return -EINVAL;
+
+	if (IS_QPOOL_MODE(nic_dev)) {
+		PMD_DRV_LOG(DEBUG, "Qpool not support set allmulticast");
+		return -ENOTSUP;
+	}
 
 	err = hinic3_mutex_lock(&nic_dev->rx_mode_mutex);
 	if (err)
@@ -2583,6 +2604,13 @@ static int hinic3_dev_promiscuous_enable(struct rte_eth_dev *dev)
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	u32 rx_mode;
 	int err;
+	if (!nic_dev || !nic_dev->hwdev)
+		return -EINVAL;
+
+	if (IS_QPOOL_MODE(nic_dev)) {
+		PMD_DRV_LOG(DEBUG, "Qpool not support set promiscuous");
+		return -ENOTSUP;
+	}
 
 	if (!(nic_dev->feature_cap & NIC_F_PROMISC)) {
 		PMD_DRV_LOG(ERR, "nic_dev: %s, port_id: %d, do not support vf promisc: %" PRIu64 "",
@@ -2627,6 +2655,13 @@ static int hinic3_dev_promiscuous_disable(struct rte_eth_dev *dev)
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	u32 rx_mode;
 	int err;
+	if (!nic_dev || !nic_dev->hwdev)
+		return -EINVAL;
+
+	if (IS_QPOOL_MODE(nic_dev)) {
+		PMD_DRV_LOG(DEBUG, "Qpool not support set promiscuous");
+		return -ENOTSUP;
+	}
 
 	if (!(nic_dev->feature_cap & NIC_F_PROMISC)) {
 		PMD_DRV_LOG(ERR, "nic_dev: %s, port_id: %d, do not support vf promisc: %" PRIu64 "",
@@ -2663,6 +2698,11 @@ static int hinic3_dev_flow_ctrl_get(struct rte_eth_dev *dev,
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct nic_pause_config nic_pause;
 	int err;
+
+	if (IS_QPOOL_MODE(nic_dev)) {
+		PMD_DRV_LOG(WARNING, "Qpool not support cfg hw pause");
+		return 0;
+	}
 
 	err = hinic3_mutex_lock(&nic_dev->pause_mutuex);
 	if (err)
