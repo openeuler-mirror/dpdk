@@ -515,10 +515,7 @@ static int hinic3_cfg_hw_pause(void *hwdev, u8 opcode,
 	struct hinic3_cmd_pause_config pause_info;
 	u16 out_size = sizeof(pause_info);
 	int err;
-	if (((struct hinic3_hwdev *)hwdev)->bifur_mode == HINIC3_BIFUR_MODE_QPOOL) {
-		PMD_DRV_LOG(WARNING, "Qpool not support cfg hw pause");
-		return 0;
-	}
+
 	memset(&pause_info, 0, sizeof(pause_info));
 
 	pause_info.port_id = hinic3_physical_port_id(hwdev);
@@ -847,10 +844,6 @@ int hinic3_set_rx_mode(void *hwdev, u32 enable)
 
 	if (!hwdev)
 		return -EINVAL;
-	if (((struct hinic3_hwdev *)hwdev)->bifur_mode == HINIC3_BIFUR_MODE_QPOOL) {
-		PMD_DRV_LOG(WARNING, "Qpool not support set rx mode");
-		return 0;
-	}
 
 	memset(&rx_mode_cfg, 0, sizeof(rx_mode_cfg));
 	rx_mode_cfg.func_id = hinic3_global_func_id(hwdev);
