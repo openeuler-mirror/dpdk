@@ -185,7 +185,7 @@ typedef uint8_t  (*prepare_cmd_buf_get_rss_indir_table_t)(struct hinic3_nic_dev 
 typedef void     (*cmd_buf_to_rss_indir_table_t)(const struct hinic3_cmd_buf *cmd_buf,
 						 uint32_t *indir_table);
 typedef void     (*cmd_buf_to_rss_indir_table_qpool_t)(const struct hinic3_cmd_buf *cmd_buf,
-						 uint32_t *indir_table);
+						 uint32_t *indir_table, uint16_t indir_table_size);
 typedef void	 (*prepare_rq_ctxt_ceq_and_prefetch_t)(struct hinic3_rq_ctxt *rq_ctxt,
 						       u16 wqe_type,
 						       u16 msix_entry_idx,

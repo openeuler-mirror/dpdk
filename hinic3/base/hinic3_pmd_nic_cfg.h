@@ -920,7 +920,9 @@ enum hinic3_qpool_subcmd {
 struct mag_cmd_rss_indir_tbl {
 	u16 pid;
 	u16 func_id;
+	u16 indir_table_size;
 	struct nic_rss_indirect_tbl rss_indir;
+	
 };
 
 typedef  struct {
