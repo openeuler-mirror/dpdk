@@ -2378,8 +2378,11 @@ static void hinic3_dev_stop(struct rte_eth_dev *dev)
 #endif
 	}
 
-	if (nic_dev->dcb->dcb_on)
-		hinic3_sync_dcb_state(nic_dev->hwdev, 1, 0);
+	if (nic_dev->dcb->dcb_on) {
+		if (nic_dev->feature_cap == SP600_NIC_FEATURE ||
+		    !HINIC3_IS_VF(nic_dev->hwdev))
+			hinic3_sync_dcb_state(nic_dev->hwdev, 1, 0);
+	}
 
 	hinic3_tm_dev_stop_proc(dev);
 
