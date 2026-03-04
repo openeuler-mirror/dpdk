@@ -1,0 +1,140 @@
+From 3b40644b4e64d17b7f1ac2d1171cec15cd56c9bd Mon Sep 17 00:00:00 2001
+From: liya0822 <liya51@h-partners.com>
+Date: Tue, 3 Mar 2026 21:10:16 +0800
+Subject: [PATCH] fix vf bifur mode could not hanlde packets in queue full
+
+---
+ drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c | 14 ++++++--
+ drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h |  2 +-
+ drivers/net/hinic3/hinic3_pmd_fdir.c         | 34 ++++++++++++++------
+ 3 files changed, 37 insertions(+), 13 deletions(-)
+
+diff --git a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c
+index c0baf13..4fa1b64 100644
+--- a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c
++++ b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c
+@@ -1414,7 +1414,13 @@ int hinic3_add_tcam_rule(void *hwdev, struct hinic3_tcam_cfg_rule *tcam_rule, u8
+ 	tcam_cmd.func_id = hinic3_global_func_id(hwdev);
+ 
+ #ifdef HINIC3_TRAFFIC_BIFUR
+-	tcam_cmd.bifur_rss_en = 1;	
++	u8 bifur_en, bifur_type;
++
++	if (hinic3_get_bifur_enable(hwdev, &bifur_en, &bifur_type) != 0)
++		PMD_DRV_LOG(ERR, "add_tcam_rule: hinic3 get port table bifur enable status failed.");
++
++	if (bifur_en)
++		tcam_cmd.bifur_rss_en = 1;
+ #endif
+ 
+ 	memcpy((void *)&tcam_cmd.rule, (void *)tcam_rule,
+@@ -1661,17 +1667,18 @@ int hinic3_set_link_status_follow(void *hwdev, enum hinic3_link_follow_status st
+ 	return follow.head.status;
+ }
+ 
+-int hinic3_get_bifur_enable(void *hwdev, u8 *enable)
++int hinic3_get_bifur_enable(void *hwdev, u8 *enable, u8 *bifur_type)
+ {
+ 	struct hinic3_port_flow_bifur_en_cmd bifur_cmd;
+ 	u16 out_size = sizeof(bifur_cmd);
+ 	int err;
+ 
+-	if (hwdev == NULL || enable == NULL) {
++	if (hwdev == NULL || enable == NULL || bifur_type == NULL) {
+ 		return -EINVAL;
+ 	}
+ 
+ 	*enable = 0;
++	*bifur_type = 0;
+ 
+ 	memset(&bifur_cmd, 0, sizeof(struct hinic3_port_flow_bifur_en_cmd));
+ 	bifur_cmd.port_id = hinic3_physical_port_id(hwdev);
+@@ -1688,6 +1695,7 @@ int hinic3_get_bifur_enable(void *hwdev, u8 *enable)
+ 	}
+ 
+ 	*enable = bifur_cmd.flow_bifur_en;
++	*bifur_type = bifur_cmd.flow_bifur_type;
+ 
+ 	return 0;
+  }
+\ No newline at end of file
+diff --git a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h
+index 46fa029..7e63d98 100644
+--- a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h
++++ b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h
+@@ -1532,5 +1532,5 @@ int hinic3_set_feature_to_hw(void *hwdev, u64 *s_feature, u16 size);
+ int hinic3_set_fdir_ethertype_filter(void *hwdev, u8 pkt_type, u16 queue_id, u8 en);
+ 
+ int hinic3_set_link_status_follow(void *hwdev, enum hinic3_link_follow_status status);
+-int hinic3_get_bifur_enable(void *hwdev, u8 *enable);
++int hinic3_get_bifur_enable(void *hwdev, u8 *enable, u8 *bifur_type);
+ #endif /* _HINIC3_PMD_NIC_CFG_H_ */
+diff --git a/drivers/net/hinic3/hinic3_pmd_fdir.c b/drivers/net/hinic3/hinic3_pmd_fdir.c
+index 5c94ead..7b4a7b2 100644
+--- a/drivers/net/hinic3/hinic3_pmd_fdir.c
++++ b/drivers/net/hinic3/hinic3_pmd_fdir.c
+@@ -28,11 +28,12 @@
+ #endif
+ #include "hinic3_pmd_fdir.h"
+ 
+-#define HINIC3_UINT1_MAX          0x1
+-#define HINIC3_UINT2_MAX          0x3
+-#define HINIC3_UINT4_MAX          0xf
+-#define HINIC3_UINT15_MAX         0x7fff
+-#define BIFUR_EN                  0x2
++#define HINIC3_UINT1_MAX          	0x1
++#define HINIC3_UINT2_MAX          	0x3
++#define HINIC3_UINT4_MAX          	0xf
++#define HINIC3_UINT15_MAX         	0x7fff
++#define HINIC3_RSS_BIFUR_QUEUE_NUM	15u
++#define BIFUR_EN                  	0x2
+ 
+ #define HINIC3_DEV_PRIVATE_TO_TCAM_INFO(nic_dev) \
+ 	(&((struct hinic3_nic_dev *)(nic_dev))->tcam)
+@@ -225,9 +226,10 @@ static void hinic3_fdir_tcam_notunnel_init(struct rte_eth_dev *dev,
+ 
+ 	tcam_key->key_mask.function_id = HINIC3_UINT15_MAX;
+ #ifdef HINIC3_TRAFFIC_BIFUR
+-	u8 enable;
+-	if (hinic3_get_bifur_enable(nic_dev->hwdev, &enable) != 0) {
+-		PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable status failed.");
++	u8 enable, bifur_type;
++
++	if (hinic3_get_bifur_enable(nic_dev->hwdev, &enable, &bifur_type) != 0) {
++		PMD_DRV_LOG(ERR, "notunnel init: hinic3 get port table bifur enable status failed.");
+ 	} 
+ 
+ 	struct rte_pci_device *pci_dev = NULL;
+@@ -494,6 +496,7 @@ static void hinic3_fdir_tcam_info_init(struct rte_eth_dev *dev,
+ 			struct hinic3_tcam_key *tcam_key,
+ 			struct hinic3_tcam_cfg_rule *fdir_tcam_rule)
+ {
++	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+ 	if (rule->tunnel_type == HINIC3_FDIR_TUNNEL_MODE_NORMAL)
+ 		hinic3_fdir_tcam_notunnel_init(dev, rule, tcam_key);
+ 	else
+@@ -501,7 +504,20 @@ static void hinic3_fdir_tcam_info_init(struct rte_eth_dev *dev,
+ 
+ 	fdir_tcam_rule->data.qid = rule->rq_index;
+ #ifdef HINIC3_TRAFFIC_BIFUR
+-	fdir_tcam_rule->data.queue_num = rule->queue_num;
++	u8 enable, bifur_type;
++
++	if (hinic3_get_bifur_enable(nic_dev->hwdev, &enable, &bifur_type) != 0) {
++		PMD_DRV_LOG(ERR, "tcam_info_init: hinic3 get port table bifur enable status failed.");
++	}
++
++	if (enable && (bifur_type != 1) && (rule->queue_num > 1)) {
++		fdir_tcam_rule->data.qid = HINIC3_UINT15_MAX;
++		fdir_tcam_rule->data.queue_num = HINIC3_RSS_BIFUR_QUEUE_NUM;
++		PMD_DRV_LOG(WARNING, "bifur type != 1, rss hash to all queues, reset qid: %ld, reset queue_num: %ld",
++				      fdir_tcam_rule->data.qid, fdir_tcam_rule->data.queue_num);
++	} else {
++		fdir_tcam_rule->data.queue_num = rule->queue_num;
++	}
+ #endif
+ 	tcam_key_calculate(tcam_key, fdir_tcam_rule);
+ }
+-- 
+2.28.0.windows.1
+

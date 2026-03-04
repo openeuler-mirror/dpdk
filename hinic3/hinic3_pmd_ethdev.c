@@ -319,6 +319,8 @@ static int hinic3_copy_mempool_init(struct hinic3_nic_dev *nic_dev);
 
 static void hinic3_copy_mempool_uninit(struct hinic3_nic_dev *nic_dev);
 
+static bool hinic3_offload_initialized = false;
+
 /**
  * Interrupt handler triggered by NIC for handling specific event
  *
@@ -472,6 +474,12 @@ static int hinic3_dev_configure(struct rte_eth_dev *dev)
 	nic_dev->mtu_size = (u16)HINIC3_PKTLEN_TO_MTU(HINIC3_MAX_RX_PKT_LEN(dev->data->dev_conf.rxmode));
 	if (dev->data->dev_conf.rxmode.mq_mode & ETH_MQ_RX_RSS_FLAG)
 		dev->data->dev_conf.rxmode.offloads |= DEV_RX_OFFLOAD_RSS_HASH;
+
+	if (!hinic3_offload_initialized) {
+		dev->data->dev_conf.rxmode.offloads |= DEV_RX_OFFLOAD_SCATTER;
+		dev->data->dev_conf.txmode.offloads |= DEV_TX_OFFLOAD_MULTI_SEGS;
+		hinic3_offload_initialized = true;
+	}
 
 	/* Clear fdir filter */
 	hinic3_free_fdir_filter(dev);
@@ -2241,10 +2249,10 @@ static int hinic3_dev_start(struct rte_eth_dev *eth_dev)
 	}
 
 	/* Add scatter support if scatter mode should be enabled */
-	if (eth_dev->data->dev_conf.rxmode.offloads & DEV_RX_OFFLOAD_SCATTER ||
-		(nic_dev->mtu_size + HINIC3_ETH_OVERHEAD) > nic_dev->rx_buff_len) {
-			eth_dev->data->scattered_rx = true;
-		}
+	if (eth_dev->data->dev_conf.rxmode.offloads & DEV_RX_OFFLOAD_SCATTER )
+		eth_dev->data->scattered_rx = true;
+	else
+		eth_dev->data->scattered_rx = false;
 
 	/* enable dev interrupt */
 	hinic3_enable_interrupt(eth_dev);
@@ -2370,8 +2378,11 @@ static void hinic3_dev_stop(struct rte_eth_dev *dev)
 #endif
 	}
 
-	if (nic_dev->dcb->dcb_on)
-		hinic3_sync_dcb_state(nic_dev->hwdev, 1, 0);
+	if (nic_dev->dcb->dcb_on) {
+		if (nic_dev->feature_cap == SP600_NIC_FEATURE ||
+		    !HINIC3_IS_VF(nic_dev->hwdev))
+			hinic3_sync_dcb_state(nic_dev->hwdev, 1, 0);
+	}
 
 	hinic3_tm_dev_stop_proc(dev);
 
