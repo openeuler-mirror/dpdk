@@ -1820,7 +1820,7 @@ int hinic3_fdir_alloc_sec_tcam_block(void *hwdev, u8 key_width, u16 *index);
 int hinic3_fdir_sec_tcam_block_free(void *hwdev, u8 key_width, u16 *index);
 
 int hinic3_fdir_add_sec_tcam_rule(void *hwdev, struct hinic3_ext_tcam_cfg_rule *tcam_rule,
-				  u8 tcam_rule_type, bool is_hairpin, u8 key_width);
+				  u8 tcam_rule_type, u8 key_width);
 
 int hinic3_fdir_set_fdir_sec_tcam_rule_filter(void *hwdev, bool enable);
 

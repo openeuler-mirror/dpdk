@@ -555,9 +555,9 @@ hinic3_fdir_tcam_action_init(struct rte_eth_dev *dev,
 
 	fdir_tcam_rule->data.dw0.qid = rule->rq_index;
 #ifdef HINIC3_TRAFFIC_BIFUR
-	u8 bifur_en, iso_en;
+	u8 bifur_en = 0;
 
-	if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &iso_en, 0) != 0)
+	if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, 0, 0) != 0)
 		PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable status failed.");
 
 	if (bifur_en)
