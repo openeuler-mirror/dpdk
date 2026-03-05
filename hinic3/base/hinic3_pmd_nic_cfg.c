@@ -1101,7 +1101,7 @@ int hinic3_rss_set_hash_key(void *hwdev, u8 *key, u16 key_size)
 	return hinic3_rss_cfg_hash_key(hwdev, HINIC3_CMD_OP_SET, key, key_size);
 }
 
-static int hinic3_rss_get_indir_tbl_qpool(int fd, struct mag_cmd_rss_indir_tbl *cmd_indir_tbl)
+static int hinic3_rss_get_indir_tbl_qpool(int fd, struct mag_cmd_rss_indir_tbl *cmd_indir_tbl, u16 *indir_table_size)
 {
 	struct msg_module msg_to_kernel = { 0 };
 	int err;
@@ -1110,6 +1110,7 @@ static int hinic3_rss_get_indir_tbl_qpool(int fd, struct mag_cmd_rss_indir_tbl *
 		       sizeof(struct mag_cmd_rss_indir_tbl), sizeof(struct mag_cmd_rss_indir_tbl),
 		       cmd_indir_tbl, cmd_indir_tbl);
 	err = ioctl(fd, 0, &msg_to_kernel);
+	*indir_table_size = cmd_indir_tbl->indir_table_size;
 	
 	if (err < 0)
 		PMD_DRV_LOG(ERR, "Get qpool indir tbl err: %d.", err);
@@ -1121,6 +1122,7 @@ int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table)
 	struct hinic3_cmd_buf *cmd_buf = NULL;
 	struct hinic3_nic_dev *nic_dev = NULL;
 	struct mag_cmd_rss_indir_tbl cmd_indir_tbl = { 0 };
+	u16 indir_table_size = 0;
 	u8 cmd;
 	int err;
 
@@ -1137,8 +1139,9 @@ int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table)
 	nic_dev = (struct hinic3_nic_dev *)(((struct hinic3_hwdev *)hwdev)->dev_handle);
 
 	if (((struct hinic3_hwdev *)hwdev)->bifur_mode == HINIC3_BIFUR_MODE_QPOOL) {
-		err = hinic3_rss_get_indir_tbl_qpool(nic_dev->fd, &cmd_indir_tbl);
+		err = hinic3_rss_get_indir_tbl_qpool(nic_dev->fd, &cmd_indir_tbl, &indir_table_size);
 		cmd_buf->buf = cmd_indir_tbl.rss_indir.entry;
+		nic_dev->indir_table_size = indir_table_size;
 	} else {
 		cmd = nic_dev->cmdq_ops->prepare_cmd_buf_get_rss_indir_table(nic_dev, cmd_buf);
 		err = hinic3_cmdq_detail_resp(hwdev, HINIC3_MOD_L2NIC, cmd, cmd_buf, cmd_buf, 0);
@@ -1150,7 +1153,7 @@ int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table)
 		return err;
 	}
 	if (((struct hinic3_hwdev *)hwdev)->bifur_mode == HINIC3_BIFUR_MODE_QPOOL)
-		nic_dev->cmdq_ops->cmd_buf_to_rss_indir_table_qpool(cmd_buf,indir_table);
+		nic_dev->cmdq_ops->cmd_buf_to_rss_indir_table_qpool(cmd_buf,indir_table, indir_table_size);
 	else
 		nic_dev->cmdq_ops->cmd_buf_to_rss_indir_table(cmd_buf,indir_table);
 

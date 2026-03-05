@@ -230,6 +230,7 @@ struct hinic3_nic_dev {
 
 	u8 rss_key[HINIC3_RSS_KEY_SIZE];
 	u16 global_id;
+	u16 indir_table_size;
 	int fd;
 	unsigned long dev_status;
 

@@ -2918,17 +2918,17 @@ static int hinic3_rss_reta_query(struct rte_eth_dev *dev,
 		return 0;
 	}
 
-	if ((reta_size != HINIC3_RSS_INDIR_SIZE && !IS_QPOOL_MODE(nic_dev)) || 
-	    (reta_size != HINIC3_RSS_INDIR_SIZE / 2 && IS_QPOOL_MODE(nic_dev))) {
-		PMD_DRV_LOG(ERR, "Invalid reta size, reta_size: %d", reta_size);
-		return -EINVAL;
-	}
-
 	err = hinic3_rss_get_indir_tbl(nic_dev->hwdev, indirtbl);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Get RSS retas table failed, error: %d",
 			    err);
 		return err;
+	}
+
+	if ((reta_size != HINIC3_RSS_INDIR_SIZE && !IS_QPOOL_MODE(nic_dev)) || 
+	    (reta_size != nic_dev->indir_table_size && IS_QPOOL_MODE(nic_dev))) {
+		PMD_DRV_LOG(ERR, "Invalid reta size, reta_size: %d", reta_size);
+		return -EINVAL;
 	}
 
 	for (i = 0; i < reta_size; i++) {
@@ -3440,6 +3440,12 @@ static int hinic3_set_mac_addr(struct rte_eth_dev *dev,
 	char mac_addr[RTE_ETHER_ADDR_FMT_SIZE];
 	u16 func_id;
 	int err;
+
+	if (IS_QPOOL_MODE(nic_dev)) {
+		PMD_DRV_LOG(WARNING, "Qpool not support set mac addr");
+		return 0;
+	}
+
 #ifdef HINIC3_TRAFFIC_BIFUR
 	if (hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev)) {
 		PMD_DRV_LOG(INFO, "The current mode not support set mac.");
@@ -3481,6 +3487,11 @@ static void hinic3_mac_addr_remove(struct rte_eth_dev *dev, uint32_t index)
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	u16 func_id;
 	int err;
+
+	if (IS_QPOOL_MODE(nic_dev)) {
+		PMD_DRV_LOG(WARNING, "Qpool not support mac addr remove");
+		return;
+	}
 
 	if (index >= HINIC3_MAX_UC_MAC_ADDRS) {
 		PMD_DRV_LOG(INFO, "Remove MAC index(%u) is out of range",

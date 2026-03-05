@@ -162,14 +162,14 @@ static void cmd_buf_to_rss_indir_table(const struct hinic3_cmd_buf *cmd_buf, u32
 	}
 }
 
-static void cmd_buf_to_rss_indir_table_qpool(const struct hinic3_cmd_buf *cmd_buf, u32 *indir_table)
+static void cmd_buf_to_rss_indir_table_qpool(const struct hinic3_cmd_buf *cmd_buf, u32 *indir_table, u16 indir_table_size)
 {
 	u32 i;
-	u32 *indir_tbl = NULL;
+	u16 *indir_tbl = NULL;
 
-	indir_tbl = (u32 *)cmd_buf->buf;
+	indir_tbl = (u16 *)cmd_buf->buf;
 	rte_mb();
-	for (i = 0; i < HINIC3_RSS_INDIR_SIZE / 2; i++) {
+	for (i = 0; i < indir_table_size; i++) {
 		indir_table[i] = indir_tbl[i];
 	}
 }
