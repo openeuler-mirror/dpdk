@@ -1290,10 +1290,10 @@ static int hinic3_flow_set_normal_rss_action_config(struct rte_eth_dev *dev,
 
 	return 0;
 
-	free_rss_template:
+free_rss_template:
 	hinic3_rss_template_free(nic_dev->hwdev, q_grp_id);
 
-	free_g_grp_id:
+free_g_grp_id:
 	hinic3_mgmt_cfg_qgrp_id(nic_dev->hwdev, HINIC3_QUEUE_GROUP_ID_FREE, &q_grp_id);
 
 	return ret;
@@ -2447,6 +2447,39 @@ hinic3_fillout_indir_tbl_by_rss_template(struct hinic3_nic_dev *nic_dev,
 	}
 }
 
+static void hinic3_flow_release_rss_template(struct hinic3_nic_dev *nic_dev,
+						struct hinic3_rss_template_entry *template_entry)
+{
+	int ret = 0;
+	u16 q_grp_id;
+
+	if (template_entry == NULL)
+		return;
+
+	/* Check the reference count */
+	if (template_entry->ref_count > 1) {
+		template_entry->ref_count--;
+		PMD_DRV_LOG(INFO, "RSS template q_grp_id: %u ref_count decreased to %u",
+				template_entry->q_grp_id, template_entry->ref_count);
+		return;
+	}
+
+	/* If reference count is 1，delete RSS template and q_grp_id */
+	q_grp_id = template_entry->q_grp_id;
+
+	hinic3_rss_template_free(nic_dev->hwdev, q_grp_id);
+
+	ret = hinic3_mgmt_cfg_qgrp_id(nic_dev->hwdev, HINIC3_QUEUE_GROUP_ID_FREE, &q_grp_id);
+	if (ret != 0)
+		PMD_DRV_LOG(ERR, "Failed to free q_grp_id: %u, ret: %d", q_grp_id, ret);
+
+	TAILQ_REMOVE(&nic_dev->rss_template_list, template_entry, node);
+	rte_free(template_entry);
+	PMD_DRV_LOG(INFO, "RSS template q_grp_id: %u deleted and removed from list", q_grp_id);
+
+	return;
+}
+
 static struct rte_flow *
 hinic3_flow_create(struct rte_eth_dev          *dev,
 		   const struct rte_flow_attr  *attr,
@@ -2548,43 +2581,12 @@ hinic3_flow_create(struct rte_eth_dev          *dev,
 	return flow;
 
 free_flow:
+	if (filter_rules && filter_rules->template_entry != NULL)
+		hinic3_flow_release_rss_template(nic_dev, filter_rules->template_entry);
 	rte_free(flow);
 	rte_free(filter_rules);
 
 	return NULL;
-}
-
-static void hinic3_flow_release_rss_template(struct hinic3_nic_dev *nic_dev,
-						struct hinic3_rss_template_entry *template_entry)
-{
-	int ret = 0;
-	u16 q_grp_id;
-
-	if (template_entry == NULL)
-		return;
-
-	/* Check the reference count */
-	if (template_entry->ref_count > 1) {
-		template_entry->ref_count--;
-		PMD_DRV_LOG(INFO, "RSS template q_grp_id: %u ref_count decreased to %u",
-				template_entry->q_grp_id, template_entry->ref_count);
-		return;
-	}
-
-	/* If reference count is 1，delete RSS template and q_grp_id */
-	q_grp_id = template_entry->q_grp_id;
-
-	hinic3_rss_template_free(nic_dev->hwdev, q_grp_id);
-
-	ret = hinic3_mgmt_cfg_qgrp_id(nic_dev->hwdev, HINIC3_QUEUE_GROUP_ID_FREE, &q_grp_id);
-	if (ret != 0)
-		PMD_DRV_LOG(ERR, "Failed to free q_grp_id: %u, ret: %d", q_grp_id, ret);
-
-	TAILQ_REMOVE(&nic_dev->rss_template_list, template_entry, node);
-	rte_free(template_entry);
-	PMD_DRV_LOG(INFO, "RSS template q_grp_id: %u deleted and removed from list", q_grp_id);
-
-	return;
 }
 
 static int
@@ -2611,9 +2613,6 @@ hinic3_flow_destroy(struct rte_eth_dev *dev, struct rte_flow *flow,
 		if (!ret)
 			TAILQ_REMOVE(&nic_dev->filter_ethertype_list, flow, node);
 
-		flow->rule = rules;
-		flow->filter_type = rules->filter_type;
-		TAILQ_REMOVE(&nic_dev->filter_ethertype_list, flow, node);
 		break;
 
 	case RTE_ETH_FILTER_FDIR:
