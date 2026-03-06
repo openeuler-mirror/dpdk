@@ -20,8 +20,6 @@
 #include "hinic3_pmd_bifur.h"
 #endif
 
-#define HAIRPIN_FLAG (1 << 1)
-
 struct vf_msg_handler {
 	u16 cmd;
 };
@@ -2118,7 +2116,7 @@ int hinic3_fdir_sec_tcam_block_free(void *hwdev, u8 key_width, u16 *index)
 }
 
 int hinic3_fdir_add_sec_tcam_rule(void *hwdev, struct hinic3_ext_tcam_cfg_rule *tcam_rule,
-				  u8 tcam_rule_type, bool is_hairpin, u8 key_width)
+				  u8 tcam_rule_type, u8 key_width)
 {
 	struct nic_cmd_fdir_ext cmd_buf = {0};
 	struct hinic3_ext_fdir_add_rule tcam_cmd = {0};
@@ -2134,8 +2132,6 @@ int hinic3_fdir_add_sec_tcam_rule(void *hwdev, struct hinic3_ext_tcam_cfg_rule *
 	}
 
 	tcam_cmd.func_id = hinic3_global_func_id(hwdev);
-	if (is_hairpin)
-		tcam_cmd.bifur_rss_en |= HAIRPIN_FLAG;
 
 	rte_memcpy((void *)&tcam_cmd.rule, (void *)tcam_rule,
 		sizeof(struct hinic3_ext_tcam_cfg_rule));

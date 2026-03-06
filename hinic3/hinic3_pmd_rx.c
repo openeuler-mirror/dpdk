@@ -1095,7 +1095,7 @@ int hinic3_start_all_rqs(struct rte_eth_dev *eth_dev)
 	}
 
 	if (nic_dev->rss_state == HINIC3_RSS_ENABLE &&
-	    nic_dev->dcb->dcb_on == 0) {
+	    nic_dev->dcb->dcb_on == 0 && rxq != NULL) {
 		err = hinic3_refill_indir_rqid(rxq);
 		if (err) {
 			PMD_DRV_LOG(ERR, "Refill rq to indrect table failed, eth_dev:%s, queue_idx:%d err:%d\n",
@@ -1108,6 +1108,8 @@ int hinic3_start_all_rqs(struct rte_eth_dev *eth_dev)
 out:
 	for (i = 0; i < nic_dev->num_rqs; i++) {
 		rxq = eth_dev->data->rx_queues[i];
+		if (rxq == NULL)
+			continue;
 		hinic3_remove_rq_from_rx_queue_list(nic_dev, rxq->q_id);
 		hinic3_free_rxq_mbufs(rxq);
 		hinic3_dev_rx_queue_intr_disable(eth_dev, rxq->q_id);

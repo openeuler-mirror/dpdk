@@ -1303,7 +1303,7 @@ failed:
 static int hinic3_add_sec_tcam_filter(struct rte_eth_dev *dev,
 				struct hinic3_tcam_key *tcam_key,
 				struct hinic3_ext_tcam_cfg_rule *fdir_tcam_rule,
-				bool is_hairpin, u8 key_width)
+				u8 key_width)
 {
 	struct hinic3_tcam_info *tcam_info =
 		HINIC3_DEV_PRIVATE_TO_TCAM_INFO(dev->data->dev_private);
@@ -1356,7 +1356,7 @@ static int hinic3_add_sec_tcam_filter(struct rte_eth_dev *dev,
 		tcam_rule_type = TCAM_RULE_FDIR_TYPE;
 
 	err = hinic3_fdir_add_sec_tcam_rule(nic_dev->hwdev, fdir_tcam_rule,
-					    tcam_rule_type, is_hairpin, key_width);
+					    tcam_rule_type, key_width);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Fdir_tcam_rule add failed!");
 		goto add_tcam_rules_failed;
@@ -1500,8 +1500,7 @@ int hinic3_flow_add_del_sec_fdir_filter(struct rte_eth_dev *dev,
 		}
 
 		ret = hinic3_add_sec_tcam_filter(dev, &tcam_key,
-						 &fdir_tcam_rule, fdir_ctrl->is_hairpin,
-						 key_width);
+						 &fdir_tcam_rule, key_width);
 		if (ret)
 			goto cfg_tcam_filter_err;
 
