@@ -455,8 +455,6 @@ get_func_info_err:
 
 static void hinic3_uninit_comm_ch_qpool(struct hinic3_hwdev *hwdev)
 {
-	hinic3_set_pf_status(hwdev->hwif, HINIC3_PF_STATUS_INIT);
-
 	hinic3_set_func_svc_used_state(hwdev, HINIC3_MOD_COMM, 0);
 }
 
