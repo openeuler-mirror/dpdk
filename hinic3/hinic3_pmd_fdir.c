@@ -552,8 +552,6 @@ hinic3_fdir_tcam_action_init(struct rte_eth_dev *dev,
 			     struct hinic3_tcam_cfg_rule *fdir_tcam_rule)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
-	struct rte_eth_dev *dst_dev = NULL;
-	struct hinic3_nic_dev *dst_nic = NULL;
 
 	fdir_tcam_rule->data.dw0.qid = rule->rq_index;
 #ifdef HINIC3_TRAFFIC_BIFUR
@@ -567,6 +565,8 @@ hinic3_fdir_tcam_action_init(struct rte_eth_dev *dev,
 #else
 		struct hinic3_rxq *rxq;
  	 	u16 rss_temp_id, rss_node_id, rss_inst_id;
+		struct hinic3_nic_dev *dst_nic = NULL;
+		struct rte_eth_dev *dst_dev = NULL;
  	 	switch (rule->action) {
 		case RTE_FLOW_ACTION_TYPE_QUEUE:
 			rxq = dev->data->rx_queues[rule->rq_index];
@@ -1083,16 +1083,10 @@ int hinic3_enable_rxq_fdir_filter(struct rte_eth_dev *dev, u32 queue_id, u32 abl
 void hinic3_free_fdir_filter(struct rte_eth_dev *dev)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
-	u8 sec_tcam_en = 0;
 
 	(void)hinic3_set_fdir_tcam_rule_filter(nic_dev->hwdev, false);
 
 	(void)hinic3_flush_tcam_rule(nic_dev->hwdev);
-
-	if (hinic3_fdir_cfg_sec_tcam(nic_dev->hwdev, &sec_tcam_en) != 0)
-		return;
-	if (sec_tcam_en == 1)
-		(void)hinic3_fdir_flush_sec_tcam_rule(nic_dev->hwdev);
 }
 
 static int hinic3_flow_set_arp_filter(struct rte_eth_dev *dev, struct rte_eth_ethertype_filter *ethertype_filter,

@@ -1274,12 +1274,10 @@ static int hinic3_mbuf_dma_map_sge(struct hinic3_txq *txq,
 	return 0;
 }
 
-static int hinic3_mbuf_dma_map_single(struct hinic3_txq *txq, 
-					struct rte_mbuf *mbuf, 
-					struct hinic3_sq_wqe_combo *wqe_combo, 
-					struct hinic3_wqe_info *wqe_info)
+static int hinic3_mbuf_dma_map_single(struct hinic3_txq *txq,
+					struct rte_mbuf *mbuf,
+					struct hinic3_sq_wqe_combo *wqe_combo)
 {
-	uint16_t nb_segs = wqe_info->sge_cnt - wqe_info->cpy_mbuf_cnt;
 	struct hinic3_sq_wqe_desc *wqe_desc = wqe_combo->hdr;
 	rte_iova_t dma_addr;
 
@@ -1415,7 +1413,7 @@ u16 hinic3_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, u16 nb_pkts)
 		if (txq->multi_segs)
 			err = hinic3_mbuf_dma_map_sge(txq, mbuf_pkt, &wqe_combo, &wqe_info);
 		else
-			err = hinic3_mbuf_dma_map_single(txq, mbuf_pkt, &wqe_combo,&wqe_info);
+			err = hinic3_mbuf_dma_map_single(txq, mbuf_pkt, &wqe_combo);
 		if (err) {
 			hinic3_put_sq_wqe(txq, &wqe_info);
 			txq->txq_stats.off_errs++;
