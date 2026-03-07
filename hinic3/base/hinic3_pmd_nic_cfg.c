@@ -1850,8 +1850,17 @@ hinic3_get_bifur_enable(void *hwdev, u8 *bifur_en, u8 *iso_en, u8 *bifur_type)
 	if (!hwdev)
 		return -EINVAL;
 
+	if (bifur_en != NULL)
+		*bifur_en = 0;
+
+	if (iso_en != NULL)
+		*iso_en = 0;
+
+	if (bifur_type != NULL)
+		*bifur_type = 0;
+
 	memset(&bifur_cmd, 0, sizeof(struct hinic3_port_flow_bifur_en_cmd));
-	bifur_cmd.port_id     = hinic3_physical_port_id(hwdev);
+	bifur_cmd.port_id = hinic3_physical_port_id(hwdev);
 	bifur_cmd.config_flag = PORT_BIFUR_CMD_GET;
 
 	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_SET_PORT_FLOW_BIFUR_ENABLE, &bifur_cmd,
@@ -1866,10 +1875,10 @@ hinic3_get_bifur_enable(void *hwdev, u8 *bifur_en, u8 *iso_en, u8 *bifur_type)
 		*bifur_en = bifur_cmd.flow_bifur_en;
 
 	if (iso_en != NULL)
-		*iso_en	  = bifur_cmd.iso_en;
+		*iso_en	= bifur_cmd.iso_en;
 
 	if (bifur_type != NULL)
-		*bifur_type	  = bifur_cmd.flow_bifur_type;
+		*bifur_type = bifur_cmd.flow_bifur_type;
 	
 	return 0;
 }
@@ -2288,4 +2297,90 @@ int hinic3_fdir_cfg_sec_tcam(void *hwdev, u8 *en)
 		*en = cmd_buf.data.tcam_cfg.key_mode;
 
 	return err;
+}
+
+static void hinic3_fec_param_covert(u32 opcode, u8 in_fec_param, u8 *out_fec_param)
+{
+	u8 i;
+	u8 fec_value_table_length;
+	struct hinic3_fec_param_value_map fec_value_table[] = {
+		{HINIC3_PORT_FEC_NOT_SET, BIT(HINIC3_PORT_FEC_NOT_SET), HINIC3_FEC_MODE_NONE},
+		{HINIC3_PORT_FEC_RSFEC, BIT(HINIC3_PORT_FEC_RSFEC), HINIC3_FEC_MODE_RS},
+		{HINIC3_PORT_FEC_BASEFEC, BIT(HINIC3_PORT_FEC_BASEFEC), HINIC3_FEC_MODE_BASER},
+		{HINIC3_PORT_FEC_NOFEC, BIT(HINIC3_PORT_FEC_NOFEC), HINIC3_FEC_MODE_OFF},
+		{HINIC3_PORT_FEC_LLRSFEC, BIT(HINIC3_PORT_FEC_LLRSFEC), HINIC3_FEC_MODE_LLRS},
+		{HINIC3_PORT_FEC_AUTO, BIT(HINIC3_PORT_FEC_AUTO), HINIC3_FEC_MODE_AUTO}
+	};
+
+	*out_fec_param = 0;
+	fec_value_table_length = (u8)(sizeof(fec_value_table) / sizeof(struct hinic3_fec_param_value_map));
+
+	if (opcode == HINIC3_FEC_MODE_OPCODE_SET) {
+		for (i = 0; i < fec_value_table_length; i++) {
+			if ((in_fec_param & fec_value_table[i].ethtool_fec_value) != 0)
+				*out_fec_param = fec_value_table[i].fec_offset;
+		}
+	}
+
+	if (opcode == HINIC3_FEC_MODE_OPCODE_GET) {
+		for (i = 0; i < fec_value_table_length; i++) {
+			if ((in_fec_param & fec_value_table[i].hinic3_fec_value) != 0)
+				*out_fec_param |= fec_value_table[i].ethtool_fec_value;
+		}
+	}
+}
+
+int hinic3_set_fec_mode(struct hinic3_hwdev *hwdev, u8 fecparam)
+{
+	struct mag_cmd_cfg_fec_mode fec_msg = { 0 };
+	u16 out_size = sizeof(fec_msg);
+	u8 advertised_fec = 0;
+	int err;
+
+	if (!hwdev)
+		return -EINVAL;
+
+	hinic3_fec_param_covert(HINIC3_FEC_MODE_OPCODE_SET, fecparam, &advertised_fec);
+	memset(&fec_msg, 0 , sizeof(fec_msg));
+	fec_msg.opcode = HINIC3_FEC_MODE_OPCODE_SET;
+	fec_msg.port_id = hinic3_physical_port_id(hwdev);
+	fec_msg.advertised_fec = advertised_fec;
+
+	err = mag_msg_to_mgmt_sync(hwdev, MAG_CMD_CFG_FEC_MODE, &fec_msg, sizeof(fec_msg),
+				   &fec_msg, &out_size);
+	
+	if ((fec_msg.head.status != 0) || err) {
+		PMD_DRV_LOG(ERR, "Failed to set fec mode failed, err: %d, status: 0x%x, out size: 0x%x\n",
+			    err, fec_msg.head.status, out_size);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+int hinic3_get_fec_mode(struct hinic3_hwdev *hwdev, u8 *supported_fec)
+{
+	struct mag_cmd_cfg_fec_mode fec_msg = { 0 };
+	u16 out_size = sizeof(fec_msg);
+	int err;
+
+	if (!hwdev)
+		return -EINVAL;
+
+	memset(&fec_msg, 0 , sizeof(fec_msg));
+	fec_msg.opcode = HINIC3_FEC_MODE_OPCODE_GET;
+	fec_msg.port_id = hinic3_physical_port_id(hwdev);
+
+	err = mag_msg_to_mgmt_sync(hwdev, MAG_CMD_CFG_FEC_MODE, &fec_msg, sizeof(fec_msg),
+				   &fec_msg, &out_size);
+	
+	if ((fec_msg.head.status != 0) || err) {
+		PMD_DRV_LOG(ERR, "Failed to get fec mode failed, err: %d, status: 0x%x, out size: 0x%x\n",
+			    err, fec_msg.head.status, out_size);
+		return -EINVAL;
+	}
+
+	hinic3_fec_param_covert(HINIC3_FEC_MODE_OPCODE_GET, fec_msg.supported_fec, supported_fec);
+
+	return 0;
 }

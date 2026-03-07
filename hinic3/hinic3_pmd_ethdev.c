@@ -3398,6 +3398,58 @@ static int hinic3_get_reg(__rte_unused struct rte_eth_dev *dev,
 	return 0;
 }
 
+static bool hinic3_fec_param_valid(u8 fec_param)
+{
+	if ((fec_param == HINIC3_FEC_MODE_LLRS)  ||
+	    (fec_param == HINIC3_FEC_MODE_RS)    ||
+	    (fec_param == HINIC3_FEC_MODE_BASER) ||
+	    (fec_param == HINIC3_FEC_MODE_OFF)) {
+		return true;
+	}
+
+	return false;
+}
+
+#ifdef DPDK_20_11
+static int hinic3_fec_set(struct rte_eth_dev *dev, uint32_t fec_capa)
+{
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+	int err;
+
+	if (hinic3_fec_param_valid(fec_capa) == false) {
+		PMD_DRV_LOG(ERR, "Fec param is valid, failed to set fec param.");
+		return -EINVAL;
+	}
+
+	err = hinic3_set_fec_mode(nic_dev->hwdev, (u8)fec_capa);
+	if (err) {
+		PMD_DRV_LOG(ERR, "Set fec param failed: %d.", err);
+		return err;
+	}
+
+	nic_dev->fec_mode = fec_capa;
+
+	return 0;
+}
+
+static int hinic3_fec_get(struct rte_eth_dev *dev, uint32_t *fec_capa)
+{
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+	u8 supported_fec = 0;
+	int err;
+	
+	err = hinic3_get_fec_mode(nic_dev->hwdev, &supported_fec);
+	if (err) {
+		PMD_DRV_LOG(ERR, "Get fec parma failed: %d.", err);
+		return err;
+	}
+
+	*fec_capa = supported_fec;
+
+	return 0;
+}
+#endif
+
 static const struct eth_dev_ops hinic3_pmd_ops = {
 	.dev_configure                 = hinic3_dev_configure,
 	.dev_infos_get                 = hinic3_dev_infos_get,
@@ -3472,6 +3524,10 @@ static const struct eth_dev_ops hinic3_pmd_ops = {
 	.rx_hairpin_queue_setup		   = hinic3_rx_hairpin_queue_setup,
 	.tx_hairpin_queue_setup		   = hinic3_tx_hairpin_queue_setup,
 	.tx_burst_mode_get             = hinic3_tx_burst_mode_get,
+#ifdef DPDK_20_11
+	.fec_get                       = hinic3_fec_get,
+	.fec_set               	       = hinic3_fec_set,
+#endif
 };
 
 static const struct eth_dev_ops hinic3_pmd_vf_ops = {
