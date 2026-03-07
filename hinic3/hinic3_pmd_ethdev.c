@@ -367,8 +367,6 @@ static void hinic3_dev_interrupt_handler_qpool(void *param)
 		return;
 	}
 
-
-
 	while (processed < MAX_PROCESS &&
 		(bytes_read = read(intr_handle->fd, &event, sizeof(event))) == sizeof(event)) {
 		if (event.type == NETDEV_UP) {
@@ -556,6 +554,28 @@ void hinic3_dev_info_get(struct rte_eth_dev_info *info, struct hinic3_nic_dev *n
 	info->default_txportconf.ring_size = HINIC3_DEFAULT_RING_SIZE;
 }
 
+static int hinic3_get_link_state_qpool(struct hinic3_nic_dev *nic_dev, u8 *link_state)
+{
+	struct drv_cmd_kernel_nic_data cfg_kernel_data;
+	struct msg_module msg_to_kernel;
+	int in_size, out_size, err;
+
+	(void)memset(&msg_to_kernel, 0, sizeof(msg_to_kernel));
+	in_size = sizeof(cfg_kernel_data);
+	out_size = sizeof(cfg_kernel_data);
+	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NIC_DRIVER, GET_KERN_DEV_DATA,
+			in_size, out_size,
+			&cfg_kernel_data, &cfg_kernel_data);
+	
+	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
+	if (err < 0)
+		PMD_DRV_LOG(ERR, "Get kernel netdev state failed, err: %d.", err);
+
+	*link_state = (u8)cfg_kernel_data.netdev_state;
+
+	return err;
+}
+
 /**
  * Get information about the device.
  *
@@ -722,7 +742,12 @@ static int hinic3_link_update(struct rte_eth_dev *dev, int wait_to_complete)
 	memset(&link, 0, sizeof(link));
 	do {
 		/* Get link status information from hardware */
-		ret = hinic3_get_link_state(nic_dev->hwdev, &link_state);
+		if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
+			ret = hinic3_get_link_state_qpool(nic_dev, &link_state);
+		} else {
+			ret = hinic3_get_link_state(nic_dev->hwdev, &link_state);
+		}
+		
 		if (ret) {
 			link.link_status = ETH_LINK_DOWN;
 			link.link_speed = ETH_SPEED_NUM_NONE;

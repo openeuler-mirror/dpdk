@@ -93,8 +93,7 @@ enum nic_driver_qpool_cmd_type {
 	DEL_USER_QUEUE_ID,    /**< 队列池化中删除用户态队列ID */
 	CFG_RSS_TEMPLATE,     /**< 队列池化中申请/释放q group id以及RSS模板 */
 	SET_RSS_INDIR_TBL,    /**< 队列池化中设置RSS间接表 */
-	GET_TXRX_QUEUE_DEPTH, /**< 队列池化中获取tx rx 队列 */
-	GET_NIC_DEV_MTU,      /**< 队列池化中获取mtu  */
+	GET_KERN_DEV_DATA,    /**< 队列池化中获取rx、tx队列深度、mtu、netdev_state  */
 };
 
 struct tool_target {
@@ -256,15 +255,13 @@ struct drv_cmd_cfg_rss_temp {
 	u32 rsvd1[15];
 };
 
-struct drv_cmd_txrx_queue_depth {
+struct drv_cmd_kernel_nic_data {
 	struct cdev_msg_head head;
 	u32 rx_q_depth;
 	u32 tx_q_depth;
-};
-
-struct drv_cmd_nic_dev_mtu {
-	struct cdev_msg_head head;
 	u16 mtu;
+	u16 netdev_state;
+	u32 rsvd1[13];
 };
 
 /*
