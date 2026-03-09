@@ -728,13 +728,11 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 
-	/* Queue depth must be equal to first queue */
-	if (nic_dev->rxq_depth == 0)
-		nic_dev->rxq_depth = nb_desc;
-	else if (nb_desc != nic_dev->rxq_depth) {
-		PMD_DRV_LOG(WARNING, "rxq%u depth:%u is not equal to first queue depth:%u.\n",
-			qid, nb_desc, nic_dev->rxq_depth);
-		nb_desc = nic_dev->rxq_depth;
+ 	/* Queue depth must be equal to queue 0 */	 
+ 	if (qid != 0 && (nb_desc != nic_dev->rxqs[0]->q_depth)) {	 
+ 		PMD_DRV_LOG(WARNING, "rxq%u depth:%u is not equal to queue0 depth:%u.\n",	 
+ 			qid, nb_desc, nic_dev->rxqs[0]->q_depth);	 
+ 		nb_desc = nic_dev->rxqs[0]->q_depth;
 	}
 
 	/* Queue depth must be power of 2, otherwise will be aligned up */
@@ -949,13 +947,11 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	hwdev = nic_dev->hwdev;
 
-	/* Queue depth must be equal to first queue */
-	if (nic_dev->txq_depth == 0)
-		nic_dev->txq_depth = nb_desc;
-	else if (nb_desc != nic_dev->txq_depth) {
-		PMD_DRV_LOG(WARNING, "txq%u depth:%u is not equal to first queue depth:%u.\n",
-			qid, nb_desc, nic_dev->txq_depth);
-		nb_desc = nic_dev->txq_depth;
+ 	/* Queue depth must be equal to queue 0 */	 
+ 	if (qid != 0 && (nb_desc != nic_dev->txqs[0]->q_depth)) {	 
+ 		PMD_DRV_LOG(WARNING, "txq%u depth:%u is not equal to queue0 depth:%u.\n",	 
+ 			qid, nb_desc, nic_dev->txqs[0]->q_depth);	 
+ 		nb_desc = nic_dev->txqs[0]->q_depth;
 	}
 
 	/* Queue depth must be power of 2, otherwise will be aligned up */
@@ -3849,8 +3845,6 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 	nic_dev->max_sqs = hinic3_func_max_sqs(nic_dev->hwdev);
 	nic_dev->max_rqs = hinic3_func_max_rqs(nic_dev->hwdev);
 
-	nic_dev->rxq_depth = 0;
-	nic_dev->txq_depth = 0;
 	if (HINIC3_FUNC_TYPE(nic_dev->hwdev) == TYPE_VF)
 
 		eth_dev->dev_ops = &hinic3_pmd_vf_ops;
