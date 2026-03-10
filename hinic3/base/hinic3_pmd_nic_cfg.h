@@ -1245,12 +1245,12 @@ enum hinic3_cmd_port_fec {
 };
 
 enum hinic3_fec_mode {
-	HINIC3_FEC_MODE_NONE	= 1,
+	HINIC3_FEC_MODE_NONE	= 0,
+	HINIC3_FEC_MODE_OFF 	= 1,
 	HINIC3_FEC_MODE_AUTO	= 2,
-	HINIC3_FEC_MODE_OFF 	= 4,
+	HINIC3_FEC_MODE_BASER 	= 4,
 	HINIC3_FEC_MODE_RS   	= 8,
-	HINIC3_FEC_MODE_BASER 	= 16,
-	HINIC3_FEC_MODE_LLRS  	= 32,
+	HINIC3_FEC_MODE_LLRS  	= 16,
 };
 
 struct hinic3_fec_param_value_map {

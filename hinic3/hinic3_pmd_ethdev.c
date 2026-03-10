@@ -3398,7 +3398,8 @@ static int hinic3_get_reg(__rte_unused struct rte_eth_dev *dev,
 	return 0;
 }
 
-static bool hinic3_fec_param_valid(u8 fec_param)
+#ifdef DPDK_20_11
+static bool hinic3_fec_param_valid(uint32_t fec_param)
 {
 	if ((fec_param == HINIC3_FEC_MODE_LLRS)  ||
 	    (fec_param == HINIC3_FEC_MODE_RS)    ||
@@ -3410,7 +3411,6 @@ static bool hinic3_fec_param_valid(u8 fec_param)
 	return false;
 }
 
-#ifdef DPDK_20_11
 static int hinic3_fec_set(struct rte_eth_dev *dev, uint32_t fec_capa)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
@@ -3435,16 +3435,16 @@ static int hinic3_fec_set(struct rte_eth_dev *dev, uint32_t fec_capa)
 static int hinic3_fec_get(struct rte_eth_dev *dev, uint32_t *fec_capa)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
-	u8 supported_fec = 0;
+	u8 advertised_fec = 0;
 	int err;
 	
-	err = hinic3_get_fec_mode(nic_dev->hwdev, &supported_fec);
+	err = hinic3_get_fec_mode(nic_dev->hwdev, &advertised_fec);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Get fec parma failed: %d.", err);
 		return err;
 	}
 
-	*fec_capa = supported_fec;
+	*fec_capa = (u32)advertised_fec;
 
 	return 0;
 }

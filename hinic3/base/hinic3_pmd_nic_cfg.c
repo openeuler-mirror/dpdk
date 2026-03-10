@@ -2355,10 +2355,11 @@ int hinic3_set_fec_mode(struct hinic3_hwdev *hwdev, u8 fecparam)
 		return -EINVAL;
 	}
 
+	PMD_DRV_LOG(INFO, "Set fec mode success, active fec capa mode: %d", fecparam);
 	return 0;
 }
 
-int hinic3_get_fec_mode(struct hinic3_hwdev *hwdev, u8 *supported_fec)
+int hinic3_get_fec_mode(struct hinic3_hwdev *hwdev, u8 *advertised_fec)
 {
 	struct mag_cmd_cfg_fec_mode fec_msg = { 0 };
 	u16 out_size = sizeof(fec_msg);
@@ -2380,7 +2381,7 @@ int hinic3_get_fec_mode(struct hinic3_hwdev *hwdev, u8 *supported_fec)
 		return -EINVAL;
 	}
 
-	hinic3_fec_param_covert(HINIC3_FEC_MODE_OPCODE_GET, fec_msg.supported_fec, supported_fec);
+	hinic3_fec_param_covert(HINIC3_FEC_MODE_OPCODE_GET, BIT(fec_msg.advertised_fec), advertised_fec);
 
 	return 0;
 }
