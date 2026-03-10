@@ -212,6 +212,8 @@ struct hinic3_nic_dev {
 	struct hinic3_ets *ets;
 
 	uint32_t fec_mode;  /* current FEC mode for ethdev */
+
+	bool hinic3_offload_initialized;
 };
 
 extern const struct rte_flow_ops hinic3_flow_ops;
