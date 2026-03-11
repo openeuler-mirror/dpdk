@@ -562,6 +562,73 @@ void hinic3_dev_info_get(struct rte_eth_dev_info *info, struct hinic3_nic_dev *n
 	info->default_txportconf.ring_size = HINIC3_DEFAULT_RING_SIZE;
 }
 
+static int hinic3_get_link_state_qpool(struct hinic3_nic_dev *nic_dev)
+{
+	struct drv_cmd_kernel_nic_data cfg_kernel_data  = { 0 };
+	struct msg_module msg_to_kernel = { 0 };
+	int err = 0;
+
+	fill_ioctl_msg(&msg_to_kernel, SEND_TO_BIFUR_DRIVER, GET_KERN_DEV_DATA,
+		       sizeof(cfg_kernel_data), sizeof(cfg_kernel_data),
+		       &cfg_kernel_data, &cfg_kernel_data);
+	
+	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
+	if (err < 0 || cfg_kernel_data.netdev_state == 0)
+		err = -EIO;
+	return err;
+}
+
+#define HINIC3_VERIFY_RX_DEPTH     1
+#define HINIC3_VERIFY_TX_DEPTH     0
+
+static int hinic3_get_kernel_mtu(struct rte_eth_dev *eth_dev)
+{
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
+	struct drv_cmd_kernel_nic_data cfg_kernel_data  = { 0 };
+	struct msg_module msg_to_kernel = { 0 };
+	int err = 0;
+	
+	fill_ioctl_msg(&msg_to_kernel, SEND_TO_BIFUR_DRIVER, GET_KERN_DEV_DATA,
+		       sizeof(cfg_kernel_data), sizeof(cfg_kernel_data),
+		       &cfg_kernel_data, &cfg_kernel_data);
+	
+	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
+	if (err < 0) {
+		PMD_DRV_LOG(WARNING, "Get kernel mtu failed");
+		return err;
+	}
+	eth_dev->data->mtu = cfg_kernel_data.mtu;
+	
+	return err;
+}
+
+static int hinic3_verify_queue_depth(struct hinic3_nic_dev *nic_dev, u16 *q_depth, u16 type)
+{
+	struct drv_cmd_kernel_nic_data cfg_kernel_data  = { 0 };
+	struct msg_module msg_to_kernel = { 0 };
+	int err = 0;
+
+	fill_ioctl_msg(&msg_to_kernel, SEND_TO_BIFUR_DRIVER, GET_KERN_DEV_DATA,
+		       sizeof(cfg_kernel_data), sizeof(cfg_kernel_data),
+		       &cfg_kernel_data, &cfg_kernel_data);
+	
+	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
+	if (err < 0)
+		return err;
+
+	if (type == HINIC3_VERIFY_RX_DEPTH && *q_depth != cfg_kernel_data.rx_q_depth) {
+		*q_depth = cfg_kernel_data.rx_q_depth;
+		PMD_DRV_LOG(WARNING, "Rxq depth adjusted to %d to match kernel", *q_depth);
+	}
+
+	if (type == HINIC3_VERIFY_TX_DEPTH && *q_depth != cfg_kernel_data.tx_q_depth) {
+		*q_depth = cfg_kernel_data.tx_q_depth;
+		PMD_DRV_LOG(WARNING, "Txq depth adjusted to %d to match kernel", *q_depth);
+	}
+	
+	return err;
+}
+
 /**
  * Get information about the device.
  *
@@ -836,7 +903,13 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	int ci_mz_size = sizeof(*rxq->rq_ci), ci_mz_align = RTE_CACHE_LINE_SIZE;
 
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
-
+	if (IS_QPOOL_MODE(nic_dev)) {
+		err = hinic3_verify_queue_depth(nic_dev, &nb_desc, HINIC3_VERIFY_RX_DEPTH);
+		if (err) {
+			PMD_DRV_LOG(ERR, "Get queue depth failed");
+			goto get_queue_depth_fail;
+		}
+	}
 	/* Queue depth must be equal to queue 0 */
 	if (qid != 0 && (nb_desc != nic_dev->rxqs[0]->q_depth)) {
 		PMD_DRV_LOG(WARNING, "rxq%u depth:%u is not equal to queue0 depth:%u.\n",
@@ -847,7 +920,6 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	/* Queue depth must be power of 2, otherwise will be aligned up */
 	rq_depth = (nb_desc & (nb_desc - 1)) ?
 		((u16)(1U << (ilog2(nb_desc) + 1))) : nb_desc;
-
 	/*
 	 * Validate number of receive descriptors.
 	 * It must not exceed hardware maximum and minimum.
@@ -937,15 +1009,15 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 
 	if (IS_QPOOL_MODE(nic_dev)) {
 		err = hinic3_get_rx_user_queue(nic_dev, rxq);
-		pi_mz_align = RTE_PGSIZE_4K;
-		rq_mz_align = RTE_PGSIZE_4K;
-		ci_mz_size = RTE_PGSIZE_4K;
-		ci_mz_align = RTE_PGSIZE_4K;
 		if (err < 0) {
 			PMD_DRV_LOG(ERR, "Get rx queue failed, dev_name: %s",
 				    qid, dev->data->name);
 			goto close_fd;
 		}
+		pi_mz_align = RTE_PGSIZE_4K;
+		rq_mz_align = RTE_PGSIZE_4K;
+		ci_mz_size = RTE_PGSIZE_4K;
+		ci_mz_align = RTE_PGSIZE_4K;
 	}
 
 	pi_mz = hinic3_dma_zone_reserve(dev, "hinic3_rq_pi", qid,
@@ -1053,6 +1125,7 @@ alloc_db_err_fail:
 alloc_pi_mz_fail:
 close_fd:
 adjust_bufsize_fail:
+get_queue_depth_fail:
 	rte_free(rxq);
 	nic_dev->rxqs[qid] = NULL;
 
@@ -1112,6 +1185,13 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	int sq_mz_align = RTE_PGSIZE_256K;
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	hwdev = nic_dev->hwdev;
+	if (IS_QPOOL_MODE(nic_dev)) {
+		err = hinic3_verify_queue_depth(nic_dev, &nb_desc, HINIC3_VERIFY_TX_DEPTH);
+		if (err) {
+			PMD_DRV_LOG(ERR, "Get queue depth failed");
+			goto get_queue_depth_fail;
+		}
+	}
 
 	/* Queue depth must be equal to queue 0 */
 	if (qid != 0 && (nb_desc != nic_dev->txqs[0]->q_depth)) {
@@ -1123,7 +1203,6 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	/* Queue depth must be power of 2, otherwise will be aligned up */
 	sq_depth = (nb_desc & (nb_desc - 1)) ?
 		   ((u16)(1U << (ilog2(nb_desc) + 1))) : nb_desc;
-
 	/*
 	 * Validate number of transmit descriptors.
 	 * It must not exceed hardware maximum and minimum.
@@ -1253,6 +1332,7 @@ alloc_sq_mz_fail:
 
 alloc_ci_mz_fail:
 close_fd:
+get_queue_depth_fail:
 	rte_free(txq);
 	return err;
 }
@@ -1883,6 +1963,7 @@ static int hinic3_dev_start_qpool(struct rte_eth_dev *eth_dev)
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
 
 	hinic3_get_func_rx_buf_size(nic_dev);
+	hinic3_get_kernel_mtu(eth_dev);
 
 	/* reset rx and tx queue */
 	hinic3_reset_rx_queue(eth_dev);
@@ -3971,7 +4052,6 @@ static int hinic3_get_nic_fd(struct hinic3_hwdev *hwdev)
 		 pci_dev->addr.bus, pci_dev->addr.devid, pci_dev->addr.function);
 	fd = open(dev_file, O_RDWR | O_TRUNC, 777);
 	if (fd < 0) {
-		PMD_DRV_LOG(ERR, "Get nic fd fail\n");
 		return -EINVAL;
 	}
 	return fd;
@@ -4114,8 +4194,16 @@ static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev)
 	nic_dev->hwdev->port_id = eth_dev->data->port_id;
 
 	nic_dev->fd = hinic3_get_nic_fd(nic_dev->hwdev);
-	if (nic_dev->fd < 0)
+	if (nic_dev->fd < 0) {
+		PMD_DRV_LOG(ERR, "Qpool func init get nic fd failed\n");
 		goto get_fd_fail;
+	}
+
+	err = hinic3_get_link_state_qpool(nic_dev);
+	if (err) {
+		PMD_DRV_LOG(ERR, "Qpool not support start when netdev is down");
+		goto link_state_err;
+	}
 
 	err = hinic3_init_hwdev(nic_dev->hwdev);
 	if (err) {
@@ -4220,6 +4308,7 @@ init_sw_rxtxqs_fail:
 get_cap_fail:
 	hinic3_free_hwdev(nic_dev->hwdev);
 	eth_dev->dev_ops = NULL;
+link_state_err:
 get_fd_fail:
 init_hwdev_fail:
 	rte_free(nic_dev->hwdev);
