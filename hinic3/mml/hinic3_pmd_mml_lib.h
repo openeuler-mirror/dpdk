@@ -93,7 +93,7 @@ enum nic_driver_qpool_cmd_type {
 	SET_RSS_INDIR_TBL,
 	GET_RSS_INDIR_TBL,
 	GET_QUEUE_START_PA,
-	GET_NIC_DEV_MTU,
+	GET_KERN_DEV_DATA,
 };
 
 struct tool_target {
@@ -207,6 +207,14 @@ struct mag_cmd_cfg_rss_temp {
 	uint16_t func_id;
 	uint16_t opcode;
 	uint16_t rsvd;
+};
+
+struct drv_cmd_kernel_nic_data {
+	u32 rx_q_depth;
+	u32 tx_q_depth;
+	u16 mtu;
+	u8 netdev_state;
+	u8 rsvd0;
 };
 
 struct drv_cmd_cqe_paddr_get {
