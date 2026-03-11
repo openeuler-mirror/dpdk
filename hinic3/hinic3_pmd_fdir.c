@@ -574,7 +574,7 @@ hinic3_fdir_tcam_action_init(struct rte_eth_dev *dev,
 			dst_dev = &rte_eth_devices[rxq->hairpin_conf.peers[0].port];
 			dst_nic = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dst_dev);
 			fdir_tcam_rule->data.dw1.bs.action = HINIC3_ACTION_PORT;
-			fdir_tcam_rule->data.dw1.bs.func_id = hinic3_physical_port_id(dst_nic->hwdev);
+			fdir_tcam_rule->data.dw1.bs.func_id = hinic3_global_func_id(dst_nic->hwdev);
 		}
 		break;
 	case RTE_FLOW_ACTION_TYPE_DROP:
