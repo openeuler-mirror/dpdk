@@ -7,9 +7,10 @@ hinic3 driver是华为SPx系列网卡在DPDK框架下的用户态驱动，旨在
 ---
 
 ## 2. 版本配套关系
-| 版本号 | 配套固件版本|发布日期 | commit id |版本特性|
-|--|--|--|--|--|
-| [hinic3-26.0.rc1-0214.r1](https://atomgit.com/openeuler/dpdk/tree/hinic3-26.0.rc1-0214.r1) | POC版本 | 2026.02.14 | cc93d8d3cb28138637e4174597d2b405e277278e |
+| 版本号 | 配套固件版本 | 发布日期 | 版本特性 |
+|--|--|--|--|
+| [hinic3-26.0.rc1-0214.r1](https://atomgit.com/openeuler/dpdk/tree/hinic3-26.0.rc1-0214.r1) | 请咨询技术支撑 | 2026.02.14 |
+| [hinic3-26.0.rc1-0307.r2](https://atomgit.com/openeuler/dpdk/tree/hinic3-26.0.rc1-0307.r2) | IN220 2.6.RC1 | 2026.03.07 | release note
  	 
 ---
 
