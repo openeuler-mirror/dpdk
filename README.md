@@ -94,7 +94,7 @@ git clone https://atomgit.com/openeuler/dpdk.git -b hinic3 dpdk-hinic3
 cd dpdk-hinic3
 ```
 
-### SP200&SP600 网卡
+### SP220&SP600&SP230 网卡
 ```bash
 sh install.sh ../dpdk-stable-21.11.9 install
 sh install.sh ../dpdk-stable-21.11.9 build
