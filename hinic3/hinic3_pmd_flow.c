@@ -1131,6 +1131,11 @@ hinic3_flow_set_rss_action_config(struct rte_eth_dev	       *dev,
 
 	act_r = (struct rte_flow_action_rss *)actions->conf;
 	rss_conf.rss_hf = act_r->types;
+	if (act_r->key_len > HINIC3_RSS_KEY_SIZE) {
+		rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_HANDLE,
+				   NULL, "Invalid RSS key, rss_key_len > 40.");
+		return -rte_errno;
+	}
 	rte_memcpy(hash, act_r->key, act_r->key_len);
 	rss_conf.rss_key = hash;
 	rss_conf.rss_key_len = act_r->key_len;
@@ -2552,10 +2557,6 @@ hinic3_flow_create(struct rte_eth_dev          *dev,
 			goto free_flow;
 		}
 
-		flow->rule = filter_rules;
-		flow->filter_type = filter_rules->filter_type;
-		TAILQ_INSERT_TAIL(&nic_dev->filter_fdir_rule_list, flow, node);
-
 		if (filter_rules->template_entry == NULL)
 			break;
 
@@ -2568,6 +2569,10 @@ hinic3_flow_create(struct rte_eth_dev          *dev,
 				goto free_flow;
 			}
 		}
+
+		flow->rule = filter_rules;
+		flow->filter_type = filter_rules->filter_type;
+		TAILQ_INSERT_TAIL(&nic_dev->filter_fdir_rule_list, flow, node);
 
 		break;
 	default:
