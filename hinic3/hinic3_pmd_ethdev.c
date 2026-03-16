@@ -9,6 +9,8 @@
 #include <rte_mempool.h>
 #include <rte_errno.h>
 #include <rte_ether.h>
+#include <rte_interrupts.h>
+#include <rte_version.h>
 #include <sys/stat.h>
 #include <rte_eal.h>
 #include <fcntl.h>
@@ -353,6 +355,7 @@ static void hinic3_dev_interrupt_handler_qpool(void *param)
 	int ret;
 	ssize_t bytes_read;
 	u8 addr_bytes[RTE_ETHER_ADDR_LEN];
+	bool interruption_done = false;
 
 	if (!hinic3_get_bit(HINIC3_DEV_INTR_EN, &nic_dev->dev_status)) {
 		PMD_DRV_LOG(WARNING,
@@ -375,6 +378,7 @@ static void hinic3_dev_interrupt_handler_qpool(void *param)
 			continue;
 
 		while ((bytes_read = read(intr_handle->fd, &event, sizeof(event))) == sizeof(event)) {
+			interruption_done = true;
 			switch (event.type) {
 			case NETDEV_UP_EVENT:
 				get_port_info(nic_dev->hwdev, 1, &link);
@@ -396,9 +400,13 @@ static void hinic3_dev_interrupt_handler_qpool(void *param)
 					PMD_DRV_LOG(INFO, "mac addr is zero");
 				break;
 			default:
+				interruption_done = false;
 				break;
 			}
 		}
+
+		if (interruption_done == true)
+			break;
 		if (bytes_read < 0 && errno != EAGAIN) {
 			PMD_DRV_LOG(ERR, "interrupt handler fd read error: %d.", errno);
 			break;
@@ -573,7 +581,7 @@ static int hinic3_get_link_state_qpool(struct hinic3_nic_dev *nic_dev)
 	fill_ioctl_msg(&msg_to_kernel, SEND_TO_BIFUR_DRIVER, GET_KERN_DEV_DATA,
 		       sizeof(cfg_kernel_data), sizeof(cfg_kernel_data),
 		       &cfg_kernel_data, &cfg_kernel_data);
-	
+
 	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
 	if (err < 0 || cfg_kernel_data.netdev_state == 0)
 		err = -EIO;
@@ -589,18 +597,18 @@ static int hinic3_get_kernel_mtu(struct rte_eth_dev *eth_dev)
 	struct drv_cmd_kernel_nic_data cfg_kernel_data  = { 0 };
 	struct msg_module msg_to_kernel = { 0 };
 	int err = 0;
-	
+
 	fill_ioctl_msg(&msg_to_kernel, SEND_TO_BIFUR_DRIVER, GET_KERN_DEV_DATA,
 		       sizeof(cfg_kernel_data), sizeof(cfg_kernel_data),
 		       &cfg_kernel_data, &cfg_kernel_data);
-	
+
 	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
 	if (err < 0) {
 		PMD_DRV_LOG(WARNING, "Get kernel mtu failed");
 		return err;
 	}
 	eth_dev->data->mtu = cfg_kernel_data.mtu;
-	
+
 	return err;
 }
 
@@ -613,7 +621,7 @@ static int hinic3_verify_queue_depth(struct hinic3_nic_dev *nic_dev, u16 *q_dept
 	fill_ioctl_msg(&msg_to_kernel, SEND_TO_BIFUR_DRIVER, GET_KERN_DEV_DATA,
 		       sizeof(cfg_kernel_data), sizeof(cfg_kernel_data),
 		       &cfg_kernel_data, &cfg_kernel_data);
-	
+
 	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
 	if (err < 0)
 		return err;
@@ -627,7 +635,7 @@ static int hinic3_verify_queue_depth(struct hinic3_nic_dev *nic_dev, u16 *q_dept
 		*q_depth = cfg_kernel_data.tx_q_depth;
 		PMD_DRV_LOG(WARNING, "Txq depth adjusted to %d to match kernel", *q_depth);
 	}
-	
+
 	return err;
 }
 
@@ -857,7 +865,7 @@ static int hinic3_release_user_queue(struct hinic3_nic_dev *nic_dev, int queue_i
 	queueinfo.qid = queue_id;
 	fill_ioctl_msg(&msg_to_kernel, SEND_TO_BIFUR_DRIVER, DEL_USER_QUEUE_ID,
 		       sizeof(queueinfo), sizeof(queueinfo), &queueinfo, &queueinfo);
-	
+
 	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
 	if (err < 0)
 		PMD_DRV_LOG(ERR, "Release_user_queue fail");
@@ -992,7 +1000,7 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 		goto adjust_bufsize_fail;
 	}
 
-	if (HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev) || 
+	if (HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev) ||
 	    HINIC3_SUPPORT_RX_SW_COMPACT_CQE(nic_dev)) {
 		/* Default rx wqe type set to compact wqe if NIC supports compact rx CQE */
 		rxq->wqe_type = HINIC3_COMPACT_RQ_WQE;
@@ -1012,8 +1020,7 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	if (IS_QPOOL_MODE(nic_dev)) {
 		err = hinic3_get_rx_user_queue(nic_dev, rxq);
 		if (err < 0) {
-			PMD_DRV_LOG(ERR, "Get rx queue failed, dev_name: %s",
-				    qid, dev->data->name);
+			PMD_DRV_LOG(ERR, "Get rx queue failed, dev_name: %s", dev->data->name);
 			goto close_fd;
 		}
 		pi_mz_align = RTE_PGSIZE_4K;
@@ -1068,7 +1075,7 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 		goto alloc_rx_info_fail;
 	}
 
-	if (HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev) || 
+	if (HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev) ||
 	    HINIC3_SUPPORT_RX_SW_COMPACT_CQE(nic_dev)) {
 		ci_mz = hinic3_dma_zone_reserve(dev, "hinic3_ci_mz", qid,
 						ci_mz_size, ci_mz_align, (int)socket_id);
@@ -1265,8 +1272,7 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	if (IS_QPOOL_MODE(nic_dev)) {
 		err = hinic3_get_tx_user_queue(nic_dev, txq);
 		if (err < 0) {
-			PMD_DRV_LOG(ERR, "Get rx queue failed, dev_name: %s",
-				    qid, dev->data->name);
+			PMD_DRV_LOG(ERR, "Get rx queue failed, dev_name: %s", dev->data->name);
 			goto close_fd;
 		}
 		ci_mz_size = HINIC3_RQSQ_PAGE_SIZE;
@@ -1365,7 +1371,7 @@ static void hinic3_rx_queue_release(struct rte_eth_dev *dev, uint16_t queue_id)
 	}
 
 	nic_dev = rxq->nic_dev;
-	
+
 	hinic3_free_rxq_mbufs(rxq);
 	if (IS_QPOOL_MODE(nic_dev))
 		hinic3_release_user_queue(nic_dev, rxq->q_id);
@@ -1791,7 +1797,7 @@ static void hinic3_enable_interrupt(struct rte_eth_dev *dev)
 		return;
 
 	/* enable rte interrupt */
-	
+
 	if (IS_QPOOL_MODE(nic_dev)) {
 		rte_intr_callback_unregister(PCI_DEV_TO_INTR_HANDLE(pci_dev),
 				             hinic3_dev_interrupt_handler_qpool, (void *)dev);
@@ -2089,7 +2095,7 @@ static int hinic3_dev_start(struct rte_eth_dev *eth_dev)
 
 	nic_dev->lro_en = (eth_dev->data->dev_conf.rxmode.offloads & DEV_RX_OFFLOAD_TCP_LRO) &
 			  (nic_dev->feature_cap & NIC_F_LRO) ? true : false;
-			  
+
 
 
 	/* Init txq and rxq context */
@@ -2248,8 +2254,8 @@ static void hinic3_dev_stop(struct rte_eth_dev *dev)
 
 	if (!HINIC3_IS_VF(nic_dev->hwdev) && nic_dev->dcb->dcb_on)
 		hinic3_sync_dcb_state(nic_dev->hwdev, 1, 0);
-	
-	
+
+
 	if (!IS_QPOOL_MODE(nic_dev)) {
 		hinic3_tm_dev_stop_proc(dev);
 		/* Stop phy port and vport */
@@ -2341,8 +2347,8 @@ static void hinic3_dev_release(struct rte_eth_dev *eth_dev)
 
 	hinic3_clear_bit(HINIC3_DEV_INTR_EN, &nic_dev->dev_status);
 	hinic3_set_msix_state(nic_dev->hwdev, 0, HINIC3_MSIX_DISABLE);
-	
-	if (IS_QPOOL_MODE(nic_dev)) {	
+
+	if (IS_QPOOL_MODE(nic_dev)) {
 		(void)rte_intr_callback_unregister(PCI_DEV_TO_INTR_HANDLE(pci_dev),
 					   hinic3_dev_interrupt_handler_qpool,
 					   (void *)eth_dev);
@@ -3000,7 +3006,7 @@ static int hinic3_rss_reta_query(struct rte_eth_dev *dev,
 	u16 i;
 	int err;
 
-	if (nic_dev->rss_state == HINIC3_RSS_DISABLE && 
+	if (nic_dev->rss_state == HINIC3_RSS_DISABLE &&
 	    !IS_QPOOL_MODE(nic_dev)) {
 		PMD_DRV_LOG(INFO, "RSS is not enabled");
 		return 0;
@@ -3013,7 +3019,7 @@ static int hinic3_rss_reta_query(struct rte_eth_dev *dev,
 		return err;
 	}
 
-	if ((reta_size != HINIC3_RSS_INDIR_SIZE && !IS_QPOOL_MODE(nic_dev)) || 
+	if ((reta_size != HINIC3_RSS_INDIR_SIZE && !IS_QPOOL_MODE(nic_dev)) ||
 	    (reta_size != nic_dev->indir_table_size && IS_QPOOL_MODE(nic_dev))) {
 		PMD_DRV_LOG(ERR, "Invalid reta size, reta_size: %d", reta_size);
 		return -EINVAL;
@@ -4252,7 +4258,11 @@ static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev)
 		goto init_mac_table_fail;
 	}
 
+#if RTE_VERSION >= RTE_VERSION_NUM(21, 11, 0, 0)
 	rte_intr_fd_set(pci_dev->intr_handle, nic_dev->fd);
+#else
+	pci_dev->intr_handle.fd = nic_dev->fd;
+#endif
 
 	/* Register callback func to eal lib */
 	err = rte_intr_callback_register(PCI_DEV_TO_INTR_HANDLE(pci_dev),

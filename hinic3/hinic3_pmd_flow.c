@@ -1077,15 +1077,15 @@ static hinic3_parse_filter_t hinic3_find_parse_filter_func(struct rte_eth_dev *d
 		return parse_filter;
 	}
 
-	if ((hinic3_get_driver_feature(nic_dev) & NIC_F_HTN_FDIR) != 0) 
+	if ((hinic3_get_driver_feature(nic_dev) & NIC_F_HTN_FDIR) != 0)
 		return hinic3_get_match_filter_func_in_list(hinic3_htn_supported_patterns,
 							    RTE_DIM(hinic3_htn_supported_patterns),
 							    pattern);
-	else if ((hinic3_get_driver_feature(nic_dev) & NIC_F_TX_WQE_COMPACT_TASK) != 0) 
+	else if ((hinic3_get_driver_feature(nic_dev) & NIC_F_TX_WQE_COMPACT_TASK) != 0)
 		return hinic3_get_match_filter_func_in_list(hinic3_npu_ext_supported_patterns,
 							    RTE_DIM(hinic3_npu_ext_supported_patterns),
 							    pattern);
-	else 	
+	else
 		return hinic3_get_match_filter_func_in_list(hinic3_npu_supported_patterns,
 							    RTE_DIM(hinic3_npu_supported_patterns),
 							    pattern);
@@ -1127,7 +1127,7 @@ hinic3_check_rss_queues(struct rte_eth_dev		 *dev,
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	uint32_t i;
 
-	if (act_r->queue_num == 0 || 
+	if (act_r->queue_num == 0 ||
 	   (IS_QPOOL_MODE(nic_dev) && act_r->queue_num != dev->data->nb_rx_queues)) {
 		rte_flow_error_set(error, EINVAL,
 				   HINIC3_FLOW_ERROR_TYPE_ACTION,
@@ -1337,7 +1337,7 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 #ifdef HINIC3_TRAFFIC_BIFUR
 			uint64_t dr_feature = hinic3_get_driver_feature(nic_dev);
 			if ((dr_feature & NIC_F_HTN_CMDQ)) {
-				rte_flow_error_set(error, EINVAL, 
+				rte_flow_error_set(error, EINVAL,
 						   HINIC3_FLOW_ERROR_TYPE_ACTION, act,
 						   "Not support rss acrion.");
 				return -rte_errno;

@@ -1199,7 +1199,7 @@ int hinic3_start_all_rqs(struct rte_eth_dev *eth_dev)
 				i, rxq->q_id, rxq->q_depth);
 			goto out;
 		}
-		if (!IS_QPOOL_MODE(nic_dev)) 
+		if (!IS_QPOOL_MODE(nic_dev))
 			hinic3_dev_rx_queue_intr_enable(eth_dev, rxq->q_id);
 		eth_dev->data->rx_queue_state[i] = RTE_ETH_QUEUE_STATE_STARTED;
 	}
@@ -1226,7 +1226,7 @@ out:
 	return err;
 }
 
-void hinic3_rx_get_cqe_info(struct hinic3_rxq *rxq,
+void hinic3_rx_get_cqe_info(__rte_unused struct hinic3_rxq *rxq,
 		            volatile struct hinic3_rq_cqe *rx_cqe,
 		            struct hinic3_cqe_info *cqe_info)
 {
