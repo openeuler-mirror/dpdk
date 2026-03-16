@@ -1127,7 +1127,8 @@ hinic3_check_rss_queues(struct rte_eth_dev		 *dev,
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	uint32_t i;
 
-	if (act_r->queue_num == 0) {
+	if (act_r->queue_num == 0 || 
+	   (IS_QPOOL_MODE(nic_dev) && act_r->queue_num != dev->data->nb_rx_queues)) {
 		rte_flow_error_set(error, EINVAL,
 				   HINIC3_FLOW_ERROR_TYPE_ACTION,
 				   act, "Invalid action queue number.");
@@ -2701,6 +2702,21 @@ hinic3_flow_flush(struct rte_eth_dev *dev, struct rte_flow_error *error)
 		return -rte_errno;
 	}
 
+	return ret;
+}
+
+int
+hinic3_flow_flush_qpool(struct rte_eth_dev *dev)
+{
+	int ret;
+
+	ret = hinic3_flow_flush_fdir_filter(dev);
+	if (ret)
+		PMD_DRV_LOG(ERR, "Failed to flush fdir flows.");
+
+	ret = hinic3_flow_flush_ethertype_filter(dev);
+	if (ret)
+		PMD_DRV_LOG(ERR,  "Failed to flush ethertype flows.");
 	return ret;
 }
 
