@@ -37,7 +37,7 @@
 #define HINIC3_UINT15_MAX         0x7fff
 #define BIFUR_EN              0x2
 
-#define HINIC3_INVALID_INDEX      -1
+#define HINIC3_INVALID_INDEX      (-1)
 
 #define HINIC3_DEV_PRIVATE_TO_TCAM_INFO(nic_dev) \
 	(&((struct hinic3_nic_dev *)(nic_dev))->tcam)
