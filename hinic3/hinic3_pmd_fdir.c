@@ -190,7 +190,7 @@ static void hinic3_fdir_tcam_ipv6_init(struct hinic3_fdir_filter *rule,
 	pci_dev = RTE_ETH_DEV_TO_PCI(dev);
 
 	/* ipv6 bifur_flag*/
-	if (pci_dev->id.device_id == HINIC3_DEV_ID_SP920 || 
+	if (pci_dev->id.device_id == HINIC3_DEV_ID_SP920 ||
 	    hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev)) {
 		/* VF RSS flow table traffic distribution */
 		tcam_key->key_mask_ipv6.bifur_flag = HINIC3_UINT2_MAX;
@@ -342,7 +342,7 @@ hinic3_fdir_tcam_ipv6_vxlan_geneve_init(struct rte_eth_dev *	   dev,
 					struct hinic3_tcam_key *   tcam_key)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
-	u8 bifur_en = 0, iso_en = 0;
+	u8 bifur_en = 0;
 
 	tcam_key->key_mask_ipv6.ip_proto = rule->key_mask.proto;
 	tcam_key->key_info_ipv6.ip_proto = rule->key_spec.proto;
@@ -356,6 +356,7 @@ hinic3_fdir_tcam_ipv6_vxlan_geneve_init(struct rte_eth_dev *	   dev,
 	tcam_key->key_mask_ipv6.function_id = HINIC3_UINT15_MAX;
 	tcam_key->key_mask_ipv6.vlan_flag = HINIC3_UINT1_MAX;
 #ifdef HINIC3_TRAFFIC_BIFUR
+	u8 iso_en = 0;
 	if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &iso_en) != 0) {
 		PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable staus failed!");
 	}
@@ -1041,7 +1042,6 @@ static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_tcam_filter *tcam_filter;
 	struct nic_ext_tcam_cfg_rule ext_tcam_rule = { 0 };
-	u16 index = 0;
 	u8 tcam_rule_type;
 	int err;
 
@@ -1066,7 +1066,7 @@ static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
  	 	tcam_rule_type = TCAM_RULE_FDIR_TYPE;
 
 	/* Add a new TCAM rule to the network device. */
-	if (IS_QPOOL_MODE(nic_dev)) 
+	if (IS_QPOOL_MODE(nic_dev))
 	{
 		ext_tcam_rule.index = fdir_tcam_rule->index;
 		ext_tcam_rule.key = fdir_tcam_rule->key;
@@ -1147,7 +1147,7 @@ hinic3_del_dynamic_tcam_filter(struct rte_eth_dev *dev,
 	}
 
 	PMD_DRV_LOG(INFO,
-		    "Del fdir_tcam_dynamic_rule succeed, function_id: 0x%x",
+		    "Del fdir_tcam_dynamic_rule succeed, function_id: 0x%x, "
 		    "tcam_block_id: %d, local_index: %d, global_index: %d, local_rules_nums: %d, global_rule_nums: %d",
 		    hinic3_global_func_id(nic_dev->hwdev),
 		    dynamic_block_id, tcam_filter->index, index,
