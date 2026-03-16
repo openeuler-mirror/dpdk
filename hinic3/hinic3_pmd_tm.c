@@ -135,7 +135,7 @@ hinic3_tm_capabilities_get(struct rte_eth_dev *dev,
 	struct hinic3_ets *ets = nic_dev->ets;
 	uint32_t max_tx_queues = hinic3_tm_max_tx_queues_get(dev);
 
-	if (!cap || !errno)
+	if (!cap || !errno || !error)
 		return -EINVAL;
 
 	error->type = RTE_TM_ERROR_TYPE_NONE;

@@ -682,7 +682,7 @@ void hinic3_dump_aeq_mbox_info(struct hinic3_hwdev *hwdev)
 	struct hinic3_aeq_elem *aeqe_pos = NULL;
 	struct rte_pci_device *pci_dev = NULL;
 	struct rte_eth_dev *eth_dev = NULL;
-	u8 i, pos;
+	u32 i, pos;
 	u8 src, size, wrapped, seq_id, seg_len, msg_id, mod;
 	u8 data[HINIC3_AEQE_DATA_SIZE];
 	u16 src_func_idx, cmd;
