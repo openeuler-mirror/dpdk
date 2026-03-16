@@ -38,6 +38,7 @@
 #include "hinic3_pmd_tm.h"
 #include "hinic3_pmd_hairpin.h"
 #include "hinic3_pmd_cmdq_adapt.h"
+#include "hinic3_pmd_flow.h"
 #ifdef HINIC3_TRAFFIC_BIFUR
 #include "hinic3_pmd_bifur.h"
 #endif
@@ -469,6 +470,7 @@ static int hinic3_dev_configure(struct rte_eth_dev *dev)
 	if (dev->data->dev_conf.rxmode.mq_mode & ETH_MQ_RX_RSS_FLAG)
 		dev->data->dev_conf.rxmode.offloads |= DEV_RX_OFFLOAD_RSS_HASH;
 	/* Clear fdir filter */
+	if (!IS_QPOOL_MODE(nic_dev))
 		hinic3_free_fdir_filter(dev);
 
 	if (dev->data->dev_conf.txmode.mq_mode == ETH_MQ_TX_DCB) {
@@ -2311,8 +2313,7 @@ static void hinic3_dev_stop(struct rte_eth_dev *dev)
 
 static void hinic3_dev_release(struct rte_eth_dev *eth_dev)
 {
-	struct hinic3_nic_dev *nic_dev =
-		HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
 	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev); /*lint !e507*/
 	int qid;
 
@@ -2407,11 +2408,17 @@ static void hinic3_dev_close(struct rte_eth_dev *eth_dev)
 #ifdef DPDK_20_11
 	ret = hinic3_dev_stop(eth_dev);
 	if (ret == 0) {
-		(void)hinic3_flush_tcam_rule(nic_dev->hwdev);
+		if (!IS_QPOOL_MODE(nic_dev))
+			(void)hinic3_flush_tcam_rule(nic_dev->hwdev);
+		else
+			hinic3_flow_flush_qpool(eth_dev);
 	}
 #else
 	hinic3_dev_stop(eth_dev);
-	(void)hinic3_flush_tcam_rule(nic_dev->hwdev);
+	if (!IS_QPOOL_MODE(nic_dev))
+		(void)hinic3_flush_tcam_rule(nic_dev->hwdev);
+	else
+		hinic3_flow_flush_qpool(eth_dev);
 #endif
 
 	hinic3_dev_release(eth_dev);
@@ -3088,7 +3095,7 @@ static int hinic3_rss_reta_update(struct rte_eth_dev *dev,
 	return err;
 }
 
-static void hinic3_get_htn_vf_stats(struct hinic3_nic_dev *nic_dev,
+static void hinic3_get_stats(struct hinic3_nic_dev *nic_dev,
 				    struct rte_eth_stats  *stats)
 {
 	struct hinic3_rxq *rxq = NULL;
@@ -3191,9 +3198,9 @@ hinic3_dev_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 				  txq->txq_stats.off_errs);
 	}
 
-	if (((hinic3_get_driver_feature(nic_dev) & NIC_F_HTN_FDIR) != 0) && 
-	      HINIC3_IS_VF(nic_dev->hwdev)) {
-		hinic3_get_htn_vf_stats(nic_dev, stats);
+	if ((((nic_dev->feature_cap & NIC_F_HTN_CMDQ) != 0) && HINIC3_IS_VF(nic_dev->hwdev)) ||
+	    IS_QPOOL_MODE(nic_dev) ) {
+		hinic3_get_stats(nic_dev, stats);
 		return 0;
 	}
 	/* Vport stats */

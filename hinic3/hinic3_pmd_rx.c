@@ -767,7 +767,7 @@ hinic3_init_rx_ptype_table(struct rte_eth_dev *dev) {
 	uint32_t *ptype = tbl->ptype;
 	uint32_t i;
 
-	if (HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev)) {
+	if (HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev) || HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev)) {
 		for (i = 0; i < HINIC3_PTYPE_NUM; i++) {
 			ptype[i] = hinic3_calc_rx_ptype_compact_table(i);
 		}

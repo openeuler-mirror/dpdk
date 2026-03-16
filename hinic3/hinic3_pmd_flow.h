@@ -77,4 +77,6 @@
 #define HINIC3_FLOW_ERROR_TYPE_ACTION_CONF         RTE_FLOW_ERROR_TYPE_ACTION_CONF
 #define HINIC3_FLOW_ERROR_TYPE_ACTION              RTE_FLOW_ERROR_TYPE_ACTION
 
+int hinic3_flow_flush_qpool(struct rte_eth_dev *dev);
+
 #endif

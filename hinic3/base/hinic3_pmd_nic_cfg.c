@@ -207,7 +207,10 @@ int hinic3_del_mac(void *hwdev, const u8 *mac_addr, u16 vlan_id, u16 func_id)
 
 	if (!hwdev || !mac_addr)
 		return -EINVAL;
-
+	if (((struct hinic3_hwdev *)hwdev)->bifur_mode == HINIC3_BIFUR_MODE_QPOOL) {
+		PMD_DRV_LOG(WARNING, "Qpool not support del mac");
+		return 0;
+	}
 #ifdef HINIC3_TRAFFIC_BIFUR
 	if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
 		PMD_DRV_LOG(WARNING, "Share mode vf do not support change mac");
