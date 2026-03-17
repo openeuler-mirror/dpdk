@@ -356,8 +356,6 @@ static void hinic3_dev_interrupt_handler_qpool(void *param)
 	struct rte_intr_handle *intr_handle = dev->intr_handle;
 	struct netdev_event event;
 	struct rte_eth_link link;
-	struct pollfd pfd;
-	int ret;
 	ssize_t bytes_read;
 	u8 link_state = 0;
 	int processed = 0;
@@ -2541,9 +2539,7 @@ static int hinic3_dev_close(struct rte_eth_dev *eth_dev)
 static void hinic3_dev_close(struct rte_eth_dev *eth_dev)
 #endif
 {
-	struct hinic3_nic_dev *nic_dev =
-		HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
-	struct rte_pci_device *pci_dev = nic_dev->hwdev->pci_dev;
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
 	u8 sec_tcam_en = 0;
 
 	if (rte_eal_process_type() != RTE_PROC_PRIMARY) {

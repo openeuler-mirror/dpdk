@@ -100,6 +100,8 @@ enum hinic3_fdir_tunnel_mode {
 	HINIC3_FDIR_TUNNEL_MODE_GPE    = 4,
 	HINIC3_FDIR_TUNNEL_MODE_GENEVE = 5,
 	HINIC3_FDIR_TUNNEL_MODE_NSH    = 6,
+	HINIC3_FDIR_TUNNEL_MODE_IPIP   = 7,
+	HINIC3_FDIR_TUNNEL_MODE_MAX    = 8,
 };
 
 enum hinic3_fdir_ip_type {
