@@ -911,8 +911,28 @@ static const struct hinic3_valid_pattern hinic3_supported_patterns[] = {
 	{ pattern_ipv6_vxlan_udp, hinic3_flow_parse_fdir_vxlan_geneve_filter },
 	{ pattern_ipv6_geneve_tcp, hinic3_flow_parse_fdir_vxlan_geneve_filter },
 	{ pattern_ipv6_geneve_udp, hinic3_flow_parse_fdir_vxlan_geneve_filter },
+};
 
-	/* support vxlan-gre */
+static const struct hinic3_valid_pattern hinic3_npu_supported_patterns[] = {
+	/*support ipinip */
+	{ pattern_ipv4_ipv4, hinic3_flow_parse_fdir_filter},
+	{ pattern_ipv4_ipv4_tcp, hinic3_flow_parse_fdir_filter},
+	{ pattern_ipv4_ipv4_udp, hinic3_flow_parse_fdir_filter},
+	{ pattern_ipv4_ipv4_any, hinic3_flow_parse_fdir_filter},
+	{ pattern_ipv4_ipv6, hinic3_flow_parse_fdir_filter},
+	{ pattern_ipv4_ipv6_tcp, hinic3_flow_parse_fdir_filter},
+	{ pattern_ipv4_ipv6_udp, hinic3_flow_parse_fdir_filter},
+	{ pattern_ipv4_ipv6_any, hinic3_flow_parse_fdir_filter},
+	{ pattern_ipv6_ipv4, hinic3_flow_parse_fdir_filter},
+	{ pattern_ipv6_ipv4_tcp, hinic3_flow_parse_fdir_filter},
+	{ pattern_ipv6_ipv4_udp, hinic3_flow_parse_fdir_filter},
+	{ pattern_ipv6_ipv4_any, hinic3_flow_parse_fdir_filter},
+	{ pattern_ipv6_ipv6, hinic3_flow_parse_fdir_filter},
+	{ pattern_ipv6_ipv6_tcp, hinic3_flow_parse_fdir_filter},
+	{ pattern_ipv6_ipv6_udp, hinic3_flow_parse_fdir_filter},
+	{ pattern_ipv6_ipv6_any, hinic3_flow_parse_fdir_filter},
+
+	/* support vxlan-gpe */
 	{ pattern_ipv4_gpe_eth, hinic3_flow_parse_fdir_vxlan_geneve_filter },
 	{ pattern_ipv4_gpe_eth_ipv4, hinic3_flow_parse_fdir_vxlan_geneve_filter },
 	{ pattern_ipv4_gpe_eth_ipv4_tcp, hinic3_flow_parse_fdir_vxlan_geneve_filter },
@@ -942,23 +962,26 @@ static const struct hinic3_valid_pattern hinic3_supported_patterns[] = {
 	{ pattern_ipv4_gpe, hinic3_flow_parse_fdir_vxlan_geneve_filter },
 	{ pattern_ipv6_gpe, hinic3_flow_parse_fdir_vxlan_geneve_filter },
 
-	/*support pinip */
-	{ pattern_ipv4_ipv4, hinic3_flow_parse_fdir_filter},
-	{ pattern_ipv4_ipv4_tcp, hinic3_flow_parse_fdir_filter},
-	{ pattern_ipv4_ipv4_udp, hinic3_flow_parse_fdir_filter},
-	{ pattern_ipv4_ipv4_any, hinic3_flow_parse_fdir_filter},
-	{ pattern_ipv4_ipv6, hinic3_flow_parse_fdir_filter},
-	{ pattern_ipv4_ipv6_tcp, hinic3_flow_parse_fdir_filter},
-	{ pattern_ipv4_ipv6_udp, hinic3_flow_parse_fdir_filter},
-	{ pattern_ipv4_ipv6_any, hinic3_flow_parse_fdir_filter},
-	{ pattern_ipv6_ipv4, hinic3_flow_parse_fdir_filter},
-	{ pattern_ipv6_ipv4_tcp, hinic3_flow_parse_fdir_filter},
-	{ pattern_ipv6_ipv4_udp, hinic3_flow_parse_fdir_filter},
-	{ pattern_ipv6_ipv4_any, hinic3_flow_parse_fdir_filter},
-	{ pattern_ipv6_ipv6, hinic3_flow_parse_fdir_filter},
-	{ pattern_ipv6_ipv6_tcp, hinic3_flow_parse_fdir_filter},
-	{ pattern_ipv6_ipv6_udp, hinic3_flow_parse_fdir_filter},
-	{ pattern_ipv6_ipv6_any, hinic3_flow_parse_fdir_filter},
+};
+static const struct hinic3_valid_pattern hinic3_npu_ext_supported_patterns[] = {
+
+	/*support ipinip */
+	{ pattern_ipv4_ipv4, hinic3_flow_parse_fdir_vxlan_geneve_filter},
+	{ pattern_ipv4_ipv4_tcp, hinic3_flow_parse_fdir_vxlan_geneve_filter},
+	{ pattern_ipv4_ipv4_udp, hinic3_flow_parse_fdir_vxlan_geneve_filter},
+	{ pattern_ipv4_ipv4_any, hinic3_flow_parse_fdir_vxlan_geneve_filter},
+	{ pattern_ipv4_ipv6, hinic3_flow_parse_fdir_vxlan_geneve_filter},
+	{ pattern_ipv4_ipv6_tcp, hinic3_flow_parse_fdir_vxlan_geneve_filter},
+	{ pattern_ipv4_ipv6_udp, hinic3_flow_parse_fdir_vxlan_geneve_filter},
+	{ pattern_ipv4_ipv6_any, hinic3_flow_parse_fdir_vxlan_geneve_filter},
+	{ pattern_ipv6_ipv4, hinic3_flow_parse_fdir_vxlan_geneve_filter},
+	{ pattern_ipv6_ipv4_tcp, hinic3_flow_parse_fdir_vxlan_geneve_filter},
+	{ pattern_ipv6_ipv4_udp, hinic3_flow_parse_fdir_vxlan_geneve_filter},
+	{ pattern_ipv6_ipv4_any, hinic3_flow_parse_fdir_vxlan_geneve_filter},
+	{ pattern_ipv6_ipv6, hinic3_flow_parse_fdir_vxlan_geneve_filter},
+	{ pattern_ipv6_ipv6_tcp, hinic3_flow_parse_fdir_vxlan_geneve_filter},
+	{ pattern_ipv6_ipv6_udp, hinic3_flow_parse_fdir_vxlan_geneve_filter},
+	{ pattern_ipv6_ipv6_any, hinic3_flow_parse_fdir_vxlan_geneve_filter},
 };
 
 static inline void
@@ -1087,13 +1110,26 @@ hinic3_match_sec_pattern(const struct rte_flow_item *pattern)
 	return true;
 }
 
+static inline hinic3_parse_filter_t
+hinic3_get_match_filter_func_in_list(const struct hinic3_valid_pattern *patterns_list,
+				     u32 num, const struct rte_flow_item *pattern)
+{
+	u32 i;
+	for (i = 0; i < num; i++) {
+		if (hinic3_match_pattern(patterns_list[i].items, pattern)) {
+			return patterns_list[i].parse_filter;
+		}
+	}
+	return NULL;
+}
+
 /* Find if there's parse filter function matched */
-static hinic3_parse_filter_t hinic3_find_parse_filter_func( struct rte_eth_dev *dev, const struct rte_flow_item *pattern)
+static hinic3_parse_filter_t hinic3_find_parse_filter_func(struct rte_eth_dev *dev,
+							   const struct rte_flow_item *pattern)
 {
 	hinic3_parse_filter_t parse_filter = NULL;
 	struct hinic3_nic_dev *nic_dev = NULL;
 	uint8_t sec_tcam_en = 0;
-	uint8_t i;
 
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	if (hinic3_fdir_cfg_sec_tcam(nic_dev->hwdev, &sec_tcam_en) != 0) {
@@ -1107,16 +1143,23 @@ static hinic3_parse_filter_t hinic3_find_parse_filter_func( struct rte_eth_dev *
 		return parse_filter;
 	}
 
-	for (i = 0; i < RTE_DIM(hinic3_supported_patterns); i++) {
-		if (hinic3_match_pattern(hinic3_supported_patterns[i].items,
-					pattern)) {
-			parse_filter =
-				hinic3_supported_patterns[i].parse_filter;
-			break;
-		}
+	parse_filter =
+		hinic3_get_match_filter_func_in_list(hinic3_supported_patterns,
+						     RTE_DIM(hinic3_supported_patterns),
+						     pattern);
+	if (parse_filter != NULL) {
+		return parse_filter;
 	}
 
-	return parse_filter;
+	if (nic_dev->feature_cap != SP600_NIC_FEATURE) 
+		return hinic3_get_match_filter_func_in_list(hinic3_npu_ext_supported_patterns,
+							    RTE_DIM(hinic3_npu_ext_supported_patterns),
+							    pattern);
+	else 	
+		return hinic3_get_match_filter_func_in_list(hinic3_npu_supported_patterns,
+							    RTE_DIM(hinic3_npu_supported_patterns),
+							    pattern);
+	return NULL;
 }
 
 #ifdef HINIC3_TRAFFIC_BIFUR
@@ -1138,8 +1181,8 @@ hinic3_flow_set_rss_action_config(struct rte_eth_dev	       *dev,
 	ret = hinic3_update_rss_config(dev, &rss_conf);
 	if (ret) {
 		rte_flow_error_set(error,
-				EINVAL, HINIC3_FLOW_ERROR_TYPE_HANDLE,
-				NULL, "Failed to create hash filter for RSS configuration.");
+				   EINVAL, HINIC3_FLOW_ERROR_TYPE_HANDLE,
+				   NULL, "Failed to create hash filter for RSS configuration.");
 	}
 
 	return ret;
@@ -1157,8 +1200,8 @@ hinic3_check_rss_queues(struct rte_eth_dev		 *dev,
 
 	if (act_r->queue_num == 0) {
 		rte_flow_error_set(error, EINVAL,
-			HINIC3_FLOW_ERROR_TYPE_ACTION,
-			act, "Invalid action queue number.");
+				   HINIC3_FLOW_ERROR_TYPE_ACTION,
+				   act, "Invalid action queue number.");
 		return -rte_errno;
 	}
 
@@ -1167,18 +1210,18 @@ hinic3_check_rss_queues(struct rte_eth_dev		 *dev,
 			(hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev) && act_r->queue[i] >= HINIC3_QUEUE_ALLOW_NUM) ||
 			(act_r->queue[i] >= dev->data->nb_rx_queues)) {
 			rte_flow_error_set(error, EINVAL,
-						HINIC3_FLOW_ERROR_TYPE_ACTION,
-						act, "Invalid action queue id.");
+					   HINIC3_FLOW_ERROR_TYPE_ACTION,
+					   act, "Invalid action queue id.");
 			return -rte_errno;
 		}
 	}
 
 	if ((hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev) && act_r->queue_num > HINIC3_QUEUE_ALLOW_NUM) ||
-			(pci_dev->id.device_id == HINIC3_DEV_ID_SP920 && act_r->queue_num > HINIC3_QUEUE_MAX)) {
-			rte_flow_error_set(error, EINVAL,
-					   HINIC3_FLOW_ERROR_TYPE_ACTION,
-					   act, "Invalid action queue number.");
-			return -rte_errno;
+	    (pci_dev->id.device_id == HINIC3_DEV_ID_SP920 && act_r->queue_num > HINIC3_QUEUE_MAX)) {
+		rte_flow_error_set(error, EINVAL,
+				   HINIC3_FLOW_ERROR_TYPE_ACTION,
+				   act, "Invalid action queue number.");
+		return -rte_errno;
 	}
 
 	return 0;
@@ -1342,10 +1385,10 @@ static int hinic3_flow_set_normal_rss_action_config(struct rte_eth_dev *dev,
 
 	return 0;
 
-free_rss_template:
+	free_rss_template:
 	hinic3_rss_template_free(nic_dev->hwdev, q_grp_id);
 
-free_g_grp_id:
+	free_g_grp_id:
 	hinic3_mgmt_cfg_qgrp_id(nic_dev->hwdev, HINIC3_QUEUE_GROUP_ID_FREE, &q_grp_id);
 
 	return ret;
@@ -1368,9 +1411,9 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 	struct rte_pci_device *pci_dev = NULL;
 	pci_dev = RTE_ETH_DEV_TO_PCI(dev);
 
-	for (i = 0; i < HINIC3_QUEUE_MAX; i++) {
-		rte_bit_relaxed_clear32(i, &filter->fdir_filter.rq_index);
-	}
+		for (i = 0; i < HINIC3_QUEUE_MAX; i++) {
+			rte_bit_relaxed_clear32(i, &filter->fdir_filter.rq_index);
+		}
 #endif
 
 	/* find the last non-VOID action before END */
@@ -1410,53 +1453,53 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 	case RTE_FLOW_ACTION_TYPE_RSS:
 		act_r =
 		(const struct rte_flow_action_rss *)act->conf;
-		err = hinic3_check_rss_queues(dev, pci_dev, act_r, act, error);
-		if (err) {
-			return err;
-		}
-		if (act_r->queue_num > 1) {
-			for (i = 0; i < act_r->queue_num; i++) {
-				if (rte_bit_relaxed_get32(act_r->queue[i], &filter->fdir_filter.rq_index) != 0) {
-					rte_flow_error_set(error, EINVAL,
-							   HINIC3_FLOW_ERROR_TYPE_ACTION, act,
-							   "Duplicate action queue numbers.");
-					return -rte_errno;
-				}
-				rte_bit_relaxed_set32(act_r->queue[i], &filter->fdir_filter.rq_index);
+			err = hinic3_check_rss_queues(dev, pci_dev, act_r, act, error);
+			if (err) {
+				return err;
 			}
-		} else {
-			filter->fdir_filter.rq_index = act_r->queue[0];
-		}
-		filter->fdir_filter.queue_num = act_r->queue_num;
-		if (act_r->key)
-			return hinic3_flow_set_rss_action_config(dev, actions, error);
+			if (act_r->queue_num > 1) {
+				for (i = 0; i < act_r->queue_num; i++) {
+					if (rte_bit_relaxed_get32(act_r->queue[i], &filter->fdir_filter.rq_index) != 0) {
+						rte_flow_error_set(error, EINVAL,
+								HINIC3_FLOW_ERROR_TYPE_ACTION, act,
+								"Duplicate action queue numbers.");
+						return -rte_errno;
+					}
+					rte_bit_relaxed_set32(act_r->queue[i], &filter->fdir_filter.rq_index);
+				}
+			} else {
+				filter->fdir_filter.rq_index = act_r->queue[0];
+			}
+			filter->fdir_filter.queue_num = act_r->queue_num;
+			if (act_r->key)
+				return hinic3_flow_set_rss_action_config(dev, actions, error);
 
-		break;
+			break;
 #else
 	case RTE_FLOW_ACTION_TYPE_RSS:
-		act_r = (const struct rte_flow_action_rss *)act->conf;
+			act_r = (const struct rte_flow_action_rss *)act->conf;
 
-		if (!act_r || act_r->queue_num == 0) {
- 	 		rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION, act,
- 	 						   "Invalid rss queue num is zero");
- 	 		return -rte_errno;
-		}
+			if (!act_r || act_r->queue_num == 0) {
+				rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION, act,
+								"Invalid rss queue num is zero");
+				return -rte_errno;
+			}
 
-		for (i = 0; i < act_r->queue_num; i++) {
- 	 		if (act_r->queue[i] >= dev->data->nb_rx_queues) {
- 	 			rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION, act,
-								   "Invalid action queue id.");
- 	 			return -rte_errno;
- 	 		}
- 	 	}
+			for (i = 0; i < act_r->queue_num; i++) {
+				if (act_r->queue[i] >= dev->data->nb_rx_queues) {
+					rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION, act,
+									"Invalid action queue id.");
+					return -rte_errno;
+				}
+			}
 
-		err = hinic3_flow_set_normal_rss_action_config(dev, act_r, act, error, &filter->template_entry);
- 	 	if (err)
- 	 		return err;
+			err = hinic3_flow_set_normal_rss_action_config(dev, act_r, act, error, &filter->template_entry);
+			if (err)
+				return err;
 
-		filter->fdir_filter.q_grp_id = filter->template_entry->q_grp_id;
- 	 	filter->fdir_filter.level = act_r->level;
-		break;
+			filter->fdir_filter.q_grp_id = filter->template_entry->q_grp_id;
+			filter->fdir_filter.level = act_r->level;
+			break;
 #endif
 
 	case RTE_FLOW_ACTION_TYPE_DROP:
@@ -1477,37 +1520,37 @@ int
 hinic3_flow_parse_attr(const struct rte_flow_attr *attr,
 		       struct rte_flow_error	  *error)
 {
-    /** Not supported egress */
-    if (attr->egress) {
-        rte_flow_error_set(error, EINVAL,
-                    HINIC3_FLOW_ERROR_TYPE_ATTR_EGRESS,
-                    attr, "Not support egress.");
-        return -rte_errno;
-    }
+	/** Not supported egress */
+	if (attr->egress) {
+		rte_flow_error_set(error, EINVAL,
+				   HINIC3_FLOW_ERROR_TYPE_ATTR_EGRESS,
+				   attr, "Not support egress.");
+		return -rte_errno;
+	}
 
-    /** Not supported priority */
-    if (attr->priority) {
-        rte_flow_error_set(error, EINVAL,
-                    HINIC3_FLOW_ERROR_TYPE_ATTR_PRIORITY,
-                    attr, "Not support priority.");
-        return -rte_errno;
-    }
+	/** Not supported priority */
+	if (attr->priority) {
+		rte_flow_error_set(error, EINVAL,
+				   HINIC3_FLOW_ERROR_TYPE_ATTR_PRIORITY,
+				   attr, "Not support priority.");
+		return -rte_errno;
+ 	}
 
-    /** Not supported group */
-    if (attr->group) {
-        rte_flow_error_set(error, EINVAL,
-                    HINIC3_FLOW_ERROR_TYPE_ATTR_GROUP,
-                    attr, "Not support group.");
-        return -rte_errno;
-    }
+	/** Not supported group */
+	if (attr->group) {
+		rte_flow_error_set(error, EINVAL,
+				   HINIC3_FLOW_ERROR_TYPE_ATTR_GROUP,
+				   attr, "Not support group.");
+		return -rte_errno;
+	}
 
-    /** Parse attr ingress */
-    if (!attr->ingress) {
-        rte_flow_error_set(error, EINVAL,
-                   HINIC3_FLOW_ERROR_TYPE_ATTR_INGRESS,
-                   attr, "Only support ingress.");
-        return -rte_errno;
-    }
+	/** Parse attr ingress */
+	if (!attr->ingress) {
+	rte_flow_error_set(error, EINVAL,
+			   HINIC3_FLOW_ERROR_TYPE_ATTR_INGRESS,
+			   attr, "Only support ingress.");
+	return -rte_errno;
+	}
 
 	return 0;
 }
@@ -1616,17 +1659,17 @@ hinic3_flow_fdir_ipv6(const struct rte_flow_item *flow_item,
 		return -rte_errno;
 	}
 
-	#ifdef DPDK_24_11
+#ifdef DPDK_24_11
 	net_addr_to_host(filter->fdir_filter.key_mask.ipv6.src_ip, (const uint32_t *)mask_ipv6->hdr.src_addr.a, 4);
 	net_addr_to_host(filter->fdir_filter.key_spec.ipv6.src_ip, (const uint32_t *)spec_ipv6->hdr.src_addr.a, 4);
 	net_addr_to_host(filter->fdir_filter.key_mask.ipv6.dst_ip, (const uint32_t *)mask_ipv6->hdr.dst_addr.a, 4);
 	net_addr_to_host(filter->fdir_filter.key_spec.ipv6.dst_ip, (const uint32_t *)spec_ipv6->hdr.dst_addr.a, 4);
-	#else
+#else
 	net_addr_to_host(filter->fdir_filter.key_mask.ipv6.src_ip, (const uint32_t *)mask_ipv6->hdr.src_addr, 4);
 	net_addr_to_host(filter->fdir_filter.key_spec.ipv6.src_ip, (const uint32_t *)spec_ipv6->hdr.src_addr, 4);
 	net_addr_to_host(filter->fdir_filter.key_mask.ipv6.dst_ip, (const uint32_t *)mask_ipv6->hdr.dst_addr, 4);
 	net_addr_to_host(filter->fdir_filter.key_spec.ipv6.dst_ip, (const uint32_t *)spec_ipv6->hdr.dst_addr, 4);
-	#endif
+#endif
 	filter->fdir_filter.key_mask.proto = mask_ipv6->hdr.proto;
 	filter->fdir_filter.key_spec.proto = spec_ipv6->hdr.proto;
 
@@ -1800,7 +1843,7 @@ hinic3_flow_parse_fdir_filter(struct rte_eth_dev	  *dev,
 
 static int
 hinic3_flow_parse_ethertype_action(struct rte_eth_dev		*dev,
-				   const struct rte_flow_action *actions,
+			           const struct rte_flow_action *actions,
 				   struct rte_flow_error	*error,
 				   struct hinic3_filter_t	*filter)
 {
@@ -1940,8 +1983,7 @@ hinic3_flow_parse_ethertype_filter(struct rte_eth_dev	       *dev,
 {
 	int ret;
 
-	ret = hinic3_flow_parse_ethertype_pattern(dev, pattern, error,
-					   filter);
+	ret = hinic3_flow_parse_ethertype_pattern(dev, pattern, error, filter);
 	if (ret)
 		return ret;
 
@@ -1958,17 +2000,18 @@ hinic3_flow_parse_ethertype_filter(struct rte_eth_dev	       *dev,
 }
 
 static int
-hinic3_flow_fdir_tunnel_ipv4(struct rte_flow_error	 *error,
-			     struct hinic3_filter_t	 *filter,
-			     const struct rte_flow_item	 *flow_item,
-			     enum hinic3_fdir_tunnel_mode tunnel_mode)
+hinic3_flow_fdir_tunnel_ipv4(struct rte_flow_error	  *error,
+			     struct hinic3_filter_t	  *filter,
+			     const struct rte_flow_item	  *flow_item,
+			     enum hinic3_fdir_tunnel_mode *tunnel_mode)
 {
 	const struct rte_flow_item_ipv4 *spec_ipv4, *mask_ipv4;
 	mask_ipv4 = (const struct rte_flow_item_ipv4 *)flow_item->mask;
 	spec_ipv4 = (const struct rte_flow_item_ipv4 *)flow_item->spec;
 
-	if (tunnel_mode == HINIC3_FDIR_TUNNEL_MODE_NORMAL) {
+	if (*tunnel_mode == HINIC3_FDIR_TUNNEL_MODE_MAX) {
 		filter->fdir_filter.outer_ip_type = HINIC3_FDIR_IP_TYPE_IPV4;
+		*tunnel_mode = HINIC3_FDIR_TUNNEL_MODE_NORMAL;
 
 		if (!mask_ipv4 && !spec_ipv4)
 			return 0;
@@ -2001,6 +2044,12 @@ hinic3_flow_fdir_tunnel_ipv4(struct rte_flow_error	 *error,
 		filter->fdir_filter.key_spec.ipv4.dst_ip =
 			rte_be_to_cpu_32(spec_ipv4->hdr.dst_addr);
 	} else {
+		if (*tunnel_mode == HINIC3_FDIR_TUNNEL_MODE_NORMAL) {
+			*tunnel_mode = HINIC3_FDIR_TUNNEL_MODE_IPIP;
+			filter->fdir_filter.tunnel_type = *tunnel_mode;
+			if (filter->fdir_filter.outer_ip_type == HINIC3_FDIR_IP_TYPE_IPV6)
+				return 0;
+		}
 		filter->fdir_filter.ip_type = HINIC3_FDIR_IP_TYPE_IPV4;
 
 		if (!mask_ipv4 && !spec_ipv4)
@@ -2040,18 +2089,19 @@ hinic3_flow_fdir_tunnel_ipv4(struct rte_flow_error	 *error,
 }
 
 static int
-hinic3_flow_fdir_tunnel_ipv6(struct rte_flow_error	 *error,
-			     struct hinic3_filter_t	 *filter,
-			     const struct rte_flow_item	 *flow_item,
-			     enum hinic3_fdir_tunnel_mode tunnel_mode)
+hinic3_flow_fdir_tunnel_ipv6(struct rte_flow_error	  *error,
+			     struct hinic3_filter_t	  *filter,
+			     const struct rte_flow_item	  *flow_item,
+			     enum hinic3_fdir_tunnel_mode *tunnel_mode)
 {
 	const struct rte_flow_item_ipv6 *spec_ipv6, *mask_ipv6;
 
 	mask_ipv6 = (const struct rte_flow_item_ipv6 *)flow_item->mask;
 	spec_ipv6 = (const struct rte_flow_item_ipv6 *)flow_item->spec;
 
-	if (tunnel_mode == HINIC3_FDIR_TUNNEL_MODE_NORMAL) {
+	if (*tunnel_mode == HINIC3_FDIR_TUNNEL_MODE_MAX) {
 		filter->fdir_filter.outer_ip_type = HINIC3_FDIR_IP_TYPE_IPV6;
+		*tunnel_mode = HINIC3_FDIR_TUNNEL_MODE_NORMAL;
 
 		if (!mask_ipv6 && !spec_ipv6)
 			return 0;
@@ -2090,8 +2140,13 @@ hinic3_flow_fdir_tunnel_ipv6(struct rte_flow_error	 *error,
 			(const uint32_t *)spec_ipv6->hdr.dst_addr, 4);
 		#endif
 	} else {
+		if (*tunnel_mode == HINIC3_FDIR_TUNNEL_MODE_NORMAL) {
+			*tunnel_mode = HINIC3_FDIR_TUNNEL_MODE_IPIP;
+			filter->fdir_filter.tunnel_type = *tunnel_mode;
+			if (filter->fdir_filter.outer_ip_type == HINIC3_FDIR_IP_TYPE_IPV6)
+				return 0;
+		}
 		filter->fdir_filter.ip_type = HINIC3_FDIR_IP_TYPE_IPV6;
-
 		if (!mask_ipv6 && !spec_ipv6)
 			return 0;
 
@@ -2260,14 +2315,13 @@ hinic3_flow_fdir_vxlan_geneve(struct rte_flow_error	  *error,
 }
 
 static int
-hinic3_flow_parse_fdir_vxlan_geneve_pattern(
-	__rte_unused struct rte_eth_dev *dev,
-	const struct rte_flow_item      *pattern,
-	struct rte_flow_error           *error,
-	struct hinic3_filter_t          *filter)
+hinic3_flow_parse_fdir_vxlan_geneve_pattern(__rte_unused struct rte_eth_dev *dev,
+					    const struct rte_flow_item      *pattern,
+					    struct rte_flow_error           *error,
+					    struct hinic3_filter_t          *filter)
 {
 	const struct rte_flow_item *flow_item = pattern;
-	enum hinic3_fdir_tunnel_mode tunnel_mode = HINIC3_FDIR_TUNNEL_MODE_NORMAL;
+	enum hinic3_fdir_tunnel_mode tunnel_mode = HINIC3_FDIR_TUNNEL_MODE_MAX;
 	enum rte_flow_item_type type;
 	int err;
 
@@ -2294,13 +2348,13 @@ hinic3_flow_parse_fdir_vxlan_geneve_pattern(
 			break;
 
 		case HINIC3_FLOW_ITEM_TYPE_IPV4:
-			err = hinic3_flow_fdir_tunnel_ipv4(error, filter, flow_item, tunnel_mode);
+			err = hinic3_flow_fdir_tunnel_ipv4(error, filter, flow_item, &tunnel_mode);
 			if (err != 0)
 				return -rte_errno;
 			break;
 
 		case HINIC3_FLOW_ITEM_TYPE_IPV6:
-			err = hinic3_flow_fdir_tunnel_ipv6(error, filter, flow_item, tunnel_mode);
+			err = hinic3_flow_fdir_tunnel_ipv6(error, filter, flow_item, &tunnel_mode);
 			if (err != 0)
 				return -rte_errno;
 			break;
@@ -2347,18 +2401,16 @@ hinic3_flow_parse_fdir_vxlan_geneve_pattern(
 }
 
 static int
-hinic3_flow_parse_fdir_vxlan_geneve_filter(
-	struct rte_eth_dev          *dev,
-	const struct rte_flow_attr  *attr,
-	const struct rte_flow_item   pattern[],
-	const struct rte_flow_action actions[],
-	struct rte_flow_error       *error,
-	struct hinic3_filter_t      *filter)
+hinic3_flow_parse_fdir_vxlan_geneve_filter(struct rte_eth_dev          *dev,
+					   const struct rte_flow_attr  *attr,
+					   const struct rte_flow_item   pattern[],
+					   const struct rte_flow_action actions[],
+					   struct rte_flow_error       *error,
+					   struct hinic3_filter_t      *filter)
 {
 	int ret;
 
-	ret = hinic3_flow_parse_fdir_vxlan_geneve_pattern(dev, pattern, error,
-					   filter);
+	ret = hinic3_flow_parse_fdir_vxlan_geneve_pattern(dev, pattern, error, filter);
 	if (ret)
 		return ret;
 
@@ -2376,17 +2428,16 @@ hinic3_flow_parse_fdir_vxlan_geneve_filter(
 }
 
 static int
-hinic3_flow_parse_sec_fdir_filter(struct rte_eth_dev	  *dev,
-			      const struct rte_flow_attr  *attr,
-			      const struct rte_flow_item   pattern[],
-			      const struct rte_flow_action actions[],
-			      struct rte_flow_error	  *error,
-			      struct hinic3_filter_t	  *filter)
+hinic3_flow_parse_sec_fdir_filter(struct rte_eth_dev		*dev,
+				  const struct rte_flow_attr	*attr,
+				  const struct rte_flow_item	pattern[],
+				  const struct rte_flow_action	actions[],
+				  struct rte_flow_error		*error,
+				  struct hinic3_filter_t	*filter)
 {
 	int ret;
 
-	ret = hinic3_flow_parse_sec_fdir_pattern(dev, pattern, error,
-					   filter);
+	ret = hinic3_flow_parse_sec_fdir_pattern(dev, pattern, error, filter);
 	if (ret)
 		return ret;
 
@@ -2416,26 +2467,26 @@ hinic3_flow_parse(struct rte_eth_dev          *dev,
 	uint32_t pattern_num = 0;
 	int ret = 0;
 
-    if (!pattern) {
+	if (!pattern) {
 		rte_flow_error_set(error, EINVAL,
 				   HINIC3_FLOW_ERROR_TYPE_UNSPECIFIED,
 				   NULL, "Pattern is NULL.");
 		return -rte_errno;
 	}
 
-    if (!actions) {
-        rte_flow_error_set(error, EINVAL,
-                    HINIC3_FLOW_ERROR_TYPE_ACTION,
-                    NULL, "Actions is NULL.");
-        return -rte_errno;
-    }
+	if (!actions) {
+		rte_flow_error_set(error, EINVAL,
+				   HINIC3_FLOW_ERROR_TYPE_ACTION,
+				   NULL, "Actions is NULL.");
+		return -rte_errno;
+	}
 
-    if (!attr) {
-        rte_flow_error_set(error, EINVAL,
-                    HINIC3_FLOW_ERROR_TYPE_ATTR,
-                    NULL, "Attr is NULL.");
-        return -rte_errno;
-    }
+	if (!attr) {
+		rte_flow_error_set(error, EINVAL,
+				   HINIC3_FLOW_ERROR_TYPE_ATTR,
+				   NULL, "Attr is NULL.");
+		return -rte_errno;
+	}
 
 	while ((pattern + pattern_num)->type != HINIC3_FLOW_ITEM_TYPE_END) {
 		pattern_num++;
@@ -2471,13 +2522,13 @@ hinic3_flow_validate(struct rte_eth_dev          *dev,
 	struct hinic3_filter_t filter_rules = {0};
 
 	return hinic3_flow_parse(dev, attr, pattern, actions, error,
-			&filter_rules);
+				 &filter_rules);
 }
 
 static void
 hinic3_fillout_indir_tbl_by_rss_template(struct hinic3_nic_dev *nic_dev,
-					struct hinic3_rss_template_entry *template_entry,
-					u32 *indir)
+					 struct hinic3_rss_template_entry *template_entry,
+					 u32 *indir)
 {
 	u32 i;
 	u16 queue_idx;
@@ -2498,9 +2549,9 @@ hinic3_fillout_indir_tbl_by_rss_template(struct hinic3_nic_dev *nic_dev,
 			indir[i] = i % nic_dev->num_rqs;
 		}
 	} else {
-		for (i = 0; i < HINIC3_RSS_INDIR_SIZE; i++) {
-			indir[i] = template_entry->queues[queue_idx];
-			queue_idx = (queue_idx + 1) % queue_num;
+	for (i = 0; i < HINIC3_RSS_INDIR_SIZE; i++) {
+		indir[i] = template_entry->queues[queue_idx];
+		queue_idx = (queue_idx + 1) % queue_num;
 		}
 	}
 }
@@ -2531,8 +2582,8 @@ hinic3_flow_create(struct rte_eth_dev          *dev,
 	flow = rte_zmalloc("hinic3_rte_flow", sizeof(struct rte_flow), 0);
 	if (!flow) {
 		rte_flow_error_set(error,
-			   EINVAL, HINIC3_FLOW_ERROR_TYPE_HANDLE,
-			   NULL, "Failed to allocate flow memory.");
+				   EINVAL, HINIC3_FLOW_ERROR_TYPE_HANDLE,
+				   NULL, "Failed to allocate flow memory.");
 		rte_free(filter_rules);
 		return NULL;
 	}
@@ -2566,14 +2617,13 @@ hinic3_flow_create(struct rte_eth_dev          *dev,
 					&filter_rules->sec_fdir_filter,
 					&filter_rules->fdir_filter, true);
 		} else {
-		ret = hinic3_flow_add_del_fdir_filter(dev,
-				&filter_rules->fdir_filter, true);
+		ret = hinic3_flow_add_del_fdir_filter(dev, &filter_rules->fdir_filter, true);
 		}
 
 		if (ret) {
 			rte_flow_error_set(error,
-				   EINVAL, HINIC3_FLOW_ERROR_TYPE_HANDLE,
-				   NULL, "Create fdir filter failed.");
+					   EINVAL, HINIC3_FLOW_ERROR_TYPE_HANDLE,
+					   NULL, "Create fdir filter failed.");
 			goto free_flow;
 		}
 
@@ -2616,7 +2666,7 @@ free_flow:
 }
 
 static void hinic3_flow_release_rss_template(struct hinic3_nic_dev *nic_dev,
-						struct hinic3_rss_template_entry *template_entry)
+					     struct hinic3_rss_template_entry *template_entry)
 {
 	struct hinic3_hwdev *hwdev = nic_dev->hwdev;
 	int ret = 0;
@@ -2642,7 +2692,7 @@ static void hinic3_flow_release_rss_template(struct hinic3_nic_dev *nic_dev,
 		PMD_DRV_LOG(ERR, "Failed to free q_grp_id: %u, ret: %d", q_grp_id, ret);
 
 	if (hwdev->qinfo_type != HINIC3_QINFO_TYPE_QPOOL)
-		TAILQ_REMOVE(&nic_dev->rss_template_list, template_entry, node);
+	TAILQ_REMOVE(&nic_dev->rss_template_list, template_entry, node);
 	rte_free(template_entry);
 	PMD_DRV_LOG(INFO, "RSS template q_grp_id: %u deleted and removed from list", q_grp_id);
 
@@ -2668,8 +2718,7 @@ hinic3_flow_destroy(struct rte_eth_dev *dev, struct rte_flow *flow,
 
 	switch (type) {
 	case RTE_ETH_FILTER_ETHERTYPE:
-		ret = hinic3_flow_add_del_ethertype_filter(dev,
-				&rules->ethertype_filter, false);
+		ret = hinic3_flow_add_del_ethertype_filter(dev, &rules->ethertype_filter, false);
 		if (!ret)
 			TAILQ_REMOVE(&nic_dev->filter_ethertype_list, flow, node);
 
@@ -2679,8 +2728,7 @@ hinic3_flow_destroy(struct rte_eth_dev *dev, struct rte_flow *flow,
 		break;
 
 	case RTE_ETH_FILTER_FDIR:
-		ret = hinic3_flow_add_del_fdir_filter(dev,
-				&rules->fdir_filter, false);
+		ret = hinic3_flow_add_del_fdir_filter(dev, &rules->fdir_filter, false);
 		if (!ret)
 			TAILQ_REMOVE(&nic_dev->filter_fdir_rule_list, flow, node);
 
@@ -2724,8 +2772,7 @@ hinic3_flow_flush_fdir_filter(struct rte_eth_dev *dev)
 		if (filter_rules == NULL)
 			break;
 
-		ret = hinic3_flow_add_del_fdir_filter(dev,
-				&filter_rules->fdir_filter, false);
+		ret = hinic3_flow_add_del_fdir_filter(dev, &filter_rules->fdir_filter, false);
 		if (ret)
 			return ret;
 
@@ -2825,9 +2872,9 @@ hinic3_flow_query(struct rte_eth_dev *dev, struct rte_flow *flow,
 
 	if (ret) {
 		rte_flow_error_set(error, -ret, HINIC3_FLOW_ERROR_TYPE_HANDLE, NULL, "Failed to query flow.");
-    }
+	}
 
-    return ret;
+	return ret;
 }
 #endif
 
