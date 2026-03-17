@@ -767,7 +767,7 @@ hinic3_init_rx_ptype_table(struct rte_eth_dev *dev) {
 	uint32_t *ptype = tbl->ptype;
 	uint32_t i;
 
-	if (HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev) || HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev)) {
+	if (HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev) || HINIC3_SUPPORT_RX_SW_COMPACT_CQE(nic_dev)) {
 		for (i = 0; i < HINIC3_PTYPE_NUM; i++) {
 			ptype[i] = hinic3_calc_rx_ptype_compact_table(i);
 		}
@@ -964,8 +964,9 @@ int hinic3_stop_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq)
 	u32 cqe_done_cnt = 0;
 	u32 cqe_hole_cnt = 0;
 	u32 head_ci, head_done;
+	u16 local_qid = !IS_QPOOL_MODE(nic_dev) ? rxq->q_id : rxq->local_qid;
 	int err;
-
+	
 	/* disable rxq intr */
 	hinic3_dev_rx_queue_intr_disable(eth_dev, rxq->q_id);
 
@@ -1000,7 +1001,7 @@ int hinic3_stop_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq)
 	if ((hinic3_get_driver_feature(nic_dev) & NIC_F_HTN_FDIR) == 0)
 		err = hinic3_set_rq_flush(nic_dev->hwdev, rxq->q_id);
 	else
-		err = hinic3_set_rq_enable(nic_dev, rxq->q_id, false);
+		err = hinic3_set_rq_enable(nic_dev, local_qid, false);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Flush rq failed, eth_dev:%s, queue_idx:%d\n",
 			    nic_dev->dev_name, rxq->q_id);
@@ -1013,7 +1014,7 @@ int hinic3_stop_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq)
 				       &head_ci, &head_done);
 		PMD_DRV_LOG(ERR, "Poll rq empty timeout, eth_dev:%s, queue_idx:%d, "
 			    "mbuf_left:%d, cqe_done:%d, cqe_hole:%d, cqe[%d].done=%d\n",
-			    nic_dev->dev_name, rxq->q_id,
+			    nic_dev->dev_name, local_qid,
 			    rxq->q_depth - hinic3_get_rq_free_wqebb(rxq),
 			    cqe_done_cnt, cqe_hole_cnt, head_ci, head_done);
 		goto poll_rq_failed;
@@ -1022,7 +1023,7 @@ int hinic3_stop_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq)
 	return 0;
 
 poll_rq_failed:
-	(void)hinic3_set_rq_enable(nic_dev, rxq->q_id, true);
+	(void)hinic3_set_rq_enable(nic_dev, local_qid, true);
 rq_flush_failed:
 	rte_spinlock_lock(&nic_dev->queue_list_lock);
 set_indir_failed:
@@ -1044,7 +1045,7 @@ hinic3_start_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq)
 	rte_spinlock_lock(&nic_dev->queue_list_lock);
 	hinic3_add_rq_to_rx_queue_list(nic_dev, rxq->q_id);
 
-	if (nic_dev->rss_state == HINIC3_RSS_ENABLE) {
+	if (IS_QPOOL_MODE(nic_dev) || nic_dev->rss_state == HINIC3_RSS_ENABLE) {
 		if ((hinic3_get_driver_feature(nic_dev) & NIC_F_HTN_FDIR) != 0)
 			err = hinic3_set_rq_enable(nic_dev, local_qid, true);
 		if (err) {

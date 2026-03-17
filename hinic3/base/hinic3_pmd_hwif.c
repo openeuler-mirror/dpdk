@@ -575,20 +575,20 @@ static int hinic3_mmap_bar_addr(struct hinic3_hwdev *hwdev)
 	off_t page_offset;
 
 	page_offset = 1 << 12 | 0xff00000;
-	cfg_regs_base = mmap(NULL, 65536, PROT_READ | PROT_WRITE, MAP_SHARED, fd, page_offset);
+	cfg_regs_base = mmap(NULL, 16384, PROT_READ | PROT_WRITE, MAP_SHARED, fd, page_offset);
 
 	page_offset = 3 << 12 | 0xff00000;
-	mgmt_reg_base = mmap(NULL, 131072, PROT_READ | PROT_WRITE, MAP_SHARED, fd, page_offset);
+	mgmt_reg_base = mmap(NULL, 65536, PROT_READ | PROT_WRITE, MAP_SHARED, fd, page_offset);
 
 	page_offset = 4 << 12 | 0xff00000;
-	db_base = mmap(NULL, 16777216, PROT_READ | PROT_WRITE, MAP_SHARED, fd, page_offset);
+	db_base = mmap(NULL, 1048576, PROT_READ | PROT_WRITE, MAP_SHARED, fd, page_offset);
 	if (!mgmt_reg_base)
 		hwif->cfg_regs_base = (uint8_t *)cfg_regs_base + HINIC3_VF_CFG_REG_OFFSET;
 	else
 		hwif->cfg_regs_base = cfg_regs_base;
 	hwif->mgmt_regs_base = mgmt_reg_base;
 	hwif->db_base = db_base;
-	hwif->db_dwqe_len = 16777216;
+	hwif->db_dwqe_len = 1048576;
 
 	return 0;
 }
