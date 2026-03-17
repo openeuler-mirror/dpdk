@@ -10,8 +10,8 @@ hinic3 driver是华为SPx系列网卡在DPDK框架下的用户态驱动，旨在
 | 版本号 | 配套固件版本 | 发布日期 | 版本特性 |
 |--|--|--|--|
 | [hinic3-26.0.rc1-0214.r1](https://atomgit.com/openeuler/dpdk/tree/hinic3-26.0.rc1-0214.r1) | 请咨询技术支撑 | 2026.02.14 |
-| [hinic3-26.0.rc1-0307.r1](https://atomgit.com/openeuler/dpdk/tree/hinic3-26.0.rc1-0307.r1) | [IN220 2.6.RC1](https://support.huawei.com/enterprise/zh/huawei-computing-components/in220-pid-253287505/software/268032408?idAbsPath=fixnode01&#124;23710424&#124;251364417&#124;9856629&#124;253287505) | 2026.03.07 | release note
-| [hinic3-26.0.rc1-0307.r2](https://atomgit.com/openeuler/dpdk/tree/hinic3-26.0.rc1-0307.r2) | [IN220 2.6.RC1](https://support.huawei.com/enterprise/zh/huawei-computing-components/in220-pid-253287505/software/268032408?idAbsPath=fixnode01&#124;23710424&#124;251364417&#124;9856629&#124;253287505) | 2026.03.07 | release note
+| [hinic3-26.0.rc1-0307.r1](https://atomgit.com/openeuler/dpdk/tree/hinic3-26.0.rc1-0307.r1) | [IN220 2.6.RC2](https://support.huawei.com/enterprise/zh/huawei-computing-components/in220-pid-253287505/software/268032408?idAbsPath=fixnode01&#124;23710424&#124;251364417&#124;9856629&#124;253287505) | 2026.03.07 | release note
+| [hinic3-26.0.rc1-0307.r2](https://atomgit.com/openeuler/dpdk/tree/hinic3-26.0.rc1-0307.r2) | [IN220 2.6.RC2](https://support.huawei.com/enterprise/zh/huawei-computing-components/in220-pid-253287505/software/268032408?idAbsPath=fixnode01&#124;23710424&#124;251364417&#124;9856629&#124;253287505) | 2026.03.07 | release note
  	 
 ---
 
@@ -52,12 +52,13 @@ tar -xf dpdk-21.11.9.tar.xz
 进入dpdk-hinic3目录，请用户按需选择进行安装编译：
 
 ### SP200&SP600 网卡
+**普通场景**
 ```bash
 sh install.sh ../dpdk-stable-21.11.9 install
 sh install.sh ../dpdk-stable-21.11.9 build
 ```
 
-### SP600 标准网卡 分流场景
+**分流场景**
 ```bash
 sh install.sh ../dpdk-stable-21.11.9 install bifur
 sh install.sh ../dpdk-stable-21.11.9 build
