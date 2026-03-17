@@ -626,7 +626,7 @@ hinic3_set_rq_enable(struct hinic3_nic_dev *nic_dev, u16 q_id, bool enable)
 	memset(&msg, 0, sizeof(msg));
 	msg.rq_enable = enable;
 	msg.rq_id = q_id;
-	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_SET_RQ_ENABLE,
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_SET_RQ_ENABLE_HTN,
 				     &msg, sizeof(msg), &msg, &out_size);
 	if (err || !out_size || msg.msg_head.status) {
 		PMD_DRV_LOG(ERR, "Set rq enable failed, qid: %u, enable: %d, err: %d, status: 0x%x, out_size: 0x%x",
