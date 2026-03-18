@@ -119,6 +119,7 @@ hinic3_dcb_alloc(struct hinic3_nic_dev *nic_dev)
 	nic_dev->ets = rte_zmalloc("ets", sizeof(struct hinic3_ets), 0);
 	if (!nic_dev->ets) {
 		PMD_DRV_LOG(ERR, "Failed to create ets.");
+		rte_free(nic_dev->dcb);
 		return -EFAULT;
 	}
 

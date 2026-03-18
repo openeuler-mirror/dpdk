@@ -77,6 +77,19 @@ hinic3_hairpin_get_peer_ports(struct rte_eth_dev *dev, uint16_t *peer_ports,
 
 	if (direction) {
 		for (i = 0; i < txq_num; i++) {
+			if (txq[i] == NULL || !txq[i]->is_hairpin || txq[i]->hairpin_conf.peer_count == 0)
+				continue;
+
+			if (peer_cnt >= len) {
+				rte_errno = ERANGE;
+				PMD_DRV_LOG(ERR, "port %u queue %u peer port out of range %lu",
+					data->port_id, i, len);
+				return -rte_errno;
+			}
+			peer_ports[peer_cnt++] = txq[i]->hairpin_conf.peers[0].port;	
+		}
+	} else {
+		for (i = 0; i < rxq_num; i++) {
 			if (rxq[i] == NULL || !rxq[i]->is_hairpin || rxq[i]->hairpin_conf.peer_count == 0)
 				continue;
 
@@ -87,19 +100,6 @@ hinic3_hairpin_get_peer_ports(struct rte_eth_dev *dev, uint16_t *peer_ports,
 				return -rte_errno;
 			}
 			peer_ports[peer_cnt++] = rxq[i]->hairpin_conf.peers[0].port;
-		}
-	} else {
-		for (i = 0; i < rxq_num; i++) {
-			if (txq[i] == NULL || !txq[i]->is_hairpin || txq[i]->hairpin_conf.peer_count == 0)
-				continue;
-
-			if (peer_cnt >= len) {
-				rte_errno = ERANGE;
-				PMD_DRV_LOG(ERR, "port %u queue %u peer port out of range %lu",
-					data->port_id, i, len);
-				return -rte_errno;
-			}
-			peer_ports[peer_cnt++] = txq[i]->hairpin_conf.peers[0].port;
 		}
 	}
 	return peer_cnt;
@@ -240,18 +240,18 @@ hinic3_tx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	}
     if (conf->peer_count > 1) {
 		rte_errno = EINVAL;
-		PMD_DRV_LOG(ERR, "port %u unable to setup Rx hairpin queue index %u"
+		PMD_DRV_LOG(ERR, "port %u unable to setup Tx hairpin queue index %u"
 			" peer count is %u", dev->data->port_id,
 			qid, conf->peer_count);
 		return -rte_errno;
 	}
 	if (conf->peers[0].port == dev->data->port_id) {
-		if (conf->peers[0].queue >= dev->data->nb_tx_queues) {
+		if (conf->peers[0].queue >= dev->data->nb_rx_queues) {
 			rte_errno = EINVAL;
-			PMD_DRV_LOG(ERR, "port %u unable to setup Rx hairpin queue"
-				" index %u, Tx %u is larger than %u",
+			PMD_DRV_LOG(ERR, "port %u unable to setup Tx hairpin queue"
+				" index %u, Rx %u is larger than %u",
 				dev->data->port_id, qid,
-				conf->peers[0].queue, dev->data->nb_tx_queues);
+				conf->peers[0].queue, dev->data->nb_rx_queues);
 			return -rte_errno;
 		}
 #ifdef DPDK_20_11
@@ -259,7 +259,7 @@ hinic3_tx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 		if (conf->manual_bind == 0 ||
 		    conf->tx_explicit == 0) {
 			rte_errno = EINVAL;
-			PMD_DRV_LOG(ERR, "port %u unable to setup Rx hairpin queue"
+			PMD_DRV_LOG(ERR, "port %u unable to setup Tx hairpin queue"
 				" index %u peer port %u with attributes %u %u",
 				dev->data->port_id, qid,
 				conf->peers[0].port,
