@@ -60,7 +60,7 @@
 	flow create 0 ingress pattern eth / ipv4 / udp / end actions queue index {hairpin_qid} / end # 指定udp报文进行hairpin转发
   	```
 
-  * **fdir流表扩展**
+* **fdir流表扩展**
 
 	对fdir相关硬件字段进行了扩展，以支持了更强的匹配能力，新增支持性包括
     * **隧道报文内外层同时匹配**
