@@ -1095,7 +1095,7 @@ int hinic3_start_all_rqs(struct rte_eth_dev *eth_dev)
 	}
 
 	if (nic_dev->rss_state == HINIC3_RSS_ENABLE &&
-	    nic_dev->dcb->dcb_on == 0) {
+	    nic_dev->dcb->dcb_on == 0 && rxq != NULL) {
 		err = hinic3_refill_indir_rqid(rxq);
 		if (err) {
 			PMD_DRV_LOG(ERR, "Refill rq to indrect table failed, eth_dev:%s, queue_idx:%d err:%d\n",
@@ -1108,6 +1108,8 @@ int hinic3_start_all_rqs(struct rte_eth_dev *eth_dev)
 out:
 	for (i = 0; i < nic_dev->num_rqs; i++) {
 		rxq = eth_dev->data->rx_queues[i];
+		if (rxq == NULL)
+			continue;
 		hinic3_remove_rq_from_rx_queue_list(nic_dev, rxq->q_id);
 		hinic3_free_rxq_mbufs(rxq);
 		hinic3_dev_rx_queue_intr_disable(eth_dev, rxq->q_id);
@@ -1163,21 +1165,27 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 		rte_prefetch0(rxq->rx_info[sw_ci].mbuf);
 
 		/* 3. Jumbo frame process */
-		if (likely(!rte_eth_devices[rxq->port_id].data->scattered_rx || pkt_len <= (u32)rx_buf_len)) {
+		if  (rte_eth_devices[rxq->port_id].data->scattered_rx) {
+			if (likely(pkt_len <= (u32)rx_buf_len)) {
+				rxm->data_len = (u16)pkt_len;
+				rxm->pkt_len = pkt_len;
+				wqebb_cnt++;
+			} else {
+				rxm->data_len = rx_buf_len;
+				rxm->pkt_len = rx_buf_len;
+
+				/* If receive jumbo, updating ci will be done by
+				* hinic3_recv_jumbo_pkt function.
+				*/
+				hinic3_update_rq_local_ci(rxq, wqebb_cnt + 1);
+				wqebb_cnt = 0;
+				hinic3_recv_jumbo_pkt(rxq, rxm, pkt_len - rx_buf_len);
+				sw_ci = hinic3_get_rq_local_ci(rxq);
+			}
+		} else {
 			rxm->data_len = (u16)pkt_len;
 			rxm->pkt_len = pkt_len;
 			wqebb_cnt++;
-		} else {
-			rxm->data_len = rx_buf_len;
-			rxm->pkt_len = rx_buf_len;
-
-			/* If receive jumbo, updating ci will be done by
-			 * hinic3_recv_jumbo_pkt function.
-			 */
-			hinic3_update_rq_local_ci(rxq, wqebb_cnt + 1);
-			wqebb_cnt = 0;
-			hinic3_recv_jumbo_pkt(rxq, rxm, pkt_len - rx_buf_len);
-			sw_ci = hinic3_get_rq_local_ci(rxq);
 		}
 
 		rxm->data_off = RTE_PKTMBUF_HEADROOM;

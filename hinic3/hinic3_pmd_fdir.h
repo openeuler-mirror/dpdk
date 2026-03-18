@@ -51,7 +51,6 @@ struct hinic3_fdir_filter {
 	struct hinic3_fdir_rule_key key_mask;
 	struct hinic3_fdir_rule_key key_spec;
 	uint32_t rq_index; /* queue assigned when matched */
-	bool is_hairpin;
 #ifdef HINIC3_TRAFFIC_BIFUR
 	uint32_t queue_num;
 #endif
@@ -1034,35 +1033,35 @@ struct hinic3_tcam_sec_key_ipv6_ipv6_mem
 	u32 vlan_cfi: 1;
 	u32 vlan_vid : 12;
 
-	u32 outer_sip0_h : 16;
-	u32 outer_sip0_l : 16;
+	u32 outer_sip2_h : 16;
+	u32 outer_sip2_l : 16;
 
-	u32 outer_sip1_h : 16;
-	u32 outer_sip1_l : 16;
+	u32 outer_sip3_h : 16;
+	u32 outer_sip3_l : 16;
 
 	u32 outer_sport : 16;
-	u32 outer_sip2_l : 16;
+	u32 outer_sip1_l : 16;
 
 	u32 eth_type : 16;
 	u32 outer_tcp_flag : 8;
 	u32 outer_ip_proto : 8;
 
-	u32 outer_dip0_h : 16;
-	u32 outer_dip0_l : 16;
+	u32 outer_dip2_h : 16;
+	u32 outer_dip2_l : 16;
 
-	u32 outer_dip1_h : 16;
-	u32 outer_dip1_l : 16;
+	u32 outer_dip3_h : 16;
+	u32 outer_dip3_l : 16;
 
 	u32 outer_dport : 16;
-	u32 outer_dip2_l : 16;
+	u32 outer_dip1_l : 16;
 
 	u32 vni_h : 16;
 	u32 vni_l : 16;
 
 	u32 inner_tcp_flag : 8;
 	u32 inner_ip_proto : 8;
-	u32 outer_dip2_h : 8;
-	u32 outer_sip2_h : 8;
+	u32 outer_dip1_h : 8;
+	u32 outer_sip1_h : 8;
 
 	u32 inner_sip0_h : 16;
 	u32 inner_sip0_l : 16;
@@ -1108,33 +1107,33 @@ struct hinic3_tcam_sec_key_ipv6_ipv6_mem
 	u32 outer_ip_type : 1;
 	u32 func_id : 15;
 
-	u32 outer_sip0_l : 16;
-	u32 outer_sip0_h : 16;
+	u32 outer_sip2_l : 16;
+	u32 outer_sip2_h : 16;
+
+	u32 outer_sip3_l : 16;
+	u32 outer_sip3_h : 16;
 
 	u32 outer_sip1_l : 16;
-	u32 outer_sip1_h : 16;
-
-	u32 outer_sip2_l : 16;
 	u32 outer_sport : 16;
 
 	u32 outer_ip_proto : 8;
 	u32 outer_tcp_flag : 8;
 	u32 eth_type : 16;
 
-	u32 outer_dip0_l : 16;
-	u32 outer_dip0_h : 16;
+	u32 outer_dip2_l : 16;
+	u32 outer_dip2_h : 16;
+
+	u32 outer_dip3_l : 16;
+	u32 outer_dip3_h : 16;
 
 	u32 outer_dip1_l : 16;
-	u32 outer_dip1_h : 16;
-
-	u32 outer_dip2_l : 16;
 	u32 outer_dport : 16;
 
 	u32 vni_l : 16;
 	u32 vni_h : 16;
 
-	u32 outer_sip2_h : 8;
-	u32 outer_dip2_h : 8;
+	u32 outer_sip1_h : 8;
+	u32 outer_dip1_h : 8;
 	u32 inner_ip_proto : 8;
 	u32 inner_tcp_flag : 8;
 

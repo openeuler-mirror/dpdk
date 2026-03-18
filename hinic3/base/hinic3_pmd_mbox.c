@@ -1201,8 +1201,11 @@ int hinic3_func_to_func_init(struct hinic3_hwdev *hwdev)
 	func_to_func->hwdev = hwdev;
 
 	struct save_mbox_info *save_mbox = rte_zmalloc("save_mbox_info", sizeof(struct save_mbox_info), 0);
-	if (!save_mbox)
-		return -ENOMEM;
+	if (!save_mbox) {
+		err = -ENOMEM;
+		goto alloc_save_mbox_err;
+	}
+
 	func_to_func->save_mbox = save_mbox;
 
 	(void)hinic3_mutex_init_shared(&func_to_func->mbox_send_mutex);
@@ -1249,8 +1252,8 @@ alloc_mbox_for_resp_err:
 alloc_mbox_for_send_err:
 	(void)hinic3_mutex_destroy(&func_to_func->msg_send_mutex);
 	(void)hinic3_mutex_destroy(&func_to_func->mbox_send_mutex);
+alloc_save_mbox_err:
 	rte_free(func_to_func);
-
 	return err;
 }
 

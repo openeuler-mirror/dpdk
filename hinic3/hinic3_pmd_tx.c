@@ -1274,6 +1274,32 @@ static int hinic3_mbuf_dma_map_sge(struct hinic3_txq *txq,
 	return 0;
 }
 
+static int hinic3_mbuf_dma_map_single(struct hinic3_txq *txq,
+					struct rte_mbuf *mbuf,
+					struct hinic3_sq_wqe_combo *wqe_combo)
+{
+	struct hinic3_sq_wqe_desc *wqe_desc = wqe_combo->hdr;
+	rte_iova_t dma_addr;
+
+	if (unlikely(mbuf == NULL)) {
+		txq->txq_stats.mbuf_null++;
+		return -EINVAL;
+	}
+
+	if (unlikely(mbuf->data_len == 0)) {
+		txq->txq_stats.sge_len0++;
+		return -EINVAL;
+	}
+
+	dma_addr = rte_mbuf_data_iova(mbuf);
+	wqe_desc->hi_addr = hinic3_hw_be32(upper_32_bits(dma_addr));
+	wqe_desc->lo_addr = hinic3_hw_be32(lower_32_bits(dma_addr));
+	wqe_desc->ctrl_len = mbuf->data_len;
+	wqe_desc->queue_info = 0;
+
+	return 0;
+}
+
 static void hinic3_prepare_sq_ctrl(struct hinic3_sq_wqe_combo *wqe_combo,
 				   struct hinic3_wqe_info *wqe_info)
 {
@@ -1384,8 +1410,10 @@ u16 hinic3_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, u16 nb_pkts)
 		}
 
 		/* Fill sq_wqe buf_desc and bd_desc */
-		err = hinic3_mbuf_dma_map_sge(txq, mbuf_pkt, &wqe_combo,
-					      &wqe_info);
+		if (txq->multi_segs)
+			err = hinic3_mbuf_dma_map_sge(txq, mbuf_pkt, &wqe_combo, &wqe_info);
+		else
+			err = hinic3_mbuf_dma_map_single(txq, mbuf_pkt, &wqe_combo);
 		if (err) {
 			hinic3_put_sq_wqe(txq, &wqe_info);
 			txq->txq_stats.off_errs++;
@@ -1480,21 +1508,28 @@ hinic3_tx_burst_mode_get(struct rte_eth_dev *dev,
 						 uint16_t tx_queue_id,
 						 struct rte_eth_burst_mode *mode)
 {
-	(void)tx_queue_id;
 	uint16_t tx_offloads = dev->data->dev_conf.txmode.offloads;
+	struct hinic3_nic_dev *nic_dev;
+	struct hinic3_txq *txq = NULL;
+
+	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+	txq = nic_dev->txqs[tx_queue_id];
+	if (!txq) {
+		return -EINVAL;
+	}
 
 	snprintf(mode->info, sizeof(mode->info),
-		"Scalar%s%s%s%s%s%s%s%s%s%s",
-		(tx_offloads & DEV_TX_OFFLOAD_MULTI_SEGS) ? " + MULTI" : " + MULTI",
-		(tx_offloads & DEV_TX_OFFLOAD_TCP_TSO) ? " + TSO" : " + TSO",
-		(tx_offloads & DEV_TX_OFFLOAD_IPV4_CKSUM) ? " + IPV4_CKSUM" : " + IPV4_CKSUM",
-		(tx_offloads & DEV_TX_OFFLOAD_VLAN_INSERT) ? " + VLAN_INSERT" : " + VLAN_INSERT",
-		(tx_offloads & DEV_TX_OFFLOAD_UDP_CKSUM) ? " + UDP_CKSUM" : " + UDP_CKSUM",
-		(tx_offloads & DEV_TX_OFFLOAD_TCP_CKSUM) ? " + TCP_CKSUM" : " + TCP_CKSUM",
-		(tx_offloads & DEV_TX_OFFLOAD_SCTP_CKSUM) ? " + SCTP_CKSUM" : " + SCTP_CKSUM",
-		(tx_offloads & DEV_TX_OFFLOAD_OUTER_IPV4_CKSUM) ? " + OUTER_IPV4_CKSUM" : " + OUTER_IPV4_CKSUM",
-		(tx_offloads & DEV_TX_OFFLOAD_VXLAN_TNL_TSO) ? " + VXLAN_TNL_TSO" : " + VXLAN_TNL_TSO",
-		(tx_offloads & DEV_TX_OFFLOAD_QINQ_INSERT) ? " + QINQ_INSERT" : " + QINQ_INSERT");
+		"Scalar%s%s%s%s%s",
+ 		(tx_offloads & DEV_TX_OFFLOAD_MULTI_SEGS) ? " + MULTI" : "",
+		(tx_offloads & (DEV_TX_OFFLOAD_TCP_TSO |
+				DEV_TX_OFFLOAD_VXLAN_TNL_TSO)) ? " + TSO" : "",
+		(tx_offloads & (DEV_TX_OFFLOAD_IPV4_CKSUM |
+				DEV_TX_OFFLOAD_UDP_CKSUM |
+				DEV_TX_OFFLOAD_TCP_CKSUM |
+				DEV_TX_OFFLOAD_SCTP_CKSUM |
+				DEV_TX_OFFLOAD_OUTER_IPV4_CKSUM)) ? " + CKSUM" : "",
+		(tx_offloads & DEV_TX_OFFLOAD_VLAN_INSERT) ? " + VLAN" : "",
+		(tx_offloads & DEV_TX_OFFLOAD_QINQ_INSERT) ? " + QINQ" : "");
 
 	return 0;
 }

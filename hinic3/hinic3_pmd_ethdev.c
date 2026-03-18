@@ -375,6 +375,12 @@ static int hinic3_dev_configure(struct rte_eth_dev *dev)
 	if (dev->data->dev_conf.rxmode.mq_mode & ETH_MQ_RX_RSS_FLAG)
 		dev->data->dev_conf.rxmode.offloads |= DEV_RX_OFFLOAD_RSS_HASH;
 
+	if (!nic_dev->hinic3_offload_initialized) {
+		dev->data->dev_conf.rxmode.offloads |= DEV_RX_OFFLOAD_SCATTER;
+		dev->data->dev_conf.txmode.offloads |= DEV_TX_OFFLOAD_MULTI_SEGS;
+		nic_dev->hinic3_offload_initialized = true;
+	}
+
 	/* Clear fdir filter */
 	hinic3_free_fdir_filter(dev);
 
@@ -720,11 +726,11 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 
-	/* Queue depth must be equal to queue 0 */
-	if (qid != 0 && (nb_desc != nic_dev->rxqs[0]->q_depth)) {
-		PMD_DRV_LOG(WARNING, "rxq%u depth:%u is not equal to queue0 depth:%u.\n",
-			qid, nb_desc, nic_dev->rxqs[0]->q_depth);
-		nb_desc = nic_dev->rxqs[0]->q_depth;
+ 	/* Queue depth must be equal to queue 0 */	 
+ 	if (qid != 0 && (nb_desc != nic_dev->rxqs[0]->q_depth)) {	 
+ 		PMD_DRV_LOG(WARNING, "rxq%u depth:%u is not equal to queue0 depth:%u.\n",	 
+ 			qid, nb_desc, nic_dev->rxqs[0]->q_depth);	 
+ 		nb_desc = nic_dev->rxqs[0]->q_depth;
 	}
 
 	/* Queue depth must be power of 2, otherwise will be aligned up */
@@ -939,11 +945,11 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	hwdev = nic_dev->hwdev;
 
-	/* Queue depth must be equal to queue 0 */
-	if (qid != 0 && (nb_desc != nic_dev->txqs[0]->q_depth)) {
-		PMD_DRV_LOG(WARNING, "txq%u depth:%u is not equal to queue0 depth:%u.\n",
-			qid, nb_desc, nic_dev->txqs[0]->q_depth);
-		nb_desc = nic_dev->txqs[0]->q_depth;
+ 	/* Queue depth must be equal to queue 0 */	 
+ 	if (qid != 0 && (nb_desc != nic_dev->txqs[0]->q_depth)) {	 
+ 		PMD_DRV_LOG(WARNING, "txq%u depth:%u is not equal to queue0 depth:%u.\n",	 
+ 			qid, nb_desc, nic_dev->txqs[0]->q_depth);	 
+ 		nb_desc = nic_dev->txqs[0]->q_depth;
 	}
 
 	/* Queue depth must be power of 2, otherwise will be aligned up */
@@ -1036,6 +1042,7 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	txq->queue_buf_vaddr = sq_mz->addr;
 	txq->sq_head_addr = (u64)txq->queue_buf_vaddr;
 	txq->sq_bot_sge_addr = txq->sq_head_addr + queue_buf_size;
+	txq->multi_segs = (dev->data->dev_conf.txmode.offloads & DEV_TX_OFFLOAD_MULTI_SEGS) ? true : false;
 
 	err = hinic3_alloc_db_addr(hwdev, &db_addr, HINIC3_DB_TYPE_SQ);
 	if (err) {
@@ -1748,7 +1755,7 @@ static int hinic3_dev_start(struct rte_eth_dev *eth_dev)
 	}
 	hinic3_update_msix_info(nic_dev->hwdev->hwif);
 	hinic3_disable_interrupt(eth_dev);
-	
+
 	err = hinic3_refill_hairpinq(eth_dev);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Refill hairpinq fail, dev_name: %s",
@@ -1815,10 +1822,10 @@ static int hinic3_dev_start(struct rte_eth_dev *eth_dev)
 	}
 
 	/* Add scatter support if scatter mode should be enabled */
-	if (eth_dev->data->dev_conf.rxmode.offloads & DEV_RX_OFFLOAD_SCATTER ||
-		(nic_dev->mtu_size + HINIC3_ETH_OVERHEAD) > nic_dev->rx_buff_len) {
-			eth_dev->data->scattered_rx = true;
-		}
+	if (eth_dev->data->dev_conf.rxmode.offloads & DEV_RX_OFFLOAD_SCATTER )
+		eth_dev->data->scattered_rx = true;
+	else
+		eth_dev->data->scattered_rx = false;
 
 	/* enable dev interrupt */
 	hinic3_enable_interrupt(eth_dev);
@@ -1933,6 +1940,7 @@ static void hinic3_dev_stop(struct rte_eth_dev *dev)
 	struct rte_eth_link link;
 	int err;
 	uint16_t i;
+	u8 sec_tcam_en = 0;
 
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	if (!hinic3_test_and_clear_bit(HINIC3_DEV_START,
@@ -2000,6 +2008,12 @@ static void hinic3_dev_stop(struct rte_eth_dev *dev)
 
 	/* Clear scatter rx flag */
 	dev->data->scattered_rx = false;
+
+	(void)hinic3_fdir_cfg_sec_tcam(nic_dev->hwdev, &sec_tcam_en);
+
+	(void)hinic3_flush_tcam_rule(nic_dev->hwdev);
+	if (sec_tcam_en == 1)
+		(void)hinic3_fdir_flush_sec_tcam_rule(nic_dev->hwdev);
 
 #ifdef DPDK_20_11
 	return 0;
@@ -2072,7 +2086,6 @@ static void hinic3_dev_close(struct rte_eth_dev *eth_dev)
 {
 	struct hinic3_nic_dev *nic_dev =
 		HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
-	u8 sec_tcam_en = 0;
 
 	if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
 #ifdef DPDK_20_11
@@ -2093,19 +2106,10 @@ static void hinic3_dev_close(struct rte_eth_dev *eth_dev)
 		return 0;
 #endif
 	}
-	(void)hinic3_fdir_cfg_sec_tcam(nic_dev->hwdev, &sec_tcam_en);
 #ifdef DPDK_20_11
 	ret = hinic3_dev_stop(eth_dev);
-	if (ret == 0) {
-		(void)hinic3_flush_tcam_rule(nic_dev->hwdev);
-		if (sec_tcam_en == 1)
-			(void)hinic3_fdir_flush_sec_tcam_rule(nic_dev->hwdev);
-	}
 #else
 	hinic3_dev_stop(eth_dev);
-	(void)hinic3_flush_tcam_rule(nic_dev->hwdev);
-	if (sec_tcam_en == 1)
-		(void)hinic3_fdir_flush_sec_tcam_rule(nic_dev->hwdev);
 #endif
 
 	hinic3_dev_release(eth_dev);
@@ -3388,6 +3392,58 @@ static int hinic3_get_reg(__rte_unused struct rte_eth_dev *dev,
 	return 0;
 }
 
+#ifdef DPDK_20_11
+static bool hinic3_fec_param_valid(uint32_t fec_param)
+{
+	if ((fec_param == HINIC3_FEC_MODE_LLRS)  ||
+	    (fec_param == HINIC3_FEC_MODE_RS)    ||
+	    (fec_param == HINIC3_FEC_MODE_BASER) ||
+	    (fec_param == HINIC3_FEC_MODE_OFF)) {
+		return true;
+	}
+
+	return false;
+}
+
+static int hinic3_fec_set(struct rte_eth_dev *dev, uint32_t fec_capa)
+{
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+	int err;
+
+	if (hinic3_fec_param_valid(fec_capa) == false) {
+		PMD_DRV_LOG(ERR, "Fec param is valid, failed to set fec param.");
+		return -EINVAL;
+	}
+
+	err = hinic3_set_fec_mode(nic_dev->hwdev, (u8)fec_capa);
+	if (err) {
+		PMD_DRV_LOG(ERR, "Set fec param failed: %d.", err);
+		return err;
+	}
+
+	nic_dev->fec_mode = fec_capa;
+
+	return 0;
+}
+
+static int hinic3_fec_get(struct rte_eth_dev *dev, uint32_t *fec_capa)
+{
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+	u8 advertised_fec = 0;
+	int err;
+	
+	err = hinic3_get_fec_mode(nic_dev->hwdev, &advertised_fec);
+	if (err) {
+		PMD_DRV_LOG(ERR, "Get fec parma failed: %d.", err);
+		return err;
+	}
+
+	*fec_capa = (u32)advertised_fec;
+
+	return 0;
+}
+#endif
+
 static const struct eth_dev_ops hinic3_pmd_ops = {
 	.dev_configure                 = hinic3_dev_configure,
 	.dev_infos_get                 = hinic3_dev_infos_get,
@@ -3462,6 +3518,10 @@ static const struct eth_dev_ops hinic3_pmd_ops = {
 	.rx_hairpin_queue_setup		   = hinic3_rx_hairpin_queue_setup,
 	.tx_hairpin_queue_setup		   = hinic3_tx_hairpin_queue_setup,
 	.tx_burst_mode_get             = hinic3_tx_burst_mode_get,
+#ifdef DPDK_20_11
+	.fec_get                       = hinic3_fec_get,
+	.fec_set               	       = hinic3_fec_set,
+#endif
 };
 
 static const struct eth_dev_ops hinic3_pmd_vf_ops = {

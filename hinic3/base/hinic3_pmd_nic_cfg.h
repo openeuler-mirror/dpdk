@@ -879,9 +879,15 @@ struct hinic3_rss_indir_table {
 struct nic_rss_indirect_tbl {
 	union {
 		struct {
+#if (RTE_BYTE_ORDER == RTE_BIG_ENDIAN)
 			u32 op_code : 8; /* 1: new fdir_rss */
 			u32 qgrp_id : 8; /* The value of qgrp_id must be 2048 less */
 			u32 rsvd1 : 16;
+#else
+			u32 rsvd1 : 16;
+			u32 qgrp_id : 8; /* The value of qgrp_id must be 2048 less */
+			u32 op_code : 8; /* 1: new fdir_rss */
+#endif
 		} bs;
 		u32 value;
 	} dw0;
@@ -1106,6 +1112,19 @@ struct mag_cmd_set_link_follow {
     u8 rsvd1[3];
 };
 
+enum hinic3_fec_mode_opcode {
+	HINIC3_FEC_MODE_OPCODE_GET = 0,
+	HINIC3_FEC_MODE_OPCODE_SET = 1,
+};
+
+struct mag_cmd_cfg_fec_mode {
+	struct mgmt_msg_head head;
+	u8 port_id;
+	u8 opcode;
+	u8 advertised_fec;
+	u8 supported_fec;
+};
+
 struct hinic3_cmd_ets_cfg {
 	struct mgmt_msg_head head;
 
@@ -1214,6 +1233,30 @@ struct nic_cmd_fdir_ext {
 		struct hinic3_fdir_cfg_key_mode tcam_cfg;
         u8 tcam_value[HINIC3_FDIR_EXT_DATA_SIZE];
     } data;
+};
+
+enum hinic3_cmd_port_fec {
+	HINIC3_PORT_FEC_NOT_SET = 0,
+	HINIC3_PORT_FEC_RSFEC = 1,
+	HINIC3_PORT_FEC_BASEFEC = 2,
+	HINIC3_PORT_FEC_NOFEC = 3,
+	HINIC3_PORT_FEC_LLRSFEC = 4,
+	HINIC3_PORT_FEC_AUTO = 5,
+};
+
+enum hinic3_fec_mode {
+	HINIC3_FEC_MODE_NONE	= 0,
+	HINIC3_FEC_MODE_OFF 	= 1,
+	HINIC3_FEC_MODE_AUTO	= 2,
+	HINIC3_FEC_MODE_BASER 	= 4,
+	HINIC3_FEC_MODE_RS   	= 8,
+	HINIC3_FEC_MODE_LLRS  	= 16,
+};
+
+struct hinic3_fec_param_value_map {
+	u8 fec_offset;
+	u8 hinic3_fec_value;
+	u8 ethtool_fec_value;
 };
 
 int l2nic_msg_to_mgmt_sync(void *hwdev, u16 cmd, void *buf_in, u16 in_size,
@@ -1814,7 +1857,7 @@ int hinic3_fdir_alloc_sec_tcam_block(void *hwdev, u8 key_width, u16 *index);
 int hinic3_fdir_sec_tcam_block_free(void *hwdev, u8 key_width, u16 *index);
 
 int hinic3_fdir_add_sec_tcam_rule(void *hwdev, struct hinic3_ext_tcam_cfg_rule *tcam_rule,
-				  u8 tcam_rule_type, bool is_hairpin, u8 key_width);
+				  u8 tcam_rule_type, u8 key_width);
 
 int hinic3_fdir_set_fdir_sec_tcam_rule_filter(void *hwdev, bool enable);
 
@@ -1823,5 +1866,9 @@ int hinic3_fdir_del_sec_tcam_rule(void *hwdev, u32 index, u8 tcam_rule_type,
 int hinic3_fdir_flush_sec_tcam_rule(void *hwdev);
 
 int hinic3_fdir_cfg_sec_tcam(void *hwdev, u8 *en);
+
+int hinic3_set_fec_mode(struct hinic3_hwdev *hwdev, u8 fecparam);
+
+int hinic3_get_fec_mode(struct hinic3_hwdev *hwdev, u8 *supported_fec);
 
 #endif /* _HINIC3_PMD_NIC_CFG_H_ */
