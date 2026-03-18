@@ -59,7 +59,7 @@ sh install.sh ../dpdk-stable-21.11.9 install
 sh install.sh ../dpdk-stable-21.11.9 build
 ```
 
-**分流场景**
+**bifur分流场景**
 ```bash
 sh install.sh ../dpdk-stable-21.11.9 install bifur
 sh install.sh ../dpdk-stable-21.11.9 build
