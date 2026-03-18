@@ -53,12 +53,13 @@ tar -xf dpdk-21.11.9.tar.xz
 进入dpdk-hinic3目录，请用户按需选择进行安装编译：
 
 ### SP200&SP600 网卡
+**普通场景**
 ```bash
 sh install.sh ../dpdk-stable-21.11.9 install
 sh install.sh ../dpdk-stable-21.11.9 build
 ```
 
-### SP600 标准网卡 分流场景
+**bifur分流场景**
 ```bash
 sh install.sh ../dpdk-stable-21.11.9 install bifur
 sh install.sh ../dpdk-stable-21.11.9 build
