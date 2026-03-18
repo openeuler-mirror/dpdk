@@ -98,6 +98,11 @@ static void link_status_event_handler(void *hwdev, void *buf_in,
 	struct hinic3_hwdev *dev = hwdev;
 	int err;
 
+	if(buf_in == NULL) {
+		PMD_DRV_LOG(ERR, "Link status event handler failed, buf_in is NULL.");
+		return;
+	}
+
 	link_status = buf_in;
 	PMD_DRV_LOG(INFO, "Link status report received, func_id: %d, status: %d(%s)",
 		    hinic3_global_func_id(hwdev), link_status->state,
