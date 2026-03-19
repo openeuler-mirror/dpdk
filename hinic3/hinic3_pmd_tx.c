@@ -1325,6 +1325,7 @@ static void hinic3_prepare_sq_ctrl(struct hinic3_sq_wqe_combo *wqe_combo,
 
 	wqe_desc->queue_info = wqe_info->queue_info;
 	wqe_desc->queue_info |= SQ_CTRL_QUEUE_INFO_SET(1U, UC);
+	wqe_desc->queue_info |= SQ_CTRL_QUEUE_INFO_SET(1U, TCPUDP_CS);
 
 	if (!SQ_CTRL_QUEUE_INFO_GET(wqe_desc->queue_info, MSS)) {
 		wqe_desc->queue_info |=
