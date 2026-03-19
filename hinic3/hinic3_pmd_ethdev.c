@@ -405,12 +405,13 @@ static void hinic3_dev_interrupt_handler_qpool(void *param)
 			}
 		}
 
-		if (interruption_done == true)
-			break;
 		if (bytes_read < 0 && errno != EAGAIN) {
 			PMD_DRV_LOG(ERR, "interrupt handler fd read error: %d.", errno);
 			break;
 		}
+
+		if (interruption_done == true)
+			break;
 	}
 }
 
