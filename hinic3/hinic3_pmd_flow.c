@@ -2561,6 +2561,10 @@ hinic3_flow_create(struct rte_eth_dev          *dev,
 			goto free_flow;
 		}
 
+		flow->rule = filter_rules;
+		flow->filter_type = filter_rules->filter_type;
+		TAILQ_INSERT_TAIL(&nic_dev->filter_fdir_rule_list, flow, node);
+
 		if (filter_rules->template_entry == NULL)
 			break;
 
@@ -2573,10 +2577,6 @@ hinic3_flow_create(struct rte_eth_dev          *dev,
 				goto free_flow;
 			}
 		}
-
-		flow->rule = filter_rules;
-		flow->filter_type = filter_rules->filter_type;
-		TAILQ_INSERT_TAIL(&nic_dev->filter_fdir_rule_list, flow, node);
 
 		break;
 	default:
@@ -2592,6 +2592,7 @@ hinic3_flow_create(struct rte_eth_dev          *dev,
 free_flow:
 	if (filter_rules && filter_rules->template_entry != NULL)
 		hinic3_flow_release_rss_template(nic_dev, filter_rules->template_entry);
+	TAILQ_REMOVE(&nic_dev->filter_fdir_rule_list, flow, node);
 	rte_free(flow);
 	rte_free(filter_rules);
 
