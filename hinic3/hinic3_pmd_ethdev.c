@@ -319,8 +319,6 @@ static int hinic3_copy_mempool_init(struct hinic3_nic_dev *nic_dev);
 
 static void hinic3_copy_mempool_uninit(struct hinic3_nic_dev *nic_dev);
 
-static bool hinic3_offload_initialized = false;
-
 /**
  * Interrupt handler triggered by NIC for handling specific event
  *
@@ -467,14 +465,17 @@ static int hinic3_dev_configure(struct rte_eth_dev *dev)
 			    HINIC3_MIN_FRAME_SIZE, HINIC3_MAX_JUMBO_FRAME_SIZE);
 		return -EINVAL;
 	}
-	nic_dev->mtu_size = (u16)HINIC3_PKTLEN_TO_MTU(HINIC3_MAX_RX_PKT_LEN(dev->data->dev_conf.rxmode));
+
+	if (nic_dev->hwdev->qinfo_type != HINIC3_QINFO_TYPE_QPOOL)
+		nic_dev->mtu_size = (u16)HINIC3_PKTLEN_TO_MTU(HINIC3_MAX_RX_PKT_LEN(dev->data->dev_conf.rxmode));
+
 	if (dev->data->dev_conf.rxmode.mq_mode & ETH_MQ_RX_RSS_FLAG)
 		dev->data->dev_conf.rxmode.offloads |= DEV_RX_OFFLOAD_RSS_HASH;
 
-	if (!hinic3_offload_initialized) {
+	if (!nic_dev->hinic3_offload_initialized) {
 		dev->data->dev_conf.rxmode.offloads |= DEV_RX_OFFLOAD_SCATTER;
 		dev->data->dev_conf.txmode.offloads |= DEV_TX_OFFLOAD_MULTI_SEGS;
-		hinic3_offload_initialized = true;
+		nic_dev->hinic3_offload_initialized = true;
 	}
 
 	/* Clear fdir filter */
@@ -578,6 +579,8 @@ static int hinic3_get_link_state_qpool(struct hinic3_nic_dev *nic_dev)
 		PMD_DRV_LOG(ERR, "Get kernel netdev state failed, err: %d.", err);
 	if (cfg_kernel_data.netdev_state == 0)
 		err = -EIO;
+
+	nic_dev->mtu_size = cfg_kernel_data.mtu;
 	return err;
 }
 
@@ -2120,12 +2123,20 @@ static int hinic3_dev_start_qpool(struct rte_eth_dev *eth_dev)
 		goto handle_err;
 	}
 
+	eth_dev->data->mtu = nic_dev->mtu_size;
+	
 	/* Set rx configuration: rss/checksum/rxmode/lro */
 	err = hinic3_set_rxtx_configure(eth_dev);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Set rx config failed, dev_name: %s",
 			    eth_dev->data->name);
 	}
+
+	/* Add scatter support if scatter mode should be enabled */
+	if (eth_dev->data->dev_conf.rxmode.offloads & DEV_RX_OFFLOAD_SCATTER)
+		eth_dev->data->scattered_rx = true;
+	else
+		eth_dev->data->scattered_rx = false;
 
 	err = hinic3_start_all_rqs(eth_dev);
 	if (err) {
