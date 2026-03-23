@@ -586,6 +586,50 @@ static inline void hinic3_set_vlan_tx_offload(struct hinic3_sq_task *task,
 			     SQ_TASK_INFO3_SET(1U, VLAN_TAG_VALID);
 }
 
+void hinic3_tx_set_normal_task_offload(struct hinic3_wqe_info *wqe_info,
+				       struct hinic3_sq_wqe_combo *wqe_combo)
+{
+	struct hinic3_sq_task *task = wqe_combo->task;
+	struct hinic3_offload_info *offload_info = &wqe_info->offload_info;
+
+	task->pkt_info0 = 0;
+	task->pkt_info0 |= SQ_TASK_INFO0_SET(offload_info->inner_l4_en, INNER_L4_EN);
+	task->pkt_info0 |= SQ_TASK_INFO0_SET(offload_info->inner_l3_en, INNER_L3_EN);
+	task->pkt_info0 |= SQ_TASK_INFO0_SET(offload_info->encapsulation, TUNNEL_FLAG);
+	task->pkt_info0 |= SQ_TASK_INFO0_SET(offload_info->out_l3_en, OUT_L3_EN);
+	task->pkt_info0 |= SQ_TASK_INFO0_SET(offload_info->out_l4_en, OUT_L4_EN);
+	task->pkt_info0 = hinic3_hw_be32(task->pkt_info0);
+
+	if (wqe_combo->task_type == SQ_WQE_TASKSECT_16BYTES) {
+		task->ip_identify = 0;
+		task->pkt_info2 = 0;
+		task->vlan_offload = 0;
+		task->vlan_offload = SQ_TASK_INFO3_SET(offload_info->vlan_tag, VLAN_TAG) |
+							 SQ_TASK_INFO3_SET(offload_info->vlan_sel, VLAN_TYPE) |
+							 SQ_TASK_INFO3_SET(offload_info->vlan_valid, VLAN_TAG_VALID);
+		task->vlan_offload = hinic3_hw_be32(task->vlan_offload);
+	}
+}
+
+void hinic3_tx_set_compact_task_offload(struct hinic3_wqe_info *wqe_info,
+					struct hinic3_sq_wqe_combo *wqe_combo)
+{
+	struct hinic3_sq_task *task = wqe_combo->task;
+	struct hinic3_offload_info *offload_info = &wqe_info->offload_info;
+
+	task->pkt_info0 = 0;
+	wqe_combo->task->pkt_info0 =
+			SQ_TASK_INFO_SET(offload_info->out_l3_en, OUT_L3_EN) |
+			SQ_TASK_INFO_SET(offload_info->out_l4_en, OUT_L4_EN) |
+			SQ_TASK_INFO_SET(offload_info->inner_l3_en, INNER_L3_EN) |
+			SQ_TASK_INFO_SET(offload_info->inner_l4_en, INNER_L4_EN) |
+			SQ_TASK_INFO_SET(offload_info->vlan_valid, VLAN_VALID) |
+			SQ_TASK_INFO_SET(offload_info->vlan_sel, VLAN_SEL) |
+			SQ_TASK_INFO_SET(offload_info->vlan_tag, VLAN_TAG);
+
+	task->pkt_info0 = hinic3_hw_be32(task->pkt_info0);
+}
+
 static bool hinic3_vxlan_out_udp_cksum_needed(hinic3_ip_cs_handler_t *ip_handler, uint8_t *pkt_data,
 	struct rte_mbuf *mbuf) {
 	struct rte_udp_hdr *udp_hdr = NULL;
@@ -1325,7 +1369,6 @@ static void hinic3_prepare_sq_ctrl(struct hinic3_sq_wqe_combo *wqe_combo,
 
 	wqe_desc->queue_info = wqe_info->queue_info;
 	wqe_desc->queue_info |= SQ_CTRL_QUEUE_INFO_SET(1U, UC);
-	wqe_desc->queue_info |= SQ_CTRL_QUEUE_INFO_SET(1U, TCPUDP_CS);
 
 	if (!SQ_CTRL_QUEUE_INFO_GET(wqe_desc->queue_info, MSS)) {
 		wqe_desc->queue_info |=

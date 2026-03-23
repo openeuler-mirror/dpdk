@@ -146,14 +146,13 @@ enum hinic3_fw_ver_type {
 #define MGMT_MSG_CMD_OP_SET	1
 #define MGMT_MSG_CMD_OP_GET	0
 
-#define COMM_MAX_FEATURE_QWORD	4
 struct comm_cmd_feature_nego {
 	struct mgmt_msg_head head;
 
 	u16 func_id;
 	u8 opcode; /* 1: set, 0: get */
 	u8 rsvd;
-	u64 s_feature[COMM_MAX_FEATURE_QWORD];
+	u64 s_feature[HINIC3_MAX_FEATURE_QWORD];
 };
 
 #define HINIC3_FW_VERSION_LEN		16

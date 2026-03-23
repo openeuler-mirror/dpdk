@@ -16,6 +16,7 @@ struct hinic3_mbox;
 struct hinic3_msg_pf_to_mgmt;
 
 #define MGMT_VERSION_MAX_LEN		32
+#define IS_QPOOL_MODE(nic_dev) ((nic_dev)->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL)
 
 enum hinic3_set_arm_type {
 	HINIC3_SET_ARM_CMDQ,
@@ -100,6 +101,8 @@ struct hinic3_hw_stats {
 
 #define HINIC3_SUPPORT_ONLY_ENHANCE_CMDQ(hwdev) \
 	(((struct hinic3_hwdev *)hwdev)->features[0] & HINIC3_F_ONLY_ENHANCE_CMDQ)
+#define HINIC3_IS_USE_REAL_RX_BUF_SIZE(hwdev) \
+	(((struct hinic3_hwdev *)hwdev)->features[0] & HINIC3_F_USE_REAL_RX_BUF_SIZE)
 
 struct nic_cmd_chip_fault_stats {
 	u32 offset;

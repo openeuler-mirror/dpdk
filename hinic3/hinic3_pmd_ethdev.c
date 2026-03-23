@@ -30,6 +30,7 @@
 #include "base/hinic3_pmd_mbox.h"
 #include "base/hinic3_pmd_nic_event.h"
 #include "mml/hinic3_pmd_mml_lib.h"
+#include "stn/hinic3_stn_cmdq.h"
 #include "hinic3_pmd_nic_io.h"
 #include "hinic3_pmd_tx.h"
 #include "hinic3_pmd_rx.h"
@@ -907,14 +908,16 @@ hinic3_rx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_rxq *rxq,
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_hwdev *hwdev = nic_dev->hwdev;
 	const struct rte_memzone *rq_mz = NULL;
-	const struct rte_memzone *cqe_mz = NULL;
+	const struct rte_memzone *cqe_mz = NULL; /**< normal cqe */
+	const struct rte_memzone *ci_mz = NULL; /**< compact cqe */
 	const struct rte_memzone *pi_mz = NULL;
 	u32 queue_buf_size;
 	void *db_addr = NULL;
 	int wqe_count;
 	int err;
+	int ci_mz_size = sizeof(*rxq->rq_ci), ci_mz_align = RTE_CACHE_LINE_SIZE;
 
-	if (hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
+	if (IS_QPOOL_MODE(nic_dev)) {
 		/* step1 alloc template */
 		if (qid == 0) {
 			err = hinic3_alloc_template(nic_dev);
@@ -975,28 +978,45 @@ hinic3_rx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_rxq *rxq,
 		goto alloc_rx_info_fail;
 	}
 
-	cqe_mz = hinic3_dma_zone_reserve(dev, "hinic3_cqe_mz", qid,
-					 rxq->q_depth * sizeof(*rxq->rx_cqe),
-					 RTE_CACHE_LINE_SIZE, (int)socket_id);
-	if (!cqe_mz) {
-		PMD_DRV_LOG(ERR, "Allocate cqe mem zone failed, dev_name: %s",
-			    dev->data->name);
-		err = -ENOMEM;
-		goto alloc_cqe_ci_mz_fail;
-	}
-	memset(cqe_mz->addr, 0, rxq->q_depth * sizeof(*rxq->rx_cqe));
-	rxq->cqe_mz = cqe_mz;
-	rxq->cqe_start_paddr = cqe_mz->iova;
-	rxq->cqe_start_vaddr = cqe_mz->addr;
-	rxq->rx_cqe = (struct hinic3_rq_cqe *)rxq->cqe_start_vaddr;
+	if (HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev) ||
+	    HINIC3_SUPPORT_RX_SW_COMPACT_CQE(nic_dev)) {
+		ci_mz = hinic3_dma_zone_reserve(dev, "hinic3_ci_mz", qid,
+						ci_mz_size, ci_mz_align, (int)socket_id);
 
-	/* step5 fill cqe dma addr*/
-	wqe_count = hinic3_rx_fill_wqe(rxq);
-	if (wqe_count != rxq->q_depth) {
-		PMD_DRV_LOG(ERR, "Fill rx wqe failed, wqe_count: %d, dev_name: %s",
-			    wqe_count, dev->data->name);
-		err = -ENOMEM;
-		goto fill_rx_wqe_fail;
+		if (!ci_mz) {
+			PMD_DRV_LOG(ERR, "Allocate ci mem zone failed, dev_name: %s", dev->data->name);
+			err = -ENOMEM;
+			hinic3_memzone_free(ci_mz);
+			goto alloc_cqe_ci_mz_fail;
+		}
+
+		memset(ci_mz->addr, 0, sizeof(*rxq->rq_ci));
+		rxq->rq_ci = (struct hinic3_rq_ci_wb *)ci_mz->addr;
+		rxq->rq_ci_paddr = ci_mz->iova;
+	} else {
+		cqe_mz = hinic3_dma_zone_reserve(dev, "hinic3_cqe_mz", qid,
+						rxq->q_depth * sizeof(*rxq->rx_cqe),
+						RTE_CACHE_LINE_SIZE, (int)socket_id);
+		if (!cqe_mz) {
+			PMD_DRV_LOG(ERR, "Allocate cqe mem zone failed, dev_name: %s",
+				dev->data->name);
+			err = -ENOMEM;
+			goto alloc_cqe_ci_mz_fail;
+		}
+		memset(cqe_mz->addr, 0, rxq->q_depth * sizeof(*rxq->rx_cqe));
+		rxq->cqe_mz = cqe_mz;
+		rxq->cqe_start_paddr = cqe_mz->iova;
+		rxq->cqe_start_vaddr = cqe_mz->addr;
+		rxq->rx_cqe = (struct hinic3_rq_cqe *)rxq->cqe_start_vaddr;
+
+		/* step5 fill cqe dma addr*/
+		wqe_count = hinic3_rx_fill_wqe(rxq);
+		if (wqe_count != rxq->q_depth) {
+			PMD_DRV_LOG(ERR, "Fill rx wqe failed, wqe_count: %d, dev_name: %s",
+				wqe_count, dev->data->name);
+			err = -ENOMEM;
+			goto fill_rx_wqe_fail;
+		}
 	}
 
 	return 0;
@@ -1142,10 +1162,16 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 		goto adjust_bufsize_fail;
 	}
 
-	if ((buf_size >= HINIC3_RX_BUF_SIZE_4K) && (buf_size < HINIC3_RX_BUF_SIZE_16K))
-		rxq->wqe_type = HINIC3_EXTEND_RQ_WQE;
-	else
-		rxq->wqe_type = HINIC3_NORMAL_RQ_WQE;
+	if (HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev) ||
+	    HINIC3_SUPPORT_RX_SW_COMPACT_CQE(nic_dev)) {
+		/* Default rx wqe type set to compact wqe if NIC supports compact rx CQE */
+		rxq->wqe_type = HINIC3_COMPACT_RQ_WQE;
+	} else {
+		if ((buf_size >= HINIC3_RX_BUF_SIZE_4K) && (buf_size < HINIC3_RX_BUF_SIZE_16K))
+			rxq->wqe_type = HINIC3_EXTEND_RQ_WQE;
+		else
+			rxq->wqe_type = HINIC3_NORMAL_RQ_WQE;
+	}
 
 	rxq->wqebb_shift = HINIC3_RQ_WQEBB_SHIFT + rxq->wqe_type;
 	rxq->wqebb_size = (u16)BIT(rxq->wqebb_shift);
@@ -4278,6 +4304,25 @@ static int hinic3_get_bifur_mode(const struct rte_pci_device *pci_dev)
 	return event.mode - '0';
 }
 
+static void hinic3_nic_tx_rx_ops_init(struct hinic3_nic_dev *nic_dev)
+{
+	if (HINIC3_SUPPORT_TX_WQE_COMPACT_TASK(nic_dev))
+		nic_dev->tx_rx_ops.nic_tx_set_wqe_offload = hinic3_tx_set_compact_task_offload;
+	else
+		nic_dev->tx_rx_ops.nic_tx_set_wqe_offload = hinic3_tx_set_normal_task_offload;
+
+	if (HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev) ||
+	    HINIC3_SUPPORT_RX_SW_COMPACT_CQE(nic_dev)) {
+		nic_dev->tx_rx_ops.nic_rx_get_cqe_info = hinic3_rx_get_compact_cqe_info;
+		nic_dev->tx_rx_ops.nic_rx_cqe_done = rx_integrated_cqe_done;
+		nic_dev->tx_rx_ops.nic_rx_poll_rq_empty = hinic3_poll_integrated_cqe_rq_empty;
+	} else {
+		nic_dev->tx_rx_ops.nic_rx_get_cqe_info = hinic3_rx_get_cqe_info;
+		nic_dev->tx_rx_ops.nic_rx_cqe_done = rx_separate_cqe_done;
+		nic_dev->tx_rx_ops.nic_rx_poll_rq_empty = hinic3_poll_rq_empty;
+	}
+}
+
 static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 {
 	struct hinic3_tcam_info *tcam_info = NULL;
@@ -4407,6 +4452,9 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 		goto get_cap_fail;
 	}
 
+	nic_dev->cmdq_ops = hinic3_nic_cmdq_get_stn_ops();
+	hinic3_nic_tx_rx_ops_init(nic_dev);
+
 	err = hinic3_init_sw_rxtxqs(nic_dev);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Init sw rxqs or txqs failed, dev_name: %s",
@@ -4525,7 +4573,7 @@ alloc_eth_addr_fail:
 	return err;
 }
 
-static int hinic3_qpool_func_init(struct rte_eth_dev *eth_dev, enum hinic3_qinfo_type mode)
+static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev, enum hinic3_qinfo_type mode)
 {
 	struct hinic3_tcam_info *tcam_info = NULL;
 	struct hinic3_nic_dev *nic_dev = NULL;
@@ -4644,6 +4692,9 @@ static int hinic3_qpool_func_init(struct rte_eth_dev *eth_dev, enum hinic3_qinfo
 		eth_dev->dev_ops = &hinic3_pmd_vf_ops;
 	else
 		eth_dev->dev_ops = &hinic3_pmd_ops;
+
+	nic_dev->cmdq_ops = hinic3_nic_cmdq_get_stn_ops();
+	hinic3_nic_tx_rx_ops_init(nic_dev);
 
 	err = hinic3_init_sw_rxtxqs(nic_dev);
 	if (err) {
@@ -4767,7 +4818,7 @@ static int hinic3_dev_init(struct rte_eth_dev *eth_dev)
 
 	mode = hinic3_get_bifur_mode(pci_dev);
 	if (mode == HINIC3_QINFO_TYPE_QPOOL)
-		err = hinic3_qpool_func_init(eth_dev, mode);
+		err = hinic3_func_init_qpool(eth_dev, mode);
 	else
 		err = hinic3_func_init(eth_dev);
 

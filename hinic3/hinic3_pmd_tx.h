@@ -33,6 +33,22 @@ struct hinic3_tx_offload_info {
 	u8 rsvd0;
 };
 
+/* sq wqe offload info */
+struct hinic3_offload_info {
+	u8 encapsulation;
+	u8 esp_next_proto;
+	u8 inner_l4_en;
+	u8 inner_l3_en;
+	u8 out_l4_en;
+	u8 out_l3_en;
+	u8 ipsec_offload;
+	u8 pkt_1588;
+	u8 vlan_sel;
+	u8 vlan_valid;
+	u16 vlan_tag;
+	u32 ip_identify;
+};
+
 /* tx wqe ctx */
 struct hinic3_wqe_info {
 	u8 around;
@@ -51,6 +67,7 @@ struct hinic3_wqe_info {
 	u16 rsvd1;
 
 	u32 queue_info;
+	struct hinic3_offload_info offload_info;
 };
 
 struct hinic3_sq_wqe_desc {
@@ -233,6 +250,37 @@ enum sq_wqe_tasksect_len_type {
 		(((val) >> SQ_TASK_INFO3_##member##_SHIFT) &	\
 		SQ_TASK_INFO3_##member##_MASK)
 
+/* compact wqe task field */
+#define SQ_TASK_INFO_PKT_1588_SHIFT		31
+#define SQ_TASK_INFO_IPSEC_PROTO_SHIFT		30
+#define SQ_TASK_INFO_OUT_L3_EN_SHIFT		28
+#define SQ_TASK_INFO_OUT_L4_EN_SHIFT		27
+#define SQ_TASK_INFO_INNER_L3_EN_SHIFT		25
+#define SQ_TASK_INFO_INNER_L4_EN_SHIFT		24
+#define SQ_TASK_INFO_ESP_NEXT_PROTO_SHIFT	22
+#define SQ_TASK_INFO_VLAN_VALID_SHIFT		19
+#define SQ_TASK_INFO_VLAN_SEL_SHIFT		16
+#define SQ_TASK_INFO_VLAN_TAG_SHIFT		0
+
+#define SQ_TASK_INFO_PKT_1588_MASK 		0x1U
+#define SQ_TASK_INFO_IPSEC_PROTO_MASK 		0x1U
+#define SQ_TASK_INFO_OUT_L3_EN_MASK 		0x1U
+#define SQ_TASK_INFO_OUT_L4_EN_MASK 		0x1U
+#define SQ_TASK_INFO_INNER_L3_EN_MASK 		0x1U
+#define SQ_TASK_INFO_INNER_L4_EN_MASK 		0x1U
+#define SQ_TASK_INFO_ESP_NEXT_PROTO_MASK 	0x3U
+#define SQ_TASK_INFO_VLAN_VALID_MASK 		0x1U
+#define SQ_TASK_INFO_VLAN_SEL_MASK 		0x7U
+#define SQ_TASK_INFO_VLAN_TAG_MASK 		0xFFFFU
+
+#define SQ_TASK_INFO_SET(val, member) \
+	(((u32)(val) & SQ_TASK_INFO_##member##_MASK) << \
+	SQ_TASK_INFO_##member##_SHIFT)
+
+#define SQ_TASK_INFO_GET(val, member) \
+	(((val) >> SQ_TASK_INFO_##member##_SHIFT) & \
+	SQ_TASK_INFO_##member##_MASK)
+
 enum hinic3_txq_status {
 	HINIC3_TXQ_STATUS_START = 0,
 	HINIC3_TXQ_STATUS_STOP,
@@ -354,6 +402,29 @@ int hinic3_stop_sq(struct hinic3_txq *txq);
 int hinic3_start_all_sqs(struct rte_eth_dev *eth_dev);
 
 int hinic3_tx_done_cleanup(void *txq, uint32_t free_cnt);
+
+/**
+ * Set wqe task section
+ *
+ * @param[in] wqe_info
+ *	 packet info parsed from mbuf
+ * @param[in] wqe_combo
+ * 	 the wqe need to format
+ */
+void hinic3_tx_set_normal_task_offload(struct hinic3_wqe_info *wqe_info,
+				       struct hinic3_sq_wqe_combo *wqe_combo);
+
+/**
+ * Set compact wqe task section
+ *
+ * @param[in] wqe_info
+ *	 packet info parsed from mbuf
+ * @param[in] wqe_combo
+ * 	 the wqe need to format
+ */
+void hinic3_tx_set_compact_task_offload(struct hinic3_wqe_info *wqe_info,
+					struct hinic3_sq_wqe_combo *wqe_combo);
+
 int hinic3_tx_burst_mode_get(struct rte_eth_dev *dev, uint16_t tx_queue_id, struct rte_eth_burst_mode *mode);
 #endif /* _HINIC3_PMD_TX_H_ */
 

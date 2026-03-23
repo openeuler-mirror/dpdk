@@ -17,37 +17,15 @@ cflags += ['-DHW_CONVERT_ENDIAN']
 cflags += ['-D__HINIC_HUAWEI_SECUREC__']
 cflags += ['-fPIC']
 cflags += ['-fstack-protector-strong']
+cflags += ['-DDPDK_22_11']
+cflags += ['-DDPDK_21_11']
+cflags += ['-DDPDK_20_11']
 
-dpdk_version = meson.project_version()
-if dpdk_version.substring(0,2) == '20'
-	cflags += ['-DDPDK_20_11']
-elif dpdk_version.substring(0,2) == '21'
-	cflags += ['-DDPDK_20_11']
-	cflags += ['-DDPDK_21_11']
-elif dpdk_version.substring(0,2) == '22'
-	cflags += ['-DDPDK_20_11']
-	cflags += ['-DDPDK_21_11']
-	cflags += ['-DDPDK_22_11']
-elif dpdk_version.substring(0,2) == '23'
-	cflags += ['-DDPDK_20_11']
-	cflags += ['-DDPDK_21_11']
-	cflags += ['-DDPDK_22_11']
-elif dpdk_version.substring(0,2) == '24'
-	cflags += ['-DDPDK_20_11']
-	cflags += ['-DDPDK_21_11']
-	cflags += ['-DDPDK_22_11']
-	cflags += ['-DDPDK_24_11']
-elif dpdk_version.substring(0,2) == '25'
-	cflags += ['-DDPDK_20_11']
-	cflags += ['-DDPDK_21_11']
-	cflags += ['-DDPDK_22_11']
-	cflags += ['-DDPDK_24_11']
-	cflags += ['-DDPDK_25_11']
-endif
 
 subdir('base')
 subdir('mml')
-objs = [base_objs] + [mml_objs]
+subdir('stn')
+objs = [base_objs] + [mml_objs] + [stn_objs]
 
 sources = files(
 	'hinic3_pmd_ethdev.c',
