@@ -2574,6 +2574,7 @@ hinic3_flow_create(struct rte_eth_dev          *dev,
 			ret = hinic3_rss_queue_set_indir_tbl(nic_dev->hwdev, indirtbl, HINIC3_RSS_INDIR_SIZE, template_entry->q_grp_id);
 			if (ret) {
 				PMD_DRV_LOG(ERR, "Set rss queue indir tbl failed");
+				TAILQ_REMOVE(&nic_dev->filter_fdir_rule_list, flow, node);
 				goto free_flow;
 			}
 		}
@@ -2592,7 +2593,6 @@ hinic3_flow_create(struct rte_eth_dev          *dev,
 free_flow:
 	if (filter_rules && filter_rules->template_entry != NULL)
 		hinic3_flow_release_rss_template(nic_dev, filter_rules->template_entry);
-	TAILQ_REMOVE(&nic_dev->filter_fdir_rule_list, flow, node);
 	rte_free(flow);
 	rte_free(filter_rules);
 
