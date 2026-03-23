@@ -1349,7 +1349,10 @@ u16 hinic3_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, u16 nb_pkts)
 	struct hinic3_sq_wqe_combo wqe_combo = {0};
 	struct hinic3_sq_wqe *sq_wqe = NULL;
 	struct hinic3_wqe_info wqe_info = {0};
-	u32 offload_err, free_cnt ;
+	u32 offload_err, free_cnt;
+	u64 total_segments = 0;
+	u64 header_len = 0;
+	u64 payload_len = 0;
 	u64 tx_bytes = 0;
 	u16 free_wqebb_cnt, nb_tx;
 	int err;
@@ -1443,6 +1446,14 @@ u16 hinic3_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, u16 nb_pkts)
 		if (wqe_combo.wqe_type != SQ_WQE_COMPACT_TYPE)
 			hinic3_prepare_sq_ctrl(&wqe_combo, &wqe_info);
 
+		if (mbuf_pkt->ol_flags & HINIC3_PKT_TX_TCP_SEG) {
+			header_len = mbuf_pkt->l2_len + mbuf_pkt->l3_len + mbuf_pkt->l4_len;
+			payload_len = mbuf_pkt->pkt_len - header_len;
+			total_segments += (payload_len + mbuf_pkt->tso_segsz - 1) / mbuf_pkt->tso_segsz;
+		} else {
+			total_segments += 1;
+		}
+
 		tx_bytes += mbuf_pkt->pkt_len;
 	}
 
@@ -1451,7 +1462,7 @@ u16 hinic3_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, u16 nb_pkts)
 		hinic3_write_db(txq->db_addr, txq->local_qid, (int)(txq->cos),
 				SQ_CFLAG_DP,
 				MASKED_QUEUE_IDX(txq, txq->prod_idx));
-		txq->txq_stats.packets += nb_tx;
+		txq->txq_stats.packets += total_segments;
 		txq->txq_stats.bytes += tx_bytes;
 	}
 	txq->txq_stats.burst_pkts = nb_tx;
