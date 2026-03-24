@@ -1800,7 +1800,7 @@ static void hinic3_enable_interrupt(struct rte_eth_dev *dev)
 	/* enable rte interrupt */
 
 	if (IS_QPOOL_MODE(nic_dev)) {
-		rte_intr_callback_unregister(PCI_DEV_TO_INTR_HANDLE(pci_dev),
+		rte_intr_callback_register(PCI_DEV_TO_INTR_HANDLE(pci_dev),
 				             hinic3_dev_interrupt_handler_qpool, (void *)dev);
 	} else {
 		rte_intr_enable(PCI_DEV_TO_INTR_HANDLE(pci_dev));
@@ -1977,6 +1977,9 @@ static int hinic3_dev_start_qpool(struct rte_eth_dev *eth_dev)
 	/* reset rx and tx queue */
 	hinic3_reset_rx_queue(eth_dev);
 	hinic3_reset_tx_queue(eth_dev);
+
+	/* reset qps resource */
+	hinic3_flush_assign_qps_res(nic_dev->hwdev);
 
 	/* Init txq and rxq context */
 	err = hinic3_init_qp_ctxts(nic_dev);
@@ -2297,10 +2300,14 @@ static void hinic3_dev_stop(struct rte_eth_dev *dev)
 		/* Clean root context */
 		hinic3_free_qp_ctxts(nic_dev->hwdev);
 
-		/* Free all tx and rx mbufs */
-		hinic3_free_all_txq_mbufs(nic_dev);
-		hinic3_free_all_rxq_mbufs(nic_dev);
+	} else {
+		hinic3_flush_txqs(nic_dev);
+		hinic3_flush_assign_qps_res(nic_dev->hwdev);
 	}
+
+	/* Free all tx and rx mbufs */
+	hinic3_free_all_txq_mbufs(nic_dev);
+	hinic3_free_all_rxq_mbufs(nic_dev);
 
 	/* Free mempool */
 	hinic3_copy_mempool_uninit(nic_dev);
