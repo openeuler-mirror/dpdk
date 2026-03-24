@@ -1192,8 +1192,8 @@ int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table, u32 indir_table_size
 	struct hinic3_nic_dev *nic_dev = NULL;
 	struct hinic3_cmd_buf *cmd_buf = NULL;
 	struct nic_rss_indirect_tbl *nic_indir_tbl = NULL;
+	struct nic_rss_indirect_tbl_user_data *indir_tbl_udata = NULL;
 	struct hinic3_indir_tbl_qid_lqid *entry = NULL;
-	u16 rss_temp_id, rss_node_id, rss_inst_id;
 	u16 *indir_tbl = NULL;
 	int err;
 	u32 i;
@@ -1212,14 +1212,12 @@ int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table, u32 indir_table_size
 		nic_dev = ((struct hinic3_hwdev *)hwdev)->dev_handle;
 		nic_indir_tbl = (struct nic_rss_indirect_tbl *)cmd_buf->buf;
 		memset(nic_indir_tbl, 0, sizeof(struct nic_rss_indirect_tbl));
-		hinic3_mgmt_get_rss_id(hwdev, nic_dev->hwdev->qpool_qgrp_id, &rss_temp_id, &rss_node_id, &rss_inst_id);
-		nic_indir_tbl->dw0.bs.op_code = 1;
-		nic_indir_tbl->dw1.fdir_rss.rss_instance_id = rss_inst_id;
-		nic_indir_tbl->dw1.fdir_rss.rss_temp_id = rss_temp_id;
-		nic_indir_tbl->dw1.fdir_rss.rss_node_id = rss_node_id;
 
-		nic_indir_tbl->dw0.value = cpu_to_be32(nic_indir_tbl->dw0.value);
-		nic_indir_tbl->dw1.value = cpu_to_be32(nic_indir_tbl->dw1.value);
+		indir_tbl_udata = (struct nic_rss_indirect_tbl_user_data *)&nic_indir_tbl->dw0.user_data;
+		indir_tbl_udata->qgrp_id = nic_dev->hwdev->qpool_qgrp_id - HINIC3_QGRP_START_INDEX;
+		indir_tbl_udata->op_code = 1;
+
+		nic_indir_tbl->dw0.user_data = cpu_to_be32(nic_indir_tbl->dw0.user_data);
 
 		err = hinic3_rss_get_indir_tbl_qpool(nic_indir_tbl, nic_dev->fd);
 	} else {
@@ -1242,6 +1240,7 @@ int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table, u32 indir_table_size
 
 	if (((struct hinic3_hwdev *)hwdev)->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
 		for (i = 0; i < indir_table_size; i++) {
+			PMD_DRV_LOG(ERR, "i: %d, *(indir_tbl + i): %d", i, *(indir_tbl + i));
 			entry = hinic3_find_by_local_qid(*(indir_tbl + i));
 			indir_table[i] = entry ? entry->q_id : 0xFFF;
 		}
@@ -1312,8 +1311,6 @@ int hinic3_rss_set_indir_tbl_qpool(void *hwdev, const u32 *indir_table, u32 indi
 
 	struct rte_eth_dev * eth_dev = (struct rte_eth_dev *)(((struct hinic3_hwdev *)hwdev)->eth_dev);
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
-
-	indir_tbl->dw0.bs.qgrp_id = hinic3_global_func_id(nic_dev->hwdev);
 
 	for (i = 0; i < indir_table_size; i++)
 		indir_tbl->entry[i] = (u16)(*(indir_table + i));
@@ -2334,6 +2331,7 @@ int
 hinic3_rss_queue_set_indir_tbl(void *hwdev, const u32 *indir_table, u32 indir_table_size, u16 q_grp_id)
 {
 	struct nic_rss_indirect_tbl *indir_tbl = NULL;
+	struct nic_rss_indirect_tbl_user_data *indir_tbl_udata = NULL;
 	struct hinic3_cmd_buf *cmd_buf = NULL;
 	u32 i, size;
 	u32 *temp = NULL;
@@ -2352,9 +2350,10 @@ hinic3_rss_queue_set_indir_tbl(void *hwdev, const u32 *indir_table, u32 indir_ta
 	cmd_buf->size = sizeof(struct nic_rss_indirect_tbl);
 	indir_tbl = (struct nic_rss_indirect_tbl *)cmd_buf->buf;
 	memset(indir_tbl, 0, sizeof(*indir_tbl));
-	indir_tbl->dw0.bs.qgrp_id = q_grp_id - HINIC3_QGRP_START_INDEX;
-	indir_tbl->dw0.bs.op_code = 1;
-	indir_tbl->dw0.value = cpu_to_be32(indir_tbl->dw0.value);
+	indir_tbl_udata = (struct nic_rss_indirect_tbl_user_data *)&indir_tbl->dw0.user_data;
+	indir_tbl_udata->qgrp_id = q_grp_id - HINIC3_QGRP_START_INDEX;
+	indir_tbl_udata->op_code = 1;
+	indir_tbl->dw0.user_data = cpu_to_be32(indir_tbl->dw0.user_data);
 
 	for (i = 0; i < indir_table_size; i++)
 		indir_tbl->entry[i] = (u16)(*(indir_table + i));

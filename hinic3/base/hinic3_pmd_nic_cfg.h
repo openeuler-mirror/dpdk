@@ -1008,7 +1008,7 @@ struct hinic3_tcam_result {
 	union {
 		u32 queue_num;
 		struct {
-			u32 func_id : 10;
+			u32 id : 10;
 			u32 rsvd0 : 6;
 			u32 action : 8;
 			u32 rsvd1 : 8;

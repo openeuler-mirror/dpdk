@@ -530,7 +530,7 @@ static int hinic3_cmd_modify_tx_queue_ctx(struct hinic3_nic_dev *nic_dev,
 	msg_to_kernel.npu_cmd.ack_type = HINIC3_ACK_TYPE_CMDQ;
 
 	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
-	if (err < 0)
+	if (err != 0)
 		PMD_DRV_LOG(ERR, "Modify tx queue ctx error: %d.", errno);
 	return err;
 }
