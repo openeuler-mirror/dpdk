@@ -50,7 +50,11 @@ tar -xf dpdk-21.11.9.tar.xz
   ```
 
 ### 3.4 编译
-进入dpdk-hinic3目录，请用户按需选择进行安装编译：
+进入dpdk-hinic3目录，用户可使用驱动提供的安装脚本`install.sh`按需选择进行安装编译。
+
+>**说明：**
+> - 此处../dpdk-stable-21.11.9需替换为实际的dpdk版本及路径
+> - 安装脚本会自动检测目标DPDK目录是否为Git仓库，如果不是，会自动初始化Git。
 
 ### SP200&SP600 网卡
 **普通场景**
@@ -70,11 +74,6 @@ sh install.sh ../dpdk-stable-21.11.9 build
 sh install.sh ../dpdk-stable-21.11.9 install bifur
 sh install.sh ../dpdk-stable-21.11.9 build generic
 ```
-安装脚本会自动检测目标DPDK目录是否为Git仓库，如果不是，会自动初始化Git。
-
-安装脚本会自动判断 DPDK 版本：
-  - DPDK版本 = 19.11时，使用 `make` 编译。
-  - DPDK版本 ≥ 20.11， 使用 `meson + ninja` 编译。
 
 ---
 
@@ -86,7 +85,7 @@ sh install.sh ../dpdk-stable-21.11.9 build generic
 | Speed capabilities         | Y  | Y  | RSS key update        | Y  | Y  | Rx descriptor status |    |     |
 | Link speed configuration   | Y  | Y  | RSS reta update       | Y  | Y  | Tx descriptor status |    |     |
 | Link status                | Y  | Y  | Inner RSS             |    |    | Tx queue count       |    |     |
-| Link status event          |    |    | VMDq                  |    |    | Basic stats          | Y  | Y   |
+| Link status event          | Y  | Y  | VMDq                  |    |    | Basic stats          | Y  | Y   |
 | Removal event              |    |    | SR-IOV                | Y  | Y  | Extended stats       | Y  | Y   |
 | Queue status event         |    |    | DCB                   | Y  | Y  | Stats per queue      | Y  | Y   |
 | Rx interrupt               | Y  | Y  | VLAN filter           | Y  | Y  | FW version           | Y  | Y   |
@@ -106,8 +105,8 @@ sh install.sh ../dpdk-stable-21.11.9 build generic
 | TSO                  | Y | Y | Timestamp offload   |   |   | x86-32     |   |    |
 | Promiscuous mode     | Y | Y | MACsec offload      |   |   | x86-64     | Y | Y  |
 | Allmulticast mode    | Y | Y | Inner L3 checksum   | Y | Y | Usage doc  |   |    |
-| Unicast MAC filter   |   |   | Inner L4 checksum   | Y | Y | Design doc |   |    |
-| Multicast MAC filter |   |   | Packet type parsing | Y | Y | Perf doc   |   |    |
+| Unicast MAC filter   | Y | Y | Inner L4 checksum   | Y | Y | Design doc |   |    |
+| Multicast MAC filter | Y | Y | Packet type parsing | Y | Y | Perf doc   |   |    |
 | RSS hash             | Y | Y | Timesync            |   |   |            |   |    |
 ### 自定义特性
 | Feature         | PF  | VF |
@@ -118,8 +117,9 @@ sh install.sh ../dpdk-stable-21.11.9 build generic
 | Hairpin       | Y | Y  |
 
 
-## 5. 特别说明
+## 5. 使用约束
 DPU场景下发以下流规则时，会导致管理口的SSH登录报文被送到用户态，导致DPU断链。
+> 避免在该场景使用以下流规则。
 ```
 flow create port_id ingress pattern eth / ipv4 / end actions queue index queue_id / end
 flow create port_id ingress pattern eth / ipv4 / tcp / end actions queue index queue_id / end
