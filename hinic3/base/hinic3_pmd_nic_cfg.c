@@ -1240,7 +1240,6 @@ int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table, u32 indir_table_size
 
 	if (((struct hinic3_hwdev *)hwdev)->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
 		for (i = 0; i < indir_table_size; i++) {
-			PMD_DRV_LOG(ERR, "i: %d, *(indir_tbl + i): %d", i, *(indir_tbl + i));
 			entry = hinic3_find_by_local_qid(*(indir_tbl + i));
 			indir_table[i] = entry ? entry->q_id : 0xFFF;
 		}

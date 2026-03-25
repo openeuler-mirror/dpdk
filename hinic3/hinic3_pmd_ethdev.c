@@ -2124,13 +2124,6 @@ static int hinic3_dev_start_qpool(struct rte_eth_dev *eth_dev)
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
 	hinic3_get_func_rx_buf_size(nic_dev);
 
-	nic_features = hinic3_get_driver_feature(nic_dev);
-	/* You can update the features supported by the driver according to the
-	 * scenario here
-	 */
-	nic_features &= DEFAULT_DRV_FEATURE;
-	hinic3_update_driver_feature(nic_dev, nic_features);
-
 	err = hinic3_set_feature_to_hw(nic_dev->hwdev, &nic_dev->feature_cap, 1);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Failed to set nic features to hardware, err %d",
@@ -2233,6 +2226,13 @@ static int hinic3_dev_start(struct rte_eth_dev *eth_dev)
 	}
 	hinic3_update_msix_info(nic_dev->hwdev->hwif);
 
+	nic_features = hinic3_get_driver_feature(nic_dev);
+	/* You can update the features supported by the driver according to the
+	 * scenario here
+	 */
+	nic_features &= DEFAULT_DRV_FEATURE;
+	hinic3_update_driver_feature(nic_dev, nic_features);
+
 	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
 		return hinic3_dev_start_qpool(eth_dev);
 	}
@@ -2260,13 +2260,6 @@ static int hinic3_dev_start(struct rte_eth_dev *eth_dev)
 			    eth_dev->data->name);
 		goto init_func_tbl_fail;
 	}
-
-	nic_features = hinic3_get_driver_feature(nic_dev);
-	/* You can update the features supported by the driver according to the
-	 * scenario here
-	 */
-	nic_features &= DEFAULT_DRV_FEATURE;
-	hinic3_update_driver_feature(nic_dev, nic_features);
 
 	err = hinic3_set_feature_to_hw(nic_dev->hwdev, &nic_dev->feature_cap, 1);
 	if (err) {
@@ -4693,6 +4686,13 @@ static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev, enum hinic3_qinfo
 	else
 		eth_dev->dev_ops = &hinic3_pmd_ops;
 
+	err = hinic3_get_feature_from_hw(nic_dev->hwdev, &nic_dev->feature_cap, 1);
+	if (err) {
+		PMD_DRV_LOG(ERR, "Get nic feature from hardware failed, dev_name: %s",
+			    eth_dev->data->name);
+		goto get_cap_fail;
+	}
+
 	nic_dev->cmdq_ops = hinic3_nic_cmdq_get_stn_ops();
 	hinic3_nic_tx_rx_ops_init(nic_dev);
 
@@ -4777,6 +4777,7 @@ set_default_feature_fail:
 init_sw_rxtxqs_fail:
 	hinic3_free_nic_hwdev(nic_dev->hwdev);
 
+get_cap_fail:
 init_hwdev_fail:
 link_state_err:
 get_nic_fd_fail:
