@@ -262,6 +262,8 @@ struct hinic3_nic_dev {
 	u8 hinic3_function_mode;
 #endif
 	struct hinic3_ets *ets;
+
+	bool hinic3_offload_initialized;
 };
 
 extern const struct rte_flow_ops hinic3_flow_ops;

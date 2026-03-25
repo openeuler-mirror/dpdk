@@ -478,6 +478,13 @@ static int hinic3_dev_configure(struct rte_eth_dev *dev)
 	nic_dev->mtu_size = (u16)HINIC3_PKTLEN_TO_MTU(HINIC3_MAX_RX_PKT_LEN(dev->data->dev_conf.rxmode));
 	if (dev->data->dev_conf.rxmode.mq_mode & ETH_MQ_RX_RSS_FLAG)
 		dev->data->dev_conf.rxmode.offloads |= DEV_RX_OFFLOAD_RSS_HASH;
+
+	if (!nic_dev->hinic3_offload_initialized) {
+		dev->data->dev_conf.rxmode.offloads |= DEV_RX_OFFLOAD_SCATTER;
+		dev->data->dev_conf.txmode.offloads |= DEV_TX_OFFLOAD_MULTI_SEGS;
+		nic_dev->hinic3_offload_initialized = true;
+	}
+
 	/* Clear fdir filter */
 	if (!IS_QPOOL_MODE(nic_dev))
 		hinic3_free_fdir_filter(dev);
@@ -1309,6 +1316,7 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	txq->queue_buf_vaddr = sq_mz->addr;
 	txq->sq_head_addr = (u64)txq->queue_buf_vaddr;
 	txq->sq_bot_sge_addr = txq->sq_head_addr + queue_buf_size;
+	txq->multi_segs = (dev->data->dev_conf.txmode.offloads & DEV_TX_OFFLOAD_MULTI_SEGS) ? true : false;
 
 	err = hinic3_alloc_db_addr(hwdev, &db_addr, HINIC3_DB_TYPE_SQ);
 	if (err) {
@@ -2125,10 +2133,10 @@ static int hinic3_dev_start(struct rte_eth_dev *eth_dev)
 	}
 
 	/* Add scatter support if scatter mode should be enabled */
-	if (eth_dev->data->dev_conf.rxmode.offloads & DEV_RX_OFFLOAD_SCATTER ||
-		(nic_dev->mtu_size + HINIC3_ETH_OVERHEAD) > nic_dev->rx_buff_len) {
-			eth_dev->data->scattered_rx = true;
-		}
+	if (eth_dev->data->dev_conf.rxmode.offloads & DEV_RX_OFFLOAD_SCATTER)
+		eth_dev->data->scattered_rx = true;
+	else
+		eth_dev->data->scattered_rx = false;
 
 	/* enable dev interrupt */
 	hinic3_enable_interrupt(eth_dev);

@@ -1387,22 +1387,28 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 		/* 2. Prefetch next mbuf first 64B. */
 		rte_prefetch0(rxq->rx_info[sw_ci].mbuf);
 
-		/* 3. Jumbo frame process. */
-		if (likely(!eth_dev->data->scattered_rx || pkt_len <= rx_buf_len)) {
+		/* 3. Jumbo frame process */
+		if  (rte_eth_devices[rxq->port_id].data->scattered_rx) {
+			if (likely(!eth_dev->data->scattered_rx || pkt_len <= rx_buf_len)) {
+				rxm->data_len = (u16)pkt_len;
+				rxm->pkt_len = pkt_len;
+				hinic3_update_rq_local_ci(rxq, 1);
+			} else {
+				rxm->data_len = rx_buf_len;
+				rxm->pkt_len = rx_buf_len;
+
+				/*
+				* If receive jumbo, updating ci will be done by
+				* hinic3_recv_jumbo_pkt function.
+				*/
+				hinic3_update_rq_local_ci(rxq, 1);
+				hinic3_recv_jumbo_pkt(rxq, rxm, pkt_len - rx_buf_len);
+				sw_ci = hinic3_get_rq_local_ci(rxq);
+			}
+		} else {
 			rxm->data_len = (u16)pkt_len;
 			rxm->pkt_len = pkt_len;
 			hinic3_update_rq_local_ci(rxq, 1);
-		} else {
-			rxm->data_len = rx_buf_len;
-			rxm->pkt_len = rx_buf_len;
-
-			/*
-			 * If receive jumbo, updating ci will be done by
-			 * hinic3_recv_jumbo_pkt function.
-			 */
-			hinic3_update_rq_local_ci(rxq, 1);
-			hinic3_recv_jumbo_pkt(rxq, rxm, pkt_len - rx_buf_len);
-			sw_ci = hinic3_get_rq_local_ci(rxq);
 		}
 
 		rxm->data_off = RTE_PKTMBUF_HEADROOM + cqe_info.data_offset;
