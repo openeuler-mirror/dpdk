@@ -78,7 +78,7 @@
 #define HINIC3_SUPPORT_RX_HW_COMPACT_CQE(dev) \
 	HINIC3_SUPPORT_FEATURE(dev, RX_HW_COMPACT_CQE)
 #define HINIC3_SUPPORT_RX_SW_COMPACT_CQE(dev) \
-	HINIC3_SUPPORT_FEATURE(dev, RX_SW_COMPACT_CQE)	
+	HINIC3_SUPPORT_FEATURE(dev, RX_SW_COMPACT_CQE)
 #define HINIC3_SUPPORT_TX_WQE_COMPACT_TASK(dev) \
 	HINIC3_SUPPORT_FEATURE(dev, TX_WQE_COMPACT_TASK)
 #define HINIC3_SUPPORT_VXLAN_OFFLOAD(dev) \
@@ -922,7 +922,7 @@ struct mag_cmd_rss_indir_tbl {
 	u16 func_id;
 	u16 indir_table_size;
 	struct nic_rss_indirect_tbl rss_indir;
-	
+
 };
 
 typedef  struct {
@@ -1222,6 +1222,16 @@ struct nic_cmd_get_rss_id {
 	u16 rss_temp_id;
 	u16 rss_node_id;
 	u16 rss_instance_id;
+};
+
+#define FUNC_MAX_CLEAR_QP_NUM 256
+struct hinic3_cmd_clear_assign_qp_res {
+	struct mgmt_msg_head msg_head;
+
+	u16 func_id;
+	u16 qp_num;
+	u32 rsvd[4];
+	u16 qp[FUNC_MAX_CLEAR_QP_NUM];
 };
 
 int l2nic_msg_to_mgmt_sync(void *hwdev, u16 cmd, void *buf_in, u16 in_size,
@@ -1826,5 +1836,7 @@ int hinic3_mgmt_cfg_qgrp_id(void *hwdev, u8 opcode, u16 *q_grp_id);
 void hinic3_mgmt_get_rss_id(void *hwdev, u16 func_id, u16 *rss_temp_id, u16 *rss_node_id, u16 *rss_inst_id);
 
 int hinic3_rss_queue_set_indir_tbl(void *hwdev, const u32 *indir_table, u32 indir_table_size, u16 q_grp_id);
+
+void hinic3_flush_assign_qps_res(void *hwdev);
 
 #endif /* _HINIC3_PMD_NIC_CFG_H_ */

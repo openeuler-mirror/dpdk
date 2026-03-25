@@ -446,7 +446,7 @@ int hinic3_set_vport_enable(void *hwdev, bool enable)
 	en_state.state = enable ? 1 : 0;
 	en_state.num_qps = nic_dev->num_rqs;
 	en_state.rx_compact_wqe_en = HINIC3_SUPPORT_RX_SW_COMPACT_CQE(nic_dev);
-	
+
 	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_SET_VPORT_ENABLE,
 				     &en_state, sizeof(en_state),
 				     &en_state, &out_size);
@@ -1114,7 +1114,7 @@ static int hinic3_rss_get_indir_tbl_qpool(int fd, struct mag_cmd_rss_indir_tbl *
 		       cmd_indir_tbl, cmd_indir_tbl);
 	err = ioctl(fd, 0, &msg_to_kernel);
 	*indir_table_size = cmd_indir_tbl->indir_table_size;
-	
+
 	if (err < 0)
 		PMD_DRV_LOG(ERR, "Get qpool indir tbl err: %d.", err);
 	return err;
@@ -1149,7 +1149,7 @@ int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table)
 		cmd = nic_dev->cmdq_ops->prepare_cmd_buf_get_rss_indir_table(nic_dev, cmd_buf);
 		err = hinic3_cmdq_detail_resp(hwdev, HINIC3_MOD_L2NIC, cmd, cmd_buf, cmd_buf, 0);
 	}
-	
+
 	if (err) {
 		PMD_DRV_LOG(ERR, "Get rss indir table failed");
 		hinic3_free_cmd_buf(cmd_buf);
@@ -1617,7 +1617,7 @@ int hinic3_add_tcam_rule_by_kernel(void *hwdev, struct nic_ext_tcam_cfg_rule *tc
 		       sizeof(tcam_cmd), &tcam_cmd, &tcam_cmd);
 	err = ioctl(fd, 0, &msg_to_kernel);
 
-	if (err < 0) 
+	if (err < 0)
 		perror("Qpool tcam rule add");
 	return err;
 }
@@ -2115,4 +2115,33 @@ hinic3_rss_queue_set_indir_tbl(void *hwdev, const u32 *indir_table, u32 indir_ta
 	hinic3_free_cmd_buf(cmd_buf);
 
 	return err;
+}
+
+void hinic3_flush_assign_qps_res(void *hwdev)
+{
+	struct hinic3_cmd_clear_assign_qp_res sq_res = {0};
+	struct hinic3_nic_dev *nic_dev = NULL;
+	u16 out_size = sizeof(sq_res), q_id;
+	int err;
+
+	if (!hwdev)
+		return;
+
+	memset(&sq_res, 0, sizeof(sq_res));
+
+	nic_dev = ((struct hinic3_hwdev *)hwdev)->dev_handle;
+	sq_res.func_id = hinic3_global_func_id(hwdev);
+	sq_res.qp_num = nic_dev->num_sqs;
+	for (q_id = 0; q_id < nic_dev->num_sqs; q_id++) {
+		sq_res.qp[q_id] = nic_dev->txqs[q_id]->local_qid;
+	}
+
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_CLEAR_ASSIGN_QP_RES,
+				     &sq_res, sizeof(sq_res), &sq_res,
+				     &out_size);
+	if (err || !out_size || sq_res.msg_head.status)
+		PMD_DRV_LOG(ERR, "Clear sq resources failed, err: %d, status: 0x%x, out size: 0x%x",
+			    errno, sq_res.msg_head.status, out_size);
+
+	return;
 }
