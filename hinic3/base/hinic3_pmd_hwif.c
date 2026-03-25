@@ -587,7 +587,7 @@ static int hinic3_mmap_bar_addr(struct hinic3_hwdev *hwdev)
 			return -EFAULT;
 		}
 
-		mgmt_reg_base = mmap(NULL, 65536, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 3 << 12);
+		mgmt_reg_base = mmap(NULL, 131072, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 3 << 12);
 		if (mgmt_reg_base == MAP_FAILED) {
 			PMD_DRV_LOG(ERR, "Failed to map mgmt reg.");
 			return -EFAULT;
