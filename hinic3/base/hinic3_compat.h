@@ -317,12 +317,12 @@ static inline int hinic3_mutex_lock(pthread_mutex_t *pthreadmutex)
 		PMD_DRV_LOG(ERR, "Mutex lock failed, err: %d", err);
 	}
 
-	return err; /*lint !e454*/
+	return err;
 }
 
 static inline int hinic3_mutex_unlock(pthread_mutex_t *pthreadmutex)
 {
-	return pthread_mutex_unlock(pthreadmutex); /*lint !e455*/
+	return pthread_mutex_unlock(pthreadmutex);
 }
 
 #endif /* _HINIC3_COMPAT_H_ */

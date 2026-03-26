@@ -61,7 +61,7 @@ void *hinic3_read_wqe(struct hinic3_wq *wq, int num_wqebbs, u16 *cons_idx)
 
 	*cons_idx = curr_cons_idx;
 
-	return WQ_WQE_ADDR(wq, (u32)(*cons_idx)); /*lint !e647*/
+	return WQ_WQE_ADDR(wq, (u32)(*cons_idx));
 }
 
 int hinic3_cmdq_alloc(struct hinic3_wq *wq, void *dev, int cmdq_blocks,
@@ -125,7 +125,7 @@ void *hinic3_get_wqe(struct hinic3_wq *wq, int num_wqebbs, u16 *prod_idx)
 	wq->prod_idx += num_wqebbs;
 	*prod_idx = MASKED_WQE_IDX(wq, curr_prod_idx);
 
-	return WQ_WQE_ADDR(wq, (u32)(*prod_idx)); /*lint !e647*/
+	return WQ_WQE_ADDR(wq, (u32)(*prod_idx));
 }
 
 void hinic3_set_sge(struct hinic3_sge *sge, uint64_t addr, u32 len)

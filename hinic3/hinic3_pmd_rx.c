@@ -157,7 +157,7 @@ static inline void *hinic3_get_rq_wqe(struct hinic3_rxq *rxq, u16 *pi)
 	rxq->prod_idx++;
 	rxq->delta--;
 
-	return NIC_WQE_ADDR(rxq, *pi); /*lint !e701 !e647*/
+	return NIC_WQE_ADDR(rxq, *pi);
 }
 
 /**
@@ -198,7 +198,7 @@ static inline u16 hinic3_get_rq_local_pi(struct hinic3_rxq *rxq)
 static inline void hinic3_update_rq_hw_pi(struct hinic3_rxq *rxq, u16 pi)
 {
 	*rxq->pi_virt_addr =
-		(u16)cpu_to_be16((pi & rxq->q_mask) << rxq->wqe_type); /*lint !e701*/
+		(u16)cpu_to_be16((pi & rxq->q_mask) << rxq->wqe_type);
 }
 
 int hinic3_rx_fill_wqe(struct hinic3_rxq *rxq)
@@ -314,7 +314,7 @@ u32 hinic3_rx_fill_buffers(struct hinic3_rxq *rxq)
 
 		rx_info->mbuf = mb;
 
-		rq_wqe = NIC_WQE_ADDR(rxq, rxq->next_to_update); /*lint !e701 !e647*/
+		rq_wqe = NIC_WQE_ADDR(rxq, rxq->next_to_update);
 
 		/* Fill buffer address only */
 		if (rxq->wqe_type == HINIC3_EXTEND_RQ_WQE) {
@@ -335,7 +335,7 @@ u32 hinic3_rx_fill_buffers(struct hinic3_rxq *rxq)
 	if (likely(i > 0)) {
 #ifndef HINIC3_RQ_DB
 		hinic3_write_db(rxq->db_addr, rxq->q_id, 0, RQ_CFLAG_DP,
-				(u16)(rxq->next_to_update << rxq->wqe_type)); /*lint !e701*/
+				(u16)(rxq->next_to_update << rxq->wqe_type));
 		/* Init rq contxet used, need to optimization */
 		rxq->prod_idx = rxq->next_to_update;
 #else
@@ -599,7 +599,7 @@ int hinic3_update_rss_config(struct rte_eth_dev *dev,
 		rss_conf->rss_hf = HINIC3_RSS_OFFLOAD_ALL;
 	} else if ((rss_conf->rss_hf & HINIC3_RSS_OFFLOAD_ALL) == 0) {
 		PMD_DRV_LOG(ERR, "Does't support rss hash type: %"PRIu64,
-			    rss_conf->rss_hf); /*lint !e10*/
+			    rss_conf->rss_hf);
 		return -EINVAL;
 	}
 
@@ -1212,7 +1212,7 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 		lro_num = HINIC3_GET_RX_NUM_LRO(status);
 		if (unlikely(lro_num != 0)) {
 			rxm->ol_flags |= HINIC3_PKT_RX_LRO;
-			rxm->tso_segsz = pkt_len / lro_num; /*lint !e40 !e63*/
+			rxm->tso_segsz = pkt_len / lro_num;
 		}
 
 #ifdef HINIC3_TRAFFIC_BIFUR

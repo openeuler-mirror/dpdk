@@ -196,7 +196,7 @@ struct hinic3_nic_dev {
 	char dev_name[HINIC3_DEV_NAME_LEN];
 	const struct rte_pci_id *id_table;
 	u64 feature_cap;
-	u32 vfta[HINIC3_VFTA_SIZE]; /* VLAN bitmap */ /*lint !e40*/
+	u32 vfta[HINIC3_VFTA_SIZE]; /* VLAN bitmap */
 
 	u16 tcam_rule_nums;
 	u16 ethertype_rule_nums;

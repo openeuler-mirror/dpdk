@@ -133,7 +133,7 @@ static void *hinic3_get_sq_wqe(struct hinic3_txq *sq,
 			wqe_info->wrapped = (u8)(sq->q_depth - cur_pi);
 	}
 
-	return NIC_WQE_ADDR(sq, cur_pi); /*lint !e701 !e647*/
+	return NIC_WQE_ADDR(sq, cur_pi);
 }
 
 /**
@@ -945,7 +945,7 @@ static int hinic3_set_tx_offload(struct rte_mbuf *mbuf,
 
 		/* Set MSS value */
 		queue_info = SQ_CTRL_QUEUE_INFO_CLEAR(queue_info, MSS);
-		queue_info |= SQ_CTRL_QUEUE_INFO_SET(mbuf->tso_segsz, MSS); /*lint !e40*/
+		queue_info |= SQ_CTRL_QUEUE_INFO_SET(mbuf->tso_segsz, MSS);
 
 		/*
 		 * In VXLAN TSO scene, checksum of pseudo header in inner/outer L4 layers
@@ -1023,8 +1023,8 @@ static bool hinic3_is_tso_sge_valid(struct rte_mbuf *mbuf,
 		checked_len = 0;
 		total_len = 0;
 		first_len = 0;
-		adjust_mss = mbuf->tso_segsz >= TX_MSS_MIN ? /*lint !e40*/
-			     mbuf->tso_segsz : TX_MSS_MIN;   /*lint !e40*/
+		adjust_mss = mbuf->tso_segsz >= TX_MSS_MIN ?
+			     mbuf->tso_segsz : TX_MSS_MIN;
 		max_sges = HINIC3_NONTSO_PKT_MAX_SGE - 1;
 		limit_len = adjust_mss + wqe_info->payload_offset;
 
@@ -1063,7 +1063,7 @@ static bool hinic3_is_tso_sge_valid(struct rte_mbuf *mbuf,
 				if (left_len > HINIC3_COPY_MBUF_SIZE)
 					return false;
 				wqe_info->sge_cnt = (u16)(mbuf_head->nb_segs +
-						    i - left_sges); //lint !e834
+						    i - left_sges);
 				wqe_info->cpy_mbuf_cnt = 1;
 
 				return true;
@@ -1126,8 +1126,7 @@ static int hinic3_get_tx_offload(struct rte_mbuf *mbuf,
 	}
 
 	/* tso mbuf */
-	wqe_info->payload_offset = inner_l3_offset + mbuf->l3_len + /*lint !e40*/
-				   mbuf->l4_len;                    /*lint !e40*/
+	wqe_info->payload_offset = inner_l3_offset + mbuf->l3_len + mbuf->l4_len;
 
 	if (unlikely(HINIC3_TSO_SEG_NUM_INVALID(mbuf->nb_segs)))
 		/* too many mbuf segs */
@@ -1172,7 +1171,7 @@ static void *hinic3_copy_tx_mbuf(struct hinic3_nic_dev *nic_dev,
 	for (i = 0; i < sge_cnt; i++) {
 		rte_memcpy((u8 *)dst_mbuf->buf_addr + offset,
 			   (u8 *)mbuf->buf_addr + mbuf->data_off,
-			   mbuf->data_len); //lint !e124
+			   mbuf->data_len);
 		dst_mbuf->data_len += mbuf->data_len;
 		offset += mbuf->data_len;
 		mbuf = mbuf->next;
