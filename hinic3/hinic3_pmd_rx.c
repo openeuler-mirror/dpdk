@@ -1375,14 +1375,13 @@ rx_integrated_cqe_done(struct hinic3_rxq *rxq, volatile struct hinic3_rq_cqe **r
 u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 {
 	struct hinic3_rxq *rxq = rx_queue;
-	struct rte_eth_dev *eth_dev = (struct rte_eth_dev *)rxq->nic_dev->hwdev->eth_dev;
 	struct hinic3_nic_dev *nic_dev = rxq->nic_dev;
 	const struct hinic3_ptype_table * const ptype_tbl = nic_dev->ptype_tbl;
 	struct hinic3_rx_info *rx_info = NULL;
 	volatile struct hinic3_rq_cqe *rx_cqe = NULL;
 	struct hinic3_cqe_info cqe_info = {0};
 	struct rte_mbuf *rxm = NULL;
-	u16 sw_ci, rx_buf_len, wqebb_cnt = 0, pkts = 0;
+	u16 sw_ci, rx_buf_len, pkts = 0;
 	u32 pkt_len;
 	u64 rx_bytes = 0;
 #ifdef HINIC3_XSTAT_PROF_RX

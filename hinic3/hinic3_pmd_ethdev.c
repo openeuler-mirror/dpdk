@@ -2116,7 +2116,6 @@ static void hinic3_print_hairpin_map(struct rte_eth_dev *dev)
 static int hinic3_dev_start_qpool(struct rte_eth_dev *eth_dev)
 {
 	struct hinic3_nic_dev *nic_dev = NULL;
-	u64 nic_features;
 	struct hinic3_rxq *rxq = NULL;
 	int i;
 	int err;
