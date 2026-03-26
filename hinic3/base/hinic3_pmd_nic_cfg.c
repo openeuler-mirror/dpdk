@@ -1226,6 +1226,39 @@ int hinic3_rss_set_indir_tbl_qpool(void *hwdev, const u32 *indir_table)
 	}
 	return err;
 }
+#define HINIC3_MOD_OFFSET 8 
+#define HINIC3_CMD_OFFSET 16
+#define HINIC3_BUFSIZE_BASE_UNIT 1024
+#define HINIC3_HTN_ELB_TABLE 21
+#define MPU_MSG_FORMATE(api_type, mod, cmd) ((api_type) | (mod) << HINIC3_MOD_OFFSET | (cmd) << HINIC3_CMD_OFFSET)
+
+int hinic3_compare_kernel_mbuf_size(int fd, int mbuf_size, void *hwdev)
+{
+	struct msg_module msg_to_kernel = { 0 };
+	struct nic_cmd_dfx_sm_table htn_tbl_info = { 0 };
+	u32 msg_formate = MPU_MSG_FORMATE(API_TYPE_MBOX, HINIC3_MOD_L2NIC, HINIC3_NIC_CMD_GET_SM_TABLE);
+	htn_tbl_info.tbl_type = HINIC3_HTN_ELB_TABLE;
+	htn_tbl_info.args.func_tbl_arg.func_id = hinic3_global_func_id(hwdev);
+	int err = 0;
+
+	fill_ioctl_msg(&msg_to_kernel, SEND_TO_MPU, msg_formate,
+		       sizeof(struct nic_cmd_dfx_sm_table), sizeof(struct nic_cmd_dfx_sm_table),
+		       &htn_tbl_info, &htn_tbl_info);
+	err = ioctl(fd, 0, &msg_to_kernel);
+	if (err < 0) {
+		PMD_DRV_LOG(ERR, "get kernel mbuf size error: %d.", err);
+		return -EINVAL;
+	}
+	struct func_table_entry *tbl_buf = (struct func_table_entry *)(htn_tbl_info.tbl_buf);
+	if (mbuf_size != tbl_buf->dw2.bs.rq_wqe_buffer_size * HINIC3_BUFSIZE_BASE_UNIT) {	
+		PMD_DRV_LOG(ERR, 
+			    "mbuf size should be %d to follow kernel", 
+			    tbl_buf->dw2.bs.rq_wqe_buffer_size * HINIC3_BUFSIZE_BASE_UNIT);
+		return -EINVAL;
+	}
+	return 0;
+}
+
 
 static int hinic3_cmdq_set_rss_type(void *hwdev, struct hinic3_rss_type rss_type)
 {

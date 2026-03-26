@@ -1019,6 +1019,10 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	rxq->rx_buff_shift = ilog2(rxq->buf_len);
 
 	if (IS_QPOOL_MODE(nic_dev)) {
+		err = hinic3_compare_kernel_mbuf_size(nic_dev->fd, buf_size, nic_dev->hwdev);
+		if (err) 
+			goto mbuf_size_err;
+
 		err = hinic3_get_rx_user_queue(nic_dev, rxq);
 		if (err < 0) {
 			PMD_DRV_LOG(ERR, "Get rx queue failed, dev_name: %s", dev->data->name);
@@ -1134,6 +1138,7 @@ alloc_db_err_fail:
 
 alloc_pi_mz_fail:
 close_fd:
+mbuf_size_err:
 adjust_bufsize_fail:
 get_queue_depth_fail:
 	rte_free(rxq);
