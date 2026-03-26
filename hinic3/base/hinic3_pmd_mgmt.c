@@ -183,7 +183,7 @@ static int recv_mgmt_msg_handler(struct hinic3_msg_pf_to_mgmt *pf_to_mgmt,
 	}
 
 	offset  = seq_id * SEGMENT_LEN;
-	memcpy((u8 *)recv_msg->msg + offset, msg_body, seq_len); /*lint !e746*/
+	memcpy((u8 *)recv_msg->msg + offset, msg_body, seq_len);
 
 	if (!HINIC3_MSG_HEADER_GET(mbox_header, LAST))
 		return HINIC3_MSG_HANDLER_RES;

@@ -565,7 +565,7 @@ static int aeq_elem_handler(struct hinic3_eq *eq, u32 aeqe_desc,
 	if (EQ_ELEM_DESC_GET(aeqe_desc, SRC)) {
 		/* SW event uses only the first 8B */
 
-		memcpy(data, aeqe_pos->aeqe_data, HINIC3_AEQE_DATA_SIZE); /*lint !e746*/
+		memcpy(data, aeqe_pos->aeqe_data, HINIC3_AEQE_DATA_SIZE);
 		hinic3_be32_to_cpu(data, HINIC3_AEQE_DATA_SIZE);
 		/* Just support HINIC3_STATELESS_EVENT */
 		return hinic3_nic_sw_aeqe_handler(eq->hwdev, event, data);

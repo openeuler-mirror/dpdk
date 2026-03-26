@@ -335,7 +335,7 @@ static int recv_mbox_handler(struct hinic3_mbox *func_to_func, void *header,
 	}
 
 	pos = seq_id * MBOX_SEG_LEN;
-	memcpy((void *)((u8 *)recv_mbox->mbox + pos), (void *)mbox_body, /*lint !e746*/
+	memcpy((void *)((u8 *)recv_mbox->mbox + pos), (void *)mbox_body,
 	       (size_t)HINIC3_MSG_HEADER_GET(mbox_header, SEG_LEN));
 
 	if (!HINIC3_MSG_HEADER_GET(mbox_header, LAST))
@@ -1059,11 +1059,11 @@ static int init_mbox_info(struct hinic3_recv_mbox *mbox_info,
 
 	mbox_info->seq_id = SEQ_ID_MAX_VAL;
 
-	mbox_info->mbox = rte_zmalloc("mbox", (size_t)mbox_max_buf_sz, 1); /*lint !e571*/
+	mbox_info->mbox = rte_zmalloc("mbox", (size_t)mbox_max_buf_sz, 1);
 	if (!mbox_info->mbox)
 		return -ENOMEM;
 
-	mbox_info->buf_out = rte_zmalloc("mbox_buf_out", (size_t)mbox_max_buf_sz, 1); /*lint !e571*/
+	mbox_info->buf_out = rte_zmalloc("mbox_buf_out", (size_t)mbox_max_buf_sz, 1);
 	if (!mbox_info->buf_out) {
 		err = -ENOMEM;
 		goto alloc_buf_out_err;

@@ -1603,7 +1603,7 @@ int hinic3_set_rq_flush(void *hwdev, u16 q_id)
 	cmd_buf->size = sizeof(*rq_flush_msg);
 
 	rq_flush_msg = cmd_buf->buf;
-	rq_flush_msg->local_rq_id = q_id; //lint !e40 !e63
+	rq_flush_msg->local_rq_id = q_id;
 	rte_mb();
 	rq_flush_msg->value = cpu_to_be32(rq_flush_msg->value);
 

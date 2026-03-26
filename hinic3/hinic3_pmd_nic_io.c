@@ -301,7 +301,7 @@ static void hinic3_qp_prepare_cmdq_header(
 	qp_ctxt_hdr->start_qid = q_id;
 	qp_ctxt_hdr->rsvd = 0;
 
-	rte_mb(); /*lint !e746*/
+	rte_mb();
 
 	hinic3_cpu_to_be32(qp_ctxt_hdr, sizeof(*qp_ctxt_hdr));
 }
@@ -388,8 +388,8 @@ static void hinic3_rq_prepare_ctxt(struct hinic3_rxq *rq, struct hinic3_rq_ctxt 
 	u8 intr_disable;
 
 	/* RQ depth is in unit of 8 Bytes */
-	ci_start = (u16)((rq->cons_idx & rq->q_mask) << wqe_type); /*lint !e701*/
-	pi_start = (u16)((rq->prod_idx & rq->q_mask) << wqe_type); /*lint !e701*/
+	ci_start = (u16)((rq->cons_idx & rq->q_mask) << wqe_type);
+	pi_start = (u16)((rq->prod_idx & rq->q_mask) << wqe_type);
 
 	/* Read the first page from hardware table */
 	wq_page_addr = rq->queue_buf_paddr;
@@ -498,7 +498,7 @@ static int init_sq_ctxts(struct hinic3_nic_dev *nic_dev)
 		if (err || out_param != 0) {
 			PMD_DRV_LOG(ERR, "Set SQ ctxts failed, "
 				    "err: %d, out_param: %"PRIu64,
-				    err, out_param); /*lint !e10*/
+				    err, out_param);
 
 			err = -EFAULT;
 			break;
@@ -554,7 +554,7 @@ static int init_rq_ctxts(struct hinic3_nic_dev *nic_dev)
 		if (err || out_param != 0) {
 			PMD_DRV_LOG(ERR, "Set RQ ctxts failed, "
 				    "err: %d, out_param: %"PRIu64,
-				    err, out_param); /*lint !e10*/
+				    err, out_param);
 			err = -EFAULT;
 			break;
 		}
@@ -599,7 +599,7 @@ static int clean_queue_offload_ctxt(struct hinic3_nic_dev *nic_dev,
 				      cmd_buf, &out_param, 0);
 	if ((err) || (out_param)) {
 		PMD_DRV_LOG(ERR, "Clean queue offload ctxts failed, "
-			    "err: %d, out_param: %"PRIu64, err, out_param); /*lint !e10*/
+			    "err: %d, out_param: %"PRIu64, err, out_param);
 		err = -EFAULT;
 	}
 

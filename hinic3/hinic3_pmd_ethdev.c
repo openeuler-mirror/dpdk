@@ -499,7 +499,7 @@ static int hinic3_fw_version_get(struct rte_eth_dev *dev, char *fw_version,
 		return -EIO;
 	}
 
-	if (fw_size < strlen((char *)mgmt_ver) + 1)  /*lint !e574 !e776 !e746*/
+	if (fw_size < strlen((char *)mgmt_ver) + 1) 
 		return (strlen((char *)mgmt_ver) + 1);
 
 	(void)snprintf(fw_version, fw_size, "%s", mgmt_ver);
@@ -1184,7 +1184,7 @@ static int hinic3_dev_rx_queue_start(__rte_unused struct rte_eth_dev *dev,
 
 		dev->data->rx_queue_state[rq_id] = RTE_ETH_QUEUE_STATE_STARTED;
 	}
-	rc = hinic3_enable_rxq_fdir_filter(dev, (u32)rq_id, (u32)true); /*lint !e746*/
+	rc = hinic3_enable_rxq_fdir_filter(dev, (u32)rq_id, (u32)true);
 	if (rc) {
 		PMD_DRV_LOG(ERR, "Failed to enable rq : %d fdir filter.", rq_id);
 		return rc;
@@ -1210,7 +1210,7 @@ static int hinic3_dev_rx_queue_stop(__rte_unused struct rte_eth_dev *dev,
 
 		dev->data->rx_queue_state[rq_id] = RTE_ETH_QUEUE_STATE_STOPPED;
 	}
-	rc = hinic3_enable_rxq_fdir_filter(dev, (u32)rq_id, (u32)false); /*lint !e746*/
+	rc = hinic3_enable_rxq_fdir_filter(dev, (u32)rq_id, (u32)false);
 	if (rc) {
 		PMD_DRV_LOG(ERR, "Failed to disable rq : %d fdir filter.", rq_id);
 		return rc;
@@ -1258,7 +1258,7 @@ static int hinic3_dev_tx_queue_stop(__rte_unused struct rte_eth_dev *dev,
 int hinic3_dev_rx_queue_intr_enable(struct rte_eth_dev *dev,
 				    uint16_t queue_id)
 {
-	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(dev); /*lint !e507*/
+	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(dev);
 	struct rte_intr_handle *intr_handle = PCI_DEV_TO_INTR_HANDLE(pci_dev);
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	u16 msix_intr;
@@ -1279,7 +1279,7 @@ int hinic3_dev_rx_queue_intr_enable(struct rte_eth_dev *dev,
 
 int hinic3_dev_rx_queue_intr_disable(struct rte_eth_dev *dev, uint16_t queue_id)
 {
-	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(dev); /*lint !e507*/
+	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(dev);
 	struct rte_intr_handle *intr_handle = PCI_DEV_TO_INTR_HANDLE(pci_dev);
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	u16 msix_intr;
@@ -1493,7 +1493,7 @@ static void hinic3_remove_all_vlanid(struct rte_eth_dev *dev)
 static void hinic3_disable_interrupt(struct rte_eth_dev *dev)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
-	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(dev); /*lint !e507*/
+	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(dev);
 
 	if (!hinic3_get_bit(HINIC3_DEV_INIT, &nic_dev->dev_status))
 		return;
@@ -1507,7 +1507,7 @@ static void hinic3_disable_interrupt(struct rte_eth_dev *dev)
 static void hinic3_enable_interrupt(struct rte_eth_dev *dev)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
-	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(dev); /*lint !e507*/
+	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(dev);
 
 	if (!hinic3_get_bit(HINIC3_DEV_INIT, &nic_dev->dev_status))
 		return;
@@ -2024,7 +2024,7 @@ static void hinic3_dev_release(struct rte_eth_dev *eth_dev)
 {
 	struct hinic3_nic_dev *nic_dev =
 		HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
-	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev); /*lint !e507*/
+	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
 	int qid;
 
 	/* Release io resource */
@@ -3741,7 +3741,7 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 	struct rte_pci_device *pci_dev = NULL;
 	int err;
 
-	pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev); /*lint !e507*/
+	pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
 
 	/* EAL is secondary and eth_dev is already created */
 	if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
@@ -3828,7 +3828,7 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 		err = -ENOMEM;
 		goto alloc_hwdev_mem_fail;
 	}
-	nic_dev->hwdev->pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev); /*lint !e507*/
+	nic_dev->hwdev->pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
 	nic_dev->hwdev->dev_handle = nic_dev;
 	nic_dev->hwdev->eth_dev = eth_dev;
 	nic_dev->hwdev->port_id = eth_dev->data->port_id;
@@ -3981,7 +3981,7 @@ static int hinic3_dev_init(struct rte_eth_dev *eth_dev)
 {
 	struct rte_pci_device *pci_dev;
 
-	pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev); /*lint !e507*/
+	pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
 
 	PMD_DRV_LOG(INFO, "Initializing %.4x:%.2x:%.2x.%x in %s process",
 		    pci_dev->addr.domain, pci_dev->addr.bus,

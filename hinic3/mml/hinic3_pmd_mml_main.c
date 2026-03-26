@@ -53,13 +53,13 @@ cmd_separate(cmd_adapter_t *adapter, const char *buf_in, uint32_t in_size, char 
 	char *saveptr = NULL;
 	int i;
 
-	cmd_buf = calloc(1, in_size + 1); /*lint !e776*/
+	cmd_buf = calloc(1, in_size + 1);
 	if (!cmd_buf) {
 		PMD_DRV_LOG(ERR, "Failed to allocate cmd_buf\n");
 		return -UDA_ENONMEM;
 	}
 
-	(void)memcpy(cmd_buf, buf_in, in_size); /*lint !e776*/
+	(void)memcpy(cmd_buf, buf_in, in_size);
 
 	tmp = cmd_buf;
 	for (i = 1; i < MAX_ARGC; i++) {

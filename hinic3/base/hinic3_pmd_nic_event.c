@@ -395,7 +395,7 @@ u8 hinic3_nic_sw_aeqe_handler(__rte_unused void *hwdev, u8 event, u8 *data)
 {
 	PMD_DRV_LOG(ERR,
 		    "Received nic ucode aeq event type: 0x%x, data: %"PRIu64"",
-		    event, *((u64 *)data)); /*lint !e10*/
+		    event, *((u64 *)data));
 
 	return 0;
 }

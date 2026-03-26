@@ -1847,7 +1847,7 @@ hinic3_flow_parse_ethertype_pattern(__rte_unused struct rte_eth_dev *dev,
 				return -rte_errno;
 			}
 
-			if ((ether_mask->type & UINT16_MAX) != UINT16_MAX) { /*lint !e40*/
+			if ((ether_mask->type & UINT16_MAX) != UINT16_MAX) {
 				rte_flow_error_set(error, EINVAL,
 						HINIC3_FLOW_ERROR_TYPE_ITEM, flow_item,
 						"Invalid ethertype mask");
@@ -2662,7 +2662,7 @@ hinic3_flow_flush_fdir_filter(struct rte_eth_dev *dev)
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct rte_flow *flow;
 
-	while (true) { /*lint !e716*/
+	while (true) {
 		flow = TAILQ_FIRST(&nic_dev->filter_fdir_rule_list);
 		if (flow == NULL)
 			break;
@@ -2691,7 +2691,7 @@ hinic3_flow_flush_ethertype_filter(struct rte_eth_dev *dev)
 	struct rte_flow *flow;
 	int ret = 0;
 
-	while (true) { /*lint !e716*/
+	while (true) {
 		flow = TAILQ_FIRST(&nic_dev->filter_ethertype_list);
 		if (flow == NULL)
 			break;

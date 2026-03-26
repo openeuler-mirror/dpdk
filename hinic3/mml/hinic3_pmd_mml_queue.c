@@ -15,8 +15,8 @@ hinic3_pmd_mml_log_ret(char *show_str, int *show_len, const char *fmt, ...)
 	va_list args;
 	int ret = 0;
 
-	va_start(args, fmt);				 //lint !e530
-	ret = vsprintf(show_str + *show_len, fmt, args); /*lint !e776*/
+	va_start(args, fmt);
+	ret = vsprintf(show_str + *show_len, fmt, args);
 	va_end(args);
 
 	if (ret > 0) {

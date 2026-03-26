@@ -59,7 +59,7 @@ hinic3_dbg_get_rx_cqe_info(void *hwdev, uint16_t q_id, uint16_t idx, void *buf_o
 	if (q_id >= nic_dev->num_rqs || idx >= nic_dev->rxqs[q_id]->q_depth)
 		return -EFAULT;
 
-	(void)memcpy(buf_out, (void *)&(nic_dev->rxqs[q_id]->rx_cqe[idx]), /*lint !e746*/
+	(void)memcpy(buf_out, (void *)&(nic_dev->rxqs[q_id]->rx_cqe[idx]),
 		     sizeof(struct hinic3_rq_cqe));
 	*out_size = sizeof(struct hinic3_rq_cqe);
 
@@ -122,7 +122,7 @@ hinic3_dbg_get_sq_wqe_info(void *dev, u16 q_id, u16 idx, u16 wqebb_cnt, u8 *wqe,
 	offset = (u32)idx << txq->wqebb_shift;
 
 	(void)memcpy((void *)wqe, (void *)((u8 *)src_wqe + offset),
-		     (size_t)((u32)wqebb_cnt << txq->wqebb_shift)); /*lint !e647*/
+		     (size_t)((u32)wqebb_cnt << txq->wqebb_shift));
 
 	*wqe_size = (u16)((u32)wqebb_cnt << txq->wqebb_shift);
 	return 0;
@@ -152,7 +152,7 @@ hinic3_dbg_get_rq_wqe_info(void *dev, u16 q_id, u16 idx, u16 wqebb_cnt, u8 *wqe,
 	offset = (u32)idx << rxq->wqebb_shift;
 
 	(void)memcpy((void *)wqe, (void *)((u8 *)src_wqe + offset),
-		     (size_t)((u32)wqebb_cnt << rxq->wqebb_shift)); /*lint !e647*/
+		     (size_t)((u32)wqebb_cnt << rxq->wqebb_shift));
 
 	*wqe_size = (u16)((u32)wqebb_cnt << rxq->wqebb_shift);
 	return 0;

@@ -263,7 +263,7 @@ static void cmdq_set_db(struct hinic3_cmdq *cmdq,
 
 static void cmdq_wqe_fill(void *dst, void *src)
 {
-	memcpy((void *)((u8 *)dst + FIRST_DATA_TO_WRITE_LAST), /*lint !e746*/
+	memcpy((void *)((u8 *)dst + FIRST_DATA_TO_WRITE_LAST),
 	       (void *)((u8 *)src + FIRST_DATA_TO_WRITE_LAST),
 	       CMDQ_WQE_SIZE - FIRST_DATA_TO_WRITE_LAST);
 
@@ -759,7 +759,7 @@ int hinic3_cmdqs_init(struct hinic3_hwdev *hwdev)
 {
 	struct hinic3_cmdqs *cmdqs = NULL;
 	size_t saved_wqs_size;
-	char cmdq_pool_name[RTE_MEMPOOL_NAMESIZE]; /*lint !e834*/
+	char cmdq_pool_name[RTE_MEMPOOL_NAMESIZE];
 	int err;
 
 	cmdqs = rte_zmalloc(NULL, sizeof(*cmdqs), 0);
@@ -777,7 +777,7 @@ int hinic3_cmdqs_init(struct hinic3_hwdev *hwdev)
 		goto alloc_wqs_err;
 	}
 
-	memset(cmdq_pool_name, 0, RTE_MEMPOOL_NAMESIZE); /*lint !e834*/
+	memset(cmdq_pool_name, 0, RTE_MEMPOOL_NAMESIZE);
 	(void)snprintf(cmdq_pool_name, sizeof(cmdq_pool_name), "hinic3_cmdq_%u", hwdev->port_id);
 
 	cmdqs->cmd_buf_pool = rte_pktmbuf_pool_create(cmdq_pool_name,

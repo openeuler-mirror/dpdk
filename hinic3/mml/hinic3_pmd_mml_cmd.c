@@ -145,7 +145,7 @@ check_command_length(int argc, char **argv)
 	unsigned long long str_len = 0;
 
 	for (i = 1; i < argc; i++) {
-		str_len += strlen(argv[i]);	   //lint !e737
+		str_len += strlen(argv[i]);
 	}
 
 	if (str_len > COMMAND_MAX_STRING) {
@@ -260,7 +260,6 @@ major_cmd_option_check(major_cmd_t *major_cmd, char **argv, int *index)
 	return UDA_SUCCESS;
 }
 
-/*lint -e850*/
 static int
 major_command_parse(major_cmd_t *major_cmd, int argc, char **argv)
 {
@@ -276,7 +275,6 @@ major_command_parse(major_cmd_t *major_cmd, int argc, char **argv)
 	return UDA_SUCCESS;
 }
 
-/*lint +e850*/
 static int
 copy_reslut_to_buffer(void *buf_out, char *reslut, int len)
 {
