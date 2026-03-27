@@ -389,6 +389,7 @@ struct hinic3_txq {
 
 	struct rte_eth_hairpin_conf hairpin_conf;
 	bool is_hairpin;
+	bool multi_segs;
 
 	void *db_addr;
 
