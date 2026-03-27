@@ -24,6 +24,9 @@
 #define RQ_CTXT_CEQ_ATTR_INTR_ARM_MASK			0x1U
 #define RQ_CTXT_CEQ_ATTR_EN_MASK			0x1U
 
+/* Indicate ucode that this is an interrupt in the DPDK scenario. */
+#define RQ_CTXT_INVALID_INTR_NUM			0x1FFU
+
 #define SQ_CTXT_SIZE(num_sqs)	((u16)(sizeof(struct hinic3_qp_ctxt_header) \
 				+ (num_sqs) * sizeof(struct hinic3_sq_ctxt)))
 

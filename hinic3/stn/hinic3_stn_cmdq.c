@@ -142,17 +142,23 @@ static void prepare_sq_ctxt_drop_and_prefetch(struct hinic3_sq_ctxt *sq_ctxt)
 			      SQ_CTXT_PREF_SET(WQ_PREFETCH_THRESHOLD, CACHE_THRESHOLD);
 }
 
-static void prepare_rq_ctxt_ceq_and_prefetch(struct hinic3_rq_ctxt *rq_ctxt, u16 wqe_type,
-	u16 msix_entry_idx, bool support_rq_sw_compact_cqe, u8 intr_disable)
+static void
+prepare_rq_ctxt_ceq_and_prefetch(struct hinic3_rq_ctxt *rq_ctxt, u16 wqe_type,
+				 u16 msix_entry_idx,
+				 bool support_rq_sw_compact_cqe,
+				 u8 intr_disable)
 {
+	msix_entry_idx = (intr_disable == 0) ? msix_entry_idx : RQ_CTXT_INVALID_INTR_NUM;
 	rq_ctxt->ceq_attr = RQ_CTXT_CEQ_ATTR_SET(intr_disable, EN) |
 			    RQ_CTXT_CEQ_ATTR_SET(0, INTR_ARM) |
 			    RQ_CTXT_CEQ_ATTR_SET(msix_entry_idx, INTR);
+
 	if (wqe_type == HINIC3_COMPACT_RQ_WQE && support_rq_sw_compact_cqe) {
 		rq_ctxt->ceq_attr |= RQ_CTXT_CEQ_ATTR_SET(1, EN);
 		rq_ctxt->ceq_attr |= RQ_CTXT_CEQ_ATTR_SET(1, CI_WR);
 		rq_ctxt->ceq_attr |= RQ_CTXT_CEQ_ATTR_SET(1, INTR_ARM);
 	}
+
 	rq_ctxt->pref_cache = RQ_CTXT_PREF_SET(WQ_PREFETCH_MIN, CACHE_MIN) |
 			      RQ_CTXT_PREF_SET(WQ_PREFETCH_MAX, CACHE_MAX) |
 			      RQ_CTXT_PREF_SET(WQ_PREFETCH_THRESHOLD, CACHE_THRESHOLD);
