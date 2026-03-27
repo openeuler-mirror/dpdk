@@ -1273,7 +1273,7 @@ hinic3_rx_get_cqe_info(__rte_unused struct hinic3_rxq *rxq,
 	cqe_info->pkt_len = RQ_CQE_SGE_GET(dw1, LEN);
 	cqe_info->vlan_tag = RQ_CQE_SGE_GET(dw1, VLAN);
 
-	cqe_info->ptype = HINIC3_GET_RX_PTYPE_OFFLOAD(dw0);
+	cqe_info->ptype = HINIC3_GET_RX_PTYPE_OFFLOAD(dw2);
 	cqe_info->vlan_offload = RQ_CQE_OFFOLAD_TYPE_GET(dw2, VLAN_EN);
 	cqe_info->rss_type = RQ_CQE_OFFOLAD_TYPE_GET(dw2, RSS_TYPE);
 	cqe_info->rss_hash_value = dw3;

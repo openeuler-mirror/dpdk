@@ -430,20 +430,6 @@ static int hinic3_dev_configure(struct rte_eth_dev *dev)
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	int err;
 
-	struct stat telemetry_stat;
-	char path[PATH_MAX];
-	const char *runtime_dir = rte_eal_get_runtime_dir();
-	snprintf(path, sizeof(path), "%s/dpdk_telemetry.v2", runtime_dir);
-
-	err = stat(path, &telemetry_stat);
-	if (err) {
-		PMD_DRV_LOG(ERR, "dev config stat failed, path: %s, err: %d",
-			path, err);
-		return err;
-	}
-
-	nic_dev->global_id = telemetry_stat.st_ino;
-
 	nic_dev->num_sqs = dev->data->nb_tx_queues;
 	nic_dev->num_rqs = dev->data->nb_rx_queues;
 
@@ -574,14 +560,66 @@ static int hinic3_get_link_state_qpool(struct hinic3_nic_dev *nic_dev)
 	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NIC_DRIVER, GET_KERN_DEV_DATA,
 			in_size, out_size,
 			&cfg_kernel_data, &cfg_kernel_data);
-	
+
 	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
 	if (err < 0)
 		PMD_DRV_LOG(ERR, "Get kernel netdev state failed, err: %d.", err);
+
 	if (cfg_kernel_data.netdev_state == 0)
 		err = -EIO;
 
-	nic_dev->mtu_size = cfg_kernel_data.mtu;
+	return err;
+}
+
+static int hinic3_get_kernel_mtu(struct rte_eth_dev *eth_dev)
+{
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
+	struct drv_cmd_kernel_nic_data cfg_kernel_data  = { 0 };
+	struct msg_module msg_to_kernel = { 0 };
+	int err = 0;
+
+	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NIC_DRIVER, GET_KERN_DEV_DATA,
+		       sizeof(cfg_kernel_data), sizeof(cfg_kernel_data),
+		       &cfg_kernel_data, &cfg_kernel_data);
+
+	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
+	if (err < 0) {
+		PMD_DRV_LOG(WARNING, "Get kernel mtu failed");
+		return err;
+	}
+
+	eth_dev->data->mtu = cfg_kernel_data.mtu;
+
+	return err;
+}
+
+#define HINIC3_VERIFY_RX_DEPTH     1
+#define HINIC3_VERIFY_TX_DEPTH     0
+
+static int hinic3_verify_queue_depth(struct hinic3_nic_dev *nic_dev, u16 *q_depth, u16 type)
+{
+	struct drv_cmd_kernel_nic_data cfg_kernel_data  = { 0 };
+	struct msg_module msg_to_kernel = { 0 };
+	int err = 0;
+
+	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NIC_DRIVER, GET_KERN_DEV_DATA,
+		       sizeof(cfg_kernel_data), sizeof(cfg_kernel_data),
+		       &cfg_kernel_data, &cfg_kernel_data);
+
+	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
+	if (err < 0)
+		return err;
+
+	if (type == HINIC3_VERIFY_RX_DEPTH && *q_depth != cfg_kernel_data.rx_q_depth) {
+		*q_depth = cfg_kernel_data.rx_q_depth;
+		PMD_DRV_LOG(WARNING, "[WARNING] Rxq depth adjusted to %d to match kernel", *q_depth);
+	}
+
+	if (type == HINIC3_VERIFY_TX_DEPTH && *q_depth != cfg_kernel_data.tx_q_depth) {
+		*q_depth = cfg_kernel_data.tx_q_depth;
+		PMD_DRV_LOG(WARNING, "[WARNING] Txq depth adjusted to %d to match kernel", *q_depth);
+	}
+
 	return err;
 }
 
@@ -901,7 +939,7 @@ static int hinic3_release_user_queue(struct hinic3_nic_dev *nic_dev, int queue_i
 	return err;
 }
 
-static int 
+static int
 hinic3_rx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_rxq *rxq,
 			   uint16_t qid, unsigned int socket_id)
 {
@@ -1079,7 +1117,15 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	u32 buf_size;
 	int err;
 
-	if(nic_dev->hwdev->qinfo_type != HINIC3_QINFO_TYPE_QPOOL) {
+	if (IS_QPOOL_MODE(nic_dev)) {
+		err = hinic3_verify_queue_depth(nic_dev, &nb_desc, HINIC3_VERIFY_RX_DEPTH);
+		if (err) {
+			PMD_DRV_LOG(ERR, "Get queue depth failed");
+			goto get_queue_depth_fail;
+		}
+	}
+
+	if (nic_dev->hwdev->qinfo_type != HINIC3_QINFO_TYPE_QPOOL) {
 		/* Queue depth must be equal to queue 0 */
 		if (qid != 0 && (nb_desc != nic_dev->rxqs[0]->q_depth)) {
 			PMD_DRV_LOG(WARNING, "rxq%u depth:%u is not equal to queue0 depth:%u.\n",
@@ -1189,6 +1235,7 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	return 0;
 
 adjust_bufsize_fail:
+get_queue_depth_fail:
 	rte_free(rxq);
 	nic_dev->rxqs[qid] = NULL;
 
@@ -1220,7 +1267,7 @@ static int hinic3_get_tx_user_queue(struct hinic3_nic_dev *nic_dev, struct hinic
 	return err;
 }
 
-static int 
+static int
 hinic3_tx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_txq *txq,
 			   uint16_t qid, unsigned int socket_id)
 {
@@ -1333,7 +1380,15 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	u16 sq_depth, tx_free_thresh;
 	int err;
 
-	if(nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL){
+	if (IS_QPOOL_MODE(nic_dev)) {
+		err = hinic3_verify_queue_depth(nic_dev, &nb_desc, HINIC3_VERIFY_TX_DEPTH);
+		if (err) {
+			PMD_DRV_LOG(ERR, "Get queue depth failed");
+			goto get_queue_depth_fail;
+		}
+	}
+
+	if(nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
 		/* Queue depth must be equal to queue 0 */
 		if (qid != 0 && (nb_desc != nic_dev->txqs[0]->q_depth)) {
 			PMD_DRV_LOG(WARNING, "txq%u depth:%u is not equal to queue0 depth:%u.\n",
@@ -1411,6 +1466,11 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	dev->data->tx_queues[qid] = txq;
 
 	return 0;
+
+get_queue_depth_fail:
+	nic_dev->txqs[qid] = NULL;
+	rte_free(txq);
+	return err;
 
 }
 
@@ -1533,7 +1593,7 @@ static void hinic3_tx_queue_release(struct rte_eth_dev *dev, uint16_t queue_id)
 #endif
 }
 
-static int 
+static int
 hinic3_dev_rx_queue_start(struct rte_eth_dev *dev, uint16_t rq_id)
 {
 	struct hinic3_rxq *rxq = NULL;
@@ -1564,7 +1624,7 @@ hinic3_dev_rx_queue_start(struct rte_eth_dev *dev, uint16_t rq_id)
 	return 0;
 }
 
-static int 
+static int
 hinic3_dev_rx_queue_stop(struct rte_eth_dev *dev, uint16_t rq_id)
 {
 	struct hinic3_rxq *rxq = NULL;
@@ -2122,6 +2182,9 @@ static int hinic3_dev_start_qpool(struct rte_eth_dev *eth_dev)
 
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
 	hinic3_get_func_rx_buf_size(nic_dev);
+	err = hinic3_get_kernel_mtu(eth_dev);
+	if (err)
+		return err;
 
 	err = hinic3_set_feature_to_hw(nic_dev->hwdev, &nic_dev->feature_cap, 1);
 	if (err) {
@@ -2134,6 +2197,7 @@ static int hinic3_dev_start_qpool(struct rte_eth_dev *eth_dev)
 	hinic3_reset_tx_queue(eth_dev);
 
 	/* Init txq and rxq context */
+	hinic3_flush_assign_qps_res(nic_dev->hwdev);
 	err = hinic3_init_qp_ctxts(nic_dev);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Init qp context failed, dev_name: %s",
@@ -2142,7 +2206,7 @@ static int hinic3_dev_start_qpool(struct rte_eth_dev *eth_dev)
 	}
 
 	eth_dev->data->mtu = nic_dev->mtu_size;
-	
+
 	/* Set rx configuration: rss/checksum/rxmode/lro */
 	err = hinic3_set_rxtx_configure(eth_dev);
 	if (err) {
@@ -2237,7 +2301,7 @@ static int hinic3_dev_start(struct rte_eth_dev *eth_dev)
 	}
 
 	hinic3_disable_interrupt(eth_dev);
-	
+
 	err = hinic3_refill_hairpinq(eth_dev);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Refill hairpinq fail, dev_name: %s",
@@ -2925,12 +2989,11 @@ static int hinic3_dev_promiscuous_disable(struct rte_eth_dev *dev)
 	u32 rx_mode;
 	int err;
 
-	
 	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
 		PMD_DRV_LOG(WARNING, "Qpool mode not support set promiscuous disable.");
 		return -ENOTSUP;
 	}
-	
+
 	if (!(nic_dev->feature_cap & NIC_F_PROMISC)) {
 		PMD_DRV_LOG(ERR, "nic_dev: %s, port_id: %d, do not support vf promisc: %" PRIu64 "",
 			nic_dev->dev_name, dev->data->port_id, nic_dev->feature_cap);
@@ -3360,7 +3423,7 @@ hinic3_dev_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 	if (nic_dev->hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
 		q_num = (nic_dev->num_rqs < HINIC3_QUEUE_STAT_CNTRS) ?
 			nic_dev->num_rqs : HINIC3_QUEUE_STAT_CNTRS;
-		
+
 		for (i = 0; i < q_num; i++) {
 			rxq = nic_dev->rxqs[i];
 			stats->ipackets += rxq->rxq_stats.packets;
