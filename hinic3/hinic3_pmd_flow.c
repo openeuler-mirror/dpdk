@@ -1250,7 +1250,11 @@ static int hinic3_flow_set_normal_rss_action_config(struct rte_eth_dev *dev,
 		 * Otherwise, the RSS types of the func are used.
 		 */
 		if (act_r->types == 0) {
-			ret = hinic3_cmdq_set_rss_queue_type(nic_dev->hwdev, nic_dev->rss_type, q_grp_id, 0);
+			if (nic_dev->rss_state == HINIC3_RSS_DISABLE) {
+				nic_dev->rss_type.ipv4 = 1;
+				nic_dev->rss_type.ipv6 = 1;
+			}
+			ret = hinic3_cmdq_set_rss_queue_type(nic_dev->hwdev, nic_dev->rss_type, q_grp_id, HINIC3_RSS_ENABLE);
 		} else {
 			struct hinic3_rss_type rss_type = {0};
 			rss_type.ipv4 = (act_r->types & (ETH_RSS_IPV4 | ETH_RSS_FRAG_IPV4)) ? 1 : 0;
@@ -1259,7 +1263,7 @@ static int hinic3_flow_set_normal_rss_action_config(struct rte_eth_dev *dev,
 			rss_type.tcp_ipv6 = (act_r->types & ETH_RSS_NONFRAG_IPV6_TCP) ? 1 : 0;
 			rss_type.udp_ipv4 = (act_r->types & ETH_RSS_NONFRAG_IPV4_UDP) ? 1 : 0;
 			rss_type.udp_ipv6 = (act_r->types & ETH_RSS_NONFRAG_IPV6_UDP) ? 1 : 0;
-			ret = hinic3_cmdq_set_rss_queue_type(nic_dev->hwdev, rss_type, q_grp_id, 1);
+			ret = hinic3_cmdq_set_rss_queue_type(nic_dev->hwdev, rss_type, q_grp_id, HINIC3_RSS_ENABLE);
 		}
 
 		if (ret) {
