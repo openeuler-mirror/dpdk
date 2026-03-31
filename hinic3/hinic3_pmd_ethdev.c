@@ -52,7 +52,7 @@
 #define HINIC3_DEFAULT_RX_FREE_THRESH	32
 #define HINIC3_DEFAULT_TX_FREE_THRESH	32
 
-#define HINIC3_RX_WAIT_CYCLE_THRESH	500
+#define HINIC3_RX_WAIT_CYCLE_THRESH	150
 
 /*
  * Vlan_id is a 12 bit number. The VFTA array is actually a 4096 bit array,
