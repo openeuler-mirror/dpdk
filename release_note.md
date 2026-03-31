@@ -1,4 +1,31 @@
 # Release Notes
+## hinic3-26.0.rc1-0331.r1
+### 更新说明
+* **新流表适配func rss 关闭场景，规则rss能够正确使能**
+* **扩展hairpin tx mtu拦截能力**
+
+### 已解决问题
+无
+### 遗留问题
+无
+
+## hinic3-26.0.rc1-0307.r2
+### 更新说明
+* **新增FEC特性**
+
+  支持前向纠错（FEC）功能，通过在数据流中添加冗余校验信息，使接收端直接纠正传输错误，避免重传延迟。
+  
+  目前支持RS-FEC、Base-R FEC及关闭FEC三种模式，通过网卡硬件实现，提供模式配置与状态查询接口。
+  ```bash
+	show port 0 fec_mode # 查看FEC能力及当前模式
+	set port 0 fec_mode rs # 设置RS-FEC模式
+	set port 0 fec_mode baser # 设置Base-R FEC模式
+	set port 0 fec_mode off #关闭FEC
+  ```
+### 已解决问题
+无
+### 遗留问题
+无
 
 ## hinic3-26.0.rc1-0313.r1
 ### 更新说明
