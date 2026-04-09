@@ -956,13 +956,6 @@ hinic3_rx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_rxq *rxq,
 	int ci_mz_size = sizeof(*rxq->rq_ci), ci_mz_align = RTE_CACHE_LINE_SIZE;
 
 	if (IS_QPOOL_MODE(nic_dev)) {
-		/* step1 alloc template */
-		if (qid == 0) {
-			err = hinic3_alloc_template(nic_dev);
-			if (err < 0)
-				goto alloc_template_fail;
-		}
-
 		/* Get user queue */
 		err = hinic3_get_rx_user_queue(nic_dev, rxq);
 		if (err < 0)
@@ -1080,7 +1073,6 @@ get_rx_user_queue_fail:
 	if (hwdev->qinfo_type == HINIC3_QINFO_TYPE_QPOOL)
 		hinic3_release_template(nic_dev);
 
-alloc_template_fail:
 	rte_free(rxq);
 	nic_dev->rxqs[qid] = NULL;
 
@@ -4740,6 +4732,12 @@ static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev, enum hinic3_qinfo
 		goto init_hwdev_fail;
 	}
 
+ 	err = hinic3_alloc_template(nic_dev);
+ 	if (err < 0) {
+		PMD_DRV_LOG(ERR, "Qpool mode alloc RSS template failed, err: %d", err);
+ 		goto alloc_template_fail;
+	}
+
 	nic_dev->max_sqs = hinic3_func_max_sqs(nic_dev->hwdev);
 	nic_dev->max_rqs = hinic3_func_max_rqs(nic_dev->hwdev);
 
@@ -4840,6 +4838,7 @@ init_sw_rxtxqs_fail:
 	hinic3_free_nic_hwdev(nic_dev->hwdev);
 
 get_cap_fail:
+alloc_template_fail:
 init_hwdev_fail:
 link_state_err:
 get_nic_fd_fail:

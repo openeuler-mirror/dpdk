@@ -902,13 +902,27 @@ int hinic3_poll_integrated_cqe_rq_empty(struct hinic3_rxq *rxq)
 {
 	struct hinic3_rx_info *rx_info;
 	struct hinic3_rq_ci_wb rq_ci;
-	u16 sw_ci;
-	u16 hw_ci;
+	u16 sw_ci, sw_pi, hw_ci;
+	unsigned long timeout;
 
 	sw_ci = hinic3_get_rq_local_ci(rxq);
-	rq_ci.dw1.value = hinic3_hw_cpu32(__atomic_load_n(&rxq->rq_ci->dw1.value, __ATOMIC_ACQUIRE));
-	hw_ci = rq_ci.dw1.bs.hw_ci;
+	sw_pi = hinic3_get_rq_local_pi(rxq);
 
+	/* 等待硬件排空 */
+	timeout = msecs_to_jiffies(HINIC3_FLUSH_QUEUE_TIMEOUT) + jiffies;
+	do {
+		rq_ci.dw1.value = hinic3_hw_cpu32(__atomic_load_n(&rxq->rq_ci->dw1.value, __ATOMIC_ACQUIRE));
+		hw_ci = rq_ci.dw1.bs.hw_ci;
+		if (sw_pi == hw_ci)
+			break;
+
+		rte_delay_us(1);
+	} while (time_before(jiffies, timeout));
+
+	if (sw_pi != hw_ci)
+		return -EFAULT;
+
+	/* rx流程还未结束 */
 	while (sw_ci != hw_ci) {
 		rx_info = &rxq->rx_info[sw_ci];
 		rte_pktmbuf_free(rx_info->mbuf);
@@ -923,22 +937,36 @@ int hinic3_poll_integrated_cqe_rq_empty(struct hinic3_rxq *rxq)
 	return 0;
 }
 
-void hinic3_dump_cqe_status(struct hinic3_rxq *rxq, u32 *cqe_done_cnt,
-			    u32 *cqe_hole_cnt, u32 *head_ci,
-			    u32 *head_done)
+static void
+hinic3_dump_cqe_status(struct hinic3_rxq *rxq)
 {
-	u16 sw_ci;
+	volatile struct hinic3_rq_cqe *rx_cqe;
+	struct hinic3_rq_ci_wb rq_ci;
+	u16 sw_ci, sw_pi, hw_ci;
+	u32 head_ci, head_done;
 	u16 avail_pkts = 0;
 	u16 hit_done = 0;
 	u16 cqe_hole = 0;
 	u32 status;
-	volatile struct hinic3_rq_cqe *rx_cqe;
+
+	if (rxq->wqe_type == HINIC3_COMPACT_RQ_WQE) {
+		sw_ci = hinic3_get_rq_local_ci(rxq);
+		sw_pi = hinic3_get_rq_local_pi(rxq);
+		rq_ci.dw1.value = hinic3_hw_cpu32(__atomic_load_n(&rxq->rq_ci->dw1.value, __ATOMIC_ACQUIRE));
+		hw_ci = rq_ci.dw1.bs.hw_ci;
+		PMD_DRV_LOG(ERR,
+			"Poll rq empty timeout, eth_dev:%s, queue_idx:%d, mbuf_left:%d, sw_pi:%d, sw_ci:%d, hw_ci:%d",
+			rxq->nic_dev->dev_name, rxq->q_id,
+			rxq->q_depth - hinic3_get_rq_free_wqebb(rxq),
+			sw_pi, sw_ci, hw_ci);
+		return;
+	}
 
 	sw_ci = hinic3_get_rq_local_ci(rxq);
 	rx_cqe = &rxq->rx_cqe[sw_ci];
 	status = rx_cqe->status;
-	*head_done = HINIC3_GET_RX_DONE(status);
-	*head_ci = sw_ci;
+	head_done = HINIC3_GET_RX_DONE(status);
+	head_ci = sw_ci;
 
 	for (sw_ci = 0; sw_ci < rxq->q_depth; sw_ci++) {
 		rx_cqe = &rxq->rx_cqe[sw_ci];
@@ -959,16 +987,16 @@ void hinic3_dump_cqe_status(struct hinic3_rxq *rxq, u32 *cqe_done_cnt,
 		hit_done = 1;
 	}
 
-	*cqe_done_cnt = avail_pkts;
-	*cqe_hole_cnt = cqe_hole;
+	PMD_DRV_LOG(ERR, "Poll rq empty timeout, eth_dev:%s, queue_idx:%d, "
+		"mbuf_left:%d, cqe_done:%d, cqe_hole:%d, cqe[%d].done=%d\n",
+		rxq->nic_dev->dev_name, rxq->q_id,
+		rxq->q_depth - hinic3_get_rq_free_wqebb(rxq),
+		avail_pkts, cqe_hole, head_ci, head_done);
 }
 
 int hinic3_stop_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq)
 {
 	struct hinic3_nic_dev *nic_dev = rxq->nic_dev;
-	u32 cqe_done_cnt = 0;
-	u32 cqe_hole_cnt = 0;
-	u32 head_ci, head_done;
 	int err;
 
 	/* disable rxq intr */
@@ -1013,15 +1041,9 @@ int hinic3_stop_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq)
 		goto rq_flush_failed;
 	}
 
-	err = hinic3_poll_rq_empty(rxq);
+	err = nic_dev->tx_rx_ops.nic_rx_poll_rq_empty(rxq);
 	if (err) {
-		hinic3_dump_cqe_status(rxq, &cqe_done_cnt, &cqe_hole_cnt,
-				       &head_ci, &head_done);
-		PMD_DRV_LOG(ERR, "Poll rq empty timeout, eth_dev:%s, queue_idx:%d, "
-			    "mbuf_left:%d, cqe_done:%d, cqe_hole:%d, cqe[%d].done=%d\n",
-			    nic_dev->dev_name, rxq->q_id,
-			    rxq->q_depth - hinic3_get_rq_free_wqebb(rxq),
-			    cqe_done_cnt, cqe_hole_cnt, head_ci, head_done);
+		hinic3_dump_cqe_status(rxq);
 		goto poll_rq_failed;
 	}
 
