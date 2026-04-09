@@ -1,0 +1,19 @@
+ /* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright(c) 2022 Huawei Technologies Co., Ltd
+ */
+#ifndef HIOVS_ACL_API_H
+#define HIOVS_ACL_API_H
+
+enum hinic3_acl_act_type {
+    HINIC3_ACL_ACT_UPCALL,
+    HINIC3_ACL_ACT_UPCALL_TAG_DATA,
+    HINIC3_ACL_ACT_UPCALL_TAG_INDEX,
+    HINIC3_ACL_ACT_INDIRECT_HANDLE,
+    HINIC3_ACL_ACT_SET_VXLAN_RSVD0,
+    HINIC3_ACL_ACT_COUNT,
+    HINIC3_ACL_ACT_MIRROR_TX,
+    HINIC3_ACL_ACT_MIRROR_RX,
+    HINIC3_ACL_ACT_TYPE_MAX
+};
+
+#endif
