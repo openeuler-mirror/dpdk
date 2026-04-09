@@ -1,0 +1,67 @@
+#include "hinic3_driver_public.h"
+#include "hinic3_parse_agent_config.h"
+#define HINIC3_ERROR_CODE_LEN (int)(sizeof(hiovs_error_code_map_array) / sizeof(struct hiovs_error_code_map))
+#define HINIC3_FLEXDA_ERROR_CODE_LEN (int)(sizeof(hiovs_flexda_error_code_map_array) / sizeof(struct hiovs_error_code_map))
+
+
+static struct hiovs_error_code_map hiovs_error_code_map_array[] = {
+    {HINIC3_API_OK, 0},
+    {HIOVS_OK, 0},
+    {HINIC3_PORT_API_ERROR_BASE, -EPERM},
+    {HINIC3_FLOW_API_ERROR_BASE, -EINVAL},
+    {HINIC3_FLOW_API_KEY_ERROR, -EPERM},
+    {HINIC3_FLOW_API_ACTION_ERROR, -EPERM},
+    {HINIC3_FLOW_API_FLUSH_ERROR, -EBUSY},
+    {HINIC3_FLOW_API_CBPARM_ERROR, -EPERM},
+    {HINIC3_FLOW_API_FULL_ERROR, -EPERM},
+    {HINIC3_FLOW_API_SEND_ERROR, -EBUSY},
+    {HINIC3_FLOW_API_OTHER_ERROR, -EPERM},
+    {HINIC3_FLOW_API_TABLE_ERROR, -EPERM},
+    {HINIC3_FLOW_API_MASK_ERROR, -EPERM},
+    {HINIC3_FLOW_API_ERROR_END, -EPERM},
+    {HINIC3_CALLBACK_API_ERROR_BASE, -EPERM},
+    {HINIC3_BUM_API_ERROR_BASE, -EPERM},
+    {HINIC3_QOS_API_ERROR_BASE, -EPERM},
+    {HINIC3_GLOBAL_API_ERROR_BASE, -EPERM},
+    {HINIC3_API_ERROR_END, -EPERM},
+    {HIOVS_ERROR, -EPERM},
+    {HIOVS_EEXEC, -ENOMEM},
+};
+
+static struct hiovs_error_code_map hiovs_flexda_error_code_map_array[] = {
+    {HINIC3_API_OK, 0},
+    {HIOVS_OK, 0},
+    {HINIC3_PORT_API_ERROR_BASE, -HINIC3_PORT_API_ERROR_BASE},
+    {HINIC3_FLOW_API_ERROR_BASE, -HINIC3_FLOW_API_ERROR_BASE},
+    {HINIC3_FLOW_API_KEY_ERROR, -HINIC3_FLOW_API_KEY_ERROR},
+    {HINIC3_FLOW_API_ACTION_ERROR, -HINIC3_FLOW_API_ACTION_ERROR},
+    {HINIC3_FLOW_API_FLUSH_ERROR, -HINIC3_FLOW_API_FLUSH_ERROR},
+    {HINIC3_FLOW_API_CBPARM_ERROR, -HINIC3_FLOW_API_CBPARM_ERROR},
+    {HINIC3_FLOW_API_FULL_ERROR, -HINIC3_FLOW_API_FULL_ERROR},
+    {HINIC3_FLOW_API_SEND_ERROR, -HINIC3_FLOW_API_SEND_ERROR},
+    {HINIC3_FLOW_API_OTHER_ERROR, -HINIC3_FLOW_API_OTHER_ERROR},
+    {HINIC3_FLOW_API_TABLE_ERROR, -HINIC3_FLOW_API_TABLE_ERROR},
+    {HINIC3_FLOW_API_MASK_ERROR, -HINIC3_FLOW_API_MASK_ERROR},
+    {HINIC3_FLOW_API_ERROR_END, -HINIC3_FLOW_API_ERROR_END},
+    {HINIC3_CALLBACK_API_ERROR_BASE, -HINIC3_CALLBACK_API_ERROR_BASE},
+    {HINIC3_BUM_API_ERROR_BASE, -HINIC3_BUM_API_ERROR_BASE},
+    {HINIC3_QOS_API_ERROR_BASE, -HINIC3_QOS_API_ERROR_BASE},
+    {HINIC3_GLOBAL_API_ERROR_BASE, -HINIC3_GLOBAL_API_ERROR_BASE},
+    {HINIC3_API_ERROR_END, -HINIC3_API_ERROR_END},
+    {HIOVS_ERROR, -HIOVS_ERROR},
+    {HIOVS_EEXEC, -HIOVS_EEXEC},
+};
+
+struct hiovs_error_code_map *error_code_map = NULL;
+int array_size = 0;
+
+void hinic3_convert_error_code_init(void)
+{
+    if (hinic3_card_mod_get() == PROG_MODE) {
+        array_size = HINIC3_FLEXDA_ERROR_CODE_LEN;
+        error_code_map = hiovs_flexda_error_code_map_array;
+    } else {
+        array_size = HINIC3_ERROR_CODE_LEN;
+        error_code_map = hiovs_error_code_map_array;
+    }
+}

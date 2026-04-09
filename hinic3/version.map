@@ -1,0 +1,7 @@
+DPDK_22 {
+	global:
+	hinic3_agent_construct;
+	hinic3_agent_destruct;
+
+	local: *;
+};

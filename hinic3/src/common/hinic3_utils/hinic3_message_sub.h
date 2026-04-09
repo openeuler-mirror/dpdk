@@ -1,0 +1,352 @@
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright(c) 2021 Huawei Technologies Co., Ltd
+ */
+
+
+#ifndef HINIC3_MESSAGE_SUB_H
+#define HINIC3_MESSAGE_SUB_H
+
+#include "rte_pci.h"
+#include "hinic3_packets_types.h"
+#include "hinic3_init.h"
+
+#ifdef  __cplusplus
+extern "C" {
+#endif
+
+
+enum hinic3_bond_arg_type {
+    HINIC3_BOND_ARG_UPLINK_PCI_ID,
+    HINIC3_BOND_ARG_LACP_DEACTIVE_SLAVES,
+    HINIC3_BOND_ARG_BOND_MODE,
+    HINIC3_BOND_ARG_XMIT_HASH_POLICY,
+    HINIC3_BOND_ARG_SLAVES,
+    HINIC3_BOND_ARG_ACTIVE_SLAVE,
+    HINIC3_BOND_ARG_UPDELAY,
+    HINIC3_BOND_ARG_DOWNDELAY,
+    HINIC3_BOND_ARG_LACP_STATUS,
+    HINIC3_BOND_ARG_ACTIVE_MAC,
+    HINIC3_BOND_ARG_SLAVE_NAME,
+    HINIC3_BOND_ARG_SLAVE_STATUS,
+    HINIC3_BOND_ARG_SLAVE_SPEED,   /* Mbps */
+    HINIC3_BOND_ARG_SLAVE_DUPLEX,
+    HINIC3_BOND_ARG_SLAVE_MAC_ADDRESS,
+    HINIC3_BOND_ARG_SLAVE_MTU,
+    HINIC3_BOND_ARG_SLAVE_STATISTICS,
+    HINIC3_BOND_ARG_SLAVE_LACP_INFO,
+    HINIC3_BOND_ARG_SLAVE_MAY_ENABLE,
+    HINIC3_BOND_ARG_LACP_RATE,
+    HINIC3_BOND_ARG_SLAVE_PCI,
+    HINIC3_BOND_ARG_TYPE_MAX,
+};
+
+enum hinic3_global_action_solve_type {
+    GLOBAL_CFG_ACTION_DROP,
+    GLOBAL_CFG_ACTION_UPCALL,
+};
+
+enum hinic3_global_thread_mode {
+    GLOBAL_CFG_THREAD_MODE_ROUND_ROBIN = 0,
+    GLOBAL_CFG_THREAD_MODE_INTERRUPT,
+};
+
+enum hinic3_global_pmd_mode {
+    GLOBAL_CFG_PMD_MODE_STOP = 0,
+    GLOBAL_CFG_PMD_MODE_START = 1,
+};
+
+enum hinic3_gobal_vlan_ethtype {
+    GLOBAL_VLAN_ETHTYPE_8021Q = 0,
+};
+
+enum hinic3_gobal_action_check {
+    GLOBAL_ACTION_CHECK_OFF = 0,
+    GLOBAL_ACTION_CHECK_ON = 1,
+};
+
+enum hinic3_global_cfg_arg_type {
+    HINIC3_GLOBAL_CFG_ARG_VLAN_ETHTYPE,
+    HINIC3_GLOBAL_CFG_ARG_RSS_VF_NUM,
+    HINIC3_GLOBAL_CFG_ARG_VXLAN_LOCAL_IP,
+    HINIC3_GLOBAL_CFG_ARG_PCI_VENDOR_ID,
+    HINIC3_GLOBAL_CFG_ARG_PCI_DEVICE_ID,
+    HINIC3_GLOBAL_CFG_ARG_PCI_SUB_VENDOR_ID,
+    HINIC3_GLOBAL_CFG_ARG_PCI_SUB_DEVICE_ID,
+    HINIC3_GLOBAL_CFG_ARG_FM_CTL, /* default 0:limitless */
+    HINIC3_GLOBAL_CFG_ARG_INVALID_TCP_ACTION, /* default drop */
+    HINIC3_GLOBAL_CFG_ARG_IP_FRAG_ACTION, /* default upcall */
+    HINIC3_GLOBAL_CFG_ARG_THREAD_MODE, /* default GLOBAL_CFG_THREAD_MODE_ROUND_ROBIN */
+    HINIC3_GLOBAL_CFG_ARG_FLOW_AGE_TIME, /* GLOBAL_CFG_FLOW_AGE_TIME */
+    HINIC3_GLOBAL_CFG_ARG_PTHREAD_FDS,
+    HINIC3_GLOBAL_CFG_ARG_IPFRAG_UPCALL_RATELIMIT,
+    HINIC3_GLOBAL_CFG_ARG_VF_INFO,
+    HINIC3_GLOBAL_CFG_ARG_VF_ENABLE,
+    HINIC3_GLOBAL_CFG_ARG_PMD_MODE,
+    HINIC3_GLOBAL_CFG_ARG_PCAP_PROBE,
+    HINIC3_GLOBAL_GET_PCAP_PROBE_STATS,
+    HINIC3_GLOBAL_CFG_ARG_ETP,
+    HINIC3_GLOBAL_GET_ETP_STATS,
+    HINIC3_GLOBAL_CFG_ARG_PHY_DEV_INFO,
+    HINIC3_GLOBAL_CFG_ARG_ACTION_CHECKING,
+    HINIC3_GLOBAL_CFG_ARG_QUEUE_POOL_SIZE,
+    HINIC3_GLOBAL_CFG_ARG_VXLAN_CHECK_UPCALL,
+    HINIC3_GLOBAL_CFG_ARG_PREMAC,
+    HINIC3_GLOBAL_CFG_ARG_VXLAN_FLAGS,
+    HINIC3_GLOBAL_CFG_ARG_ETP_XTRACE,
+    HINIC3_GLOBAL_CFG_ARG_MIRROR_GLOBAL,
+    HINIC3_GLOBAL_CFG_ARG_MIRROR_SESSION_SET,
+    HINIC3_GLOBAL_CFG_ARG_MIRROR_SESSION_DEL,
+    HINIC3_GLOBAL_CFG_ARG_MIRROR_VTEP_SET,
+    HINIC3_GLOBAL_CFG_ARG_MIRROR_VTEP_DEL,
+    HINIC3_GLOBAL_CFG_ARG_MC_OFFLOAD_ENABLE,
+    HINIC3_GLOBAL_CFG_UNAGE_FLAG,
+    HINIC3_GLOBAL_CFG_VXLAN_DPORT,
+    HINIC3_GLOBAL_CFG_ARG_LATENCY_MOD,
+    HINIC3_GLOBAL_CFG_ARG_BOND_HASH_POLICY_CFG,
+    HINIC3_GLOBAL_CFG_ARG_TYPE_MAX,
+};
+
+enum hinic3_bum_ether_type_check {
+    ETHER_TYPE_CHECK_TRUE,
+    ETHER_TYPE_CHECK_FALSE,
+};
+
+/* Security filter supported attributes */
+enum hinic3_security_arg_type {
+    HINIC3_SECURITY_ARG_SRC_MAC,
+    HINIC3_SECURITY_ARG_BRD_RATELIMIT,
+    HINIC3_SECURITY_ARG_ETHER_TYPE_CHECK,
+    HINIC3_SECURITY_ARG_EXTRA_ETH_TYPE,
+    HINIC3_SECURITY_ARG_SRC_IPMAC,
+    HINIC3_SECURITY_ARG_FLOW_MISS_RATELIMIT,
+    HINIC3_SECURITY_ARG_IPSET,
+    HINIC3_SECURITY_ARG_TYPE_MAX,
+};
+
+/* QoS supported attributes */
+enum hinic3_qos_arg_type {
+    HINIC3_QOS_QUEUE_ARG_PRIORITY,
+    HINIC3_QOS_QUEUE_ARG_MIN_RATE,
+    HINIC3_QOS_QUEUE_ARG_MAX_RATE,
+    HINIC3_QOS_QUEUE_ARG_BURST,
+    HINIC3_QOS_QUEUE_ARG_WEIGHT,
+    HINIC3_QOS_ARG_TYPE_MAX,
+};
+
+enum hinic3_pthread_fd {
+    HINIC3_PTHREAD_AGING  = 0x10,
+    HINIC3_PTHREAD_ACK    = 0x11,
+    HINIC3_PTHREAD_HOTPLUG_CTX_CALL = 0x12,
+    HINIC3_PTHREAD_MAX,
+};
+
+enum hinic3_api_return_val {
+    HINIC3_API_OK = 0,
+    HIOVS_OK = 0,
+    HINIC3_PORT_API_ERROR_BASE       = 0x10,
+    HINIC3_FLOW_API_ERROR_BASE       = 0x20,
+    HINIC3_FLOW_API_KEY_ERROR        = HINIC3_FLOW_API_ERROR_BASE,
+    HINIC3_FLOW_API_ACTION_ERROR     = 0x21,
+    HINIC3_FLOW_API_FLUSH_ERROR      = 0x22,
+    HINIC3_FLOW_API_CBPARM_ERROR     = 0x23,
+    HINIC3_FLOW_API_FULL_ERROR       = 0x24,
+    HINIC3_FLOW_API_SEND_ERROR       = 0x25,
+    HINIC3_FLOW_API_OTHER_ERROR      = 0x26,
+    HINIC3_FLOW_API_TABLE_ERROR      = 0x27,
+    HINIC3_FLOW_API_MASK_ERROR       = 0x28,
+    HINIC3_FLOW_API_ERROR_END        = 0x29,
+    HINIC3_CALLBACK_API_ERROR_BASE   = 0x30,
+    HINIC3_BUM_API_ERROR_BASE        = 0x40,
+    HINIC3_QOS_API_ERROR_BASE        = 0x50,
+    HINIC3_GLOBAL_API_ERROR_BASE     = 0x60,
+    HINIC3_API_ERROR_END             = 0x61,
+    HIOVS_ERROR                     = -1,
+    HIOVS_EEXEC                     = -2,
+    HIOVS_EEMPTY                    = -4,
+};
+
+struct hinic3_port_capability {
+    uint32_t supported_upcall_qnum;
+    uint32_t rsvd;
+};
+
+#define HINIC3_UPCALL_INFO_RESERVE_SIZE (2)
+struct hinic3_port_upcall_info {
+    uint32_t total_upcall_qnum;
+    uint32_t left_upcall_qnum;
+    uint32_t rsvd[HINIC3_UPCALL_INFO_RESERVE_SIZE];
+};
+
+struct hinic3_pcap_probe_stats {
+    uint64_t pkts_drop_cnt;
+    uint64_t pkts_pcap_cnt;
+};
+
+/* Used for offload port */
+struct hinic3_pcap_probe_user_data {
+    uint32_t vport_id : 16; /* pcap_probe_vport_id  */
+    uint32_t rule_idx : 8;  /* pcap_probe_rule_idx */
+    uint32_t resv1 : 8;
+    uint32_t org_pkt_len : 16;
+    uint32_t resv2 : 16;
+};
+
+struct hinic3_pcap_probe_rule_q_map {
+    uint8_t rule_idx;
+    uint8_t hinic3_dpdk_port_id;
+    uint16_t queue_id;
+};
+
+
+/* start define bond args */
+enum bond_mode_type {
+    MODE_ACTIVE_BACKUP = 1,
+    MODE_BALANCE_XOR = 2,
+    MODE_8023AD = 4,
+};
+
+enum bond_hash_policy_type {
+    HASH_POLICY_L2 = 0,   /* layer 2 */
+    HASH_POLICY_L23,      /* layer 2 + 3 */
+    HASH_POLICY_L34,      /* layer 3 + 4 */
+    HASH_POLICY_L2_SMAC,  /* layer 2 + smac */
+    HASH_POLICY_L3_SIP,   /* layer 3 + sip */
+};
+
+enum bond_lacp_status_type {
+    STATUS_ACTIVE_NEGOTIATED,
+    STATUS_DISABLED,
+};
+
+enum bond_slave_status_type {
+    STATUS_UP,
+    STATUS_DOWN,
+};
+
+enum bond_slave_duplex_type {
+    SLAVE_DUPLEX_HALF,
+    SLAVE_DUPLEX_FULL,
+};
+
+enum bond_slave_statistics_type {
+    STATISTICS_RX_PKTS,
+    STATISTICS_RX_BYTES,
+    STATISTICS_RX_DROPPED,
+    STATISTICS_RX_ERRORS,
+    STATISTICS_TX_PKTS,
+    STATISTICS_TX_BYTES,
+    STATISTICS_TX_DROPPED,
+    STATISTICS_TX_ERRORS,
+    SLAVE_STATISTICS_RX_PDUS,
+    SLAVE_STATISTICS_TX_PDUS,
+    STATISTICS_RX_8023AD_DROPPED,
+    STATISTICS_TX_8023AD_DROPPED,
+    STATISTICS_UNKNOWN_PKT_8023AD_DROPPED,
+    STATISTICS_TYPE_MAX,
+};
+
+enum bond_slave_lacp_info_select_type {
+    SELECT_SELECTED,
+    SELECT_UNSELECTED,
+    SELECT_STANDBY,
+};
+
+enum bond_slave_lacp_info_lacp_time_type {
+    LACP_TIME_SLOW,
+    LACP_TIME_FAST,
+};
+
+enum bond_slave_lacp_info_type {
+    LACP_INFO_AGG_PORD_ID,
+    LACP_INFO_SELECT,
+    LACP_INFO_LACP_TIME,
+    LACP_INFO_ACTOR_SYS_ID,
+    LACP_INFO_ACTOR_PORT_PRIORITY,
+    LACP_INFO_ACTOR_PORT_NUM,
+    LACP_INFO_ACTOR_KEY,
+    LACP_INFO_ACTOR_SYS_PRIORITY,
+    LACP_INFO_ACTOR_STATE,
+    LACP_INFO_PARTNER_SYS_ID,
+    LACP_INFO_PARTNER_PORT_PRIORITY,
+    LACP_INFO_PARTNER_PORT_NUM,
+    LACP_INFO_PARTNER_KEY,
+    LACP_INFO_PARTNER_SYS_PRIORITY,
+    LACP_INFO_PARTNER_STATE,
+    LACP_INFO_TYPE_MAX,
+};
+
+
+enum hinic3_flow_arg_type {
+    HINIC3_FLOW_ARG_SW_UFID,
+    HINIC3_FLOW_ARG_CT_UFID,
+    HINIC3_FLOW_ARG_LIVE_TIME,
+    HINIC3_FLOW_ARG_PUT_RESULT,
+    HINIC3_FLOW_ARG_AGE,
+    HINIC3_FLOW_ARG_REVERSE_UFID,
+    HINIC3_FLOW_ARG_LOCAL_VXLAN,
+    HINIC3_FLOW_ARG_FLUSH_RESULT,
+    HINIC3_FLOW_PRIV_ARG_PMD_ID,
+    HINIC3_FLOW_ARG_OVS_CONN,  /* ct offload used, ovs_conn */
+    HINIC3_FLOW_ARG_CT_DIRECT, /* ct offload used, flow direction(reply or init) */
+    HINIC3_FLOW_PRIV_POLICY_FLAG,
+    HINIC3_FLOW_ARG_NO_CT_UFID,
+    HINIC3_FLOW_ARG_SW_UFID_CNT,
+    HINIC3_FLOW_ARG_TIME,
+    HINIC3_FLOW_ARG_FLOW_HASH,
+    HINIC3_FLOW_ARG_DP_HASH,
+    HINIC3_FLOW_ARG_MODIFY,
+    HINIC3_FLOW_ARG_POLICY_ID,
+    HINIC3_FLOW_ARG_TYPE_MAX,
+};
+
+struct hinic3_pkt_user_data {
+    uint32_t vport_id : 16;     /* Host order */
+    uint32_t traffic_type : 6;  /* See hinic3_pkt_user_data_traffic_type */
+    uint32_t slave_port_id : 2;
+    uint32_t l4_type : 3;       /* See hinic3_pkt_user_data_l4_type */
+    uint32_t l3_type_cos : 3;   /* Reuse for both RX/TX,Rx:See hinic3_pkt_user_data_l3_type,TX: cos */
+    uint32_t mac_type : 2;      /* See hinic3_pkt_user_data_mac_type */
+};
+
+enum hinic3_vlan_mode_type {
+    HINIC3_VLAN_MODE_ACCESS,
+    HINIC3_VLAN_MODE_TRUNK,
+};
+
+enum hinic3_port_arg_type {
+    HINIC3_PORT_ARG_VLAN_OL,
+    HINIC3_PORT_ARG_VLAN_TAG,
+    HINIC3_PORT_ARG_VLAN_MODE,
+    HINIC3_PORT_ARG_VNI,
+    HINIC3_PORT_ARG_DPDK_PORT_ID,
+    HINIC3_PORT_ARG_FAULT_STATS,
+    HINIC3_PORT_ARG_FAULT_FLUSH,
+    HINIC3_PORT_ARG_PORT_QUEUE_MAP,
+    HINIC3_PORT_ARG_GRO_ENABLE,
+    HINIC3_PORT_ARG_IPV6_GRO_ENABLE,
+    HINIC3_PORT_ARG_PORT_UPCALL_QUEUE_MAP,
+    HINIC3_PORT_ARG_BUCKET_ID,
+    HINIC3_PORT_ARG_MAX_QUEUE_NUM,
+    HINIC3_PORT_ARG_MIGRATE_TUNNEL_INFO,
+    HINIC3_PORT_ARG_MIGRATE_STATE,
+    HINIC3_PORT_ARG_PCI_ADDR,
+    HINIC3_PORT_ARG_BLOCK_START,
+    HINIC3_PORT_ARG_BLOCK_SIZE,
+    HINIC3_PORT_ARG_UPCALL_QUEUE_NUM,
+    HINIC3_PORT_ARG_UPCALL_REUSE,
+    HINIC3_PORT_ARG_INTR_EN,
+    HINIC3_PORT_ARG_FAKE_BDF,
+    HINIC3_PORT_ARG_LOCAL_LRO_EN,
+    HINIC3_PORT_ARG_IPV4_IP,
+    HINIC3_PORT_ARG_DEVICE_FEATURE,
+    HINIC3_PORT_ARG_QUEUE_SIZE,
+    HINIC3_PORT_ARG_NO_DRIVER_CHECK,
+    HINIC3_PORT_ARG_FUNCTION_ID,
+    HINIC3_PORT_ARG_TYPE_MAX,
+};
+
+#ifdef  __cplusplus
+}
+#endif
+
+#endif /* HINIC3_MESSAGE_SUB_H */
