@@ -181,7 +181,7 @@ enum hinic3_function_mode {
 
 #define DEFAULT_DRV_FEATURE 0x0BFC3FFF
 #define SP600_NIC_FEATURE   0x0003FFEF
-#define SP560_NIC_FEATURE   0x8809FFEF
+#define SP560_NIC_FEATURE   0x88C9FFEF
 
 TAILQ_HEAD(hinic3_ethertype_filter_list, rte_flow);
 TAILQ_HEAD(hinic3_fdir_rule_filter_list, rte_flow);

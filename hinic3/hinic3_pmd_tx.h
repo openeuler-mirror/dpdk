@@ -6,7 +6,7 @@
 #define _HINIC3_PMD_TX_H_
 
 #define MAX_SINGLE_SGE_SIZE		65536
-#define HINIC3_NONTSO_PKT_MAX_SGE	38 /* non-tso max sge 38 */
+#define HINIC3_NONTSO_PKT_MAX_SGE	32
 #define HINIC3_NONTSO_SEG_NUM_VALID(num)	\
 	((num) <= HINIC3_NONTSO_PKT_MAX_SGE)
 
@@ -33,6 +33,20 @@ struct hinic3_tx_offload_info {
 	u8 rsvd0;
 };
 
+/* sq wqe queue info */
+struct hinic3_queue_info {
+	u8 pri;
+	u8 uc;
+	u8 sctp;
+	u8 udp_dp_en;
+	u8 tso;
+	u8 ufo;
+	u8 payload_offset;
+	u8 pkt_type;
+	u16 mss;
+	u16 rsvd;
+};
+
 /* sq wqe offload info */
 struct hinic3_offload_info {
 	u8 encapsulation;
@@ -51,7 +65,7 @@ struct hinic3_offload_info {
 
 /* tx wqe ctx */
 struct hinic3_wqe_info {
-	u8 around;
+	u8 around; /**< Indicates whether the WQE is bypassed. */
 	u8 cpy_mbuf_cnt;
 	u16 sge_cnt;
 
@@ -59,14 +73,14 @@ struct hinic3_wqe_info {
 	u8 rsvd0;
 	u16 payload_offset;
 
-	u8 wrapped;
+	u8 rsvd1;
 	u8 owner;
 	u16 pi;
 
 	u16 wqebb_cnt;
-	u16 rsvd1;
+	u16 rsvd2;
 
-	u32 queue_info;
+	struct hinic3_queue_info queue_info;
 	struct hinic3_offload_info offload_info;
 };
 
@@ -79,7 +93,7 @@ struct hinic3_sq_wqe_desc {
 
 /*
  * Engine only pass first 12B TS field directly to uCode through metadata,
- * vlan_offoad is uesd for hardware when vlan insert in tx
+ * vlan_offoad is used for hardware when vlan insert in tx
  */
 struct hinic3_sq_task {
 	u32 pkt_info0;
@@ -122,8 +136,14 @@ struct hinic3_sq_wqe_combo {
 };
 
 /* SQ ctrl info */
-enum sq_wqe_data_format {
+enum sq_wqe_type {
 	SQ_NORMAL_WQE = 0,
+	SQ_DIRECT_WQE = 1,
+};
+
+enum sq_wqe_data_format {
+	SQ_WQE_SGL = 0,
+	SQ_WQE_INLINE_DATA = 1,
 };
 
 enum sq_wqe_ec_type {
@@ -134,7 +154,7 @@ enum sq_wqe_ec_type {
 #define COMPACT_WQE_MAX_CTRL_LEN		0x3FFF
 
 enum sq_wqe_tasksect_len_type {
-	SQ_WQE_TASKSECT_46BITS = 0,
+	SQ_WQE_TASKSECT_4BYTES = 0,
 	SQ_WQE_TASKSECT_16BYTES = 1,
 };
 
@@ -198,6 +218,33 @@ enum sq_wqe_tasksect_len_type {
 #define SQ_CTRL_QUEUE_INFO_CLEAR(val, member)	\
 	((val) & (~(SQ_CTRL_QUEUE_INFO_##member##_MASK << \
 	SQ_CTRL_QUEUE_INFO_##member##_SHIFT)))
+
+/* compact queue info */
+#define SQ_CTRL_COMPACT_QUEUE_INFO_PKT_TYPE_SHIFT	14
+#define SQ_CTRL_COMPACT_QUEUE_INFO_PLDOFF_SHIFT		16
+#define SQ_CTRL_COMPACT_QUEUE_INFO_UFO_SHIFT		24
+#define SQ_CTRL_COMPACT_QUEUE_INFO_TSO_SHIFT		25
+#define SQ_CTRL_COMPACT_QUEUE_INFO_UDP_DP_EN_SHIFT	26
+#define SQ_CTRL_COMPACT_QUEUE_INFO_SCTP_SHIFT		27
+
+#define SQ_CTRL_COMPACT_QUEUE_INFO_PKT_TYPE_MASK	0x3U
+#define SQ_CTRL_COMPACT_QUEUE_INFO_PLDOFF_MASK		0xFFU
+#define SQ_CTRL_COMPACT_QUEUE_INFO_UFO_MASK		0x1U
+#define SQ_CTRL_COMPACT_QUEUE_INFO_TSO_MASK		0x1U
+#define SQ_CTRL_COMPACT_QUEUE_INFO_UDP_DP_EN_MASK	0x1U
+#define SQ_CTRL_COMPACT_QUEUE_INFO_SCTP_MASK		0x1U
+
+#define SQ_CTRL_COMPACT_QUEUE_INFO_SET(val, member) \
+	(((u32)(val) & SQ_CTRL_COMPACT_QUEUE_INFO_##member##_MASK) << \
+	 SQ_CTRL_COMPACT_QUEUE_INFO_##member##_SHIFT)
+
+#define SQ_CTRL_COMPACT_QUEUE_INFO_GET(val, member) \
+	(((val) >> SQ_CTRL_COMPACT_QUEUE_INFO_##member##_SHIFT) & \
+	 SQ_CTRL_COMPACT_QUEUE_INFO_##member##_MASK)
+
+#define SQ_CTRL_COMPACT_QUEUE_INFO_CLEAR(val, member) \
+	((val) & (~(SQ_CTRL_COMPACT_QUEUE_INFO_##member##_MASK << \
+		    SQ_CTRL_COMPACT_QUEUE_INFO_##member##_SHIFT)))
 
 #define	SQ_TASK_INFO0_TUNNEL_FLAG_SHIFT		19
 #define	SQ_TASK_INFO0_ESP_NEXT_PROTO_SHIFT	22
@@ -327,6 +374,7 @@ struct hinic3_txq {
 
 	u16 q_id;
 	u16 local_qid;
+
 	u16 q_depth;
 	u16 q_mask;
 	u16 wqebb_size;
@@ -360,6 +408,9 @@ struct hinic3_txq {
 
 	u32 cos;
 
+	u8 tx_wqe_compact_task;
+	u8 rsvd[3];
+
 	struct hinic3_txq_stats txq_stats;
 #ifdef HINIC3_XSTAT_PROF_TX
 	uint64_t prof_tx_end_tsc; /* performance profiling */
@@ -374,9 +425,9 @@ struct hinic3_txq {
 #define IPV6_MAX_EXT_HDRS 9
 
 enum ip_version_index {
-    IPV4_INDEX = 0,
-    IPV6_INDEX = 1,
-    IP_INDEX_INVALID
+	IPV4_INDEX = 0,
+	IPV6_INDEX = 1,
+	IP_INDEX_INVALID
 };
 
 typedef struct {
@@ -426,5 +477,6 @@ void hinic3_tx_set_compact_task_offload(struct hinic3_wqe_info *wqe_info,
 					struct hinic3_sq_wqe_combo *wqe_combo);
 
 int hinic3_tx_burst_mode_get(struct rte_eth_dev *dev, uint16_t tx_queue_id, struct rte_eth_burst_mode *mode);
+
 #endif /* _HINIC3_PMD_TX_H_ */
 

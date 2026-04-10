@@ -1449,6 +1449,7 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 		txq->cos = nic_dev->dcb->txq_cos[qid];
 	else
 		txq->cos = nic_dev->default_cos;
+	txq->tx_wqe_compact_task = HINIC3_SUPPORT_TX_WQE_COMPACT_TASK(nic_dev);
 
 	err = hinic3_tx_queue_dma_create(dev, txq, qid, socket_id);
 	if (err)
