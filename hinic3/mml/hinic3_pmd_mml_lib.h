@@ -197,18 +197,6 @@ struct cdev_msg_head {
 	u32 rsvd;
 };
 
-struct nic_rss_indirect_tbl_user_data {
-#if defined(BYTE_ORDER) && (BYTE_ORDER == BIG_ENDIAN)
-	u32 op_code : 8; /* 0:old option 1:new fdir-rss */
-	u32 qgrp_id : 8; /* need add 2048 */
-	u32 rsvd : 16;
-#else
-	u32 rsvd : 16;
-	u32 qgrp_id : 8; /* need add 2048 */
-	u32 op_code : 8; /* 0:old option 1:new fdir-rss */
-#endif
-};
-
 struct nic_rss_indirect_tbl {
 	union {
 		struct {
@@ -223,7 +211,6 @@ struct nic_rss_indirect_tbl {
 #endif
 		} bs;
 		u32 value;
-		u32 user_data;
 	} dw0;
 	union {
 		struct {

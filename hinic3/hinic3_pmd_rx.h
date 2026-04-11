@@ -489,10 +489,6 @@ int hinic3_poll_integrated_cqe_rq_empty(struct hinic3_rxq *rxq);
 
 int hinic3_poll_rq_empty(struct hinic3_rxq *rxq);
 
-void hinic3_dump_cqe_status(struct hinic3_rxq *rxq, u32 *cqe_done_cnt,
-			    u32 *cqe_hole_cnt, u32 *head_ci,
-			    u32 *head_done);
-
 int hinic3_stop_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq);
 
 int hinic3_start_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq);
