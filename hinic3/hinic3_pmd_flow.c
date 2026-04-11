@@ -1151,7 +1151,7 @@ static hinic3_parse_filter_t hinic3_find_parse_filter_func(struct rte_eth_dev *d
 		return parse_filter;
 	}
 
-	if (nic_dev->feature_cap != SP600_NIC_FEATURE) 
+	if (!IS_SP600_NIC_FEATURE(nic_dev)) 
 		return hinic3_get_match_filter_func_in_list(hinic3_npu_ext_supported_patterns,
 							    RTE_DIM(hinic3_npu_ext_supported_patterns),
 							    pattern);
