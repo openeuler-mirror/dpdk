@@ -2484,7 +2484,7 @@ static void hinic3_dev_stop(struct rte_eth_dev *dev)
 	}
 
 	if (nic_dev->dcb->dcb_on) {
-		if (nic_dev->feature_cap == SP600_NIC_FEATURE ||
+		if (IS_SP600_NIC_FEATURE(nic_dev) ||
 		    !HINIC3_IS_VF(nic_dev->hwdev))
 			hinic3_sync_dcb_state(nic_dev->hwdev, 1, 0);
 	}

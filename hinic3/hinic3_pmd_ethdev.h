@@ -183,6 +183,11 @@ enum hinic3_function_mode {
 #define SP600_NIC_FEATURE   0x0003FFEF
 #define SP560_NIC_FEATURE   0x88C9FFEF
 
+#define IS_SP600_NIC_FEATURE(nic_dev) \
+	((nic_dev)->feature_cap == SP600_NIC_FEATURE)
+#define IS_SP560_NIC_FEATURE(nic_dev) \
+	((nic_dev)->feature_cap == SP560_NIC_FEATURE)
+
 TAILQ_HEAD(hinic3_ethertype_filter_list, rte_flow);
 TAILQ_HEAD(hinic3_fdir_rule_filter_list, rte_flow);
 

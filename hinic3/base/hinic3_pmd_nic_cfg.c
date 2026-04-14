@@ -2609,7 +2609,7 @@ int hinic3_fdir_cfg_sec_tcam(void *hwdev, u8 *en)
 	if (!hwdev)
 		return -EINVAL;
 
-	if(nic_dev->feature_cap != SP600_NIC_FEATURE)
+	if(!IS_SP600_NIC_FEATURE(nic_dev))
 		return 0;
 
 	cmd_buf.op_code = TCAM_EXTEND_OPCODE_GET_FLAG;

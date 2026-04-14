@@ -180,7 +180,7 @@ init_default_dcb_cfg(struct hinic3_nic_dev *nic_dev,
 	dcb_cfg->pcp_valid_cos_map = hw_dft_cos_map;
 	dcb_cfg->dscp_valid_cos_map = hw_dft_cos_map;
 
-	if(nic_dev->feature_cap == SP600_NIC_FEATURE ||
+	if(IS_SP600_NIC_FEATURE(nic_dev) ||
 	   !HINIC3_IS_VF(nic_dev->hwdev)) {
 		err = hinic3_sync_qos_map(nic_dev->hwdev, dcb_cfg);
 		if (err) {
@@ -536,7 +536,7 @@ hinic3_configure_dcb_hw(struct hinic3_nic_dev *nic_dev, u8 dcb_en)
 		return err;
 	}
 
-	if(nic_dev->feature_cap == SP600_NIC_FEATURE ||
+	if(IS_SP600_NIC_FEATURE(nic_dev) ||
 	   !HINIC3_IS_VF(nic_dev->hwdev)) {
 		err = hinic3_sync_dcb_state(nic_dev->hwdev, CMD_QOS_OP_SET, dcb_en);
 		if (err) {
