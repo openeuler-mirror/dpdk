@@ -38,9 +38,7 @@
 #include "hinic3_pmd_dcb.h"
 #include "hinic3_pmd_tm.h"
 #include "hinic3_pmd_hairpin.h"
-#ifdef HINIC3_TRAFFIC_BIFUR
 #include "hinic3_pmd_bifur.h"
-#endif
 
 #define HINIC3_MIN_RX_BUF_SIZE		1024
 
@@ -53,6 +51,8 @@
 #define HINIC3_DEFAULT_TX_FREE_THRESH	32
 
 #define HINIC3_RX_WAIT_CYCLE_THRESH	150
+
+#define RQ_WQE_TYPE_PATH "/sys/module/hinic3/parameters/rq_wqe_type"
 
 /*
  * Vlan_id is a 12 bit number. The VFTA array is actually a 4096 bit array,
@@ -70,6 +70,7 @@
 #else
 #define HINIC3_MAX_RX_PKT_LEN(rxmod) ((rxmod).max_rx_pkt_len)
 #endif
+
 /* Driver-specific log messages type */
 int hinic3_logtype;
 enum hinic3_rx_mod {
@@ -4626,6 +4627,7 @@ static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev, enum hinic3_qinfo
 	struct hinic3_tcam_info *tcam_info = NULL;
 	struct hinic3_nic_dev *nic_dev = NULL;
 	struct rte_pci_device *pci_dev = NULL;
+	unsigned long compact_cqe = 0;
 	int err;
 
 	pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
@@ -4752,6 +4754,14 @@ static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev, enum hinic3_qinfo
 		PMD_DRV_LOG(ERR, "Get nic feature from hardware failed, dev_name: %s",
 			    eth_dev->data->name);
 		goto get_cap_fail;
+	}
+
+	if (!IS_SP600_NIC_FEATURE(nic_dev)) {
+		if (hinic3_parse_sysfs_value(RQ_WQE_TYPE_PATH, &compact_cqe) != 0)
+			goto get_cap_fail;
+
+		if (compact_cqe == 1)
+			nic_dev->feature_cap &= ~(NIC_F_RX_SW_COMPACT_CQE | NIC_F_RX_HW_COMPACT_CQE);
 	}
 
 	nic_dev->cmdq_ops = hinic3_nic_cmdq_get_stn_ops();
