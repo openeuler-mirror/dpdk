@@ -1,12 +1,44 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2024-2024. All rights reserved.
  */
-#ifdef HINIC3_TRAFFIC_BIFUR
 
-#include <string.h>
-#include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+
+#include "base/hinic3_compat.h"
+#include "hinic3_pmd_bifur.h"
+
+int
+hinic3_parse_sysfs_value(const char *filename, unsigned long *val)
+{
+	FILE *f;
+	char buf[BUFSIZ];
+	char *end = NULL;
+
+	if ((f = fopen(filename, "r")) == NULL) {
+		PMD_DRV_LOG(ERR, "Cannot open sysfs value %s", filename);
+		return -1;
+	}
+
+	if (fgets(buf, sizeof(buf), f) == NULL) {
+		PMD_DRV_LOG(ERR, "Cannot read sysfs value %s", filename);
+		fclose(f);
+		return -1;
+	}
+	*val = strtoul(buf, &end, 0);
+	if ((buf[0] == '\0') || (end == NULL) || (*end != '\n')) {
+		PMD_DRV_LOG(ERR, "Cannot parse sysfs value %s", filename);
+		fclose(f);
+		return -1;
+	}
+	fclose(f);
+	return 0;
+}
+
+#ifdef HINIC3_TRAFFIC_BIFUR
+
+#include <dirent.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -25,9 +57,6 @@
 #define RTE_PCI_ANY_ID		    (0xffff)
 #define RTE_INTR_INSTANCE_F_PRIVATE UINT32_C(0)
 #endif
-
-#include "base/hinic3_compat.h"
-#include "hinic3_pmd_bifur.h"
 
 #ifndef PCI_DBDF
 #define PCI_DBDF(dom, bus, dev, func) (((u32)(dom) << 16) | ((u32)(bus) << 8) | ((u32)(dev) << 3) | ((u32)(func)&0x7))
@@ -334,33 +363,6 @@ hinic3_bifur_pci_match(const struct rte_pci_driver *pci_drv,
 	return false;
 }
 
-static int
-hinic3_bifur_parse_sysfs_value(const char *filename, unsigned long *val)
-{
-	FILE *f;
-	char buf[BUFSIZ];
-	char *end = NULL;
-
-	if ((f = fopen(filename, "r")) == NULL) {
-		PMD_DRV_LOG(ERR, "Cannot open sysfs value %s", filename);
-		return -1;
-	}
-
-	if (fgets(buf, sizeof(buf), f) == NULL) {
-		PMD_DRV_LOG(ERR, "Cannot read sysfs value %s", filename);
-		fclose(f);
-		return -1;
-	}
-	*val = strtoul(buf, &end, 0);
-	if ((buf[0] == '\0') || (end == NULL) || (*end != '\n')) {
-		PMD_DRV_LOG(ERR, "Cannot parse sysfs value %s", filename);
-		fclose(f);
-		return -1;
-	}
-	fclose(f);
-	return 0;
-}
-
 static enum rte_iova_mode
 hinic3_bifur_pci_device_iova_mode(const struct rte_pci_driver *pdrv,
 				  const struct rte_pci_device *pdev)
@@ -548,35 +550,35 @@ hinic3_bifur_alloc_pci_dev(const char *dirname,
 	dev->addr = *pair_pci_addr;
 
 	snprintf(filename, sizeof(filename), "%s/vendor", dirname);
-	if (hinic3_bifur_parse_sysfs_value(filename, &tmp) < 0) {
+	if (hinic3_parse_sysfs_value(filename, &tmp) < 0) {
 		rte_free(dev);
 		return NULL;
 	}
 	dev->id.vendor_id = (uint16_t)tmp;
 
 	snprintf(filename, sizeof(filename), "%s/device", dirname);
-	if (hinic3_bifur_parse_sysfs_value(filename, &tmp) < 0) {
+	if (hinic3_parse_sysfs_value(filename, &tmp) < 0) {
 		rte_free(dev);
 		return NULL;
 	}
 	dev->id.device_id = (uint16_t)tmp;
 
 	snprintf(filename, sizeof(filename), "%s/subsystem_vendor", dirname);
-	if (hinic3_bifur_parse_sysfs_value(filename, &tmp) < 0) {
+	if (hinic3_parse_sysfs_value(filename, &tmp) < 0) {
 		rte_free(dev);
 		return NULL;
 	}
 	dev->id.subsystem_vendor_id = (uint16_t)tmp;
 
 	snprintf(filename, sizeof(filename), "%s/subsystem_device", dirname);
-	if (hinic3_bifur_parse_sysfs_value(filename, &tmp) < 0) {
+	if (hinic3_parse_sysfs_value(filename, &tmp) < 0) {
 		rte_free(dev);
 		return NULL;
 	}
 	dev->id.subsystem_device_id = (uint16_t)tmp;
 
 	snprintf(filename, sizeof(filename), "%s/class", dirname);
-	if (hinic3_bifur_parse_sysfs_value(filename, &tmp) < 0) {
+	if (hinic3_parse_sysfs_value(filename, &tmp) < 0) {
 		rte_free(dev);
 		return NULL;
 	}
@@ -585,12 +587,12 @@ hinic3_bifur_alloc_pci_dev(const char *dirname,
 	dev->max_vfs = 0;
 	snprintf(filename, sizeof(filename), "%s/max_vfs", dirname);
 	if (!access(filename, F_OK) &&
-	    hinic3_bifur_parse_sysfs_value(filename, &tmp) == 0) {
+	    hinic3_parse_sysfs_value(filename, &tmp) == 0) {
 		dev->max_vfs = (uint16_t)tmp;
 	} else {
 		snprintf(filename, sizeof(filename), "%s/sriov_numvfs", dirname);
 		if (!access(filename, F_OK) &&
-		    hinic3_bifur_parse_sysfs_value(filename, &tmp) == 0) {
+		    hinic3_parse_sysfs_value(filename, &tmp) == 0) {
 			dev->max_vfs = (uint16_t)tmp;
 		}
 	}
@@ -598,7 +600,7 @@ hinic3_bifur_alloc_pci_dev(const char *dirname,
 	snprintf(filename, sizeof(filename), "%s/numa_node", dirname);
 
 	if (access(filename, F_OK) != -1) {
-		if (hinic3_bifur_parse_sysfs_value(filename, &tmp) == 0) {
+		if (hinic3_parse_sysfs_value(filename, &tmp) == 0) {
 			dev->device.numa_node = tmp;
 		} else {
 			dev->device.numa_node = -1;
