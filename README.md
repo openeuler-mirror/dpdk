@@ -9,7 +9,9 @@ hinic3 driver是华为SPx系列网卡在DPDK框架下的用户态驱动，旨在
 ## 2. 版本配套关系
 | 版本号 | 配套固件版本 | 发布日期 | 版本特性 |
 |--|--|--|--|
+| tag-tbd（出tag后刷新） | [IN220 2.6.RC4](https://support.huawei.com/enterprise/zh/huawei-computing-components/in220-pid-253287505/software/268283889?idAbsPath=fixnode01&#124;23710424&#124;251364417&#124;9856629&#124;253287505) | tbd（出tag后刷新） | [release note](./release_note.md#tag-tbd) |
 | [hinic3-26.0.rc1-0331.r1](https://atomgit.com/openeuler/dpdk/tags/hinic3-26.0.rc1-0331.r1) | [IN220 2.6.RC4](https://support.huawei.com/enterprise/zh/huawei-computing-components/in220-pid-253287505/software/268283889?idAbsPath=fixnode01&#124;23710424&#124;251364417&#124;9856629&#124;253287505) | 2026.03.31 | [release note](./release_note.md#hinic3-260rc1-0331r1) |
+| [hinic3-26.0.rc1-0313.r1](https://gitcode.com/openeuler/dpdk/tags/hinic3-26.0.rc1-0313.r1) | [IN220 2.6.RC2](https://support.huawei.com/enterprise/zh/huawei-computing-components/in220-pid-253287505/software/268032408?idAbsPath=fixnode01&#124;23710424&#124;251364417&#124;9856629&#124;253287505) | 2026.03.13 | [release note](./release_note.md#hinic3-260rc1-0313r1) |
 | [hinic3-26.0.rc1-0307.r2](https://atomgit.com/openeuler/dpdk/tags/hinic3-26.0.rc1-0307.r2) | [IN220 2.6.RC2](https://support.huawei.com/enterprise/zh/huawei-computing-components/in220-pid-253287505/software/268032408?idAbsPath=fixnode01&#124;23710424&#124;251364417&#124;9856629&#124;253287505) | 2026.03.07 | [release note](./release_note.md#hinic3-260rc1-0307r2) |
 | [hinic3-26.0.rc1-0307.r1](https://atomgit.com/openeuler/dpdk/tags/hinic3-26.0.rc1-0307.r1) | [IN220 2.6.RC2](https://support.huawei.com/enterprise/zh/huawei-computing-components/in220-pid-253287505/software/268032408?idAbsPath=fixnode01&#124;23710424&#124;251364417&#124;9856629&#124;253287505) | 2026.03.07 | [release note](./release_note.md#hinic3-260rc1-0307r1) |
 | [hinic3-26.0.rc1-0214.r1](https://atomgit.com/openeuler/dpdk/tags/hinic3-26.0.rc1-0214.r1) | 请咨询技术支撑 | 2026.02.14 | [release note](./release_note.md#hinic3-260rc1-0214r1) |
@@ -20,8 +22,9 @@ hinic3 driver是华为SPx系列网卡在DPDK框架下的用户态驱动，旨在
 本章节以DPDK 21.11为例，介绍如何在DPDK中集成并编译`hinic3` PMD。
 PMD已归一到本项目的hinic3目录中，使用方式由原先的每个版本单独打patch，变为使用`install.sh`脚本自动安装hinic3到源码目录中。
 
-- 当前`hinic3` PMD支持的DPDK版本：19.11 ~ 25.11
-- 分流功能支持的DPDK版本：19.11 ~ 22.11
+- 当前`hinic3` PMD支持的DPDK版本：19.11 ~ 24.11
+- 分流功能支持的DPDK版本：19.11 ~ 22.11 
+- 25以上DPDK版本请访问[DPDK github社区](https://github.com/DPDK/dpdk)
 ### 3.1 安装编译依赖
 ```bash
 yum install -y git gcc libatomic python3-devel meson ninja-build python3-pyelftools libibverbs numactl numactl-devel zlib-devel`
@@ -53,7 +56,7 @@ tar -xf dpdk-21.11.9.tar.xz
 进入dpdk-hinic3目录，用户可使用驱动提供的安装脚本`install.sh`按需选择进行安装编译。
 
 >**说明：**
-> - 此处../dpdk-stable-21.11.9需替换为实际的dpdk版本及路径
+> - 此处../dpdk-stable-21.11.9需替换为实际的DPDK版本及路径
 > - 安装脚本会自动检测目标DPDK目录是否为Git仓库，如果不是，会自动初始化Git。
 
 ### SP200&SP600 网卡
