@@ -4,28 +4,69 @@ set -e
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 
 # 适配低版本 meson
-function meson_build_adapt() {
-	MESON_FILE="./drivers/net/hinic3/meson.build"
+# DPDK版本对应的编译标志
+declare -A DPDK_VERSION_FLAGS
+DPDK_VERSION_FLAGS[20]="-DDPDK_20_11"
+DPDK_VERSION_FLAGS[21]="-DDPDK_20_11 -DDPDK_21_11"
+DPDK_VERSION_FLAGS[22]="-DDPDK_20_11 -DDPDK_21_11 -DDPDK_22_11"
+DPDK_VERSION_FLAGS[23]="-DDPDK_20_11 -DDPDK_21_11 -DDPDK_22_11"
+DPDK_VERSION_FLAGS[24]="-DDPDK_20_11 -DDPDK_21_11 -DDPDK_22_11 -DDPDK_24_11"
+DPDK_VERSION_FLAGS[25]="-DDPDK_20_11 -DDPDK_21_11 -DDPDK_22_11 -DDPDK_24_11 -DDPDK_25_11"
 
-	# 删除原有 dpdk_version 判断整个段落
-	sed -i '/^dpdk_version = meson.project_version()/,/^endif$/d' $MESON_FILE
+# 获取指定版本的编译标志
+get_version_flags() {
+	echo ${DPDK_VERSION_FLAGS[$DPDK_MAJOR]}
+}
 
-	# 定义不同版本的 cflags
-	declare -A FLAGS
-	FLAGS[20]="-DDPDK_20_11"
-	FLAGS[21]="-DDPDK_20_11 -DDPDK_21_11"
-	FLAGS[22]="-DDPDK_20_11 -DDPDK_21_11 -DDPDK_22_11"
-	FLAGS[23]="-DDPDK_20_11 -DDPDK_21_11 -DDPDK_22_11"
-	FLAGS[24]="-DDPDK_20_11 -DDPDK_21_11 -DDPDK_22_11 -DDPDK_24_11"
-	FLAGS[25]="-DDPDK_20_11 -DDPDK_21_11 -DDPDK_22_11 -DDPDK_24_11 -DDPDK_25_11"
+# 向文件添加内容（如果不存在）
+# $1: 文件路径  $2: 要添加的内容  $3: 插入位置标记行
+add_to_file() {
+	local file="$1"
+	local content="$2"
+	local marker="$3"
+	
+	if [ ! -f "$file" ]; then
+		return
+	fi
+	
+	# 判断不存在则添加
+	if ! grep -Fq "$content" "$file"; then
+		sed -i "/${marker}/a ${content}" "$file"
+	fi
+}
 
-	# 如果有对应的 flags 就写入 meson.build
-	for flag in ${FLAGS[$DPDK_MAJOR]}; do
-		line="cflags += ['$flag']"
-		# 判读不存在执行
-		if ! grep -Fq "$line" "$MESON_FILE"; then
-			sed -i "/cflags += \['-fstack-protector-strong'\]/a $line" "$MESON_FILE"
-		fi
+# 向meson.build添加cflag（如果不存在）
+add_cflags_to_meson() {
+	local meson_file="$1"
+	local flag="$2"
+	local line="cflags += ['$flag']"
+	
+	add_to_file "$meson_file" "$line" "cflags += \['-fstack-protector-strong'\]"
+}
+
+# 向Makefile添加CFLAGS（如果不存在）
+add_cflags_to_makefile() {
+	local make_file="$1"
+	local flag="$2"
+	local line="CFLAGS += $flag"
+	
+	add_to_file "$make_file" "$line" "CFLAGS += -Wno-cast-qual"
+}
+
+# 适配驱动的构建文件到当前DPDK版本
+adapt_driver_build() {
+	local meson_file="./drivers/net/hinic3/meson.build"
+	local make_file="./drivers/net/hinic3/Makefile"
+
+	# 删除原有 dpdk_version 判断整个段落（meson.build）
+	if [ -f "$meson_file" ]; then
+		sed -i '/^dpdk_version = meson.project_version()/,/^endif$/d' "$meson_file"
+	fi
+
+	# 添加当前版本对应的编译标志
+	for flag in $(get_version_flags); do
+		add_cflags_to_meson "$meson_file" "$flag"
+		add_cflags_to_makefile "$make_file" "$flag"
 	done
 }
 
@@ -198,32 +239,94 @@ config_dpdk_19() {
 	fi
 }
 
-install() {
-	install_type="$1" # 可为空或 bifur
+# 清理旧的安装文件
+clean_old_files() {
+	echo "清理旧的安装文件..."
+	rm -rf drivers/net/hinic3
+	rm -rf app/test/test_hinic3
+}
 
-	check_git
+# 清理配置文件中的hinic3相关内容
+clean_config_files() {
+	echo "清理配置文件中的 hinic3 相关内容..."
+	
+	# 统一清理所有构建文件中的 hinic3 引用
+	local config_files=(
+		"drivers/net/meson.build"
+		"drivers/net/Makefile"
+		"app/test/meson.build"
+		"app/test/Makefile"
+	)
+	
+	for file in "${config_files[@]}"; do
+		if [ -f "$file" ]; then
+			sed -i "/hinic3/d" "$file"
+		fi
+	done
+}
 
-	stashed=0
-	# 判断工作区是否有未提交的更改（包括暂存区和未跟踪文件）
-	git status --porcelain
-	if [ -n "$(git status --porcelain)" ]; then
-		echo "工作区有未提交的更改，先 stash"
-		git stash push -u -m "临时保存未提交更改"
-		stashed=1
+# 向DPDK的meson.build添加驱动子目录
+add_driver_to_meson() {
+	local meson_file="./drivers/net/meson.build"
+	
+	if ! grep -q "'hinic3'" "$meson_file"; then
+		echo "添加 'hinic3' 到 meson.build"
+		sed -i "/'hinic'/a\\	'hinic3'," "$meson_file"
 	fi
+}
 
+# 向DPDK的Makefile添加驱动子目录
+add_driver_to_makefile() {
+	local make_file="./drivers/net/Makefile"
+	local config="CONFIG_RTE_LIBRTE_HINIC_PMD"
+	
+	if ! grep -q "hinic3" "$make_file"; then
+		echo "添加 'hinic3' 到 Makefile"
+		sed -i "/${config}/aDIRS-\$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3" "$make_file"
+	fi
+}
+
+# 启用bifur编译标志
+enable_bifur() {
+	local meson_file="./drivers/net/hinic3/meson.build"
+	local make_file="./drivers/net/hinic3/Makefile"
+	
+	echo "启用 bifur 编译标志..."
+	
+	# meson.build
+	if ! grep -Fq "cflags += ['-DHINIC3_TRAFFIC_BIFUR']" "$meson_file"; then
+		echo "为 $meson_file 添加 -DHINIC3_TRAFFIC_BIFUR cflag"
+		add_cflags_to_meson "$meson_file" "-DHINIC3_TRAFFIC_BIFUR"
+	else
+		echo "$meson_file 已存在 -DHINIC3_TRAFFIC_BIFUR"
+	fi
+	
+	# Makefile
+	if ! grep -Fq "CFLAGS += -DHINIC3_TRAFFIC_BIFUR" "$make_file"; then
+		echo "为 $make_file 添加 -DHINIC3_TRAFFIC_BIFUR cflag"
+		add_cflags_to_makefile "$make_file" "-DHINIC3_TRAFFIC_BIFUR"
+	else
+		echo "$make_file 已存在 -DHINIC3_TRAFFIC_BIFUR"
+	fi
+}
+
+# 安装驱动到DPDK目录
+install_driver() {
+	local install_type="$1" # 可为空或 bifur
+	
 	# 删除并拷贝 hinic3
-	echo "更新 drivers/net/hinic3 ..."
-	rm -rf "drivers/net/hinic3"
+	echo "安装 drivers/net/hinic3 ..."
 	cp -r "$SCRIPT_DIR/hinic3" "drivers/net"
 
-	# 修改 meson.build，添加 hinic3
-	if ! grep -q "'hinic3'" "./drivers/net/meson.build"; then
-		echo "添加 'hinic3' 到 meson.build"
-		sed -i "/'hinic'/a\\	'hinic3'," "./drivers/net/meson.build"
+	# 修改构建文件，添加 hinic3
+	add_driver_to_meson
+	# dpdk=19 才需要修改Makefile
+	if [ "$DPDK_MAJOR" -eq 19 ]; then
+		add_driver_to_makefile
 	fi
 
-	meson_build_adapt
+	# 适配驱动的构建文件到当前DPDK版本
+	adapt_driver_build
 
 	# dpdk>=22
 	if [ "$DPDK_MAJOR" -ge 22 ]; then
@@ -231,30 +334,19 @@ install() {
 		echo "DPDK>=22, version.map has been removed"
 	fi
 
-	# 如果传了 bifur 参数，则修改 hinic3/meson.build
+	# 如果传了 bifur 参数，则启用 bifur 编译标志
 	if [ "$install_type" == "bifur" ]; then
-		meson_file="./drivers/net/hinic3/meson.build"
-		if ! grep -Fq "cflags += ['-DHINIC3_TRAFFIC_BIFUR']" "$meson_file"; then
-			echo "为 $meson_file 添加 -DHINIC3_TRAFFIC_BIFUR cflag"
-			sed -i "/cflags += \['-fstack-protector-strong'\]/a cflags += ['-DHINIC3_TRAFFIC_BIFUR']" "$meson_file"
-		else
-			echo "$meson_file 已存在 -DHINIC3_TRAFFIC_BIFUR"
-		fi
-
-		make_file="./drivers/net/hinic3/Makefile"
-		if ! grep -Fq "CFLAGS += -DHINIC3_TRAFFIC_BIFUR" "$make_file"; then
-			echo "为 $make_file 添加 -DHINIC3_TRAFFIC_BIFUR cflag"
-			sed -i "/CFLAGS += -Wno-cast-qual/a CFLAGS += -DHINIC3_TRAFFIC_BIFUR" "$make_file"
-		else
-			echo "$make_file 已存在 -DHINIC3_TRAFFIC_BIFUR"
-		fi
+		enable_bifur
 	fi
 
 	# dpdk=19
 	if [ "$DPDK_MAJOR" -eq 19 ]; then
 		config_dpdk_19
 	fi
+}
 
+# 提交更改到git
+commit_changes() {
 	# 添加 hinic3 并提交
 	git add .
 	if ! git diff --cached --quiet || ! git diff --quiet; then
@@ -262,12 +354,270 @@ install() {
 	else
 		echo "No changes to commit"
 	fi
+}
 
+# 暂存未提交的更改
+STASHED=0
+stash_changes() {
+	STASHED=0
+	# 判断工作区是否有未提交的更改（包括暂存区和未跟踪文件）
+	if [ -n "$(git status --porcelain)" ]; then
+		echo "工作区有未提交的更改，先 stash"
+		git stash push -u -m "临时保存未提交更改"
+		STASHED=1
+	fi
+}
+
+# 恢复之前暂存的更改
+restore_changes() {
 	# 如果之前 stash 了，恢复
-	if [ "$stashed" -eq 1 ]; then
+	if [ "$STASHED" -eq 1 ]; then
 		echo "恢复之前 stash 的更改"
 		git stash pop
 	fi
+}
+
+# 主安装函数
+install() {
+	local install_type="$1" # 可为空或 bifur
+	local force_mode="$2"   # 可为空或 --force/-f
+
+	# force 模式跳过 git 检查和提交，直接清理并安装
+	if [ "$force_mode" == "--force" ] || [ "$force_mode" == "-f" ]; then
+		clean_old_files
+		clean_config_files
+		install_driver "$install_type"
+		install_dpdk_test
+	else
+		check_git
+		stash_changes
+		clean_old_files
+		clean_config_files
+		install_driver "$install_type"
+		install_dpdk_test
+		commit_changes
+		restore_changes
+	fi
+}
+
+# 添加测试源文件到构建系统
+add_test_sources() {
+	local build_file="$1"
+	local build_type="$2" # meson 或 makefile
+	
+	if [ "$build_type" == "makefile" ]; then
+		# Makefile: 添加测试文件到 SRCS-y
+		add_to_file "$build_file" \
+			"SRCS-\$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += test_hinic3/test_hinic3_basic.c" \
+			"^SRCS-y += virtual_pmd.c"
+		add_to_file "$build_file" \
+			"SRCS-\$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += test_hinic3/test_hinic3_hairpin.c" \
+			"^SRCS-y += virtual_pmd.c"
+	else
+		# meson.build: 添加测试文件到 sources
+		add_to_file "$build_file" \
+			"'test_hinic3_basic.c'," \
+			"sources +="
+		add_to_file "$build_file" \
+			"'test_hinic3_hairpin.c'," \
+			"sources +="
+	fi
+}
+
+# 添加测试依赖到构建系统
+add_test_deps() {
+	local build_file="$1"
+	local build_type="$2" # meson 或 makefile
+	
+	if [ "$build_type" == "makefile" ]; then
+		# Makefile: 添加 include 路径和链接库
+		add_to_file "$build_file" \
+			"CFLAGS += -I\$(RTE_SDK)/drivers/net/hinic3 -I\$(RTE_SDK)/drivers/net/hinic3/base" \
+			"^CFLAGS += -DALLOW_EXPERIMENTAL_API"
+		
+		# 添加链接库到文件末尾
+		if ! grep -Fq "LDLIBS += -lrte_pmd_hinic3" "$build_file"; then
+			echo "" >> "$build_file"
+			echo "ifeq (\$(CONFIG_RTE_LIBRTE_HINIC3_PMD),y)" >> "$build_file"
+			echo "LDLIBS += -lrte_pmd_hinic3" >> "$build_file"
+			echo "endif" >> "$build_file"
+		fi
+	else
+		# meson.build: 添加依赖
+		add_to_file "$build_file" \
+			"deps += ['ethdev', 'net_hinic3']" \
+			"sources +="
+	fi
+}
+
+# 注册测试子目录
+register_test_subdir() {
+	local parent_file="$1"
+	local build_type="$2" # meson 或 makefile
+	
+	if [ "$build_type" == "makefile" ]; then
+		# Makefile 不需要注册子目录（通过 SRCS-y 直接引用）
+		return
+	fi
+	
+	if [ ! -f "$parent_file" ]; then
+		echo "警告: $parent_file 不存在"
+		return
+	fi
+
+	# DPDK <= 22 需要在 dpdk_test 定义之前插入
+	if [ "$DPDK_MAJOR" -le 22 ]; then
+		echo "添加 test_hinic3 子目录到 meson.build (dpdk_test 定义之前)..."
+		sed -i "/^dpdk_test = executable/i # hinic3 PMD tests\nhinic3_includes = include_directories('../../drivers/net/hinic3', '../../drivers/net/hinic3/base')\nsubdir('test_hinic3')\n" "$parent_file"
+		sed -i "/^[[:space:]]*test_sources,$/a\\        include_directories: hinic3_includes," "$parent_file"
+	else
+		# DPDK > 22 直接在文件末尾添加即可
+		echo "添加 test_hinic3 子目录到 meson.build (文件末尾)..."
+		echo "" >> "$parent_file"
+		echo "# hinic3 PMD tests" >> "$parent_file"
+		echo "subdir('test_hinic3')" >> "$parent_file"
+	fi
+}
+
+# 适配测试构建文件到当前DPDK版本
+adapt_test_build() {
+	local test_build_file="$1"
+	local build_type="$2" # meson 或 makefile
+	
+	if [ "$build_type" == "makefile" ]; then
+		# Makefile 不需要版本适配
+		return
+	fi
+	
+	# DPDK <= 22 使用 test_sources，> 22 使用 sources
+	if [ "$DPDK_MAJOR" -le 22 ]; then
+		sed -i 's/^sources += /test_sources += /' "$test_build_file"
+	fi
+
+	# 添加版本相关的编译标志
+	for flag in $(get_version_flags); do
+		echo "cflags += ['$flag']" >> "$test_build_file"
+	done
+}
+
+# 安装单元测试到DPDK测试框架
+install_dpdk_test() {
+	echo "安装 hinic3 单元测试到 DPDK 测试框架..."
+
+	local test_src_dir="$SCRIPT_DIR/test"
+	local test_dst_dir="app/test/test_hinic3"
+
+	if [ ! -d "$test_src_dir" ]; then
+		echo "警告: 测试源目录不存在: $test_src_dir"
+		return
+	fi
+
+	if [ ! -d "app/test" ]; then
+		echo "警告: DPDK 测试目录不存在: app/test"
+		return
+	fi
+
+	# 清空之前的安装
+	if [ -d "$test_dst_dir" ]; then
+		echo "清空之前的测试安装..."
+		rm -rf "$test_dst_dir"
+	fi
+
+	# 创建测试目录并复制文件
+	mkdir -p "$test_dst_dir"
+	echo "复制测试文件到 $test_dst_dir/"
+	cp -r "$test_src_dir"/* "$test_dst_dir/"
+
+	# 根据DPDK版本选择构建系统
+	if [ "$DPDK_MAJOR" -eq 19 ]; then
+		# DPDK 19 使用 Makefile 构建
+		local dpdk_makefile="app/test/Makefile"
+		add_test_sources "$dpdk_makefile" "makefile"
+		add_test_deps "$dpdk_makefile" "makefile"
+	else
+		# DPDK >= 20 使用 meson 构建
+		local test_meson="$test_dst_dir/meson.build"
+		local parent_meson="app/test/meson.build"
+		
+		add_test_sources "$test_meson" "meson"
+		add_test_deps "$test_meson" "meson"
+		adapt_test_build "$test_meson" "meson"
+		register_test_subdir "$parent_meson" "meson"
+	fi
+
+	echo "hinic3 单元测试安装完成!"
+}
+
+# 运行单元测试
+run_test() {
+	local build_type="$1" # release 或 debug
+	local build_dir="build"
+
+	# debug
+	if [[ "$build_type" == "debug" ]]; then
+		build_dir="debug"
+	fi
+
+	local test_bin=""
+	local tests=()
+	
+	# dpdk=19 用 Makefile
+	if [ "$DPDK_MAJOR" -eq 19 ]; then
+		local arch=$(uname -m)
+		if [ "$arch" = "aarch64" ]; then
+			build_dir="arm64-armv8a-linuxapp-gcc"
+		else
+			build_dir="x86_64-native-linux-gcc"
+		fi
+		test_bin="$build_dir/app/test"
+		export LD_LIBRARY_PATH="$PWD/$build_dir/lib:$LD_LIBRARY_PATH"
+		tests=("hinic3_basic_autotest" "hinic3_hairpin_autotest")
+	else
+		# dpdk>=20 使用 meson 构建
+		if [ -f "$build_dir/app/dpdk-test" ]; then
+			test_bin="$build_dir/app/dpdk-test"
+		elif [ -f "$build_dir/app/test/dpdk-test" ]; then
+			test_bin="$build_dir/app/test/dpdk-test"
+		else
+			echo "错误: dpdk-test 不存在，请先执行 build"
+			exit 1
+		fi
+		tests=("hinic3_basic_autotest" "hinic3_hairpin_autotest")
+	fi
+
+	echo ""
+	echo "运行 hinic3 单元测试 (DPDK 测试框架)..."
+	echo "测试程序: $test_bin"
+	echo ""
+
+	# 创建临时运行时目录避免权限问题
+	local test_runtime_dir="/tmp/dpdk-test-runtime"
+	mkdir -p "$test_runtime_dir"
+
+	# 依次运行所有测试
+	local failed=0
+	for test_name in "${tests[@]}"; do
+		echo "=========================================="
+		echo "运行测试: $test_name"
+		echo "=========================================="
+		if XDG_RUNTIME_DIR="$test_runtime_dir" DPDK_TEST="$test_name" $test_bin --file-prefix=ut --no-pci --no-huge -m 64; then
+			echo "[PASS] $test_name"
+		else
+			echo "[FAIL] $test_name"
+			failed=1
+		fi
+		echo ""
+	done
+
+	echo "=========================================="
+	if [ $failed -eq 0 ]; then
+		echo "所有测试通过!"
+	else
+		echo "部分测试失败!"
+	fi
+	echo "=========================================="
+
+	return $failed
 }
 
 replace() {
@@ -280,12 +630,7 @@ replace() {
 
 	stashed=0
 	# 判断工作区是否有未提交的更改（包括暂存区和未跟踪文件）
-	git status --porcelain
-	if [ -n "$(git status --porcelain)" ]; then
-		echo "工作区有未提交的更改，先 stash"
-		git stash push -u -m "临时保存未提交更改"
-		stashed=1
-	fi
+	stash_changes
 
 	# driver_name
 	sed -i "s/^\(#define[[:space:]]*HINIC3_DRIVER_NAME[[:space:]]*\).*/\1\"$pmd_name\"/" \
@@ -298,7 +643,18 @@ replace() {
 	fi
 	mv drivers/net/hinic3 drivers/net/$pmd_name
 
+	# 替换驱动目录中的构建文件引用
 	sed -i "s/'hinic3'/'$pmd_name'/" ./drivers/net/meson.build
+	sed -i "s/hinic3/$pmd_name/g" ./drivers/net/Makefile
+
+	# 替换测试目录中的hinic3引用
+	if [ -d "app/test/test_hinic3" ]; then
+		sed -i "s/hinic3/$pmd_name/g" app/test/test_hinic3/meson.build
+		sed -i "s/hinic3/$pmd_name/g" app/test/test_hinic3/Makefile
+		sed -i "s/'hinic3'/'$pmd_name'/" ./app/test/meson.build
+		sed -i "s/test_hinic3/test_$pmd_name/g" ./app/test/meson.build
+		sed -i "s/hinic3/$pmd_name/g" ./app/test/Makefile
+	fi
 
 	# 添加 BPNIC 并提交
 	git add .
@@ -309,10 +665,7 @@ replace() {
 	fi
 
 	# 如果之前 stash 了，恢复
-	if [ "$stashed" -eq 1 ]; then
-		echo "恢复之前 stash 的更改"
-		git stash pop
-	fi
+	restore_changes
 }
 
 build() {
@@ -420,8 +773,14 @@ help() {
    安装 hinic3 到 DPDK 目录:
    $0 <dpdk路径> install
 
+   强制重新安装 (清理已提交的修改):
+   $0 <dpdk路径> install -f/--force
+
    安装 hinic3 并启用 bifur:
    $0 <dpdk路径> install bifur
+
+   强制重新安装并启用 bifur:
+   $0 <dpdk路径> install bifur -f/--force
 
    BP卡适配安装
    $0 <dpdk路径> replace xxnic
@@ -435,9 +794,17 @@ help() {
    编译 debug 版本:
    $0 <dpdk路径> debug
 
+   运行单元测试 (需要先 build):
+   $0 <dpdk路径> test
+
+   运行 debug 版本单元测试:
+   $0 <dpdk路径> test debug
+
 示例:
    $0 ../dpdk-stable-21.11.9 install
+   $0 ../dpdk-stable-21.11.9 install --force
    $0 ../dpdk-stable-21.11.9 build
+   $0 ../dpdk-stable-21.11.9 test
 EOF
 	exit 0
 }
@@ -506,6 +873,10 @@ DPDK_MAJOR=${DPDK_VER%%.*}
 
 if [ "$ACTION" == "install" ] && [ "$3" == "bifur" ]; then
 	install bifur
+elif [ "$ACTION" == "install" ] && { [ "$3" == "--force" ] || [ "$3" == "-f" ]; }; then
+	install "" "--force"
+elif [ "$ACTION" == "install" ] && [ "$4" == "bifur" ] && { [ "$3" == "--force" ] || [ "$3" == "-f" ]; }; then
+	install bifur "--force"
 elif [ "$ACTION" == "install" ]; then
 	install
 elif [ "$ACTION" == "replace" ]; then
@@ -518,7 +889,12 @@ elif [ "$ACTION" == "debug" ] && [ "$3" == "generic" ]; then
 	build debug generic
 elif [ "$ACTION" == "debug" ]; then
 	build debug
+elif [ "$ACTION" == "test" ] && [ "$3" == "debug" ]; then
+	run_test debug
+elif [ "$ACTION" == "test" ]; then
+	run_test
 elif [[ $ACTION == "export" ]]; then
+	# 导出驱动到当前脚本目录
 	rm -rf $SCRIPT_DIR/hinic3
 	cp -r drivers/net/hinic3 $SCRIPT_DIR
 else
