@@ -155,7 +155,7 @@ struct comm_cmd_feature_nego {
 	u8 rsvd;
 	u64 s_feature[COMM_MAX_FEATURE_QWORD];
 };
-
+#define HINIC3_FW_VERSION_NUM		4
 #define HINIC3_FW_VERSION_LEN		16
 #define HINIC3_FW_COMPILE_TIME_LEN	20
 #define HINIC3_MGMT_VERSION_MAX_LEN	32
