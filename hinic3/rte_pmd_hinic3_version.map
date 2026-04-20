@@ -1,4 +1,5 @@
 DPDK_2.0 {
-
+	global:
+		hinic3_*;
 	local: *;
 };
