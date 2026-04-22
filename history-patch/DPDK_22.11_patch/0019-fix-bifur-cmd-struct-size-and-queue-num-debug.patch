@@ -1,0 +1,138 @@
+From 287496697b7765a3382ddddd422011072a805e70 Mon Sep 17 00:00:00 2001
+From: liya0822 <liya51@h-partners.com>
+Date: Tue, 21 Apr 2026 09:30:45 +0800
+Subject: [PATCH] fix debug
+
+---
+ drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h |  2 +-
+ drivers/net/hinic3/hinic3_pmd_fdir.c         | 19 +--------
+ drivers/net/hinic3/hinic3_pmd_flow.c         | 44 +++++++++++++++-----
+ 3 files changed, 36 insertions(+), 29 deletions(-)
+
+diff --git a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h
+index b04ee1c..82d7089 100644
+--- a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h
++++ b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h
+@@ -894,7 +894,7 @@ struct hinic3_port_flow_bifur_en_cmd {
+ 	u8 flow_bifur_type; /* 0: vf bifur, 2: traffic bifur */
+ 	u8 config_flag;
+ 	u8 iso_en;
+-	u8 rsvd[3];
++	u8 rsvd[2];
+ };
+ 
+ struct hinic3_flush_tcam_rules {
+diff --git a/drivers/net/hinic3/hinic3_pmd_fdir.c b/drivers/net/hinic3/hinic3_pmd_fdir.c
+index 59721e0..d170571 100644
+--- a/drivers/net/hinic3/hinic3_pmd_fdir.c
++++ b/drivers/net/hinic3/hinic3_pmd_fdir.c
+@@ -33,7 +33,6 @@
+ #define HINIC3_UINT2_MAX          	0x3
+ #define HINIC3_UINT4_MAX          	0xf
+ #define HINIC3_UINT15_MAX         	0x7fff
+-#define HINIC3_RSS_BIFUR_QUEUE_NUM	15u
+ #define BIFUR_EN                  	0x2
+ 
+ #define HINIC3_DEV_PRIVATE_TO_TCAM_INFO(nic_dev) \
+@@ -509,22 +508,8 @@ static void hinic3_fdir_tcam_info_init(struct rte_eth_dev *dev,
+ 		hinic3_fdir_tcam_vxlan_init(dev, rule, tcam_key);
+ 
+ 	fdir_tcam_rule->data.qid = rule->rq_index;
+-#ifdef HINIC3_TRAFFIC_BIFUR
+-	u8 bifur_en, bifur_type;
+-
+-	if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, 0, &bifur_type) != 0) {
+-		PMD_DRV_LOG(ERR, "tcam_info_init: hinic3 get port table bifur enable status failed.");
+-	}
++	fdir_tcam_rule->data.queue_num = rule->queue_num;
+ 
+-	if (bifur_en && (bifur_type != 1) && (rule->queue_num > 1)) {
+-		fdir_tcam_rule->data.qid = HINIC3_UINT15_MAX;
+-		fdir_tcam_rule->data.queue_num = HINIC3_RSS_BIFUR_QUEUE_NUM;
+-		PMD_DRV_LOG(WARNING, "bifur type != 1, rss hash to all queues, reset qid: %ld, reset queue_num: %ld",
+-				      fdir_tcam_rule->data.qid, fdir_tcam_rule->data.queue_num);
+-	} else {
+-		fdir_tcam_rule->data.queue_num = rule->queue_num;
+-	}
+-#endif
+ 	tcam_key_calculate(tcam_key, fdir_tcam_rule);
+ }
+ 
+@@ -765,7 +750,7 @@ static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
+ 	nic_dev->tcam_rule_nums++;
+ 
+ 	PMD_DRV_LOG(INFO, "Add fdir tcam rule, function_id: 0x%x, "
+-		    "tcam_block_id: %d, local_index: %d, global_index: %d, queue: %d, "
++		    "tcam_block_id: %d, local_index: %d, global_index: %d, queue bitmap: 0x%x, "
+ 		    "tcam_rule_nums: %d succeed",
+ 		    hinic3_global_func_id(nic_dev->hwdev),
+ 		    tcam_filter->dynamic_block_id, index, fdir_tcam_rule->index,
+diff --git a/drivers/net/hinic3/hinic3_pmd_flow.c b/drivers/net/hinic3/hinic3_pmd_flow.c
+index 5a1c8fc..a9646a7 100644
+--- a/drivers/net/hinic3/hinic3_pmd_flow.c
++++ b/drivers/net/hinic3/hinic3_pmd_flow.c
+@@ -32,6 +32,7 @@
+ 
+ #define HINIC3_QUEUE_MAX 16
+ #define HINIC3_QUEUE_ALLOW_NUM 8
++#define HINIC3_SPEC_BIFUR_QUEUE_NUM 16
+ #endif
+ 
+ #define HINIC3_UINT8_MAX          0xff
+@@ -485,21 +486,42 @@ static int hinic3_flow_parse_action(struct rte_eth_dev *dev,
+ 			return err;
+ 		}
+ 
+-		if (act_r->queue_num > 1) {
+-			for (i = 0; i < act_r->queue_num; i++) {
+-				if (rte_bit_relaxed_get32(act_r->queue[i], &filter->fdir_filter.rq_index) != 0) {
+-					rte_flow_error_set(error,
+-						EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION,
+-						act, "Duplicate action queue numbers.");
+-					return -rte_errno;
+-				}
+-				rte_bit_relaxed_set32(act_r->queue[i], &filter->fdir_filter.rq_index);
++		u8 bifur_en, bifur_type;
++
++		if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, 0, &bifur_type) != 0) {
++			PMD_DRV_LOG(ERR, "tcam_info_init: hinic3 get port table bifur enable status failed.");
++		}
++
++		/* VF splitting scenarios require special handling. */
++		if (bifur_en && (bifur_type == 0)) {  
++			u32 qnum = dev->data->nb_rx_queues;
++			PMD_DRV_LOG(WARNING, "bifur type is vf, rss hash to all queues, reset queue_num: %ld", qnum);
++			if (dev->data->nb_rx_queues == HINIC3_SPEC_BIFUR_QUEUE_NUM)
++				qnum--;
++
++			for (i = 0; i < qnum; i++) {
++				rte_bit_relaxed_set32(i, &filter->fdir_filter.rq_index);
+ 			}
++
++			filter->fdir_filter.queue_num = qnum;
+ 		} else {
+-			filter->fdir_filter.rq_index = act_r->queue[0];
++			if ((act_r->queue_num > 1) ) {
++				for (i = 0; i < act_r->queue_num; i++) {
++					if (rte_bit_relaxed_get32(act_r->queue[i], &filter->fdir_filter.rq_index) != 0) {
++						rte_flow_error_set(error,
++							EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION,
++							act, "Duplicate action queue numbers.");
++						return -rte_errno;
++					} 
++					rte_bit_relaxed_set32(act_r->queue[i], &filter->fdir_filter.rq_index);
++				}
++			} else {
++				filter->fdir_filter.rq_index = act_r->queue[0];
++			}
++
++			filter->fdir_filter.queue_num = act_r->queue_num;
+ 		}
+ 
+-		filter->fdir_filter.queue_num = act_r->queue_num;
+ 		if (act_r->key) {
+ 			return hinic3_flow_set_rss_action_config(dev, actions, error);
+ 		}
+-- 
+2.28.0.windows.1
+
