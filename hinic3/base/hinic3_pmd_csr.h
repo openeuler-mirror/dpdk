@@ -12,7 +12,8 @@
 
 #define PCI_VENDOR_ID_BP1        0x00ff
 #define HINIC3_DEV_ID_SP230      0x0229
-#define HINIC3_DEV_ID_VF_SP230   0x3750
+#define HINIC3_DEV_ID_VF_SP230   0x022a
+#define HINIC3_DEV_ID_VF_SP230_OLD  0x3750
 
 #define PCI_VENDOR_ID_BP2        0x1b18
 #define HINIC3_DEV_ID_BP2_620    0x1120

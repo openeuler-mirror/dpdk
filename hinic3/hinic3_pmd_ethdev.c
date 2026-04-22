@@ -105,7 +105,7 @@ static const struct rte_pci_id pci_id_hinic3_map[] = {
 
 	{RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI,  HINIC3_DEV_ID_SP230)},
 	{RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI,  HINIC3_DEV_ID_VF_SP230)},
-
+	{RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI,  HINIC3_DEV_ID_VF_SP230_OLD)},
 
 	{.vendor_id = 0},
 };
@@ -1027,7 +1027,7 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 
 	if (IS_QPOOL_MODE(nic_dev)) {
 		err = hinic3_compare_kernel_mbuf_size(nic_dev->fd, buf_size, nic_dev->hwdev);
-		if (err) 
+		if (err)
 			goto mbuf_size_err;
 
 		err = hinic3_get_rx_user_queue(nic_dev, rxq);
