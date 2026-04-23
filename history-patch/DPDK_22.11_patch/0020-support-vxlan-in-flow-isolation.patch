@@ -1,8 +1,8 @@
 diff --git a/drivers/net/hinic3/hinic3_pmd_fdir.c b/drivers/net/hinic3/hinic3_pmd_fdir.c
-index 59721e0..50424f4 100644
+index d170571..7682bc9 100644
 --- a/drivers/net/hinic3/hinic3_pmd_fdir.c
 +++ b/drivers/net/hinic3/hinic3_pmd_fdir.c
-@@ -412,6 +412,7 @@ static void hinic3_fdir_tcam_ipv6_vxlan_init(struct rte_eth_dev *dev,
+@@ -411,6 +411,7 @@ static void hinic3_fdir_tcam_ipv6_vxlan_init(struct rte_eth_dev *dev,
  			struct hinic3_tcam_key *tcam_key)
  {
  	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
@@ -10,7 +10,7 @@ index 59721e0..50424f4 100644
  
  	tcam_key->key_mask_ipv6.ip_proto = rule->key_mask.proto;
  	tcam_key->key_info_ipv6.ip_proto = rule->key_spec.proto;
-@@ -423,8 +424,15 @@ static void hinic3_fdir_tcam_ipv6_vxlan_init(struct rte_eth_dev *dev,
+@@ -422,8 +423,15 @@ static void hinic3_fdir_tcam_ipv6_vxlan_init(struct rte_eth_dev *dev,
  	tcam_key->key_info_ipv6.outer_ip_type = HINIC3_FDIR_IP_TYPE_IPV6;
  
  	tcam_key->key_mask_ipv6.function_id = HINIC3_UINT15_MAX;
@@ -28,7 +28,7 @@ index 59721e0..50424f4 100644
  
  	tcam_key->key_mask_ipv6.dport = rule->key_mask.dst_port;
  	tcam_key->key_info_ipv6.dport = rule->key_spec.dst_port;
-@@ -441,6 +449,8 @@ static void hinic3_fdir_tcam_vxlan_init(struct rte_eth_dev *dev,
+@@ -440,6 +448,8 @@ static void hinic3_fdir_tcam_vxlan_init(struct rte_eth_dev *dev,
  			struct hinic3_tcam_key *tcam_key)
  {
  	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
@@ -37,7 +37,7 @@ index 59721e0..50424f4 100644
  
  	if (rule->outer_ip_type == HINIC3_FDIR_IP_TYPE_IPV6) {
  		hinic3_fdir_tcam_ipv6_vxlan_init(dev, rule, tcam_key);
-@@ -487,8 +497,19 @@ static void hinic3_fdir_tcam_vxlan_init(struct rte_eth_dev *dev,
+@@ -486,8 +496,19 @@ static void hinic3_fdir_tcam_vxlan_init(struct rte_eth_dev *dev,
  	tcam_key->key_info.tunnel_type = HINIC3_FDIR_TUNNEL_MODE_VXLAN;
  
  	tcam_key->key_mask.function_id = HINIC3_UINT15_MAX;
