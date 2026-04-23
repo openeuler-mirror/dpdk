@@ -1,7 +1,7 @@
-From ab7357d2d3d2d2bdfb4028fd3b04c11d6c16da6f Mon Sep 17 00:00:00 2001
+From cfec413199b85524a02028b280ad693988cd17ca Mon Sep 17 00:00:00 2001
 From: xiaobai <chenyi19990512@163.com>
 Date: Mon, 19 May 2025 11:37:25 +0800
-Subject: [PATCH 07/12] Normal tso support l4 checnksum offload
+Subject: [PATCH 07/20] Normal tso support l4 checnksum offload
 
 ---
  drivers/net/hinic3/hinic3_pmd_ethdev.c |  1 +
@@ -34,7 +34,7 @@ index 7fa3d72..0314f71 100644
  #define HINIC3_PKT_RX_LRO                PKT_RX_LRO
  #define HINIC3_PKT_TX_L4_NO_CKSUM        PKT_TX_L4_NO_CKSUM
 diff --git a/drivers/net/hinic3/hinic3_pmd_tx.c b/drivers/net/hinic3/hinic3_pmd_tx.c
-index dfac1d1..97e3737 100644
+index dfac1d1..dc3605d 100644
 --- a/drivers/net/hinic3/hinic3_pmd_tx.c
 +++ b/drivers/net/hinic3/hinic3_pmd_tx.c
 @@ -422,7 +422,7 @@ static uint8_t hinic3_ip_phdr_cksum(hinic3_ip_cs_handler_t *ip_handler, uint8_t
@@ -104,5 +104,5 @@ index dfac1d1..97e3737 100644
  	} else {
  		if (ol_flags & HINIC3_PKT_TX_IP_CKSUM)
 -- 
-2.45.1.windows.1
+2.43.0
 

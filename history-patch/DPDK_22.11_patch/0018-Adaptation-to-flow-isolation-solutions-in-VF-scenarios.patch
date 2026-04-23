@@ -1,7 +1,7 @@
-From cffaafa9f7ec8bae8f8dbec3861c8cd714872d17 Mon Sep 17 00:00:00 2001
+From bc0e6953d837bc7ad0ad054db2f8fd0b31922878 Mon Sep 17 00:00:00 2001
 From: liya0822 <liya51@h-partners.com>
 Date: Wed, 8 Apr 2026 14:43:01 +0800
-Subject: [PATCH] Adaptation to flow isolation solutions in VF scenarios
+Subject: [PATCH 18/20] Adaptation to flow isolation solutions in VF scenarios
 
 ---
  drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c | 29 ++++++++++++++------
@@ -187,5 +187,5 @@ index a32bda7..f384b83 100644
  	u32 outer_dipv4_h : 16;
  	u32 outer_sipv4_l : 16;
 -- 
-2.28.0.windows.1
+2.43.0
 

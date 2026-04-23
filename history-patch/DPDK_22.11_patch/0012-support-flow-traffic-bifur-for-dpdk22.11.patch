@@ -1,7 +1,7 @@
-From d65f2a8d3ac032412210b54b0017666da9cc5da3 Mon Sep 17 00:00:00 2001
+From b208547e49bd97758a03da47e63b6ee6583da27b Mon Sep 17 00:00:00 2001
 From: Huawei <@huawei.com>
 Date: Tue, 5 Aug 2025 17:32:52 +0800
-Subject: [PATCH] support flow traffic bifur for dpdk22.11
+Subject: [PATCH 12/20] support flow traffic bifur for dpdk22.11
 
 ---
  drivers/net/hinic3/Makefile                   |   1 +
@@ -3765,5 +3765,5 @@ index 2913031..8ee5807 100644
  #endif
              (pci_dev->addr.bus == bus) &&
 -- 
-2.45.1.windows.1
+2.43.0
 

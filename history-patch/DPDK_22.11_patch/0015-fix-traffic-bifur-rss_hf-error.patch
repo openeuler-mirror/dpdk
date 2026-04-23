@@ -1,7 +1,7 @@
-From f2b7260844ef1a1a083ae2423de1e7212f71477d Mon Sep 17 00:00:00 2001
+From d8bfe14882b5e089816db856e05d14dfd7d21293 Mon Sep 17 00:00:00 2001
 From: xiaobai <chenyi19990512@163.com>
 Date: Wed, 3 Sep 2025 10:05:05 +0800
-Subject: [PATCH] fix traffic bifur rss_hf error
+Subject: [PATCH 15/20] fix traffic bifur rss_hf error
 
 ---
  drivers/net/hinic3/hinic3_pmd_flow.c | 2 +-
@@ -21,5 +21,5 @@ index 9374cd8..5a1c8fc 100644
  	rss_conf.rss_key = hash;
  	rss_conf.rss_key_len  = act_r->key_len;
 -- 
-2.45.1.windows.1
+2.43.0
 

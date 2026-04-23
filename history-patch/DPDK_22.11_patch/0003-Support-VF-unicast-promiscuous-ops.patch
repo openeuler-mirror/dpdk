@@ -1,7 +1,7 @@
-From 429a045a03ddad1cc0ad374fe4fabf3fbc1ad2dd Mon Sep 17 00:00:00 2001
+From a9f7413d3ebbe4d54902fafc13a87e3a8ac3c27e Mon Sep 17 00:00:00 2001
 From: Huawei <@huawei.com>
 Date: Wed, 7 May 2025 11:53:45 +0800
-Subject: [PATCH 03/12] Support VF unicast promiscuous ops
+Subject: [PATCH 03/20] Support VF unicast promiscuous ops
 
 Signed-off-by: Huawei <@huawei.com>
 ---
@@ -48,5 +48,5 @@ index e2421ad..8f8a870 100644
  	.rss_hash_conf_get             = hinic3_rss_conf_get,
  	.reta_update                   = hinic3_rss_reta_update,
 -- 
-2.45.1.windows.1
+2.43.0
 

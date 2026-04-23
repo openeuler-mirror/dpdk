@@ -1,7 +1,7 @@
-From 231bee855ce827e70c85e06b2cc8abaadfa33504 Mon Sep 17 00:00:00 2001
+From 6a1f70696db821a4e505b1e08038379fb4e8e2b6 Mon Sep 17 00:00:00 2001
 From: xiaobai <chenyi19990512@163.com>
 Date: Mon, 19 May 2025 11:50:52 +0800
-Subject: [PATCH 10/12] modify phyport stats strings
+Subject: [PATCH 10/20] modify phyport stats strings
 
 ---
  drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h | 2 +-
@@ -35,5 +35,5 @@ index 3025472..a58777e 100644
  	HINIC3_PORT_STAT(mac_rx_send_app_bad_pkt_num),
  	HINIC3_PORT_STAT(mac_rx_unfilter_pkt_num)
 -- 
-2.45.1.windows.1
+2.43.0
 

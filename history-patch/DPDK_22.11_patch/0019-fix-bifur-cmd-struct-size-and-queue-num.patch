@@ -1,7 +1,7 @@
-From 287496697b7765a3382ddddd422011072a805e70 Mon Sep 17 00:00:00 2001
+From 45ce94b9656b21154e1dec591b753388319943cd Mon Sep 17 00:00:00 2001
 From: liya0822 <liya51@h-partners.com>
 Date: Tue, 21 Apr 2026 09:30:45 +0800
-Subject: [PATCH] fix debug
+Subject: [PATCH 19/20] fix bifur cmd struct size and queue num
 
 ---
  drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h |  2 +-
@@ -134,5 +134,5 @@ index 5a1c8fc..a9646a7 100644
  			return hinic3_flow_set_rss_action_config(dev, actions, error);
  		}
 -- 
-2.28.0.windows.1
+2.43.0
 
