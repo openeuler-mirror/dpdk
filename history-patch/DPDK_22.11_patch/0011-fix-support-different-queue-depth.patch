@@ -1,7 +1,7 @@
-From 24e0ec08e194cd6b8dce43dd896602f0ebdf8100 Mon Sep 17 00:00:00 2001
+From d1a0613a54c74878ed89c9fdaa9204c03075dbfa Mon Sep 17 00:00:00 2001
 From: xiaobai <chenyi19990512@163.com>
 Date: Mon, 19 May 2025 11:59:04 +0800
-Subject: [PATCH 11/12] fix support different queue depth
+Subject: [PATCH 11/20] fix support different queue depth
 
 ---
  drivers/net/hinic3/hinic3_pmd_ethdev.c | 14 ++++++++++++++
@@ -40,5 +40,5 @@ index a58777e..ece8252 100644
  	sq_depth = (nb_desc & (nb_desc - 1)) ?
  		   ((u16)(1U << (ilog2(nb_desc) + 1))) : nb_desc;
 -- 
-2.45.1.windows.1
+2.43.0
 

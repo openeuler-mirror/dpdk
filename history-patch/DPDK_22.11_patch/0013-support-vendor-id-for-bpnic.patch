@@ -1,7 +1,7 @@
-From c66b20869005afe81341a3b86e4d4aab36b21566 Mon Sep 17 00:00:00 2001
+From c275c3ece786c9fcbb2da11db146fd9fb7c3b95c Mon Sep 17 00:00:00 2001
 From: wangxin679 <wangxin679@h-partners.com>
 Date: Tue, 5 Aug 2025 17:39:38 +0800
-Subject: [PATCH] support vendor id for bpnic
+Subject: [PATCH 13/20] support vendor id for bpnic
 
 ---
  drivers/net/hinic3/base/hinic3_pmd_csr.h      | 1 +
@@ -10,7 +10,7 @@ Subject: [PATCH] support vendor id for bpnic
  3 files changed, 6 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_csr.h b/drivers/net/hinic3/base/hinic3_pmd_csr.h
-index d8cbe61..885a497 100644
+index d8cbe61..a8556b4 100644
 --- a/drivers/net/hinic3/base/hinic3_pmd_csr.h
 +++ b/drivers/net/hinic3/base/hinic3_pmd_csr.h
 @@ -11,6 +11,7 @@
@@ -22,7 +22,7 @@ index d8cbe61..885a497 100644
  #define HINIC3_DEV_ID_DPU			0x0224
  #define HINIC3_DEV_ID_VF			0x375F
 diff --git a/drivers/net/hinic3/hinic3_pmd_ethdev.c b/drivers/net/hinic3/hinic3_pmd_ethdev.c
-index 5a7ac0f..594bcf5 100644
+index 5a7ac0f..0a6e422 100644
 --- a/drivers/net/hinic3/hinic3_pmd_ethdev.c
 +++ b/drivers/net/hinic3/hinic3_pmd_ethdev.c
 @@ -3668,6 +3668,9 @@ static const struct rte_pci_id pci_id_hinic3_map[] = {
@@ -36,7 +36,7 @@ index 5a7ac0f..594bcf5 100644
  
  	{.vendor_id = 0},
 diff --git a/drivers/net/hinic3/mml/hinic3_pmd_mml_ioctl.c b/drivers/net/hinic3/mml/hinic3_pmd_mml_ioctl.c
-index 8ee5807..839f21e 100644
+index 8ee5807..c5b5277 100644
 --- a/drivers/net/hinic3/mml/hinic3_pmd_mml_ioctl.c
 +++ b/drivers/net/hinic3/mml/hinic3_pmd_mml_ioctl.c
 @@ -174,7 +174,8 @@ static struct rte_eth_dev *get_eth_dev_by_pci_addr(char *pci_addr, __rte_unused
@@ -50,5 +50,5 @@ index 8ee5807..839f21e 100644
              pci_dev->id.device_id == HINIC3_DEV_ID_DPU ||
              pci_dev->id.device_id == HINIC3_DEV_ID_VF) &&
 -- 
-2.45.1.windows.1
+2.43.0
 

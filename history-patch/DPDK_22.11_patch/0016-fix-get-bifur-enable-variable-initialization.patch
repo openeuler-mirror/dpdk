@@ -1,7 +1,7 @@
-From ab44e803fcd80be336e4b78c83a3c331765bf5a4 Mon Sep 17 00:00:00 2001
+From b2c3446f0a2f121fd15079ad67177e47fc6ca02f Mon Sep 17 00:00:00 2001
 From: liya0822 <liya51@h-partners.com>
 Date: Mon, 2 Feb 2026 14:56:20 +0800
-Subject: [PATCH 16/16] fix get bifur enable variable initialization
+Subject: [PATCH 16/20] fix get bifur enable variable initialization
 
 ---
  drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c | 5 ++++-
@@ -25,5 +25,5 @@ index 230477a..c0baf13 100644
  	memset(&bifur_cmd, 0, sizeof(struct hinic3_port_flow_bifur_en_cmd));
  	bifur_cmd.port_id = hinic3_physical_port_id(hwdev);
 -- 
-2.28.0.windows.1
+2.43.0
 

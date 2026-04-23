@@ -1,7 +1,7 @@
-From 3ebfeb39f33e1a0cd60cf79d16a7e708e8c87c52 Mon Sep 17 00:00:00 2001
+From c537cb1b659ead2210e4b217ee9766d298aed989 Mon Sep 17 00:00:00 2001
 From: Huawei <@huawei.com>
 Date: Thu, 8 May 2025 10:54:09 +0800
-Subject: [PATCH 05/12] Support identify VXLAN packets
+Subject: [PATCH 05/20] Support identify VXLAN packets
 
 Signed-off-by: Huawei <@huawei.com>
 ---
@@ -53,5 +53,5 @@ index 2d1f241..41721eb 100644
  		rxm->ol_flags |= hinic3_rx_rss_hash(offload_type, hash_value,
  						    &rxm->hash.rss);
 -- 
-2.45.1.windows.1
+2.43.0
 

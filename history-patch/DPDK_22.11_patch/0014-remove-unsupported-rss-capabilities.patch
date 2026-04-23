@@ -1,7 +1,7 @@
-From ca08f82e78678b6b9bbc37a018d25c36d36bf590 Mon Sep 17 00:00:00 2001
+From bd9948d30048023c4d967716a45b5623412f3621 Mon Sep 17 00:00:00 2001
 From: wangxin679 <wangxin679@h-partners.com>
 Date: Thu, 21 Aug 2025 21:00:18 +0800
-Subject: [PATCH] remove unsupported rss capabilities
+Subject: [PATCH 14/20] remove unsupported rss capabilities
 
 ---
  drivers/net/hinic3/hinic3_pmd_ethdev.c | 4 ----
@@ -10,7 +10,7 @@ Subject: [PATCH] remove unsupported rss capabilities
  3 files changed, 2 insertions(+), 10 deletions(-)
 
 diff --git a/drivers/net/hinic3/hinic3_pmd_ethdev.c b/drivers/net/hinic3/hinic3_pmd_ethdev.c
-index 594bcf5..a63a6d2 100644
+index 0a6e422..9485ee0 100644
 --- a/drivers/net/hinic3/hinic3_pmd_ethdev.c
 +++ b/drivers/net/hinic3/hinic3_pmd_ethdev.c
 @@ -2368,9 +2368,7 @@ static int hinic3_rss_hash_update(struct rte_eth_dev *dev,
@@ -72,5 +72,5 @@ index 6eeb997..d665f2b 100644
  enum HINIC3_RX_CQE_PT_L3 {
  	HINIC3_RX_CQE_L3_IPV4 = 0u,
 -- 
-2.45.1.windows.1
+2.43.0
 

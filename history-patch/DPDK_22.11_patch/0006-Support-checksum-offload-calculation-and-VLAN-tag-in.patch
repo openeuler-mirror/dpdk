@@ -1,7 +1,7 @@
-From d51880068199410f89442c4dc2400889ab045e0f Mon Sep 17 00:00:00 2001
+From e789c7bde4561f4d810896f0ad3837acd3a059f1 Mon Sep 17 00:00:00 2001
 From: Huawei <@huawei.com>
 Date: Thu, 8 May 2025 11:00:01 +0800
-Subject: [PATCH 06/12] Support checksum offload calculation and VLAN tag in
+Subject: [PATCH 06/20] Support checksum offload calculation and VLAN tag in
  DPDK VXLAN scenario
 
 Signed-off-by: Huawei <@huawei.com>
@@ -40,5 +40,5 @@ index e73ed3e..dfac1d1 100644
  	version = (*ip_hdr >> 4) & 0x0F;
  	if (version == IPV4_VERSION || version == IPV6_VERSION) {
 -- 
-2.45.1.windows.1
+2.43.0
 

@@ -1,7 +1,7 @@
-From 0af63e3eef8b0fc439dea9ff6ab3959732906e85 Mon Sep 17 00:00:00 2001
+From 4cc00ec114c2dc739620ad276e9a65eb4b9f474c Mon Sep 17 00:00:00 2001
 From: xiaobai <chenyi19990512@163.com>
 Date: Mon, 19 May 2025 11:49:25 +0800
-Subject: [PATCH 09/12] fix support secondary process
+Subject: [PATCH 09/20] fix support secondary process
 
 ---
  drivers/net/hinic3/hinic3_pmd_ethdev.c | 21 +++++++++++++++++++++
@@ -40,5 +40,5 @@ index 40c8c07..3025472 100644
  	}
  
 -- 
-2.45.1.windows.1
+2.43.0
 

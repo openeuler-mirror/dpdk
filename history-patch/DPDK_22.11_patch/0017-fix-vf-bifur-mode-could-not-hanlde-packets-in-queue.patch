@@ -1,7 +1,8 @@
-From 3b40644b4e64d17b7f1ac2d1171cec15cd56c9bd Mon Sep 17 00:00:00 2001
+From 9747f60a84f4d3c9a823068c0b0590f191aa0110 Mon Sep 17 00:00:00 2001
 From: liya0822 <liya51@h-partners.com>
 Date: Tue, 3 Mar 2026 21:10:16 +0800
-Subject: [PATCH] fix vf bifur mode could not hanlde packets in queue full
+Subject: [PATCH 17/20] fix vf bifur mode could not hanlde packets in queue
+ full
 
 ---
  drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c | 14 ++++++--
@@ -136,5 +137,5 @@ index 5c94ead..7b4a7b2 100644
  	tcam_key_calculate(tcam_key, fdir_tcam_rule);
  }
 -- 
-2.28.0.windows.1
+2.43.0
 
