@@ -1,14 +1,14 @@
-From 9f315d45367ca9e3b391835851029ff0b8b41f74 Mon Sep 17 00:00:00 2001
+From bc3d6c4905e695ce36e4fba145ad7e5c9cdd8641 Mon Sep 17 00:00:00 2001
 From: huang_bing_kang <1209365920@qq.com>
 Date: Thu, 23 Apr 2026 15:23:16 +0800
 Subject: [PATCH 20/20] support vxlan in flow isolation
 
 ---
- drivers/net/hinic3/hinic3_pmd_fdir.c | 29 ++++++++++++++++++++++++----
- 1 file changed, 25 insertions(+), 4 deletions(-)
+ drivers/net/hinic3/hinic3_pmd_fdir.c | 38 ++++++++++++++++++++++++++--
+ 1 file changed, 36 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/net/hinic3/hinic3_pmd_fdir.c b/drivers/net/hinic3/hinic3_pmd_fdir.c
-index d170571..7682bc9 100644
+index d170571..f674637 100644
 --- a/drivers/net/hinic3/hinic3_pmd_fdir.c
 +++ b/drivers/net/hinic3/hinic3_pmd_fdir.c
 @@ -411,6 +411,7 @@ static void hinic3_fdir_tcam_ipv6_vxlan_init(struct rte_eth_dev *dev,
@@ -19,12 +19,11 @@ index d170571..7682bc9 100644
  
  	tcam_key->key_mask_ipv6.ip_proto = rule->key_mask.proto;
  	tcam_key->key_info_ipv6.ip_proto = rule->key_spec.proto;
-@@ -422,8 +423,15 @@ static void hinic3_fdir_tcam_ipv6_vxlan_init(struct rte_eth_dev *dev,
+@@ -422,8 +423,20 @@ static void hinic3_fdir_tcam_ipv6_vxlan_init(struct rte_eth_dev *dev,
  	tcam_key->key_info_ipv6.outer_ip_type = HINIC3_FDIR_IP_TYPE_IPV6;
  
  	tcam_key->key_mask_ipv6.function_id = HINIC3_UINT15_MAX;
--	tcam_key->key_info_ipv6.function_id =
--		hinic3_global_func_id(nic_dev->hwdev) & HINIC3_UINT15_MAX;
++#ifdef HINIC3_TRAFFIC_BIFUR
 +	if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, 0, 0) != 0) {
 +		PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable status failed.");
 +	}
@@ -34,10 +33,14 @@ index d170571..7682bc9 100644
 +		tcam_key->key_info_ipv6.function_id =
 +			hinic3_global_func_id(nic_dev->hwdev) & HINIC3_UINT15_MAX;
 +	}
++#else
+ 	tcam_key->key_info_ipv6.function_id =
+ 		hinic3_global_func_id(nic_dev->hwdev) & HINIC3_UINT15_MAX;
++#endif
  
  	tcam_key->key_mask_ipv6.dport = rule->key_mask.dst_port;
  	tcam_key->key_info_ipv6.dport = rule->key_spec.dst_port;
-@@ -440,6 +448,8 @@ static void hinic3_fdir_tcam_vxlan_init(struct rte_eth_dev *dev,
+@@ -440,6 +453,8 @@ static void hinic3_fdir_tcam_vxlan_init(struct rte_eth_dev *dev,
  			struct hinic3_tcam_key *tcam_key)
  {
  	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
@@ -46,12 +49,11 @@ index d170571..7682bc9 100644
  
  	if (rule->outer_ip_type == HINIC3_FDIR_IP_TYPE_IPV6) {
  		hinic3_fdir_tcam_ipv6_vxlan_init(dev, rule, tcam_key);
-@@ -486,8 +496,19 @@ static void hinic3_fdir_tcam_vxlan_init(struct rte_eth_dev *dev,
+@@ -486,8 +501,25 @@ static void hinic3_fdir_tcam_vxlan_init(struct rte_eth_dev *dev,
  	tcam_key->key_info.tunnel_type = HINIC3_FDIR_TUNNEL_MODE_VXLAN;
  
  	tcam_key->key_mask.function_id = HINIC3_UINT15_MAX;
--	tcam_key->key_info.function_id =
--		hinic3_global_func_id(nic_dev->hwdev) & HINIC3_UINT15_MAX;
++#ifdef HINIC3_TRAFFIC_BIFUR
 +	if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, &iso_en, 0) != 0) {
 +		PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable status failed.");
 +	}
@@ -61,13 +63,42 @@ index d170571..7682bc9 100644
 +		tcam_key->key_info.function_id =
 +			hinic3_global_func_id(nic_dev->hwdev) & HINIC3_UINT15_MAX;
 +	}
++
 +	if (iso_en) {
 +		tcam_key->key_info.er_id = er_id;
 +		tcam_key->key_info.er_id = HINIC3_UINT4_MAX;
 +	}
++#else
+ 	tcam_key->key_info.function_id =
+ 		hinic3_global_func_id(nic_dev->hwdev) & HINIC3_UINT15_MAX;
++#endif
  
  	if (rule->ip_type == HINIC3_FDIR_IP_TYPE_IPV4)
  		hinic3_fdir_tcam_vxlan_ipv4_init(rule, tcam_key);
+@@ -508,7 +540,9 @@ static void hinic3_fdir_tcam_info_init(struct rte_eth_dev *dev,
+ 		hinic3_fdir_tcam_vxlan_init(dev, rule, tcam_key);
+ 
+ 	fdir_tcam_rule->data.qid = rule->rq_index;
++#ifdef HINIC3_TRAFFIC_BIFUR
+ 	fdir_tcam_rule->data.queue_num = rule->queue_num;
++#endif
+ 
+ 	tcam_key_calculate(tcam_key, fdir_tcam_rule);
+ }
+@@ -750,11 +784,11 @@ static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
+ 	nic_dev->tcam_rule_nums++;
+ 
+ 	PMD_DRV_LOG(INFO, "Add fdir tcam rule, function_id: 0x%x, "
+-		    "tcam_block_id: %d, local_index: %d, global_index: %d, queue bitmap: 0x%x, "
++		    "tcam_block_id: %d, local_index: %d, global_index: %d, "
+ 		    "tcam_rule_nums: %d succeed",
+ 		    hinic3_global_func_id(nic_dev->hwdev),
+ 		    tcam_filter->dynamic_block_id, index, fdir_tcam_rule->index,
+-		    fdir_tcam_rule->data.qid, nic_dev->tcam_rule_nums);
++		    nic_dev->tcam_rule_nums);
+ 
+ 	return 0;
+ 
 -- 
 2.43.0
 
