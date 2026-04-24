@@ -1,14 +1,14 @@
-From f2dd876752c280e65ee043bc4c587a6e75cd9f42 Mon Sep 17 00:00:00 2001
+From bc3d6c4905e695ce36e4fba145ad7e5c9cdd8641 Mon Sep 17 00:00:00 2001
 From: huang_bing_kang <1209365920@qq.com>
 Date: Thu, 23 Apr 2026 15:23:16 +0800
 Subject: [PATCH 20/20] support vxlan in flow isolation
 
 ---
- drivers/net/hinic3/hinic3_pmd_fdir.c | 34 ++++++++++++++++++++++++++++
- 1 file changed, 34 insertions(+)
+ drivers/net/hinic3/hinic3_pmd_fdir.c | 38 ++++++++++++++++++++++++++--
+ 1 file changed, 36 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/net/hinic3/hinic3_pmd_fdir.c b/drivers/net/hinic3/hinic3_pmd_fdir.c
-index d170571..b1ebedd 100644
+index d170571..f674637 100644
 --- a/drivers/net/hinic3/hinic3_pmd_fdir.c
 +++ b/drivers/net/hinic3/hinic3_pmd_fdir.c
 @@ -411,6 +411,7 @@ static void hinic3_fdir_tcam_ipv6_vxlan_init(struct rte_eth_dev *dev,
@@ -85,6 +85,20 @@ index d170571..b1ebedd 100644
  
  	tcam_key_calculate(tcam_key, fdir_tcam_rule);
  }
+@@ -750,11 +784,11 @@ static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
+ 	nic_dev->tcam_rule_nums++;
+ 
+ 	PMD_DRV_LOG(INFO, "Add fdir tcam rule, function_id: 0x%x, "
+-		    "tcam_block_id: %d, local_index: %d, global_index: %d, queue bitmap: 0x%x, "
++		    "tcam_block_id: %d, local_index: %d, global_index: %d, "
+ 		    "tcam_rule_nums: %d succeed",
+ 		    hinic3_global_func_id(nic_dev->hwdev),
+ 		    tcam_filter->dynamic_block_id, index, fdir_tcam_rule->index,
+-		    fdir_tcam_rule->data.qid, nic_dev->tcam_rule_nums);
++		    nic_dev->tcam_rule_nums);
+ 
+ 	return 0;
+ 
 -- 
 2.43.0
 
