@@ -2359,7 +2359,7 @@ int hinic3_set_fec_mode(struct hinic3_hwdev *hwdev, u8 fecparam)
 	return 0;
 }
 
-int hinic3_get_fec_mode(struct hinic3_hwdev *hwdev, u8 *advertised_fec)
+int hinic3_get_fec_mode(struct hinic3_hwdev *hwdev, u8 *advertised_fec, u8 *supported_fec)
 {
 	struct mag_cmd_cfg_fec_mode fec_msg = { 0 };
 	u16 out_size = sizeof(fec_msg);
@@ -2368,7 +2368,12 @@ int hinic3_get_fec_mode(struct hinic3_hwdev *hwdev, u8 *advertised_fec)
 	if (!hwdev)
 		return -EINVAL;
 
-	memset(&fec_msg, 0 , sizeof(fec_msg));
+	if (advertised_fec != NULL)
+		*advertised_fec = 0;
+
+	if (supported_fec != NULL)
+		*supported_fec = 0;
+	
 	fec_msg.opcode = HINIC3_FEC_MODE_OPCODE_GET;
 	fec_msg.port_id = hinic3_physical_port_id(hwdev);
 
@@ -2380,8 +2385,12 @@ int hinic3_get_fec_mode(struct hinic3_hwdev *hwdev, u8 *advertised_fec)
 			    err, fec_msg.head.status, out_size);
 		return -EINVAL;
 	}
+	
+	if (advertised_fec != NULL)
+		hinic3_fec_param_covert(HINIC3_FEC_MODE_OPCODE_GET, BIT(fec_msg.advertised_fec), advertised_fec);
 
-	hinic3_fec_param_covert(HINIC3_FEC_MODE_OPCODE_GET, BIT(fec_msg.advertised_fec), advertised_fec);
+	if (supported_fec != NULL)
+		hinic3_fec_param_covert(HINIC3_FEC_MODE_OPCODE_GET, fec_msg.supported_fec, supported_fec);
 
 	return 0;
 }

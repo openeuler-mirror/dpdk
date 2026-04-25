@@ -1869,6 +1869,6 @@ int hinic3_fdir_cfg_sec_tcam(void *hwdev, u8 *en);
 
 int hinic3_set_fec_mode(struct hinic3_hwdev *hwdev, u8 fecparam);
 
-int hinic3_get_fec_mode(struct hinic3_hwdev *hwdev, u8 *supported_fec);
+int hinic3_get_fec_mode(struct hinic3_hwdev *hwdev, u8 *advertised_fec, u8 *supported_fec);
 
 #endif /* _HINIC3_PMD_NIC_CFG_H_ */
