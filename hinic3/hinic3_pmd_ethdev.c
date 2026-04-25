@@ -3734,6 +3734,58 @@ static int hinic3_set_default_hw_feature(struct hinic3_nic_dev *nic_dev)
 	return 0;
 }
 
+static int hinic3_parse_version(const char *str, uint8_t *ver) {
+    if (str == NULL || ver == NULL)
+		return -EINVAL;
+
+    uint8_t idx = 0;
+    uint8_t val = 0;
+    uint8_t char_cnt = 0;
+
+    for (const char *p = str; *p; ++p) {
+        if (++char_cnt > HINIC3_FW_VERSION_LEN)
+			return -EINVAL;
+
+        unsigned char c = *p;
+        if (c >= '0' && c <= '9')
+            val = val * 10 + (c - '0');
+        else if (c == '.') {
+			if (idx >= HINIC3_FW_VERSION_NUM - 1)
+				return -EINVAL;
+			ver[idx++] = val;
+			val = 0;
+        } else
+            return -EINVAL;
+    }
+	if (idx != HINIC3_FW_VERSION_NUM - 1)
+		return -EINVAL;
+
+	ver[idx++] = val;
+    return 0;
+}
+
+static int hinic3_check_fw_version(struct rte_eth_dev *eth_dev)
+{
+	char fw_version[HINIC3_FW_VERSION_LEN];
+	int fw_size = HINIC3_FW_VERSION_LEN;
+	uint8_t version[HINIC3_FW_VERSION_NUM];
+	int ret = hinic3_fw_version_get(eth_dev, fw_version, fw_size);
+	if (ret != 0) {
+		PMD_DRV_LOG(ERR, "Get firmware version failed, err: %d", ret);
+		return ret;
+	}
+	ret = hinic3_parse_version(fw_version, version);
+	if(ret) {
+		PMD_DRV_LOG(ERR, "Parse firmware version failed, err: %d", ret);
+		return ret;
+	}
+	if (!strcmp(fw_version, "15.19.2.9")) {
+		PMD_DRV_LOG(ERR, "Unsupported firmware version:%s", fw_version);
+		return -ENOTSUP;
+	}
+	return 0;
+}
+
 static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 {
 	struct hinic3_tcam_info *tcam_info = NULL;
@@ -3855,7 +3907,12 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 			    eth_dev->data->name);
 		goto init_nic_hwdev_fail;
 	}
-
+	
+	err = hinic3_check_fw_version(eth_dev);
+	if (err) {
+		PMD_DRV_LOG(ERR, "Check firmware version failed, err: %d", err);
+		goto check_fw_version_fail;
+	}
 	err = hinic3_get_feature_from_hw(nic_dev->hwdev, &nic_dev->feature_cap, 1);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Get nic feature from hardware failed, dev_name: %s",
@@ -3952,9 +4009,10 @@ init_mac_table_fail:
 	hinic3_deinit_sw_rxtxqs(nic_dev);
 
 init_sw_rxtxqs_fail:
+get_cap_fail:
+check_fw_version_fail:
 	hinic3_free_nic_hwdev(nic_dev->hwdev);
 
-get_cap_fail:
 init_nic_hwdev_fail:
 	hinic3_free_hwdev(nic_dev->hwdev);
 	eth_dev->dev_ops = NULL;
