@@ -45,6 +45,8 @@
 
 #define HINIC3_RX_WAIT_CYCLE_THRESH	500
 
+#define HINIC3_FEC_CAPA_NUM_PER_SPEED	1
+
 /*
  * Vlan_id is a 12 bit number. The VFTA array is actually a 4096 bit array,
  * 128 of 32bit elements. 2^5 = 32. The val of lower 5 bits specifies the bit
@@ -3432,7 +3434,7 @@ static int hinic3_fec_get(struct rte_eth_dev *dev, uint32_t *fec_capa)
 	u8 advertised_fec = 0;
 	int err;
 	
-	err = hinic3_get_fec_mode(nic_dev->hwdev, &advertised_fec);
+	err = hinic3_get_fec_mode(nic_dev->hwdev, &advertised_fec, 0);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Get fec parma failed: %d.", err);
 		return err;
@@ -3442,6 +3444,40 @@ static int hinic3_fec_get(struct rte_eth_dev *dev, uint32_t *fec_capa)
 
 	return 0;
 }
+
+static int hinic3_fec_capability_get(struct rte_eth_dev *dev,
+			struct rte_eth_fec_capa *speed_fec_capa,
+			unsigned int num)
+{
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+	u8 supported_fec = 0;
+	int err;
+
+	if (speed_fec_capa == NULL)
+		return HINIC3_FEC_CAPA_NUM_PER_SPEED;
+
+	if (num < HINIC3_FEC_CAPA_NUM_PER_SPEED) {
+		PMD_DRV_LOG(ERR, "Not enough array size(%u) to store FEC capabilities, should not be less than %u.",
+			    num, HINIC3_FEC_CAPA_NUM_PER_SPEED);
+		return -EINVAL;
+	}
+
+	err = hinic3_get_fec_mode(nic_dev->hwdev, 0, &supported_fec);
+	if (err) {
+		PMD_DRV_LOG(ERR, "Failed to get fec capability, err: %d.", err);
+		return err;
+	}
+	
+	speed_fec_capa->speed = nic_dev->hwdev->speed;
+	speed_fec_capa->capa = (u32)supported_fec;
+
+	if (speed_fec_capa->speed == ETH_SPEED_NUM_NONE ||
+		speed_fec_capa->capa == 0)
+		return -ENOTSUP;
+
+	return HINIC3_FEC_CAPA_NUM_PER_SPEED;
+}
+
 #endif
 
 static const struct eth_dev_ops hinic3_pmd_ops = {
@@ -3519,6 +3555,7 @@ static const struct eth_dev_ops hinic3_pmd_ops = {
 	.tx_hairpin_queue_setup		   = hinic3_tx_hairpin_queue_setup,
 	.tx_burst_mode_get             = hinic3_tx_burst_mode_get,
 #ifdef DPDK_20_11
+	.fec_get_capability	       = hinic3_fec_capability_get,
 	.fec_get                       = hinic3_fec_get,
 	.fec_set               	       = hinic3_fec_set,
 #endif
