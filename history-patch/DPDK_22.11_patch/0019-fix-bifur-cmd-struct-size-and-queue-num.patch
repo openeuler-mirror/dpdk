@@ -1,13 +1,13 @@
-From 45ce94b9656b21154e1dec591b753388319943cd Mon Sep 17 00:00:00 2001
+From 29837b8d223147f3c5011be2de836808b8b18adc Mon Sep 17 00:00:00 2001
 From: liya0822 <liya51@h-partners.com>
-Date: Tue, 21 Apr 2026 09:30:45 +0800
+Date: Mon, 27 Apr 2026 20:24:05 +0800
 Subject: [PATCH 19/20] fix bifur cmd struct size and queue num
 
 ---
  drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h |  2 +-
- drivers/net/hinic3/hinic3_pmd_fdir.c         | 19 +--------
- drivers/net/hinic3/hinic3_pmd_flow.c         | 44 +++++++++++++++-----
- 3 files changed, 36 insertions(+), 29 deletions(-)
+ drivers/net/hinic3/hinic3_pmd_fdir.c         | 19 +-------
+ drivers/net/hinic3/hinic3_pmd_flow.c         | 49 +++++++++++++++-----
+ 3 files changed, 41 insertions(+), 29 deletions(-)
 
 diff --git a/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h
 index b04ee1c..82d7089 100644
@@ -68,7 +68,7 @@ index 59721e0..d170571 100644
  		    hinic3_global_func_id(nic_dev->hwdev),
  		    tcam_filter->dynamic_block_id, index, fdir_tcam_rule->index,
 diff --git a/drivers/net/hinic3/hinic3_pmd_flow.c b/drivers/net/hinic3/hinic3_pmd_flow.c
-index 5a1c8fc..a9646a7 100644
+index 5a1c8fc..3836a56 100644
 --- a/drivers/net/hinic3/hinic3_pmd_flow.c
 +++ b/drivers/net/hinic3/hinic3_pmd_flow.c
 @@ -32,6 +32,7 @@
@@ -79,7 +79,7 @@ index 5a1c8fc..a9646a7 100644
  #endif
  
  #define HINIC3_UINT8_MAX          0xff
-@@ -485,21 +486,42 @@ static int hinic3_flow_parse_action(struct rte_eth_dev *dev,
+@@ -485,21 +486,47 @@ static int hinic3_flow_parse_action(struct rte_eth_dev *dev,
  			return err;
  		}
  
@@ -90,8 +90,6 @@ index 5a1c8fc..a9646a7 100644
 -						EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION,
 -						act, "Duplicate action queue numbers.");
 -					return -rte_errno;
--				}
--				rte_bit_relaxed_set32(act_r->queue[i], &filter->fdir_filter.rq_index);
 +		u8 bifur_en, bifur_type;
 +
 +		if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, 0, &bifur_type) != 0) {
@@ -99,19 +97,26 @@ index 5a1c8fc..a9646a7 100644
 +		}
 +
 +		/* VF splitting scenarios require special handling. */
-+		if (bifur_en && (bifur_type == 0)) {  
-+			u32 qnum = dev->data->nb_rx_queues;
-+			PMD_DRV_LOG(WARNING, "bifur type is vf, rss hash to all queues, reset queue_num: %ld", qnum);
-+			if (dev->data->nb_rx_queues == HINIC3_SPEC_BIFUR_QUEUE_NUM)
-+				qnum--;
++		if (bifur_en && (bifur_type == 0)) { 
++			if (dev->data->nb_rx_queues > 1) { 
++				u32 qnum = dev->data->nb_rx_queues;
++				PMD_DRV_LOG(WARNING, "bifur type is vf, rss hash to all queues, reset queue_num: %ld", qnum);
++				if (dev->data->nb_rx_queues >= HINIC3_SPEC_BIFUR_QUEUE_NUM)
++					qnum = HINIC3_SPEC_BIFUR_QUEUE_NUM - 1;
 +
-+			for (i = 0; i < qnum; i++) {
-+				rte_bit_relaxed_set32(i, &filter->fdir_filter.rq_index);
++				for (i = 0; i < qnum; i++) {
++					rte_bit_relaxed_set32(i, &filter->fdir_filter.rq_index);
+ 				}
+-				rte_bit_relaxed_set32(act_r->queue[i], &filter->fdir_filter.rq_index);
++
++				filter->fdir_filter.queue_num = qnum;
++			} else {
++				filter->fdir_filter.rq_index = act_r->queue[0];
++				filter->fdir_filter.queue_num = act_r->queue_num;
  			}
-+
-+			filter->fdir_filter.queue_num = qnum;
  		} else {
 -			filter->fdir_filter.rq_index = act_r->queue[0];
+-		}
 +			if ((act_r->queue_num > 1) ) {
 +				for (i = 0; i < act_r->queue_num; i++) {
 +					if (rte_bit_relaxed_get32(act_r->queue[i], &filter->fdir_filter.rq_index) != 0) {
@@ -127,7 +132,7 @@ index 5a1c8fc..a9646a7 100644
 +			}
 +
 +			filter->fdir_filter.queue_num = act_r->queue_num;
- 		}
++ 		}
  
 -		filter->fdir_filter.queue_num = act_r->queue_num;
  		if (act_r->key) {
