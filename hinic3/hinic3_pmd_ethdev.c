@@ -1558,8 +1558,13 @@ int hinic3_dev_rx_queue_intr_enable(struct rte_eth_dev *dev,
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	u16 msix_intr;
 
-	if (!rte_intr_dp_is_en(intr_handle) || !intr_handle->intr_vec)
-		return 0;
+	if ((nic_dev->feature_cap & NIC_F_HTN_CMDQ) != 0) {
+		if (!rte_intr_dp_is_en(intr_handle) || !intr_handle->intr_vec || !dev->data->dev_conf.intr_conf.rxq)
+			return 0;
+	} else {
+		if (!rte_intr_dp_is_en(intr_handle) || !intr_handle->intr_vec)
+			return 0;
+	}
 
 	if (queue_id >= dev->data->nb_rx_queues)
 		return -EINVAL;
@@ -1872,8 +1877,11 @@ static int hinic3_init_rxq_intr(struct rte_eth_dev *dev)
 
 	intr_handle = dev->intr_handle;
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
-	if (!dev->data->dev_conf.intr_conf.rxq)
-		return 0;
+
+	if ((nic_dev->feature_cap & NIC_F_HTN_CMDQ) == 0) {
+		if (!dev->data->dev_conf.intr_conf.rxq)
+			return 0;
+	}
 
 	if (!rte_intr_cap_multiple(intr_handle)) {
 		PMD_DRV_LOG(ERR, "Rx queue interrupts require MSI-X interrupts (vfio-pci driver)\n");
