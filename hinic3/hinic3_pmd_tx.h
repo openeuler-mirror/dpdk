@@ -10,8 +10,13 @@
 #define HINIC3_NONTSO_SEG_NUM_VALID(num)	\
 	((num) <= HINIC3_NONTSO_PKT_MAX_SGE)
 
-#define HINIC3_TSO_PKT_MAX_SGE		127 /* tso max sge 127 */
+#define HINIC3_TSO_PKT_MAX_SGE		255 /* tso max sge 255 */
 #define HINIC3_TSO_SEG_NUM_INVALID(num)	((num) > HINIC3_TSO_PKT_MAX_SGE)
+
+/* Non-copy SGE configuration: 28 SGEs are not copied */
+#define HINIC3_NON_COPY_SGE_NUM	28
+#define HINIC3_NONTSO_MBUF_NUM_MAX		(HINIC3_NONTSO_PKT_MAX_SGE - HINIC3_NON_COPY_SGE_NUM)
+#define HINIC3_TSO_MBUF_NUM_MAX 		(HINIC3_TSO_PKT_MAX_SGE - HINIC3_NON_COPY_SGE_NUM)
 
 /* Tx offload info */
 struct hinic3_tx_offload_info {
@@ -78,7 +83,7 @@ struct hinic3_wqe_info {
 	u16 pi;
 
 	u16 wqebb_cnt;
-	u16 rsvd2;
+	u16 last_cpy_mbuf_usable;
 
 	struct hinic3_queue_info queue_info;
 	struct hinic3_offload_info offload_info;
