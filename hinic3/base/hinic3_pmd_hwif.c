@@ -152,7 +152,9 @@
 #define HINIC3_IS_VF_DEV(pdev) ( \
 	((pdev)->id.device_id == HINIC3_DEV_ID_VF_SP620) || \
 	((pdev)->id.device_id == HINIC3_DEV_ID_VF_BP2_620) || \
-	((pdev)->id.device_id == HINIC3_DEV_ID_VF_BP3_620) \
+	((pdev)->id.device_id == HINIC3_DEV_ID_VF_BP3_620) || \
+	((pdev)->id.device_id == HINIC3_DEV_ID_VF_SP560) || \
+	((pdev)->id.device_id == HINIC3_DEV_ID_HYPER_VF_SP560) \
 )
 
 u32 hinic3_hwif_read_reg(struct hinic3_hwif *hwif, u32 reg)
