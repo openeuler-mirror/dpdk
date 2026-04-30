@@ -41,7 +41,9 @@
 
 #define PCI_ADDR_LEN                        12
 #define SEC_TO_MSEC_BASE                    1000
+#define SEC_TO_USEC_BASE                    1000000
 #define MSEC_TO_NSEC_BASE                   1000000
+#define USEC_TO_NSEC_BASE                   1000
 
 #define MAC_FMT                             "%02x:%02x:%02x:%02x:%02x:%02x,"
 #define MAC_ARGS(eth)                       (eth)[0], (eth)[1], (eth)[2], (eth)[3], (eth)[4], (eth)[5]
@@ -210,6 +212,7 @@ int parse_mac(const char *mac, struct eth_address *output_mac);
 int check_valid_mac(const char *mac, enum hinic3_mac_fmt fmt);
 int check_valid_eth_type(const char *eth_type);
 
+long long int hinic3_time_usec(clockid_t clk);
 long long int hinic3_time_msec(void);
 long long int hinic3_time_sec(void);
 void hinic3_set_ctrl_thread_cpu_affinity(pthread_t *thread);

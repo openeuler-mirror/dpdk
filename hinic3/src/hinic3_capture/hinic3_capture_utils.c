@@ -38,19 +38,20 @@ struct rte_mempool *g_pcap_shared_mp = NULL;
 
 static int g_cap_switch = 0;
 static int g_pcap_task = 0;
+static int g_cap_cpu_usage = 0;
 static long long g_no_pcap_task_time = 0;
 struct pcap_task_mgr_t g_cap_task_mgr;
 struct pcap_task_save_t g_cap_task_save = {0};
+
+static long long period_us = 0;
+static long long target_work_us = 0;
+static long long work_us = 0;
+static long long integral_err = 0;
 
 struct pcap_task_mgr_t *
 pcap_get_task_mgr(void)
 {
     return &g_cap_task_mgr;
-}
-
-int pcap_get_cap_switch(void)
-{
-    return g_cap_switch;
 }
 
 void pcap_task_mgr_spin_lock(void)
@@ -821,7 +822,7 @@ void pcap_port_tasks_get(struct pcap_task_batch *task_batch, struct pcap_port_t 
         if (!cap_task)
             continue;
 
-        if (cap_task->stop_flag || (cap_task->remain_count == 0))
+        if (cap_task->stop_flag)
             continue;
 
         cap_task->ref_cnt++;
@@ -1334,6 +1335,21 @@ void pcap_task_stop_as_eth_port_del(uint16_t vport_id)
     return;
 }
 
+void pcap_cpu_usage_set(enum PCAP_CPU_USAGE_TYPE value)
+{
+    g_cap_cpu_usage = value;
+}
+
+enum PCAP_CPU_USAGE_TYPE pcap_cpu_usage_get(void)
+{
+    return g_cap_cpu_usage;
+}
+
+int pcap_switch_get(void)
+{
+    return g_cap_switch;
+}
+
 void pcap_switch_set(int value)
 {
     g_cap_switch = value;
@@ -1359,15 +1375,58 @@ void pcap_time_set(long long value)
     g_no_pcap_task_time = value;
 }
 
+static void 
+pcap_rx_limit(void)
+{
+    long long wall_start = hinic3_time_usec(CLOCK_MONOTONIC);
+    long long cpu_start = hinic3_time_usec(CLOCK_THREAD_CPUTIME_ID);
+
+    /* 1. 运行阶段：精确控制运行时间*/
+    while (hinic3_time_usec(CLOCK_MONOTONIC) - wall_start <= work_us) {
+        pcap_hook_rx_pre();
+    }
+
+    long long wall_after_burn = hinic3_time_usec(CLOCK_MONOTONIC);
+    long long cpu_after_burn = hinic3_time_usec(CLOCK_THREAD_CPUTIME_ID);
+    
+    /* 2. 睡眠阶段：释放CPU */
+    long long to_sleep = period_us - (wall_after_burn - wall_start);
+    if (to_sleep > 0) {
+        usleep((useconds_t)to_sleep);
+    }
+    
+    /* 3. 测量与补PI控制器 */
+    long long actual_work_cpu = cpu_after_burn - cpu_start;
+    long long error = target_work_us - actual_work_cpu;  // 正=运行时间少了，负=运行时间多了
+    
+    integral_err += error;
+    /* 抗积分饱和 */
+    if (integral_err > period_us)
+        integral_err = period_us;
+    if (integral_err < -period_us)
+        integral_err = -period_us;
+    
+    /* PI公式：下次工作时长 = 目标 + 比例项 + 积分项 */
+    work_us = target_work_us + error + integral_err * PCAP_PID_KI;
+    if (work_us < 0)
+        work_us = 0;
+    if (work_us > period_us)
+        work_us = period_us;
+}
+
 void *
 pcap_thread_main(void *arg HINIC3_UNUSED)
 {
     enum check_thread_item_type check_thread = CAPTURE_THREAD;
     long long start = hinic3_time_msec();
+    period_us = PCAP_PERIOD_US;
+    target_work_us = PCAP_PERIOD_US * PCAP_CPU_TARGET_RATE;
+    work_us = target_work_us;
+    integral_err = 0;
 
     for (;;)
     {
-        if (pcap_get_cap_switch() == 1 && pcap_task_get() == 0 && pcap_timeout_check_s(pcap_time_get(), PCAP_DISABLE_TIME_S))
+        if (pcap_switch_get() == 1 && pcap_task_get() == 0 && pcap_timeout_check_s(pcap_time_get(), PCAP_DISABLE_TIME_S))
         {
             HINIC3_LOG(INFO, CAPTURE, "Disable capture probe because timeout.");
             pcap_switch_set(0);
@@ -1377,13 +1436,18 @@ pcap_thread_main(void *arg HINIC3_UNUSED)
         if (g_cap_task_save.thread_exit == PCAP_THREAD_EXIT_STATUS)
             break;
 
-        if (pcap_get_cap_switch() == 0)
+        if (pcap_switch_get() == 0)
         {
             usleep(PCAP_SIEEP_TIME);
             continue;
         }
 
-        pcap_hook_rx_pre();
+        if (pcap_cpu_usage_get() == PCAP_CPU_LOW) {
+            pcap_rx_limit();
+        } else {
+            pcap_hook_rx_pre();
+        }
+
     }
 
     return 0;

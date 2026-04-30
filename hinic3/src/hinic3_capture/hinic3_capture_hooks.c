@@ -64,7 +64,7 @@ pcap_hook_rx_pre(void)
     struct pcap_task_batch task_batch;
     struct pcap_task_t *pcap_task_record = NULL;
 
-    if (pcap_get_cap_switch() == 0)
+    if (pcap_switch_get() == 0)
         return;
 
     pcap_task_batch_init(&task_batch);
@@ -73,6 +73,9 @@ pcap_hook_rx_pre(void)
         if (pcap_task_get() != 0) {
             pcap_task_set(0);
             pcap_time_set(hinic3_time_sec());
+        }
+        if (pcap_cpu_usage_get() == PCAP_CPU_LOW) {
+            usleep(PCAP_PERIOD_US);
         }
         return;
     }

@@ -72,6 +72,7 @@ int hinic3_flow_qos_limit_set(uint16_t qos_id, uint16_t type, uint64_t max_rate,
                              uint64_t min_rate, uint64_t min_burst);
 int hinic3_flow_qos_limit_get(uint16_t qos_id, uint16_t type, uint64_t *max_rate, uint64_t *max_burst,
                              uint64_t *min_rate, uint64_t *min_burst);
+int hinic3_vf_qos_statistics_get(uint16_t *qos_array, struct hovs_qos_stats_batch *stats, size_t cnt);                         
 int hinic3_vf_qos_statistics_get_all_batch(uint16_t *qos_array, struct hovs_qos_stats_batch_all *stats, size_t cnt);
 int hinic3_vf_qos_statistics_clear_batch(uint16_t *qos_array, size_t cnt);
 int hinic3_hqos_statistics_clear(enum qos_type_limit type, uint16_t dir, uint16_t *ids, size_t cnt);

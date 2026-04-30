@@ -44,14 +44,14 @@ static const char *g_port_smap_key[HINIC3_PORT_ARG_TYPE_MAX] = {
     HINIC3_PORT_BLOCK_START,
     HINIC3_PORT_BLOCK_SIZE,
     HINIC3_PORT_UPCALL_QUEUE_NUM,
-    NULL,
+    HINIC3_PORT_UPCALL_REUSE,
     NULL,
     NULL,
     NULL,
     NULL,
     NULL,
     HINIC3_PORT_VIRTIO_QUEUE_DEPTH,
-    NULL,
+    HINIC3_PORT_NO_DRIVER_CHECK,
     HINIC3_PORT_FUNCTION_ID,
 };
 
@@ -76,6 +76,7 @@ static const char *g_bond_smap_key[HINIC3_BOND_ARG_TYPE_MAX] = {
     NULL,
     NULL, /* slave cfg str end */
     HINIC3_BOND_LACP_RATE,
+    HINIC3_BOND_ARG_SLAVE_PCI_STR,
 };
 
 static inline int port_smap_key_to_nla_type(char *smap_key)

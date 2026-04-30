@@ -59,32 +59,36 @@ int check_vf_bw_args(struct qos_single_value vm_qos)
 
     if (vm_qos.is_RFC2697 == true) {
         if ((min_rate < MIN_BW_RATE_QOS) || (min_rate >= MAX_BW_RATE_QOS)) {
-            HINIC3_LOG(ERR, QOS, "cir range is incorrect.");
+            HINIC3_LOG(ERR, QOS, "cir range is incorrect min_rate is %llu.", min_rate);
             return -1;
         }
 
         if ((min_burst < MIN_BW_RATE_QOS) || (min_burst > MAX_BW_BURST_QOS)) {
-            HINIC3_LOG(ERR, QOS, "cbs range is incorrect.");
+            HINIC3_LOG(ERR, QOS, "cbs range is incorrect min_burst is %llu.", min_burst);
             return -1;
         }
 
         if ((max_burst + min_burst) > MAX_BW_BURST_QOS) {
-            HINIC3_LOG(ERR, QOS, "cbs and ebs range is incorrect.");
+            HINIC3_LOG(ERR, QOS,
+                "cbs and ebs range is incorrect max_burst is %llu min_burst is %llu.", max_burst, min_burst);
             return -1;
         }
     } else {
         if ((min_rate < MIN_BW_RATE_QOS) || (min_burst < MIN_BW_RATE_QOS)) {
-            HINIC3_LOG(ERR, QOS, "cir or cbs range is incorrect.");
+            HINIC3_LOG(ERR, QOS,
+                "cir or cbs range is incorrect min_rate is %llu min_burst is %llu.", min_rate, min_burst);
             return -1;
         }
 
         if ((max_rate < min_rate) || (max_rate >= MAX_BW_RATE_QOS)) {
-            HINIC3_LOG(ERR, QOS, "cir or pir range is incorrect.");
+            HINIC3_LOG(ERR, QOS,
+                "vf bw args, cir or pir range is incorrect max_rate is %llu min_rate is %llu.", max_rate, min_rate);
             return -1;
         }
 
         if ((max_burst < min_burst) || (max_burst > MAX_BW_BURST_QOS)) {
-            HINIC3_LOG(ERR, QOS, "cbs or pbs range is incorrect.");
+            HINIC3_LOG(ERR, QOS,
+                "cbs or pbs range is incorrect max_burst is %llu min_burst is %llu.", max_burst, min_burst);
             return -1;
         }
     }
@@ -100,17 +104,19 @@ int check_vf_pps_args(struct qos_single_value vm_qos)
     uint64_t min_burst = vm_qos.min_burst;
 
     if ((min_rate < MIN_PPS_RATE_QOS) || (min_burst < MIN_PPS_RATE_QOS)) {
-        HINIC3_LOG(ERR, QOS, "cir or cbs range is incorrect.");
+        HINIC3_LOG(ERR, QOS, "cir or cbs range is incorrect min_rate is %llu min_burst is %llu.", min_rate, min_burst);
         return -1;
     }
 
     if ((max_rate < min_rate) || (max_rate >= MAX_PPS_RATE_QOS)) {
-        HINIC3_LOG(ERR, QOS, "cir or pir range is incorrect.");
+        HINIC3_LOG(ERR, QOS,
+                    "vf pps args cir or pir range is incorrect max_rate is %llu min_rate is %llu.", max_rate, min_rate);
         return -1;
     }
 
     if ((max_burst < min_burst) || (max_burst > MAX_PPS_BURST_QOS)) {
-        HINIC3_LOG(ERR, QOS, "cbs or pbs range is incorrect.");
+        HINIC3_LOG(ERR, QOS,
+                    "cbs or pbs range is incorrect max_burst is %llu min_burst is %llu.", max_burst, min_burst);
         return -1;
     }
 
@@ -135,7 +141,8 @@ int hinic3_port_mgmt_set_qos_id(uint16_t vport_id, uint16_t bucket_id)
     hinic3_smap_add_format(HINIC3_QOS, &args, HINIC3_PORT_BUCKET_ID, "%u", bucket_id);
     ret = hinic3_port_mgmt_set(vport_id, &args, &unset_args);
     if (ret != 0) {
-        HINIC3_LOG(ERR, QOS, "failed to set qos id for vport_id (%u)", vport_id);
+        HINIC3_LOG(ERR, QOS,
+            "failed to set qos id for vport_id (%u) bucket_id is (%u) ret is %d", vport_id, bucket_id, ret);
     }
 
     hinic3_smap_destroy(&args);
@@ -308,6 +315,21 @@ int hinic3_flow_qos_limit_set(uint16_t qos_id, uint16_t type, uint64_t max_rate,
         HINIC3_LOG(ERR, QOS, "Failed to clear the flow qos statistics. qos id is %u.", qos_id);
     }
     ret = ops->hovs_qos_flow_limit_set(qos_id, type, max_rate, max_burst, min_rate, min_burst);
+    return ret;
+}
+
+int hinic3_vf_qos_statistics_get(uint16_t *qos_array, struct hovs_qos_stats_batch *stats, size_t cnt)
+{
+    int ret;
+    struct hinic3_drv_ops *ops = NULL;
+
+    if ((qos_array == NULL) || (stats == NULL)) {
+        return -1;
+    }
+
+    ops = hinic3_get_drv_ops();
+    HINIC3_FUNC_PTR_OR_ERR_RET(ops->hovs_qos_statistics_get_batch, HINIC3_DRV_FUNC_NO_PTR);
+    ret = ops->hovs_qos_statistics_get_batch(VM_LEVEL, qos_array, stats, cnt);
     return ret;
 }
 

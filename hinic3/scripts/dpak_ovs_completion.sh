@@ -643,6 +643,17 @@ _complete_capture_probe_start()
     fi
 }
 
+_complete_enable_capture_probe() {
+    local cur prev
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    if [[ ${COMP_CWORD} -eq 2 ]]; then
+        COMPREPLY=( $(compgen -W "-c -q -h" -- ${cur}) )
+    elif [[ ${COMP_CWORD} -eq 3 && ${prev} == "-c" ]]; then
+        COMPREPLY=( $(compgen -W "high low" -- ${cur}) )
+    fi
+}
+
 _complete_capture_probe() {
     local cur prev
     cur="${COMP_WORDS[COMP_CWORD]}"
@@ -826,6 +837,10 @@ _dpak_ovs_ctl() {
             ;;
         hwoff/exec-cmd)
            _complete_exec_cmd
+            return 0
+            ;;
+        hwoff/enable-capture-probe)
+           _complete_enable_capture_probe
             return 0
             ;;
         hwoff/capture-probe)

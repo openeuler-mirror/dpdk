@@ -425,6 +425,18 @@ int parse_mac(const char *mac, struct eth_address *output_mac)
     return 0;
 }
 
+long long int hinic3_time_usec(clockid_t clk)
+{
+    struct timespec ts;
+    int ret;
+    ret = clock_gettime(clk, &ts);
+    if (ret != 0) {
+        HINIC3_LOG(ERR, AGENT, "Failed to get time by hinic3_time_uesc function, err is %d!", errno);
+        return -1;
+    }
+    return (long long int)ts.tv_sec * SEC_TO_USEC_BASE + ts.tv_nsec / USEC_TO_NSEC_BASE;
+}
+
 long long int hinic3_time_msec(void)
 {
     struct timespec ts;

@@ -131,7 +131,7 @@ int hinic3_flow_get_capability(struct hinic3_flow_capability *cap)
 
     if (cap == NULL)
     {
-        HINIC3_LOG(WARNING, DRIVER, "hinic3 get capability parameter is NULL!");
+        HINIC3_LOG(WARNING, DRIVER, "The hinic3 get capability parameter is NULL!");
         return -EINVAL;
     }
     ops = hinic3_get_drv_ops();
@@ -144,7 +144,7 @@ int hinic3_flow_get_capability(struct hinic3_flow_capability *cap)
 
     if (ret != 0)
     {
-        HINIC3_LOG(WARNING, DRIVER, "hinic3 get capability parameter failed, error is %d!", ret);
+        HINIC3_LOG(WARNING, DRIVER, "The hinic3 get capability parameter failed, error is %d!", ret);
         return hinic3_convert_error_code(ret);
     }
 
@@ -166,7 +166,7 @@ int hinic3_flow_put(const struct hinic3_dpif_flow *put, const struct hinic3_nlat
     int ret;
     if (put == NULL || args == NULL)
     {
-        HINIC3_LOG(WARNING, DRIVER, "hinic3_flow_put pointer parameter is NULL!");
+        HINIC3_LOG(WARNING, DRIVER, "The hinic3_flow_put pointer parameter is NULL!");
         return -EINVAL;
     }
     ops = hinic3_get_drv_ops();
@@ -241,7 +241,7 @@ int hinic3_flow_get_by_ufid(uint64_t ufid, struct hinic3_dpif_flow_for_get *get,
 
     if (get == NULL)
     {
-        HINIC3_LOG(WARNING, DRIVER, "hinic3_flow_get_by_ufid pointer parameter is NULL!");
+        HINIC3_LOG(WARNING, DRIVER, "The hinic3_flow_get_by_ufid pointer parameter is NULL!");
         return -EINVAL;
     }
     ops = hinic3_get_drv_ops();
@@ -257,7 +257,7 @@ int hinic3_flow_get_by_ufid(uint64_t ufid, struct hinic3_dpif_flow_for_get *get,
                                              ops->hovs_flow_mgmt_get_by_ufid(ufid, &hovs_get));
         if (ret != 0)
         {
-            HINIC3_LOG(WARNING, DRIVER, "hinic3 flow get by ufid failed, error is %d!", ret);
+            HINIC3_LOG(WARNING, DRIVER, "The hinic3 flow get by ufid failed, error is %d!", ret);
             return hinic3_convert_error_code(ret);
         }
         get->key_len = hovs_get.key_len;
@@ -321,7 +321,7 @@ int hinic3_flow_del_batch(const uint32_t table_id, const uint64_t *ufids, struct
     struct hinic3_drv_ops *ops = NULL;
     if (ufids == NULL || flows == NULL || *flows == NULL)
     {
-        HINIC3_LOG(WARNING, DRIVER, "hinic3_flow_del_batch pointer parameter is NULL!");
+        HINIC3_LOG(WARNING, DRIVER, "The hinic3_flow_del_batch pointer parameter is NULL!");
         return -EINVAL;
     }
 
@@ -404,7 +404,7 @@ int hinic3_flow_dump_next(void *state, struct hinic3_dpif_flow_for_get *dump)
 {
     if (state == NULL || dump == NULL)
     {
-        HINIC3_LOG(WARNING, DRIVER, "hinic3_flow_dump_next pointer parameter is NULL!");
+        HINIC3_LOG(WARNING, DRIVER, "The hinic3_flow_dump_next pointer parameter is NULL!");
         return -EINVAL;
     }
     struct hinic3_drv_ops *ops = NULL;
@@ -467,7 +467,7 @@ int hinic3_flow_get_maxflows(uint32_t table_id, uint32_t *max_flows)
     struct hinic3_drv_ops *ops = NULL;
     if (max_flows == NULL)
     {
-        HINIC3_LOG(WARNING, DRIVER, "hinic3_flow_get_maxflows pointer parameter is NULL!");
+        HINIC3_LOG(WARNING, DRIVER, "The hinic3_flow_get_maxflows pointer parameter is NULL!");
         return -EINVAL;
     }
     ops = hinic3_get_drv_ops();
@@ -522,7 +522,7 @@ int hinic3_flow_get_forward_mode(uint8_t *forward_mode)
     struct hinic3_drv_ops *ops = NULL;
     if (forward_mode == NULL)
     {
-        HINIC3_LOG(WARNING, DRIVER, "hinic3_flow_get_forward_mode pointer parameter is NULL!");
+        HINIC3_LOG(WARNING, DRIVER, "The hinic3_flow_get_forward_mode pointer parameter is NULL!");
         return -EINVAL;
     }
 
@@ -676,7 +676,7 @@ int hinic3_iface_high_priority_upcall_set(const uint16_t port_id, struct hinic3_
     ret = ops->hovs_port_mgmt_set_upcall_priority(port_id, cfgs->hovs_cfgs, cfgs->cfgs_len, 1);
     if (ret != 0)
     {
-        HINIC3_LOG(ERR, DRIVER, "hinic3 high priority upcall set fail, ret is %d!", ret);
+        HINIC3_LOG(ERR, DRIVER, "The hinic3 high priority upcall set fail, ret is %d!", ret);
     }
     return hinic3_convert_error_code(ret);
 }
@@ -685,7 +685,7 @@ int hinic3_mega_flow_put(const struct hinic3_dpif_flow *put, uint32_t index, uin
 {
     if ((put == NULL) || (ufid == NULL))
     {
-        HINIC3_LOG(WARNING, DRIVER, "hinic3_mega_flow_put pointer parameter is NULL!");
+        HINIC3_LOG(WARNING, DRIVER, "The hinic3_mega_flow_put pointer parameter is NULL!");
         return -EINVAL;
     }
 
@@ -730,7 +730,7 @@ int hinic3_mega_flow_dump_start(void **state)
 {
     if (state == NULL)
     {
-        HINIC3_LOG(WARNING, DRIVER, "hinic3_mega_flow_dump_start pointer parameter is NULL!");
+        HINIC3_LOG(WARNING, DRIVER, "The hinic3_mega_flow_dump_start pointer parameter is NULL!");
         return -EINVAL;
     }
 
@@ -747,7 +747,7 @@ int hinic3_mega_flow_dump_next(void *state, struct hinic3_dpif_flow_for_get *dum
 {
     if (state == NULL || dump == NULL)
     {
-        HINIC3_LOG(WARNING, DRIVER, "hinic3_mega_flow_dump_next pointer parameter is NULL!");
+        HINIC3_LOG(WARNING, DRIVER, "The hinic3_mega_flow_dump_next pointer parameter is NULL!");
         return -EINVAL;
     }
 
@@ -779,6 +779,10 @@ int hinic3_mega_flow_dump_done(void *state)
     HINIC3_FUNC_PTR_OR_ERR_RET(ops->hovs_mega_flow_mgmt_dump_done, HINIC3_DRV_FUNC_NO_PTR);
     HINIC3_LOG_HINIC_FLOW_API_LOG_NO_LOG(ret, HINIC3_FLOW_AGENT_MEGA_DUMP_DONE,
                                          ops->hovs_mega_flow_mgmt_dump_done(state));
+    if (ret != 0)
+    {
+        HINIC3_LOG(ERR, DRIVER, "The hinic3_mega_flow_dump_done fail, ret is %d!", ret);
+    }
     return hinic3_convert_error_code(ret);
 }
 
@@ -786,7 +790,7 @@ int hinic3_statistics_mega_flow_get_by_ufid(const uint64_t ufid, struct hinic3_f
 {
     if (stats == NULL)
     {
-        HINIC3_LOG(WARNING, DRIVER, "hinic3_statistics_mega_flow_get_by_ufid pointer parameter is NULL!");
+        HINIC3_LOG(WARNING, DRIVER, "The hinic3_statistics_mega_flow_get_by_ufid pointer parameter is NULL!");
         return -EINVAL;
     }
 
@@ -817,7 +821,7 @@ int hinic3_flow_modify(const struct hinic3_dpif_flow *put, const struct hinic3_n
 
     if (put == NULL || args == NULL)
     {
-        HINIC3_LOG(WARNING, DRIVER, "hinic3_flow_put pointer parameter is NULL!");
+        HINIC3_LOG(WARNING, DRIVER, "The hinic3 flow modify pointer parameter is NULL!");
         return -EINVAL;
     }
 
@@ -844,7 +848,7 @@ int hinic3_flow_get_block_table_size(uint32_t *block_num)
 
     if (block_num == NULL)
     {
-        HINIC3_LOG(WARNING, DRIVER, "hinic3_flow_get_block_table_size block_num pointer parameter is NULL!");
+        HINIC3_LOG(WARNING, DRIVER, "The hinic3_flow_get_block_table_size block_num pointer parameter is NULL!");
         return -EINVAL;
     }
 
@@ -861,7 +865,7 @@ void hinic3_flow_set_block_version(uint32_t block_num, uint16_t block_id[], uint
 
     if (block_id == NULL || block_version == NULL || result == NULL)
     {
-        HINIC3_LOG(WARNING, DRIVER, "hinic3_flow_set_block_version pointer parameter is NULL!");
+        HINIC3_LOG(WARNING, DRIVER, "The hinic3_flow_set_block_version pointer parameter is NULL!");
         return;
     }
 
@@ -886,7 +890,7 @@ int hinic3_flow_get_block_version(uint32_t block_num, uint16_t block_id[], uint1
 
     if (block_id == NULL || block_version == NULL)
     {
-        HINIC3_LOG(WARNING, DRIVER, "hinic3_flow_get_block_version input pointer parameter is NULL!");
+        HINIC3_LOG(WARNING, DRIVER, "The hinic3_flow_get_block_version input pointer parameter is NULL!");
         return -EINVAL;
     }
 

@@ -11,6 +11,7 @@
 #include "rte_cycles.h"
 #include "rte_lcore.h"
 #include "rte_spinlock.h"
+#include "rte_ethdev.h"
 
 #include "hinic3_ds.h"
 #include "hinic3_log.h"
@@ -20,7 +21,7 @@
 #include "hinic3_capture_filter.h"
 #include "hinic3_nlattr.h"
 #include "hinic3_util.h"
-#include "rte_ethdev.h"
+#include "hinic3_option.h"
 #include "hinic3_eth_util.h"
 #include "hinic3_command.h"
 #include "hinic3_cmd_exec.h"
@@ -73,6 +74,13 @@
 "The value is an integer with a range <1-4294967295>\n"                                                          \
     "    -h, --help                                      Display the help information\n"
 
+#define PCAP_CMD_ENBLE_DESC                                                                                 \
+"  Usage: dpak-ovs-ctl hwoff/enable-capture-probe [ -c ENUM<high,low> | -q | { -h | --help } ]\n\n"         \
+"  Options list:                                                                                  \n"       \
+"    -c                            Set capture thread CPU usage level, ENUM<high,low>, the default value is high\n"                    \
+"    -q                            Query current capture enable status and CPU usage\n"                     \
+"    -h, --help                    Display the help information\n"
+
 static struct pcap_cmd_t g_cap_main_command = { "hwoff/capture-probe",
                                                 "{ start <portname> -w <filename> -t INTEGER<1-1440>"
                                                 "[ [ [ -sip ENUM<IP<X.X.X.X>,IPV6<X:X::X:X>> | "
@@ -101,6 +109,16 @@ static struct pcap_cmd_t g_cap_sub_commands[] = {
     {"--help",  "", pcap_cmd_help, 0, 0, NULL},
 };
 
+static const struct hinic3_opt enable_pcap_cmd_opts[] = {
+    {"-h",        REQUIRED_ARGUMENT, 0, ENPCAP_HELP_OPT},
+    {"--help",    REQUIRED_ARGUMENT, 0, ENPCAP_HELP_OPT},
+    {"-c",        OPTIONAL_ARGUMENT, 0, ENPCAP_CPU_MODE_OPT},
+    {"--cpu",     OPTIONAL_ARGUMENT, 0, ENPCAP_CPU_MODE_OPT},
+    {"-q",        REQUIRED_ARGUMENT, 0, ENPCAP_QUERY_OPT},
+    {"--query",   REQUIRED_ARGUMENT, 0, ENPCAP_QUERY_OPT},
+    {NULL,        0,                 0, 0}
+};
+
 static void
 pcap_cmd_usage_print(struct ds *ds)
 {
@@ -109,18 +127,141 @@ pcap_cmd_usage_print(struct ds *ds)
     hinic3_ds_put_cstr(ds, p_cmd->desc);
 }
 
-static void
-pcap_cmd_enable_capture(struct unixctl_conn *conn, int argc HINIC3_UNUSED, const char *argv[] HINIC3_UNUSED, void *aux)
+static int
+pcap_cmd_option_check(const struct hinic3_opt *opts, int argc, const char *name)
 {
-    struct ds ds = DS_EMPTY_INITIALIZER;
+    for (int i = 0; opts[i].name != NULL; i++) {
+        if (strcmp(name, opts[i].name) == 0) {
+            if (argc < opts[i].has_arg + 1)
+                return PCAP_CMD_TOO_FEW_ARGS;
+            if (argc > opts[i].has_arg + 1)
+                return PCAP_CMD_TOO_MANY_ARGS;
+            return opts[i].val;
+        }
+    }
+
+    return PCAP_CMD_ERR_ARGS;
+}
+
+static int
+pcap_cmd_enable_capture_err(int pcap_err, struct ds *ds)
+{
+    if (pcap_err == PCAP_CMD_TOO_FEW_ARGS) {
+        hinic3_ds_put_format(ds, "%s", HINIC3_UI_LEADING_SIGN_ERROR
+            HINIC3_UI_ERROR_INCOMPLETE_COMMAND HINIC3_COMMAND_HELP_INFO);
+    }
+    if (pcap_err == PCAP_CMD_TOO_MANY_ARGS) {
+        hinic3_ds_put_format(ds, "%s", HINIC3_UI_LEADING_SIGN_ERROR
+            HINIC3_UI_ERROR_TOO_MANY_PARAMETER HINIC3_COMMAND_HELP_INFO);
+    }
+    if (pcap_err == PCAP_CMD_ERR_ARGS) {
+        hinic3_ds_put_format(ds, "%s", HINIC3_UI_LEADING_SIGN_ERROR
+            HINIC3_UI_ERROR_WRONG_PARAMETER HINIC3_COMMAND_HELP_INFO);
+    }
+    return -1;
+}
+
+
+static void
+pcap_cmd_enable_set_cpu_low(struct ds *ds)
+{
+    if (pcap_switch_get() == 1) {
+        HINIC3_LOG(WARNING, CAPTURE, "Enable capture failed, please disable the capture probe first!");
+        hinic3_ds_put_format(ds, "%sPlease disable the capture probe first!\n", HINIC3_UI_LEADING_SIGN_WARNING);
+        return;
+    }
     pcap_switch_set(1);
+    pcap_cpu_usage_set(PCAP_CPU_LOW);
     pcap_task_set(0);
     pcap_time_set(hinic3_time_sec());
-    HINIC3_LOG(INFO, CAPTURE, "Capture is enabled.");
-    hinic3_ds_put_format(&ds, "%sCapture is enabled.\n", HINIC3_UI_LEADING_SIGN_INFO);
-    hinic3_command_reply(conn, hinic3_ds_cstr(&ds));
-    hinic3_ds_destroy(&ds);
+    HINIC3_LOG(INFO, CAPTURE, "Capture is enabled, the CPU usage level is low.");
+    hinic3_ds_put_format(ds, "%sCapture is enabled.\n", HINIC3_UI_LEADING_SIGN_INFO);
+    return;
+}
+
+static void
+pcap_cmd_enable_set_cpu_high(struct ds *ds)
+{
+    if (pcap_switch_get() == 1) {
+        HINIC3_LOG(WARNING, CAPTURE, "Enable capture failed, please disable the capture probe first!");
+        hinic3_ds_put_format(ds, "%sPlease disable the capture probe first!\n", HINIC3_UI_LEADING_SIGN_WARNING);
+        return;
+    }
+    pcap_switch_set(1);
+    pcap_cpu_usage_set(PCAP_CPU_HIGH);
+    pcap_task_set(0);
+    pcap_time_set(hinic3_time_sec());
+    HINIC3_LOG(INFO, CAPTURE, "Capture is enabled, the CPU level usage is high.");
+    hinic3_ds_put_format(ds, "%sCapture is enabled.\n", HINIC3_UI_LEADING_SIGN_INFO);
+    return;
+}
+
+static int
+pcap_cmd_enable_set_cpu_level(const char *level, struct ds *ds)
+{
+    if (strcmp("low", level) == 0) {
+        pcap_cmd_enable_set_cpu_low(ds);
+    } else if (strcmp("high", level) == 0) {
+        pcap_cmd_enable_set_cpu_high(ds);
+    } else {
+        hinic3_ds_put_format(ds, "%s", HINIC3_UI_LEADING_SIGN_ERROR
+            HINIC3_UI_ERROR_WRONG_PARAMETER HINIC3_COMMAND_HELP_INFO);
+        return -1;
+    }
+    return 0;
+}
+
+static void
+pcap_cmd_enable_query(struct ds *ds)
+{
+    if (pcap_switch_get() != 1) {
+        hinic3_ds_put_format(ds, "%sCapture status is disabled.\n", HINIC3_UI_LEADING_SIGN_INFO);
+        return;
+    } else {
+        hinic3_ds_put_format(ds, "%sCapture status is enabled, ", HINIC3_UI_LEADING_SIGN_INFO);
+    }
+
+    if (pcap_cpu_usage_get() == PCAP_CPU_HIGH) {
+        hinic3_ds_put_format(ds, "the CPU usage level is high.\n");
+    } else {
+        hinic3_ds_put_format(ds, "the CPU usage level is low.\n");
+    }
+    return;
+}
+
+static void
+pcap_cmd_enable_capture(struct unixctl_conn *conn, int argc, const char *argv[], void *aux)
+{
     *(int *)aux = 0;
+    struct ds ds = DS_EMPTY_INITIALIZER;
+    if (argc == 1) {
+        pcap_cmd_enable_set_cpu_high(&ds);
+        goto end;
+    }
+
+    int option_val = pcap_cmd_option_check(enable_pcap_cmd_opts, argc, argv[1]);
+
+    switch (option_val) {
+        case ENPCAP_HELP_OPT:
+            hinic3_ds_put_format(&ds, PCAP_CMD_ENBLE_DESC);
+            break;
+        case ENPCAP_CPU_MODE_OPT:
+            *(int *)aux = pcap_cmd_enable_set_cpu_level(argv[OPTIONAL_ARGUMENT], &ds);
+            break;
+        case ENPCAP_QUERY_OPT:
+            pcap_cmd_enable_query(&ds);
+            break;
+        default:
+            *(int *)aux = pcap_cmd_enable_capture_err(option_val, &ds);
+            break;
+    }
+
+end:
+    if (*(int *)aux != 0)
+        hinic3_command_reply_error(conn, hinic3_ds_cstr(&ds));
+    else
+        hinic3_command_reply(conn, hinic3_ds_cstr(&ds));
+    hinic3_ds_destroy(&ds);
 }
 
 static void
@@ -244,7 +385,7 @@ pcap_cmd_start(struct unixctl_conn *conn, int argc, const char *argv[], void *au
     struct pcap_task_mgr_t *task_mgr = pcap_get_task_mgr();
 
     HINIC3_LOG(INFO, CAPTURE, "Going to start a capture task.");
-    if (pcap_get_cap_switch() == 0) {
+    if (pcap_switch_get() == 0) {
         hinic3_ds_put_format(&ds, "%sPlease enable capture first, use command hwoff/enable-capture-probe.\n",
             HINIC3_UI_LEADING_SIGN_WARNING);
         goto fail;
@@ -437,6 +578,7 @@ pcap_unix_cmd_register(void)
     struct pcap_cmd_t *p_cmd = &g_cap_main_command;
 
     hinic3_command_register(p_cmd->cmd, p_cmd->usage, p_cmd->min_args, p_cmd->max_args, p_cmd->cb, NULL);
-    hinic3_command_register("hwoff/enable-capture-probe", "", 0, 0, pcap_cmd_enable_capture, NULL);
+    hinic3_command_register("hwoff/enable-capture-probe", "[ -c ENUM<high,low> | -q | { -h | --help } ]",
+        0, PCAP_CMD_ENABLE_MAX_PARAM, pcap_cmd_enable_capture, NULL);
     hinic3_command_register("hwoff/disable-capture-probe", "", 0, 0, pcap_cmd_disable_capture, NULL);
 }

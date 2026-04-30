@@ -33,6 +33,10 @@
 #define PCAP_TIME_S_TO_MS           1000
 #define PCAP_SIEEP_TIME             1000
 
+#define PCAP_PERIOD_US              1000
+#define PCAP_CPU_TARGET_RATE        0.3
+#define PCAP_PID_KI                 0.1
+
 #define PCAP_CMD_MIN_PARAM          1
 #define PCAP_CMD_MAX_PARAM          32
 #define PCAP_CMD_START_MIN_PARAM    3
@@ -41,6 +45,10 @@
 #define PCAP_CMD_STOP_MAX_PARAM     2
 #define PCAP_CMD_SHOW_MIN_PARAM     1
 #define PCAP_CMD_SHOW_MAX_PARAM     2
+#define PCAP_CMD_ENABLE_MAX_PARAM   2
+#define PCAP_CMD_TOO_MANY_ARGS      -1
+#define PCAP_CMD_TOO_FEW_ARGS       -2
+#define PCAP_CMD_ERR_ARGS           -3
 
 #define PCAP_STOP_CHECK_PERIOD_MS   5
 #define PCAP_STOP_TIME_OUT_MS      (10 * 1000)
@@ -63,6 +71,18 @@
 #define PCAP_MEMPOOL_NAME           "hinic3-pcap-save-mp:"
 #define PCAP_SAVE_THREAD_NAME       "pcap-save-thread"
 #define PCAP_RING_NAME_PREFIX       "hinic3-pcap-ring"
+
+enum {
+    ENPCAP_HELP_OPT,
+    ENPCAP_CPU_MODE_OPT,
+    ENPCAP_PCAP_MODE_OPT,
+    ENPCAP_QUERY_OPT,
+};
+
+enum PCAP_CPU_USAGE_TYPE {
+    PCAP_CPU_HIGH,
+    PCAP_CPU_LOW
+};
 
 enum pcap_write_way {
     WRITE_BY_PMD = 0,
@@ -259,11 +279,13 @@ struct pcap_task_save_t *hinic3_get_cap_task_save(void);
 struct rte_mempool **hinic3_get_pcap_shared_mp(void);
 void hinic3_set_ticks_per_ms(uint64_t value);
 bool pcap_check_file_used_no_lock(struct pcap_key_t *cap_key);
-int pcap_get_cap_switch(void);
 struct pcap_task_mgr_t* pcap_get_task_mgr(void);
 void pcap_port_tasks_get(struct pcap_task_batch *task_batch, struct pcap_port_t *port_mirror);
 int pcap_port_tasks_count_no_lock(uint32_t port_no);
 int pcap_port_info_get_by_name(const char *port_name, struct pcap_port_t *port_info, struct ds *ds);
+void pcap_cpu_usage_set(enum PCAP_CPU_USAGE_TYPE value);
+enum PCAP_CPU_USAGE_TYPE pcap_cpu_usage_get(void);
+int pcap_switch_get(void);
 void pcap_switch_set(int value);
 int pcap_task_get(void);
 void pcap_task_set(int value);
