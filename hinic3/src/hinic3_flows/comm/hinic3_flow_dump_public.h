@@ -15,6 +15,14 @@
 
 typedef struct hinic3_flow_act_vxlan_gpe_header hinic3_act_vxlan_header;
 
+enum acl_group_e {
+    ACL_INGRESS_GROUP_0,
+    ACL_INGRESS_GROUP_1,
+    ACL_EGRESS_GROUP_0,
+    ACL_EGRESS_GROUP_1,
+    ACL_GROUP_NUM
+};
+
 struct hinic3_dump_flow_info {
     struct rte_flow_item items[HINIC3_FLOW_DUMP_MAX_PATTERN];
     unsigned int useful_item_index;
@@ -39,7 +47,9 @@ enum hinic3_dump_context_status {
 struct hinic3_flow_dump_context {
     union {
         void *hiovs_state;
+        void *acl_states[ACL_GROUP_NUM];
     };
+    int acl_start_ret[ACL_GROUP_NUM];
     uint32_t type;
     struct hinic3_dump_flow_mem context_mem;
     pthread_t thread_id;

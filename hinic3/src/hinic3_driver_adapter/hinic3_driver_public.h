@@ -149,10 +149,7 @@ typedef int (*hinic3_flow_put_cb_t)(uint64_t ufid, const struct hinic3_nlattr_ob
 typedef int (*hinic3_flow_age_cb_t)(uint64_t ufid, const struct hinic3_dpif_flow_for_get *flow,
     const struct hinic3_nlattr_obj *args, size_t args_len);
 typedef int (*hinic3_flush_done_cb_t)(void);
-struct hinic3_flow_del_context *hinic3_del_batch_context_alloc(void);
-void hinic3_del_batch_context_free(struct hinic3_flow_del_context *batch);
-void hinic3_del_hw_flows_batch(struct hinic3_flow_del_context *batch, struct hw_element *hw_ele);
-const struct rte_vdev_driver* vpmd_vdev_driver_get(void);
+
 void hinic3_convert_error_code_init(void);
 
 #ifdef __cplusplus

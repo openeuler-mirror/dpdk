@@ -391,4 +391,10 @@ static inline bool hinic3_support_payload_capture_get(void)
     return conf->support_payload_capture;
 }
 
+static inline bool hinic3_is_metal_container(void)
+{
+    struct hinic3_init_arg *conf = hinic3_get_init_arg();
+    return conf->bare_metal_type == HINIC3_SCENE_BARE_METAL_CONTAINER;
+}
+
 #endif

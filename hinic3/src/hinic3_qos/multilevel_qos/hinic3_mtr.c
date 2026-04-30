@@ -1366,12 +1366,14 @@ clear:
     return -1;
 }
 
-static int hinic3_set_meter_conf(struct hinic3_meter_node *meter, struct rte_flow *flow,
+static int hinic3_set_meter_conf(uint32_t meter_id, struct rte_flow *flow,
     enum hinic3_meter_qos_direction dir, uint16_t port_id)
 {
     enum hinic3_qos_tablehead index;
+    struct hinic3_meter_node *meter = NULL;
+    meter = hinic3_meter_find(meter_id);
     if (meter == NULL) {
-        HINIC3_LOG(ERR, QOS, "Multi qos: meter is NULL.");
+        HINIC3_LOG(ERR, QOS, "Multi qos: meter id is not find, meter id is %u.", meter_id);
         return -1;
     }
 
@@ -1428,7 +1430,7 @@ struct rte_flow *hinic3_set_multi_qos(const struct rte_flow_item *pattern, const
         goto end;
     }
 
-    ret = hinic3_set_meter_conf(hinic3_meter_find(meter_id), flow, dir, port_id);
+    ret = hinic3_set_meter_conf(meter_id, flow, dir, port_id);
     if (ret != 0) {
         hinic3_free(flow);
         flow = NULL;

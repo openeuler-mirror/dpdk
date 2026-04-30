@@ -140,6 +140,7 @@ const void *hinic3_adapt_memzone_reserve(const char *name, size_t len, int socke
 const void *hinic3_adapt_memzone_reserve_aligned(const char *name, size_t len, int socket_id, unsigned flags,
     unsigned align);
 int hinic3_adapt_memzone_free(void *addr);
+const struct rte_memzone *hinic3_memzone_lookup(const char *name);
 int hinic3_adapt_mbuf_alloc_bulk(void *mp, struct hovs_mbuf **mbufs, uint32_t count);
 int hinic3_global_set_vxlan_vtep(const struct hinic3_vtep_ip_set_args *ops);
 hinic3_global_api hinic3_global_get_api_index(const char *api_name);

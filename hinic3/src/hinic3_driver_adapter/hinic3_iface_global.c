@@ -890,7 +890,7 @@ int hinic3_global_cfg_set(const struct smap *args, struct smap *unset_args)
 
     if (args == NULL || unset_args == NULL)
     {
-        HINIC3_LOG(WARNING, DRIVER, "Pointer parameter is NULL!");
+        HINIC3_LOG(WARNING, DRIVER, "global cfg set, Pointer parameter is NULL!");
         return -1;
     }
 
@@ -916,7 +916,7 @@ int hinic3_global_cfg_set(const struct smap *args, struct smap *unset_args)
     ret = global_cfg_smap_to_nlattr(args, &set_args_nla);
     if (ret != 0)
     {
-        HINIC3_LOG(ERR, DRIVER, "Call global_cfg_smap_to_nlattr error!");
+        HINIC3_LOG(ERR, DRIVER, "global cfg set, Call global_cfg_smap_to_nlattr error!");
         goto err;
     }
 
@@ -961,7 +961,7 @@ int hinic3_global_cfg_get(struct smap *args)
     buff = (void *)hinic3_calloc(1, HOVS_MAX_TLV_BUF_LEN, HINIC3_DRIVER_ADAPTER);
     if (buff == NULL)
     {
-        HINIC3_LOG(ERR, DRIVER, "Alloc memory error!");
+        HINIC3_LOG(ERR, DRIVER, "global cfg get, Alloc memory error!");
         return -1;
     }
 
@@ -971,7 +971,7 @@ int hinic3_global_cfg_get(struct smap *args)
     ret = global_cfg_smap_to_nlattr(args, &args_nla);
     if (ret != 0)
     {
-        HINIC3_LOG(ERR, DRIVER, "Call global_cfg_smap_to_nlattr error!");
+        HINIC3_LOG(ERR, DRIVER, "global cfg get, Call global_cfg_smap_to_nlattr error!");
         goto err;
     }
 
@@ -1001,7 +1001,7 @@ int hinic3_global_statistics_get(struct hinic3_global_stats *stats)
 
     if (stats == NULL)
     {
-        HINIC3_LOG(WARNING, DRIVER, "Pointer parameter is NULL!");
+        HINIC3_LOG(WARNING, DRIVER, "global statistics get, Pointer parameter is NULL!");
         return -1;
     }
 
@@ -1639,6 +1639,11 @@ const void *hinic3_adapt_memzone_reserve_aligned(const char *name, size_t len, i
 int hinic3_adapt_memzone_free(void *addr)
 {
     return hinic3_rte_memzone_free((struct rte_memzone *)addr);
+}
+
+const struct rte_memzone *hinic3_memzone_lookup(const char *name)
+{
+    return rte_memzone_lookup(name);
 }
 
 struct hovs_mbuf *hinic3_adapt_mbuf_alloc(void *mp)

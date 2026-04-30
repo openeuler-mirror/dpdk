@@ -115,6 +115,7 @@ hinic3_set_flow_qos_to_hovs_sub(struct hinic3_meter_node *meter, bool is_clear,
     struct qos_single_value *profile = NULL;
     // 如果meter已经被非流表级QoS占用，则返回失败
     if (meter->type != QOS_TYPE_MAX && meter->type != QOS_TYPE_FLOW_LIMIT) {
+        HINIC3_LOG(ERR, FLOW, "set flow qos to hovs failed type is %d.", meter->type);
         hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_METER_TYPE, 1);
         return -1;
     }
@@ -128,7 +129,7 @@ hinic3_set_flow_qos_to_hovs_sub(struct hinic3_meter_node *meter, bool is_clear,
             g_qos_ids.qos_ids[meter->qos_id].flags = false;
             ret = hinic3_flow_qos_limit_set(meter->qos_id, profile->packet_mode, 0, 0, 0, 0);
             if (ret != 0) {
-                HINIC3_LOG(ERR, FLOW, "hinic3 flow qos clear failed!");
+                HINIC3_LOG(ERR, FLOW, "flow qos clear failed id %u mode is %d.", meter->qos_id, profile->packet_mode);
                 return -1;
             }
         }
