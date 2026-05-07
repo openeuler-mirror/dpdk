@@ -725,6 +725,7 @@ hinic3_bifur_probe_pair_func(struct rte_pci_driver *pci_drv, struct rte_pci_devi
 	}
 	ret = hinic3_bifur_work_pci_pre_probe(pci_drv, *work_pci_dev);
 	if (ret != 0) {
+		rte_free(*work_pci_dev);
 		return ret;
 	}
 	return 0;
@@ -753,8 +754,8 @@ hinic3_bifur_mapped_dev_op(struct rte_pci_device *mapped_pci_dev, enum MAPPED_DE
 		STAILQ_FOREACH (mapped_dev, &g_mapped_dev_list, entries) {
 			if (mapped_dev->pci_dev == mapped_pci_dev) {
 				hinic3_bifur_pci_unmap_device(mapped_dev->pci_dev);
-				rte_free(mapped_dev);
 				STAILQ_REMOVE(&g_mapped_dev_list, mapped_dev, hinic3_bifur_mapped_dev, entries);
+				rte_free(mapped_dev);
 				found = true;
 				break;
 			}
@@ -815,6 +816,7 @@ hinic3_bifur_store_pcidev_pairs(struct rte_pci_device *origin_pci_dev,
 	dev_pair->work_pci_dev = work_pci_dev;
 	ret = hinic3_bifur_lock_pair(dev_pair);
 	if (ret != 0) {
+		rte_free(dev_pair);
 		return ret;
 	}
 	TAILQ_INSERT_TAIL(&g_hinic3_bifur_mgr.pair_list, dev_pair, entries);

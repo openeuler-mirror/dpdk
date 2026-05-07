@@ -568,30 +568,92 @@ static int wait_until_doorbell_and_outbound_enabled(struct hinic3_hwif *hwif)
 
 static int hinic3_mmap_bar_addr(struct hinic3_hwdev *hwdev)
 {
+	struct rte_pci_device *pci_dev = hwdev->pci_dev;
 	struct hinic3_hwif *hwif = hwdev->hwif;
-	int fd = ((struct hinic3_nic_dev *)hwdev->dev_handle)->fd;
 	void *cfg_regs_base = NULL;
 	void *mgmt_reg_base = NULL;
 	void *db_base = NULL;
-	off_t page_offset;
+	int fd = ((struct hinic3_nic_dev *)hwdev->dev_handle)->fd;
 
-	page_offset = 1 << 12 | 0xff00000;
-	cfg_regs_base = mmap(NULL, 16384, PROT_READ | PROT_WRITE, MAP_SHARED, fd, page_offset);
+	size_t page_size = sysconf(_SC_PAGESIZE);
 
-	page_offset = 3 << 12 | 0xff00000;
-	mgmt_reg_base = mmap(NULL, 65536, PROT_READ | PROT_WRITE, MAP_SHARED, fd, page_offset);
+	if (!HINIC3_IS_VF_DEV(pci_dev)) {
+		/* Region 1: CFG BAR */
+		cfg_regs_base = mmap(NULL,
+			pci_dev->mem_resource[HINIC3_PF_PCI_CFG_REG_BAR].len,
+			PROT_READ | PROT_WRITE, MAP_SHARED,
+			fd, HINIC3_PF_PCI_CFG_REG_BAR << ilog2(page_size));
+		if (cfg_regs_base == MAP_FAILED) {
+			PMD_DRV_LOG(ERR, "Failed to map cfg reg.");
+			goto err_out;
+		}
 
-	page_offset = 4 << 12 | 0xff00000;
-	db_base = mmap(NULL, 1048576, PROT_READ | PROT_WRITE, MAP_SHARED, fd, page_offset);
+		/* Region 3: MGMT BAR */
+		mgmt_reg_base = mmap(NULL,
+			pci_dev->mem_resource[HINIC3_PCI_MGMT_REG_BAR].len,
+			PROT_READ | PROT_WRITE, MAP_SHARED,
+			fd, HINIC3_PCI_MGMT_REG_BAR << ilog2(page_size));
+		if (mgmt_reg_base == MAP_FAILED) {
+			PMD_DRV_LOG(ERR, "Failed to map mgmt reg.");
+			goto err_unmap_cfg;
+		}
+
+		/* Region 4: DB BAR */
+		db_base = mmap(NULL,
+			pci_dev->mem_resource[HINIC3_PCI_DB_BAR].len,
+			PROT_READ | PROT_WRITE, MAP_SHARED,
+			fd, HINIC3_PCI_DB_BAR << ilog2(page_size));
+		if (db_base == MAP_FAILED) {
+			PMD_DRV_LOG(ERR, "Failed to map db.");
+			goto err_unmap_mgmt;
+		}
+
+		hwif->db_dwqe_len = pci_dev->mem_resource[HINIC3_PCI_DB_BAR].len;
+	} else {
+		/* Region 0: VF CFG BAR */
+		cfg_regs_base = mmap(NULL,
+			pci_dev->mem_resource[HINIC3_VF_PCI_CFG_REG_BAR].len,
+			PROT_READ | PROT_WRITE, MAP_SHARED,
+			fd, HINIC3_VF_PCI_CFG_REG_BAR << ilog2(page_size));
+		if (cfg_regs_base == MAP_FAILED) {
+			PMD_DRV_LOG(ERR, "Failed to map cfg reg.");
+			goto err_out;
+		}
+
+		/* Region 4: VF DB BAR */
+		db_base = mmap(NULL,
+			pci_dev->mem_resource[HINIC3_PCI_DB_BAR].len,
+			PROT_READ | PROT_WRITE, MAP_SHARED,
+			fd, HINIC3_PCI_DB_BAR << ilog2(page_size));
+		if (db_base == MAP_FAILED) {
+			PMD_DRV_LOG(ERR, "Failed to map db.");
+			goto err_unmap_cfg;
+		}
+
+		hwif->db_dwqe_len = pci_dev->mem_resource[HINIC3_PCI_DB_BAR].len;
+	}
+
+	/* If function is VF, mgmt_regs_base will be NULL */
 	if (!mgmt_reg_base)
-		hwif->cfg_regs_base = (uint8_t *)cfg_regs_base + HINIC3_VF_CFG_REG_OFFSET;
+		hwif->cfg_regs_base = (u8 *)cfg_regs_base + HINIC3_VF_CFG_REG_OFFSET;
 	else
 		hwif->cfg_regs_base = cfg_regs_base;
+
 	hwif->mgmt_regs_base = mgmt_reg_base;
 	hwif->db_base = db_base;
-	hwif->db_dwqe_len = 1048576;
 
 	return 0;
+
+err_unmap_mgmt:
+	munmap(mgmt_reg_base,
+		pci_dev->mem_resource[HINIC3_PCI_MGMT_REG_BAR].len);
+err_unmap_cfg:
+	munmap(cfg_regs_base,
+		HINIC3_IS_VF_DEV(pci_dev) ?
+		pci_dev->mem_resource[HINIC3_VF_PCI_CFG_REG_BAR].len :
+		pci_dev->mem_resource[HINIC3_PF_PCI_CFG_REG_BAR].len);
+err_out:
+	return -EFAULT;
 }
 
 static int hinic3_get_bar_addr(struct hinic3_hwdev *hwdev)

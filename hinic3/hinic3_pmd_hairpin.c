@@ -71,7 +71,7 @@ hinic3_hairpin_get_peer_ports(struct rte_eth_dev *dev, uint16_t *peer_ports,
 
 	if (direction) {
 		for (i = 0; i < txq_num; i++) {
-			if (!rxq[i]->is_hairpin)
+			if (!txq[i]->is_hairpin)
 				continue;
 
 			if (peer_cnt >= len) {
@@ -80,11 +80,11 @@ hinic3_hairpin_get_peer_ports(struct rte_eth_dev *dev, uint16_t *peer_ports,
 					data->port_id, i, len);
 				return -rte_errno;
 			}
-			peer_ports[peer_cnt++] = rxq[i]->hairpin_conf.peers[0].port;
+			peer_ports[peer_cnt++] = txq[i]->hairpin_conf.peers[0].port;
 		}
 	} else {
 		for (i = 0; i < rxq_num; i++) {
-			if (!txq[i]->is_hairpin) {
+			if (!rxq[i]->is_hairpin) {
 				continue;
 			}
 			if (peer_cnt >= len) {
@@ -93,7 +93,7 @@ hinic3_hairpin_get_peer_ports(struct rte_eth_dev *dev, uint16_t *peer_ports,
 					data->port_id, i, len);
 				return -rte_errno;
 			}
-			peer_ports[peer_cnt++] = txq[i]->hairpin_conf.peers[0].port;
+			peer_ports[peer_cnt++] = rxq[i]->hairpin_conf.peers[0].port;
 		}
 	}
 	return peer_cnt;
@@ -123,7 +123,7 @@ hinic3_rx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	u16 rq_depth;
 
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
-	
+
 	/* Queue depth must be power of 2, otherwise will be aligned up */
 	rq_depth = (nb_desc & (nb_desc - 1)) ?
 		((u16)(1U << (ilog2(nb_desc) + 1))) : nb_desc;
