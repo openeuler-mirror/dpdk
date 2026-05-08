@@ -1,0 +1,709 @@
+From ae4802666acfe661d4c648ed4d5921569369e93b Mon Sep 17 00:00:00 2001
+From: wangxin <wangxin679@h-partners.com>
+Date: Sat, 9 May 2026 15:27:45 +0800
+Subject: [PATCH] [feature] support config port rate
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+[描述信息] 支持通过 port config 修改网口速率
+[修改说明] 添加 hns3_check_dev_conf 与 hns3_apply_link_speed 实现
+---
+ drivers/net/hns3/hns3_cmd.h    |  61 ++++-
+ drivers/net/hns3/hns3_dcb.c    |  14 ++
+ drivers/net/hns3/hns3_dcb.h    |   1 +
+ drivers/net/hns3/hns3_ethdev.c | 410 +++++++++++++++++++++++++++++++--
+ drivers/net/hns3/hns3_ethdev.h |  20 ++
+ 5 files changed, 475 insertions(+), 31 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_cmd.h b/drivers/net/hns3/hns3_cmd.h
+index 344474d..cd1cd79 100644
+--- a/drivers/net/hns3/hns3_cmd.h
++++ b/drivers/net/hns3/hns3_cmd.h
+@@ -92,6 +92,7 @@ enum hns3_opcode_type {
+ 
+ 	/* MAC command */
+ 	HNS3_OPC_CONFIG_MAC_MODE        = 0x0301,
++	HNS3_OPC_CONFIG_AN_MODE         = 0x0304,
+ 	HNS3_OPC_QUERY_LINK_STATUS      = 0x0307,
+ 	HNS3_OPC_CONFIG_MAX_FRM_SIZE    = 0x0308,
+ 	HNS3_OPC_CONFIG_SPEED_DUP       = 0x0309,
+@@ -201,9 +202,11 @@ enum hns3_opcode_type {
+ 
+ 	/* Firmware stats command */
+ 	HNS3_OPC_FIRMWARE_COMPAT_CFG    = 0x701A,
++	/* Firmware control phy command */
++	HNS3_OPC_PHY_PARAM_CFG          = 0x7025,
+ 
+ 	/* SFP command */
+-	HNS3_OPC_SFP_GET_SPEED          = 0x7104,
++	HNS3_OPC_GET_SFP_INFO           = 0x7104,
+ 
+ 	/* Interrupts commands */
+ 	HNS3_OPC_ADD_RING_TO_VECTOR     = 0x1503,
+@@ -638,6 +641,45 @@ struct hns3_firmware_compat_cmd {
+ 	uint8_t rsv[20];
+ };
+ 
++/* Bitmap flags in supported, advertising and lp_advertising */
++#define HNS3_PHY_LINK_SPEED_10M_HD_BIT		BIT(0)
++#define HNS3_PHY_LINK_SPEED_10M_BIT		BIT(1)
++#define HNS3_PHY_LINK_SPEED_100M_HD_BIT		BIT(2)
++#define HNS3_PHY_LINK_SPEED_100M_BIT		BIT(3)
++#define HNS3_PHY_LINK_SPEED_1000M_BIT		BIT(5)
++#define HNS3_PHY_LINK_MODE_AUTONEG_BIT		BIT(6)
++#define HNS3_PHY_LINK_MODE_PAUSE_BIT		BIT(13)
++#define HNS3_PHY_LINK_MODE_ASYM_PAUSE_BIT	BIT(14)
++
++#define HNS3_PHY_PARAM_CFG_BD_NUM	2
++struct hns3_phy_params_bd0_cmd {
++	uint32_t speed;
++#define HNS3_PHY_DUPLEX_CFG_B	0
++	uint8_t duplex;
++#define HNS3_PHY_AUTONEG_CFG_B	0
++	uint8_t autoneg;
++	uint8_t eth_tp_mdix;
++	uint8_t eth_tp_mdix_ctrl;
++	uint8_t port;
++	uint8_t transceiver;
++	uint8_t phy_address;
++	uint8_t rsv;
++	uint32_t supported;
++	uint32_t advertising;
++	uint32_t lp_advertising;
++};
++
++/* Bitmap flags in supported_speed */
++#define HNS3_FIBER_LINK_SPEED_1G_BIT		BIT(0)
++#define HNS3_FIBER_LINK_SPEED_10G_BIT		BIT(1)
++#define HNS3_FIBER_LINK_SPEED_25G_BIT		BIT(2)
++#define HNS3_FIBER_LINK_SPEED_50G_BIT		BIT(3)
++#define HNS3_FIBER_LINK_SPEED_100G_BIT		BIT(4)
++#define HNS3_FIBER_LINK_SPEED_40G_BIT		BIT(5)
++#define HNS3_FIBER_LINK_SPEED_100M_BIT		BIT(6)
++#define HNS3_FIBER_LINK_SPEED_10M_BIT		BIT(7)
++#define HNS3_FIBER_LINK_SPEED_200G_BIT		BIT(8)
++
+ #define HNS3_MAC_TX_EN_B		6
+ #define HNS3_MAC_RX_EN_B		7
+ #define HNS3_MAC_PAD_TX_B		11
+@@ -703,12 +745,17 @@ struct hns3_config_auto_neg_cmd {
+ #define HNS3_MAC_FEC_BASER		1
+ #define HNS3_MAC_FEC_RS			2
+ 
+-struct hns3_sfp_speed_cmd {
+-	uint32_t  sfp_speed;
+-	uint8_t   query_type; /* 0: sfp speed, 1: active fec */
+-	uint8_t   active_fec; /* current FEC mode */
+-	uint16_t  rsv1;
+-	uint32_t  rsv2[4];
++struct hns3_sfp_info_cmd {
++	uint32_t sfp_speed;
++	uint8_t query_type; /* 0: sfp speed, 1: active */
++	uint8_t active_fec; /* current FEC mode */
++	uint8_t autoneg; /* current autoneg state */
++	/* 0: not support autoneg, 1: support autoneg */
++	uint8_t autoneg_ability;
++	uint32_t supported_speed; /* speed supported by current media */
++	uint32_t module_type;
++	uint8_t fec_ability; /* supported fec modes, see HNS3_FIBER_FEC_XXX_BIT */
++	uint8_t rsv1[7];
+ };
+ 
+ /* Configure FEC mode, opcode:0x031A */
+diff --git a/drivers/net/hns3/hns3_dcb.c b/drivers/net/hns3/hns3_dcb.c
+index a5cfcce..beb5fd5 100644
+--- a/drivers/net/hns3/hns3_dcb.c
++++ b/drivers/net/hns3/hns3_dcb.c
+@@ -371,6 +371,20 @@ hns3_dcb_port_shaper_cfg(struct hns3_hw *hw)
+ 	return hns3_cmd_send(hw, &desc, 1);
+ }
+ 
++int
++hns3_port_shaper_update(struct hns3_hw *hw, uint32_t speed)
++{
++	struct hns3_mac *mac = &hw->mac;
++	int ret;
++
++	mac->link_speed = speed;
++	ret = hns3_dcb_port_shaper_cfg(hw);
++	if (ret)
++		hns3_err(hw, "configure port shappering failed: ret = %d", ret);
++
++	return ret;
++}
++
+ static int
+ hns3_dcb_pg_shapping_cfg(struct hns3_hw *hw, enum hns3_shap_bucket bucket,
+ 			 uint8_t pg_id, uint32_t shapping_para, uint32_t rate)
+diff --git a/drivers/net/hns3/hns3_dcb.h b/drivers/net/hns3/hns3_dcb.h
+index 0d167e7..14daf70 100644
+--- a/drivers/net/hns3/hns3_dcb.h
++++ b/drivers/net/hns3/hns3_dcb.h
+@@ -208,6 +208,7 @@ int hns3_queue_to_tc_mapping(struct hns3_hw *hw, uint16_t nb_rx_q,
+ 			     uint16_t nb_tx_q);
+ 
+ int hns3_update_queue_map_configure(struct hns3_adapter *hns);
++int hns3_port_shaper_update(struct hns3_hw *hw, uint32_t speed);
+ int hns3_dcb_port_shaper_cfg(struct hns3_hw *hw);
+ 
+ #endif /* _HNS3_DCB_H_ */
+diff --git a/drivers/net/hns3/hns3_ethdev.c b/drivers/net/hns3/hns3_ethdev.c
+index b2ff59e..32a739f 100644
+--- a/drivers/net/hns3/hns3_ethdev.c
++++ b/drivers/net/hns3/hns3_ethdev.c
+@@ -102,6 +102,7 @@ static int hns3_remove_mc_addr(struct hns3_hw *hw,
+ static int hns3_restore_fec(struct hns3_hw *hw);
+ static int hns3_query_dev_fec_info(struct hns3_hw *hw);
+ static int hns3_do_stop(struct hns3_adapter *hns);
++static int hns3_check_port_speed(struct hns3_hw *hw, uint32_t link_speeds);
+ 
+ static void
+ hns3_pf_disable_irq0(struct hns3_hw *hw)
+@@ -2342,6 +2343,43 @@ hns3_setup_dcb(struct rte_eth_dev *dev)
+ 	return ret;
+ }
+ 
++static int
++hns3_check_link_speed(struct hns3_hw *hw, uint32_t link_speeds)
++{
++	int ret;
++
++	/*
++	 * Some hardware doesn't support auto-negotiation, but users may not
++	 * configure link_speeds (default 0), which means auto-negotiation.
++	 * In this case, it should return success.
++	 */
++	if (link_speeds == ETH_LINK_SPEED_AUTONEG &&
++	    hw->mac.support_autoneg == 0)
++		return 0;
++
++	if (link_speeds != ETH_LINK_SPEED_AUTONEG) {
++		ret = hns3_check_port_speed(hw, link_speeds);
++		if (ret)
++			return ret;
++	}
++
++	return 0;
++}
++
++static int
++hns3_check_dev_conf(struct rte_eth_dev *dev)
++{
++	struct hns3_hw *hw = HNS3_DEV_PRIVATE_TO_HW(dev->data->dev_private);
++	struct rte_eth_conf *conf = &dev->data->dev_conf;
++	int ret;
++
++	ret = hns3_check_mq_mode(dev);
++	if (ret)
++		return ret;
++
++	return hns3_check_link_speed(hw, conf->link_speeds);
++}
++
+ static int
+ hns3_dev_configure(struct rte_eth_dev *dev)
+ {
+@@ -2376,11 +2414,10 @@ hns3_dev_configure(struct rte_eth_dev *dev)
+ 	}
+ 
+ 	hw->adapter_state = HNS3_NIC_CONFIGURING;
+-	if (conf->link_speeds & ETH_LINK_SPEED_FIXED) {
+-		hns3_err(hw, "setting link speed/duplex not supported");
+-		ret = -EINVAL;
++	ret = hns3_check_dev_conf(dev);
++	if (ret)
+ 		goto cfg_err;
+-	}
++
+ 	ret = hns3_check_mq_mode(dev);
+ 	if (ret)
+ 		goto cfg_err;
+@@ -4398,24 +4435,49 @@ hns3_dev_promisc_restore(struct hns3_adapter *hns)
+ }
+ 
+ static int
+-hns3_get_sfp_speed(struct hns3_hw *hw, uint32_t *speed)
++hns3_get_sfp_info(struct hns3_hw *hw, struct hns3_mac *mac_info)
+ {
+-	struct hns3_sfp_speed_cmd *resp;
++	struct hns3_sfp_info_cmd *resp;
+ 	struct hns3_cmd_desc desc;
+ 	int ret;
+ 
+-	hns3_cmd_setup_basic_desc(&desc, HNS3_OPC_SFP_GET_SPEED, true);
+-	resp = (struct hns3_sfp_speed_cmd *)desc.data;
++	hns3_cmd_setup_basic_desc(&desc, HNS3_OPC_GET_SFP_INFO, true);
++	resp = (struct hns3_sfp_info_cmd *)desc.data;
++	resp->query_type = HNS3_ACTIVE_QUERY;
++
+ 	ret = hns3_cmd_send(hw, &desc, 1);
+ 	if (ret == -EOPNOTSUPP) {
+-		hns3_err(hw, "IMP do not support get SFP speed %d", ret);
++		hns3_warn(hw, "firmware does not support get SFP info,"
++			  " ret = %d.", ret);
+ 		return ret;
+ 	} else if (ret) {
+-		hns3_err(hw, "get sfp speed failed %d", ret);
++		hns3_err(hw, "get sfp info failed, ret = %d.", ret);
+ 		return ret;
+ 	}
+ 
+-	*speed = resp->sfp_speed;
++	/*
++	 * In some case, the speed of MAC obtained from firmware may be 0, it
++	 * shouldn't be set to mac->speed.
++	 */
++	if (!rte_le_to_cpu_32(resp->sfp_speed))
++		return 0;
++
++	mac_info->link_speed = rte_le_to_cpu_32(resp->sfp_speed);
++	/*
++	 * if resp->supported_speed is 0, it means it's an old version
++	 * firmware, do not update these params.
++	 */
++	if (resp->supported_speed) {
++		mac_info->query_type = HNS3_ACTIVE_QUERY;
++		mac_info->supported_speed =
++					rte_le_to_cpu_32(resp->supported_speed);
++		mac_info->support_autoneg = resp->autoneg_ability;
++		mac_info->link_autoneg = (resp->autoneg == 0) ? ETH_LINK_FIXED
++					: ETH_LINK_AUTONEG;
++		mac_info->fec_capa = resp->fec_ability;
++	} else {
++		mac_info->query_type = HNS3_DEFAULT_QUERY;
++	}
+ 
+ 	return 0;
+ }
+@@ -4460,27 +4522,52 @@ hns3_cfg_mac_speed_dup(struct hns3_hw *hw, uint32_t speed, uint8_t duplex)
+ static int
+ hns3_update_fiber_link_info(struct hns3_hw *hw)
+ {
+-	struct hns3_adapter *hns = HNS3_DEV_HW_TO_ADAPTER(hw);
+-	struct hns3_pf *pf = &hns->pf;
+-	uint32_t speed;
++	struct hns3_pf *pf = HNS3_DEV_HW_TO_PF(hw);
++	struct hns3_mac *mac = &hw->mac;
++	struct hns3_mac mac_info;
+ 	int ret;
+ 
+-	/* If IMP do not support get SFP/qSFP speed, return directly */
++	/* If firmware do not support get SFP/qSFP speed, return directly */
+ 	if (!pf->support_sfp_query)
+ 		return 0;
+ 
+-	ret = hns3_get_sfp_speed(hw, &speed);
++	memset(&mac_info, 0, sizeof(struct hns3_mac));
++	ret = hns3_get_sfp_info(hw, &mac_info);
+ 	if (ret == -EOPNOTSUPP) {
+ 		pf->support_sfp_query = false;
+ 		return ret;
+ 	} else if (ret)
+ 		return ret;
+ 
+-	if (speed == ETH_SPEED_NUM_NONE)
+-		return 0; /* do nothing if no SFP */
++	/* Do nothing if no SFP */
++	if (mac_info.link_speed == ETH_SPEED_NUM_NONE)
++		return 0;
++
++	/*
++	 * If query_type is HNS3_ACTIVE_QUERY, it is no need
++	 * to reconfigure the speed of MAC. Otherwise, it indicates
++	 * that the current firmware only supports to obtain the
++	 * speed of the SFP, and the speed of MAC needs to reconfigure.
++	 */
++	mac->query_type = mac_info.query_type;
++	if (mac->query_type == HNS3_ACTIVE_QUERY) {
++		if (mac_info.link_speed != mac->link_speed) {
++			ret = hns3_port_shaper_update(hw, mac_info.link_speed);
++			if (ret)
++				return ret;
++		}
++
++		mac->link_speed = mac_info.link_speed;
++		mac->supported_speed = mac_info.supported_speed;
++		mac->support_autoneg = mac_info.support_autoneg;
++		mac->link_autoneg = mac_info.link_autoneg;
++		mac->fec_capa = mac_info.fec_capa;
++		return 0;
++	}
+ 
+ 	/* Config full duplex for SFP */
+-	return hns3_cfg_mac_speed_dup(hw, speed, ETH_LINK_FULL_DUPLEX);
++	return hns3_cfg_mac_speed_dup(hw, mac_info.link_speed,
++				      ETH_LINK_FULL_DUPLEX);
+ }
+ 
+ static int
+@@ -4866,6 +4953,274 @@ hns3_uninit_pf(struct rte_eth_dev *eth_dev)
+ 	hw->io_base = NULL;
+ }
+ 
++static uint32_t
++hns3_convert_link_speeds2bitmap_copper(uint32_t link_speeds)
++{
++	uint32_t speed_bit;
++
++	switch (link_speeds & ~ETH_LINK_SPEED_FIXED) {
++	case ETH_LINK_SPEED_10M:
++		speed_bit = HNS3_PHY_LINK_SPEED_10M_BIT;
++		break;
++	case ETH_LINK_SPEED_10M_HD:
++		speed_bit = HNS3_PHY_LINK_SPEED_10M_HD_BIT;
++		break;
++	case ETH_LINK_SPEED_100M:
++		speed_bit = HNS3_PHY_LINK_SPEED_100M_BIT;
++		break;
++	case ETH_LINK_SPEED_100M_HD:
++		speed_bit = HNS3_PHY_LINK_SPEED_100M_HD_BIT;
++		break;
++	case ETH_LINK_SPEED_1G:
++		speed_bit = HNS3_PHY_LINK_SPEED_1000M_BIT;
++		break;
++	default:
++		speed_bit = 0;
++		break;
++	}
++
++	return speed_bit;
++}
++
++static uint32_t
++hns3_convert_link_speeds2bitmap_fiber(uint32_t link_speeds)
++{
++	uint32_t speed_bit;
++
++	switch (link_speeds & ~ETH_LINK_SPEED_FIXED) {
++	case ETH_LINK_SPEED_1G:
++		speed_bit = HNS3_FIBER_LINK_SPEED_1G_BIT;
++		break;
++	case ETH_LINK_SPEED_10G:
++		speed_bit = HNS3_FIBER_LINK_SPEED_10G_BIT;
++		break;
++	case ETH_LINK_SPEED_25G:
++		speed_bit = HNS3_FIBER_LINK_SPEED_25G_BIT;
++		break;
++	case ETH_LINK_SPEED_40G:
++		speed_bit = HNS3_FIBER_LINK_SPEED_40G_BIT;
++		break;
++	case ETH_LINK_SPEED_50G:
++		speed_bit = HNS3_FIBER_LINK_SPEED_50G_BIT;
++		break;
++	case ETH_LINK_SPEED_100G:
++		speed_bit = HNS3_FIBER_LINK_SPEED_100G_BIT;
++		break;
++	case ETH_LINK_SPEED_200G:
++		speed_bit = HNS3_FIBER_LINK_SPEED_200G_BIT;
++		break;
++	default:
++		speed_bit = 0;
++		break;
++	}
++
++	return speed_bit;
++}
++
++static int
++hns3_check_port_speed(struct hns3_hw *hw, uint32_t link_speeds)
++{
++	struct hns3_mac *mac = &hw->mac;
++	uint32_t supported_speed = mac->supported_speed;
++	uint32_t speed_bit = 0;
++
++	if (mac->media_type == HNS3_MEDIA_TYPE_COPPER)
++		speed_bit = hns3_convert_link_speeds2bitmap_copper(link_speeds);
++	else
++		speed_bit = hns3_convert_link_speeds2bitmap_fiber(link_speeds);
++
++	if (!(speed_bit & supported_speed)) {
++		hns3_err(hw, "link_speeds(0x%x) exceeds the supported speed capability or is incorrect.",
++			 link_speeds);
++		return -EINVAL;
++	}
++
++	return 0;
++}
++
++static inline uint32_t
++hns3_get_link_speed(uint32_t link_speeds)
++{
++	uint32_t speed = ETH_SPEED_NUM_NONE;
++
++	if (link_speeds & ETH_LINK_SPEED_10M ||
++	    link_speeds & ETH_LINK_SPEED_10M_HD)
++		speed = ETH_SPEED_NUM_10M;
++	if (link_speeds & ETH_LINK_SPEED_100M ||
++	    link_speeds & ETH_LINK_SPEED_100M_HD)
++		speed = ETH_SPEED_NUM_100M;
++	if (link_speeds & ETH_LINK_SPEED_1G)
++		speed = ETH_SPEED_NUM_1G;
++	if (link_speeds & ETH_LINK_SPEED_10G)
++		speed = ETH_SPEED_NUM_10G;
++	if (link_speeds & ETH_LINK_SPEED_25G)
++		speed = ETH_SPEED_NUM_25G;
++	if (link_speeds & ETH_LINK_SPEED_40G)
++		speed = ETH_SPEED_NUM_40G;
++	if (link_speeds & ETH_LINK_SPEED_50G)
++		speed = ETH_SPEED_NUM_50G;
++	if (link_speeds & ETH_LINK_SPEED_100G)
++		speed = ETH_SPEED_NUM_100G;
++	if (link_speeds & ETH_LINK_SPEED_200G)
++		speed = ETH_SPEED_NUM_200G;
++
++	return speed;
++}
++
++static uint8_t
++hns3_get_link_duplex(uint32_t link_speeds)
++{
++	if ((link_speeds & ETH_LINK_SPEED_10M_HD) ||
++	    (link_speeds & ETH_LINK_SPEED_100M_HD))
++		return ETH_LINK_HALF_DUPLEX;
++	else
++		return ETH_LINK_FULL_DUPLEX;
++}
++
++static int
++hns3_set_copper_port_link_speed(struct hns3_hw *hw,
++				struct hns3_set_link_speed_cfg *cfg)
++{
++	struct hns3_cmd_desc desc[HNS3_PHY_PARAM_CFG_BD_NUM];
++	struct hns3_phy_params_bd0_cmd *req;
++	uint16_t i;
++
++	for (i = 0; i < HNS3_PHY_PARAM_CFG_BD_NUM - 1; i++) {
++		hns3_cmd_setup_basic_desc(&desc[i], HNS3_OPC_PHY_PARAM_CFG,
++					  false);
++		desc[i].flag |= rte_cpu_to_le_16(HNS3_CMD_FLAG_NEXT);
++	}
++	hns3_cmd_setup_basic_desc(&desc[i], HNS3_OPC_PHY_PARAM_CFG, false);
++	req = (struct hns3_phy_params_bd0_cmd *)desc[0].data;
++	req->autoneg = cfg->autoneg;
++
++	/*
++	 * The full speed capability is used to negotiate when
++	 * auto-negotiation is enabled.
++	 */
++	if (cfg->autoneg) {
++		req->advertising = HNS3_PHY_LINK_SPEED_10M_BIT |
++				   HNS3_PHY_LINK_SPEED_10M_HD_BIT |
++				   HNS3_PHY_LINK_SPEED_100M_BIT |
++				   HNS3_PHY_LINK_SPEED_100M_HD_BIT |
++				   HNS3_PHY_LINK_SPEED_1000M_BIT;
++	} else {
++		req->speed = cfg->speed;
++		req->duplex = cfg->duplex;
++	}
++
++	return hns3_cmd_send(hw, desc, HNS3_PHY_PARAM_CFG_BD_NUM);
++}
++
++static int
++hns3_set_autoneg(struct hns3_hw *hw, bool enable)
++{
++	struct hns3_config_auto_neg_cmd *req;
++	struct hns3_cmd_desc desc;
++	uint32_t flag = 0;
++	int ret;
++
++	hns3_cmd_setup_basic_desc(&desc, HNS3_OPC_CONFIG_AN_MODE, false);
++
++	req = (struct hns3_config_auto_neg_cmd *)desc.data;
++	if (enable)
++		hns3_set_bit(flag, HNS3_MAC_CFG_AN_EN_B, 1);
++	req->cfg_an_cmd_flag = rte_cpu_to_le_32(flag);
++
++	ret = hns3_cmd_send(hw, &desc, 1);
++	if (ret)
++		hns3_err(hw, "autoneg set cmd failed, ret = %d.", ret);
++
++	return ret;
++}
++
++static int
++hns3_set_fiber_port_link_speed(struct hns3_hw *hw,
++			       struct hns3_set_link_speed_cfg *cfg)
++{
++	int ret;
++
++	if (hw->mac.support_autoneg) {
++		ret = hns3_set_autoneg(hw, cfg->autoneg);
++		if (ret) {
++			hns3_err(hw, "failed to configure auto-negotiation.");
++			return ret;
++		}
++
++		/*
++		 * To enable auto-negotiation, we only need to open the switch
++		 * of auto-negotiation, then firmware sets all speed
++		 * capabilities.
++		 */
++		if (cfg->autoneg)
++			return 0;
++	}
++
++	/*
++	 * Some hardware doesn't support auto-negotiation, but users may not
++	 * configure link_speeds (default 0), which means auto-negotiation.
++	 * In this case, a warning message need to be printed, instead of
++	 * an error.
++	 */
++	if (cfg->autoneg) {
++		hns3_warn(hw, "auto-negotiation is not supported, use default fixed speed!");
++		return 0;
++	}
++
++	return hns3_cfg_mac_speed_dup(hw, cfg->speed, cfg->duplex);
++}
++
++static const char *
++hns3_get_media_type_name(uint8_t media_type)
++{
++	if (media_type == HNS3_MEDIA_TYPE_FIBER)
++		return "fiber";
++	else if (media_type == HNS3_MEDIA_TYPE_COPPER)
++		return "copper";
++	else if (media_type == HNS3_MEDIA_TYPE_BACKPLANE)
++		return "backplane";
++	else
++		return "unknown";
++}
++
++static int
++hns3_set_port_link_speed(struct hns3_hw *hw,
++			 struct hns3_set_link_speed_cfg *cfg)
++{
++	int ret;
++
++	if (hw->mac.media_type == HNS3_MEDIA_TYPE_COPPER)
++		ret = hns3_set_copper_port_link_speed(hw, cfg);
++	else
++		ret = hns3_set_fiber_port_link_speed(hw, cfg);
++
++	if (ret) {
++		hns3_err(hw, "failed to set %s port link speed, ret = %d.",
++			 hns3_get_media_type_name(hw->mac.media_type),
++			 ret);
++		return ret;
++	}
++
++	return 0;
++}
++
++static int
++hns3_apply_link_speed(struct hns3_hw *hw)
++{
++	struct rte_eth_conf *conf = &hw->data->dev_conf;
++	struct hns3_set_link_speed_cfg cfg;
++
++	memset(&cfg, 0, sizeof(struct hns3_set_link_speed_cfg));
++	cfg.autoneg = (conf->link_speeds == ETH_LINK_SPEED_AUTONEG) ?
++			ETH_LINK_AUTONEG : ETH_LINK_FIXED;
++	if (cfg.autoneg != ETH_LINK_AUTONEG) {
++		cfg.speed = hns3_get_link_speed(conf->link_speeds);
++		cfg.duplex = hns3_get_link_duplex(conf->link_speeds);
++	}
++
++	return hns3_set_port_link_speed(hw, &cfg);
++}
++
+ static int
+ hns3_do_start(struct hns3_adapter *hns, bool reset_queue)
+ {
+@@ -4890,8 +5245,16 @@ hns3_do_start(struct hns3_adapter *hns, bool reset_queue)
+ 		PMD_INIT_LOG(ERR, "failed to enable MAC, ret = %d", ret);
+ 		goto err_config_mac_mode;
+ 	}
++
++	ret = hns3_apply_link_speed(hw);
++	if (ret)
++		goto err_set_link_speed;
++
+ 	return 0;
+ 
++err_set_link_speed:
++	(void)hns3_cfg_mac_mode(hw, false);
++
+ err_config_mac_mode:
+ 	hns3_dev_release_mbufs(hns);
+ 	/*
+@@ -5938,8 +6301,7 @@ get_current_fec_auto_state(struct hns3_hw *hw, uint8_t *state)
+ static int
+ hns3_fec_get_internal(struct hns3_hw *hw, uint32_t *fec_capa)
+ {
+-#define QUERY_ACTIVE_SPEED	1
+-	struct hns3_sfp_speed_cmd *resp;
++	struct hns3_sfp_info_cmd *resp;
+ 	uint32_t tmp_fec_capa;
+ 	uint8_t auto_state;
+ 	struct hns3_cmd_desc desc;
+@@ -5961,9 +6323,9 @@ hns3_fec_get_internal(struct hns3_hw *hw, uint32_t *fec_capa)
+ 		}
+ 	}
+ 
+-	hns3_cmd_setup_basic_desc(&desc, HNS3_OPC_SFP_GET_SPEED, true);
+-	resp = (struct hns3_sfp_speed_cmd *)desc.data;
+-	resp->query_type = QUERY_ACTIVE_SPEED;
++	hns3_cmd_setup_basic_desc(&desc, HNS3_OPC_GET_SFP_INFO, true);
++	resp = (struct hns3_sfp_info_cmd *)desc.data;
++	resp->query_type = HNS3_ACTIVE_QUERY;
+ 
+ 	ret = hns3_cmd_send(hw, &desc, 1);
+ 	if (ret == -EOPNOTSUPP) {
+diff --git a/drivers/net/hns3/hns3_ethdev.h b/drivers/net/hns3/hns3_ethdev.h
+index 5717f54..d557faf 100644
+--- a/drivers/net/hns3/hns3_ethdev.h
++++ b/drivers/net/hns3/hns3_ethdev.h
+@@ -161,6 +161,12 @@ struct hns3_cfg {
+ 	uint16_t umv_space;
+ };
+ 
++struct hns3_set_link_speed_cfg {
++	uint32_t speed;
++	uint8_t duplex  : 1;
++	uint8_t autoneg : 1;
++};
++
+ /* mac media type */
+ enum hns3_media_type {
+ 	HNS3_MEDIA_TYPE_UNKNOWN,
+@@ -170,6 +176,9 @@ enum hns3_media_type {
+ 	HNS3_MEDIA_TYPE_NONE,
+ };
+ 
++#define HNS3_DEFAULT_QUERY		0
++#define HNS3_ACTIVE_QUERY		1
++
+ struct hns3_mac {
+ 	uint8_t mac_addr[RTE_ETHER_ADDR_LEN];
+ 	uint8_t media_type;
+@@ -178,6 +187,11 @@ struct hns3_mac {
+ 	uint8_t link_autoneg : 1; /* ETH_LINK_[AUTONEG/FIXED] */
+ 	uint8_t link_status  : 1; /* ETH_LINK_[DOWN/UP] */
+ 	uint32_t link_speed;      /* ETH_SPEED_NUM_ */
++	uint8_t query_type;
++	uint32_t supported_speed; /* supported speed for current media type */
++	uint8_t support_autoneg;
++	/* current supported fec modes. see HNS3_FIBER_FEC_XXX_BIT */
++	uint32_t fec_capa;
+ };
+ 
+ struct hns3_fake_queue_data {
+@@ -817,6 +831,12 @@ struct hns3_adapter {
+ #define HNS3_DEV_HW_TO_ADAPTER(hw) \
+ 	container_of(hw, struct hns3_adapter, hw)
+ 
++static inline struct hns3_pf *HNS3_DEV_HW_TO_PF(struct hns3_hw *hw)
++{
++	struct hns3_adapter *adapter = HNS3_DEV_HW_TO_ADAPTER(hw);
++	return &adapter->pf;
++}
++
+ #define hns3_set_field(origin, mask, shift, val) \
+ 	do { \
+ 		(origin) &= (~(mask)); \
+-- 
+2.33.0
+
