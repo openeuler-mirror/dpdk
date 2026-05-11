@@ -1879,7 +1879,7 @@ hinic3_get_bifur_enable(void *hwdev, u8 *bifur_en, u8 *iso_en, u8 *bifur_type)
 
 	if (bifur_type != NULL)
 		*bifur_type = bifur_cmd.flow_bifur_type;
-	
+
 	return 0;
 }
 
@@ -2348,7 +2348,7 @@ int hinic3_set_fec_mode(struct hinic3_hwdev *hwdev, u8 fecparam)
 
 	err = mag_msg_to_mgmt_sync(hwdev, MAG_CMD_CFG_FEC_MODE, &fec_msg, sizeof(fec_msg),
 				   &fec_msg, &out_size);
-	
+
 	if ((fec_msg.head.status != 0) || err) {
 		PMD_DRV_LOG(ERR, "Failed to set fec mode failed, err: %d, status: 0x%x, out size: 0x%x\n",
 			    err, fec_msg.head.status, out_size);
@@ -2373,19 +2373,19 @@ int hinic3_get_fec_mode(struct hinic3_hwdev *hwdev, u8 *advertised_fec, u8 *supp
 
 	if (supported_fec != NULL)
 		*supported_fec = 0;
-	
+
 	fec_msg.opcode = HINIC3_FEC_MODE_OPCODE_GET;
 	fec_msg.port_id = hinic3_physical_port_id(hwdev);
 
 	err = mag_msg_to_mgmt_sync(hwdev, MAG_CMD_CFG_FEC_MODE, &fec_msg, sizeof(fec_msg),
 				   &fec_msg, &out_size);
-	
+
 	if ((fec_msg.head.status != 0) || err) {
 		PMD_DRV_LOG(ERR, "Failed to get fec mode failed, err: %d, status: 0x%x, out size: 0x%x\n",
 			    err, fec_msg.head.status, out_size);
 		return -EINVAL;
 	}
-	
+
 	if (advertised_fec != NULL)
 		hinic3_fec_param_covert(HINIC3_FEC_MODE_OPCODE_GET, BIT(fec_msg.advertised_fec), advertised_fec);
 
@@ -2393,4 +2393,63 @@ int hinic3_get_fec_mode(struct hinic3_hwdev *hwdev, u8 *advertised_fec, u8 *supp
 		hinic3_fec_param_covert(HINIC3_FEC_MODE_OPCODE_GET, fec_msg.supported_fec, supported_fec);
 
 	return 0;
+}
+
+#define NIC_CVLAN_INSERT_ENABLE 0x1
+#define NIC_QINQ_INSERT_ENABLE  0X3
+int hinic3_set_vlan_ctx(void *hwdev, u16 vlan_tag, u16 q_id, bool add)
+{
+	struct nic_vlan_ctx *vlan_ctx = NULL;
+	struct hinic3_cmd_buf *cmd_buf = NULL;
+	u64 out_param = 0;
+	int err;
+	cmd_buf = hinic3_alloc_cmd_buf(hwdev);
+	if (!cmd_buf) {
+		PMD_DRV_LOG(ERR, "Failed to allocate cmd buf\n");
+		return -ENOMEM;
+	}
+
+	cmd_buf->size = sizeof(struct nic_vlan_ctx);
+	vlan_ctx = (struct nic_vlan_ctx *)cmd_buf->buf;
+	vlan_ctx->func_id = hinic3_global_func_id(hwdev);
+	vlan_ctx->qid = q_id;
+	vlan_ctx->vlan_tag = vlan_tag;
+	vlan_ctx->vlan_sel = 0; /* TPID0 in IPSU */
+	vlan_ctx->vlan_mode = add ?
+		NIC_QINQ_INSERT_ENABLE : NIC_CVLAN_INSERT_ENABLE;
+	hinic3_cpu_to_be32(vlan_ctx, sizeof(struct nic_vlan_ctx));
+
+	err = hinic3_cmdq_direct_resp(hwdev, HINIC3_MOD_L2NIC,
+			   HINIC3_UCODE_CMD_MODIFY_VLAN_CTX,
+			   cmd_buf, &out_param, 0);
+	hinic3_free_cmd_buf(cmd_buf);
+
+	if (err || out_param != 0) {
+		PMD_DRV_LOG(ERR, "Failed to set vlan context, err: %d", err);
+		return -EFAULT;
+	}
+
+	return err;
+}
+
+int hinic3_cfg_vf_vlan(void *hwdev, u8 opcode, u16 vid)
+{
+	struct hinic3_cmd_vf_vlan_config vf_vlan;
+	u16 out_size = sizeof(vf_vlan);
+	int err;
+	/* VLAN 0 is a special case, don't allow it to be removed */
+	if (!vid && opcode == HINIC3_CMD_OP_DEL)
+		return 0;
+	memset(&vf_vlan, 0, sizeof(vf_vlan));
+	vf_vlan.opcode = opcode;
+	vf_vlan.func_id = hinic3_global_func_id(hwdev);
+	vf_vlan.vlan_id = vid;
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_CFG_VF_VLAN,
+		&vf_vlan, sizeof(vf_vlan), &vf_vlan, &out_size);
+	if (err || !out_size || vf_vlan.msg_head.status) {
+		PMD_DRV_LOG(ERR, "Failed to set func_id %d vlan, err: %d, status: 0x%x,out size: 0x%x\n",
+			    hinic3_global_func_id(hwdev), err, vf_vlan.msg_head.status, out_size);
+		return -EFAULT;
+	}
+	return err;
 }

@@ -728,10 +728,10 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 
- 	/* Queue depth must be equal to queue 0 */	 
- 	if (qid != 0 && (nb_desc != nic_dev->rxqs[0]->q_depth)) {	 
- 		PMD_DRV_LOG(WARNING, "rxq%u depth:%u is not equal to queue0 depth:%u.\n",	 
- 			qid, nb_desc, nic_dev->rxqs[0]->q_depth);	 
+ 	/* Queue depth must be equal to queue 0 */
+ 	if (qid != 0 && (nb_desc != nic_dev->rxqs[0]->q_depth)) {
+ 		PMD_DRV_LOG(WARNING, "rxq%u depth:%u is not equal to queue0 depth:%u.\n",
+ 			qid, nb_desc, nic_dev->rxqs[0]->q_depth);
  		nb_desc = nic_dev->rxqs[0]->q_depth;
 	}
 
@@ -947,10 +947,10 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	hwdev = nic_dev->hwdev;
 
- 	/* Queue depth must be equal to queue 0 */	 
- 	if (qid != 0 && (nb_desc != nic_dev->txqs[0]->q_depth)) {	 
- 		PMD_DRV_LOG(WARNING, "txq%u depth:%u is not equal to queue0 depth:%u.\n",	 
- 			qid, nb_desc, nic_dev->txqs[0]->q_depth);	 
+ 	/* Queue depth must be equal to queue 0 */
+ 	if (qid != 0 && (nb_desc != nic_dev->txqs[0]->q_depth)) {
+ 		PMD_DRV_LOG(WARNING, "txq%u depth:%u is not equal to queue0 depth:%u.\n",
+ 			qid, nb_desc, nic_dev->txqs[0]->q_depth);
  		nb_desc = nic_dev->txqs[0]->q_depth;
 	}
 
@@ -2262,7 +2262,7 @@ static int hinic3_vlan_offload_set(struct rte_eth_dev *dev, int mask)
 
 	/* Enable or disable VLAN stripping */
 	if (mask & ETH_VLAN_STRIP_MASK) {
-		on = (rxmode->offloads & DEV_RX_OFFLOAD_VLAN_STRIP) ?
+		on = (rxmode->offloads & (DEV_RX_OFFLOAD_VLAN_STRIP | DEV_RX_OFFLOAD_QINQ_STRIP)) ?
 		     true : false;
 		err = hinic3_set_rx_vlan_offload(nic_dev->hwdev, on);
 		if (err) {
@@ -2277,6 +2277,35 @@ static int hinic3_vlan_offload_set(struct rte_eth_dev *dev, int mask)
 			    nic_dev->dev_name, dev->data->port_id);
 	}
 	return 0;
+}
+
+static int hinic3_vlan_pvid_set(struct rte_eth_dev *dev, uint16_t vlan_id, int on)
+{
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+	struct rte_eth_rxmode *rxmode = &dev->data->dev_conf.rxmode;
+	int err = 0;
+
+	if ((rxmode->offloads & (DEV_RX_OFFLOAD_QINQ_STRIP)) ? true : false) {
+		err = hinic3_cfg_vf_vlan(nic_dev->hwdev, on, vlan_id);
+		if (err) {
+			PMD_DRV_LOG(ERR, "cfg vlan failed, vlan_id: %d, err: %d", vlan_id, err);
+			return err;
+		}
+
+		err = hinic3_set_vlan_ctx(nic_dev->hwdev, vlan_id, 0xFFFF, true);
+		if (err) {
+			PMD_DRV_LOG(ERR, "Set vlan failed, vlan_id: %d, err: %d", vlan_id, err);
+			return err;
+		}
+
+		err = hinic3_set_mac(nic_dev->hwdev, dev->data->mac_addrs[0].addr_bytes, vlan_id, hinic3_global_func_id(nic_dev->hwdev));
+		if (err) {
+			PMD_DRV_LOG(ERR, "set mac failed, err: %d", err);
+			return err;
+		}
+	}
+
+	return err;
 }
 
 /**
@@ -3433,7 +3462,7 @@ static int hinic3_fec_get(struct rte_eth_dev *dev, uint32_t *fec_capa)
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	u8 advertised_fec = 0;
 	int err;
-	
+
 	err = hinic3_get_fec_mode(nic_dev->hwdev, &advertised_fec, 0);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Get fec parma failed: %d.", err);
@@ -3467,7 +3496,7 @@ static int hinic3_fec_capability_get(struct rte_eth_dev *dev,
 		PMD_DRV_LOG(ERR, "Failed to get fec capability, err: %d.", err);
 		return err;
 	}
-	
+
 	speed_fec_capa->speed = nic_dev->hwdev->speed;
 	speed_fec_capa->capa = (u32)supported_fec;
 
@@ -3515,6 +3544,7 @@ static const struct eth_dev_ops hinic3_pmd_ops = {
 	.mtu_set                       = hinic3_dev_set_mtu,
 	.vlan_filter_set               = hinic3_vlan_filter_set,
 	.vlan_offload_set              = hinic3_vlan_offload_set,
+	.vlan_pvid_set                 = hinic3_vlan_pvid_set,
 	.allmulticast_enable           = hinic3_dev_allmulticast_enable,
 	.allmulticast_disable          = hinic3_dev_allmulticast_disable,
 	.promiscuous_enable            = hinic3_dev_promiscuous_enable,
