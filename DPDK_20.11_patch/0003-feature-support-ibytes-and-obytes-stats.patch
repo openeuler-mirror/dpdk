@@ -1,0 +1,206 @@
+From 8a4b9ed087d2760a91928d17a99badf7185bfc25 Mon Sep 17 00:00:00 2001
+From: wangxin <wangxin679@h-partners.com>
+Date: Fri, 8 May 2026 16:15:22 +0800
+Subject: [PATCH 3/3] [feature] support ibytes and obytes stats
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+[描述信息] 支持网口带宽统计信息查询
+[修改说明] 添加 ibytes 与 obytes 统计
+---
+ drivers/net/hns3/hns3_rxtx.c          | 16 ++++++++++++++++
+ drivers/net/hns3/hns3_rxtx.h          | 15 +++++++++++++++
+ drivers/net/hns3/hns3_rxtx_vec_neon.h |  9 +++++++++
+ drivers/net/hns3/hns3_rxtx_vec_sve.c  |  7 +++++++
+ drivers/net/hns3/hns3_stats.c         |  8 ++++++--
+ 5 files changed, 53 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/hns3/hns3_rxtx.c b/drivers/net/hns3/hns3_rxtx.c
+index 00dab27..84ca558 100644
+--- a/drivers/net/hns3/hns3_rxtx.c
++++ b/drivers/net/hns3/hns3_rxtx.c
+@@ -2251,6 +2251,9 @@ hns3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, uint16_t nb_pkts)
+ 					       cksum_err);
+ 		hns3_rxd_to_vlan_tci(rxq, rxm, l234_info, &rxd);
+ 
++		/* Increment bytes counter  */
++		rxq->basic_stats.bytes += rxm->pkt_len;
++
+ 		rx_pkts[nb_rx++] = rxm;
+ 		continue;
+ pkt_err:
+@@ -2471,6 +2474,9 @@ hns3_recv_scattered_pkts(void *rx_queue,
+ 					       cksum_err);
+ 		hns3_rxd_to_vlan_tci(rxq, first_seg, l234_info, &rxd);
+ 
++		/* Increment bytes counter */
++		rxq->basic_stats.bytes += first_seg->pkt_len;
++
+ 		rx_pkts[nb_rx++] = first_seg;
+ 		first_seg = NULL;
+ 		continue;
+@@ -3681,6 +3687,11 @@ hns3_tx_fill_hw_ring(struct hns3_tx_queue *txq,
+ 	for (i = 0; i < mainpart; i += PER_LOOP_NUM) {
+ 		hns3_tx_backup_4mbuf(tx_entry + i, pkts + i);
+ 		hns3_tx_setup_4bd(txdp + i, pkts + i);
++
++		/* Increment bytes counter */
++		uint32_t j;
++		for (j = 0; j < PER_LOOP_NUM; j++)
++			txq->basic_stats.bytes += pkts[i + j]->pkt_len;
+ 	}
+ 	if (unlikely(leftover > 0)) {
+ 		for (i = 0; i < leftover; i++) {
+@@ -3688,6 +3699,9 @@ hns3_tx_fill_hw_ring(struct hns3_tx_queue *txq,
+ 					     pkts + mainpart + i);
+ 			hns3_tx_setup_1bd(txdp + mainpart + i,
+ 					  pkts + mainpart + i);
++
++			/* Increment bytes counter */
++			txq->basic_stats.bytes += pkts[mainpart + i]->pkt_len;
+ 		}
+ 	}
+ }
+@@ -3826,6 +3840,8 @@ hns3_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
+ 		desc->tx.tp_fe_sc_vld_ra_ri |=
+ 				 rte_cpu_to_le_16(BIT(HNS3_TXD_FE_B));
+ 
++		/* Increment bytes counter */
++		txq->basic_stats.bytes += tx_pkt->pkt_len;
+ 		nb_hold += i;
+ 		txq->next_to_use = tx_next_use;
+ 		txq->tx_bd_ready -= i;
+diff --git a/drivers/net/hns3/hns3_rxtx.h b/drivers/net/hns3/hns3_rxtx.h
+index 40ac113..e86fe55 100644
+--- a/drivers/net/hns3/hns3_rxtx.h
++++ b/drivers/net/hns3/hns3_rxtx.h
+@@ -263,6 +263,12 @@ struct hns3_entry {
+ 	struct rte_mbuf *mbuf;
+ };
+ 
++struct hns3_rx_basic_stats {
++	uint64_t packets;
++	uint64_t bytes;
++	uint64_t errors;
++};
++
+ struct hns3_rx_queue {
+ 	void *io_base;
+ 	volatile void *io_head_reg;
+@@ -319,12 +325,19 @@ struct hns3_rx_queue {
+ 	struct rte_mbuf *bulk_mbuf[HNS3_BULK_ALLOC_MBUF_NUM];
+ 	uint16_t bulk_mbuf_num;
+ 
++	struct hns3_rx_basic_stats basic_stats;
++
+ 	/* offset_table: used for vector, to solve execute re-order problem */
+ 	uint8_t offset_table[HNS3_VECTOR_RX_OFFSET_TABLE_LEN + 1];
+ 	uint64_t mbuf_initializer; /* value to init mbufs used with vector rx */
+ 	struct rte_mbuf fake_mbuf; /* fake mbuf used with vector rx */
+ };
+ 
++struct hns3_tx_basic_stats {
++	uint64_t packets;
++	uint64_t bytes;
++};
++
+ struct hns3_tx_queue {
+ 	void *io_base;
+ 	volatile void *io_tail_reg;
+@@ -367,6 +380,8 @@ struct hns3_tx_queue {
+ 	uint16_t tx_rs_thresh;
+ 	struct rte_mbuf **free;
+ 
++	struct hns3_tx_basic_stats basic_stats;
++
+ 	/*
+ 	 * tso mode.
+ 	 * value range:
+diff --git a/drivers/net/hns3/hns3_rxtx_vec_neon.h b/drivers/net/hns3/hns3_rxtx_vec_neon.h
+index 4e94c7a..345c77d 100644
+--- a/drivers/net/hns3/hns3_rxtx_vec_neon.h
++++ b/drivers/net/hns3/hns3_rxtx_vec_neon.h
+@@ -61,6 +61,9 @@ hns3_xmit_fixed_burst_vec(void *__restrict tx_queue,
+ 		for (i = 0; i < n; i++, tx_pkts++, tx_desc++) {
+ 			hns3_vec_tx(tx_desc, *tx_pkts);
+ 			tx_entry[i].mbuf = *tx_pkts;
++
++			/* Increment bytes counter */
++			txq->basic_stats.bytes += (*tx_pkts)->pkt_len;
+ 		}
+ 
+ 		nb_commit -= n;
+@@ -72,6 +75,9 @@ hns3_xmit_fixed_burst_vec(void *__restrict tx_queue,
+ 	for (i = 0; i < nb_commit; i++, tx_pkts++, tx_desc++) {
+ 		hns3_vec_tx(tx_desc, *tx_pkts);
+ 		tx_entry[i].mbuf = *tx_pkts;
++
++		/* Increment bytes counter */
++		txq->basic_stats.bytes += (*tx_pkts)->pkt_len;
+ 	}
+ 
+ 	next_to_use += nb_commit;
+@@ -116,6 +122,9 @@ hns3_desc_parse_field(struct hns3_rx_queue *rxq,
+ 		if (likely(bd_base_info & BIT(HNS3_RXD_L3L4P_B)))
+ 			hns3_rx_set_cksum_flag(pkt, pkt->packet_type,
+ 					       cksum_err);
++
++		/* Increment bytes counter */
++		rxq->basic_stats.bytes += pkt->pkt_len;
+ 	}
+ 
+ 	return retcode;
+diff --git a/drivers/net/hns3/hns3_rxtx_vec_sve.c b/drivers/net/hns3/hns3_rxtx_vec_sve.c
+index 67bf8cc..2eae55b 100644
+--- a/drivers/net/hns3/hns3_rxtx_vec_sve.c
++++ b/drivers/net/hns3/hns3_rxtx_vec_sve.c
+@@ -58,6 +58,9 @@ hns3_desc_parse_field_sve(struct hns3_rx_queue *rxq,
+ 		if (likely(key->bd_base_info[i] & BIT(HNS3_RXD_L3L4P_B)))
+ 			hns3_rx_set_cksum_flag(rx_pkts[i],
+ 					rx_pkts[i]->packet_type, cksum_err);
++
++		/* Increment bytes counter */
++		rxq->basic_stats.bytes += rx_pkts[i]->pkt_len;
+ 	}
+ 
+ 	return retcode;
+@@ -428,6 +431,10 @@ hns3_tx_fill_hw_ring_sve(struct hns3_tx_queue *txq,
+ 		svst1_scatter_u64offset_u64(pg, (uint64_t *)&txdp->tx.paylen,
+ 					    offsets, svdup_n_u64(valid_bit));
+ 
++		/* Increment bytes counter */
++		txq->basic_stats.bytes +=
++			(svaddv_u64(pg, data_len) >> HNS3_UINT16_BIT);
++
+ 		/* update index for next loop */
+ 		i += svcntd();
+ 		pkts += svcntd();
+diff --git a/drivers/net/hns3/hns3_stats.c b/drivers/net/hns3/hns3_stats.c
+index 04702f1..94d266c 100644
+--- a/drivers/net/hns3/hns3_stats.c
++++ b/drivers/net/hns3/hns3_stats.c
+@@ -527,14 +527,18 @@ hns3_stats_get(struct rte_eth_dev *eth_dev, struct rte_eth_stats *rte_stats)
+ 				stats->rcb_rx_ring_pktnum[i] > cnt ?
+ 				stats->rcb_rx_ring_pktnum[i] - cnt : 0;
+ 			rte_stats->ierrors += cnt;
++			rte_stats->ibytes += rxq->basic_stats.bytes;
+ 		}
+ 	}
+ 	/* Get the error stats of transmitted packets */
+ 	num = RTE_MIN(RTE_ETHDEV_QUEUE_STAT_CNTRS, eth_dev->data->nb_tx_queues);
+ 	for (i = 0; i < num; i++) {
+ 		txq = eth_dev->data->tx_queues[i];
+-		if (txq)
+-			rte_stats->q_opackets[i] = stats->rcb_tx_ring_pktnum[i];
++		if (txq == NULL)
++			continue;
++
++		rte_stats->q_opackets[i] = stats->rcb_tx_ring_pktnum[i];
++		rte_stats->obytes += txq->basic_stats.bytes;
+ 	}
+ 
+ 	rte_stats->oerrors = 0;
+-- 
+2.33.0
+
