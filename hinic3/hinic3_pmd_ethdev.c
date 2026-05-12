@@ -21,6 +21,7 @@
 #include "base/hinic3_pmd_hw_cfg.h"
 #include "base/hinic3_pmd_hw_comm.h"
 #include "base/hinic3_pmd_nic_event.h"
+#include "base/hinic3_pmd_nic_cfg.h"
 #include "mml/hinic3_pmd_mml_lib.h"
 #include "hinic3_pmd_nic_io.h"
 #include "hinic3_pmd_tx.h"
@@ -29,9 +30,7 @@
 #include "hinic3_pmd_dcb.h"
 #include "hinic3_pmd_tm.h"
 #include "hinic3_pmd_hairpin.h"
-#ifdef HINIC3_TRAFFIC_BIFUR
 #include "hinic3_pmd_bifur.h"
-#endif
 
 #define HINIC3_MIN_RX_BUF_SIZE		1024
 
@@ -3166,12 +3165,12 @@ static int hinic3_set_mac_addr(struct rte_eth_dev *dev,
 	u16 func_id;
 	int err;
 
-#ifdef HINIC3_TRAFFIC_BIFUR
-	if (hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev)) {
-		PMD_DRV_LOG(INFO, "The current mode not support set mac.");
-		return -EPERM;
+	if (IS_BIFUR_MODE()) {
+		if (hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev)) {
+			PMD_DRV_LOG(INFO, "The current mode not support set mac.");
+			return -EPERM;
+		}
 	}
-#endif
 
 	if (!rte_is_valid_assigned_ether_addr(addr)) {
 		rte_ether_format_addr(mac_addr, RTE_ETHER_ADDR_FMT_SIZE, addr);
@@ -3861,13 +3860,15 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
 	memset(nic_dev, 0, sizeof(*nic_dev));
-#ifdef HINIC3_TRAFFIC_BIFUR
-	if (hinic3_bifur_is_shared_dev(pci_dev)) {
-		PMD_DRV_LOG(INFO, "It`s a shared vf for flow bifurcation");
-		/* HINIC3_FUNC_EXCLUSIVE is default value. */
-		nic_dev->hinic3_function_mode = HINIC3_FUNC_SHARED;
+
+	if (IS_BIFUR_MODE()) {
+		if (hinic3_bifur_is_shared_dev(pci_dev)) {
+			PMD_DRV_LOG(INFO, "It`s a shared vf for flow bifurcation");
+			/* HINIC3_FUNC_EXCLUSIVE is default value. */
+			nic_dev->hinic3_function_mode = HINIC3_FUNC_SHARED;
+		}
 	}
-#endif
+
 	nic_dev->id_table = pci_id_hinic3_map;
 
 	(void)snprintf(nic_dev->dev_name, sizeof(nic_dev->dev_name),
@@ -4111,23 +4112,43 @@ static int hinic3_dev_uninit(struct rte_eth_dev *dev)
 #endif
 }
 
-#ifdef HINIC3_TRAFFIC_BIFUR
 static int hinic3_pci_probe(struct rte_pci_driver *pci_drv,
 			    struct rte_pci_device *pci_dev)
-#else
-static int hinic3_pci_probe(__rte_unused struct rte_pci_driver *pci_drv,
-			    struct rte_pci_device *pci_dev)
-#endif
 {
-	int ret = 0;
 	struct rte_pci_device *work_pci_dev = pci_dev;
-#ifdef HINIC3_TRAFFIC_BIFUR
-	enum BIFUR_ACTION bifur_action = BIFUR_CONTINUE;
-	ret = hinic3_bifur_pre_probe(pci_drv, pci_dev, &work_pci_dev, &bifur_action);
-	if (ret != 0 || bifur_action == BIFUR_DONE) {
+	char dev_file[PATH_MAX];
+	int ret = 0;
+
+	snprintf(dev_file, sizeof(dev_file), "/sys/class/nic_cdev/nic_cdev!" PCI_PRI_FMT "/qinfo_mode",
+		 pci_dev->addr.domain,
+		 pci_dev->addr.bus,
+		 pci_dev->addr.devid,
+		 pci_dev->addr.function);
+	
+	ret = hinic3_qinfo_type_init(dev_file);
+	if (ret != 0) {
+		PMD_DRV_LOG(ERR, "Qinfo type init failed: %d, unable to know mode used.", ret);
 		return ret;
 	}
-#endif
+
+	if (IS_NORMAL_MODE()) {
+		ret = rte_pci_map_device(pci_dev);
+		pci_drv->drv_flags |= RTE_PCI_DRV_NEED_MAPPING;
+		if (ret != 0) {
+			PMD_DRV_LOG(ERR, "Rte pci map device failed: %d", ret);
+			return ret;
+		}
+	}
+
+	if (IS_BIFUR_MODE()) {
+		enum BIFUR_ACTION bifur_action = BIFUR_CONTINUE;
+		ret = hinic3_bifur_pre_probe(pci_drv, pci_dev, &work_pci_dev, &bifur_action);
+		if (ret != 0 || bifur_action == BIFUR_DONE) {
+			PMD_DRV_LOG(ERR, "Bifur pre probe failed: %d", ret);
+			return ret;
+		}
+	}
+
 	ret = rte_eth_dev_pci_generic_probe(work_pci_dev,
 		sizeof(struct hinic3_nic_dev), hinic3_dev_init);
 	return ret;
@@ -4140,19 +4161,16 @@ static int hinic3_pci_remove(struct rte_pci_device *pci_dev)
 	if (ret != 0) {
 		PMD_DRV_LOG(ERR, "hinic3_pci_remove: rte remove failed!");
 	}
-#ifdef HINIC3_TRAFFIC_BIFUR
-	hinic3_bifur_post_remove(pci_dev);
-#endif
+
+	if (IS_BIFUR_MODE())
+		hinic3_bifur_post_remove(pci_dev);
+
 	return ret;
 }
 
 static struct rte_pci_driver rte_hinic3_pmd = {
 	.id_table = pci_id_hinic3_map,
-#ifdef HINIC3_TRAFFIC_BIFUR
 	.drv_flags = RTE_PCI_DRV_INTR_LSC,
-#else
-	.drv_flags = RTE_PCI_DRV_NEED_MAPPING | RTE_PCI_DRV_INTR_LSC,
-#endif
 	.probe = hinic3_pci_probe,
 	.remove = hinic3_pci_remove,
 };
