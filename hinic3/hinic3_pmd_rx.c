@@ -941,7 +941,6 @@ static inline uint64_t hinic3_rx_vlan(uint32_t offload_type, uint32_t vlan_len,
 	return HINIC3_PKT_RX_VLAN | HINIC3_PKT_RX_VLAN_STRIPPED;
 }
 
-#ifdef HINIC3_TRAFFIC_BIFUR
 static int hinic3_rx_packet_type(u32 offload_type)
 {
 	u32 l3_type = 0, l4_type = 0;
@@ -971,7 +970,6 @@ static int hinic3_rx_packet_type(u32 offload_type)
 
 	return l3_type | l4_type;
 }
-#endif
 
 static uint64_t hinic3_rx_csum(uint32_t status, struct hinic3_rxq *rxq)
 {
@@ -1215,9 +1213,10 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 			rxm->tso_segsz = pkt_len / lro_num;
 		}
 
-#ifdef HINIC3_TRAFFIC_BIFUR
-		rxm->packet_type |= hinic3_rx_packet_type(offload_type);
-#endif
+		if (IS_BIFUR_MODE()) {
+		    	rxm->packet_type |= hinic3_rx_packet_type(offload_type);
+		}
+
 		rx_cqe->status = 0;
 
 		rx_bytes += pkt_len;

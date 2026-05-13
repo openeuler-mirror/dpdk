@@ -17,9 +17,7 @@
 #define HINIC3_PKT_TCAM_DYNAMIC_INDEX_START(block_index)  \
 		(HINIC3_TCAM_DYNAMIC_BLOCK_SIZE * (block_index))
 
-#ifdef HINIC3_TRAFFIC_BIFUR
 #define HINIC3_RSS_QUEUE_BUF 128
-#endif
 
 struct rte_flow {
 	TAILQ_ENTRY(rte_flow) node;
@@ -51,9 +49,8 @@ struct hinic3_fdir_filter {
 	struct hinic3_fdir_rule_key key_mask;
 	struct hinic3_fdir_rule_key key_spec;
 	uint32_t rq_index; /* queue assigned when matched */
-#ifdef HINIC3_TRAFFIC_BIFUR
+
 	uint32_t queue_num;
-#endif
 };
 
 struct hinic3_sec_fdir_filter {
@@ -112,13 +109,10 @@ struct hinic3_tcam_key_mem {
 	u32 rsvd0 : 16;
 	u32 ip_proto : 8;
 	u32 tunnel_type : 4;
-#ifdef HINIC3_TRAFFIC_BIFUR
+
 	u32 model : 1;
 	u32 bifur_flag : 2;
 	u32 rsvd1 : 1;
-#else
-	u32 rsvd1 : 4;
-#endif
 
 	u32 function_id : 15;
 	u32 ip_type : 1;
@@ -138,12 +132,10 @@ struct hinic3_tcam_key_mem {
 
 	u32 sport : 16;
 	u32 rsvd5 : 16;
-#ifdef HINIC3_TRAFFIC_BIFUR
+
 	u32 rsvd6 : 12;
 	u32 er_id : 4;
-#else
-	u32 rsvd6 : 16;
-#endif
+
 	u32 outer_sipv4_h : 16;
 
 	u32 outer_sipv4_l : 16;
@@ -155,13 +147,10 @@ struct hinic3_tcam_key_mem {
 	u32 vni_l : 16;
 	u32 rsvd7 : 16;
 #else
-#ifdef HINIC3_TRAFFIC_BIFUR
 	u32 rsvd1 : 1;
 	u32 bifur_flag : 2;
 	u32 model : 1;
-#else
-	u32 rsvd1 : 4;
-#endif
+
 	u32 tunnel_type : 4;
 	u32 ip_proto : 8;
 	u32 rsvd0 : 16;
@@ -186,12 +175,9 @@ struct hinic3_tcam_key_mem {
 	u32 sport : 16;
 
 	u32 outer_sipv4_h : 16;
-#ifdef HINIC3_TRAFFIC_BIFUR
+
 	u32 er_id : 4;
 	u32 rsvd6 : 12;
-#else
-	u32 rsvd6 : 16;
-#endif
 
 	u32 outer_dipv4_h : 16;
 	u32 outer_sipv4_l : 16;
@@ -232,13 +218,9 @@ struct hinic3_tcam_key_ipv6_mem {
 	u32 ip_proto : 8;
 	u32 tunnel_type : 4;
 	u32 outer_ip_type : 1;
-#ifdef HINIC3_TRAFFIC_BIFUR
-	u32	vlan_flag : 1;
-	u32 bifur_flag : 2;
-#else
+
 	u32 vlan_flag : 1;
-	u32 rsvd1 : 2;
-#endif
+	u32 bifur_flag : 2;
 
 	u32 function_id : 15;
 	u32 ip_type : 1;
@@ -271,13 +253,9 @@ struct hinic3_tcam_key_ipv6_mem {
 	u32 dipv6_key7 : 16;
 	u32 rsvd2 : 16;
 #else
-#ifdef HINIC3_TRAFFIC_BIFUR
 	u32 bifur_flag : 2;
 	u32 vlan_flag : 1;
-#else
-	u32 rsvd1 : 2;
-	u32 vlan_flag : 1;
-#endif
+
 	u32 outer_ip_type : 1;
 	u32 tunnel_type : 4;
 	u32 ip_proto : 8;

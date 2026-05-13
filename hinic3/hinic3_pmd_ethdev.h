@@ -202,9 +202,9 @@ struct hinic3_nic_dev {
 	struct hinic3_rss_template_list rss_template_list;
 
 	struct hinic3_ptype_table* ptype_tbl;
-#ifdef HINIC3_TRAFFIC_BIFUR
+
 	u8 hinic3_function_mode;
-#endif
+	
 	struct hinic3_ets *ets;
 
 	uint32_t fec_mode;  /* current FEC mode for ethdev */

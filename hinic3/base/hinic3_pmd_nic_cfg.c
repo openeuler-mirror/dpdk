@@ -2,6 +2,9 @@
  * Copyright(c) 2019 Huawei Technologies Co., Ltd
  */
 
+
+#include <fcntl.h>
+#include <sys/ioctl.h>
 #include <rte_ether.h>
 #include <rte_memcpy.h>
 
@@ -16,9 +19,9 @@
 #include "hinic3_pmd_nic_cfg.h"
 #include "hinic3_pmd_hw_cfg.h"
 #include "hinic3_pmd_ethdev.h"
-#ifdef HINIC3_TRAFFIC_BIFUR
 #include "hinic3_pmd_bifur.h"
-#endif
+
+int g_qinfo_type = HINIC3_QINFO_TYPE_NORMAL;
 
 struct vf_msg_handler {
 	u16 cmd;
@@ -148,12 +151,12 @@ int hinic3_set_mac(void *hwdev, const u8 *mac_addr, u16 vlan_id, u16 func_id)
 	if (!hwdev || !mac_addr)
 		return -EINVAL;
 
-#ifdef HINIC3_TRAFFIC_BIFUR
-	if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
-		PMD_DRV_LOG(WARNING, "Share mode vf do not support change mac");
-		return 0;
+ 	if (IS_BIFUR_MODE()) {
+		if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
+			PMD_DRV_LOG(WARNING, "Share mode vf do not support change mac");
+			return 0;
+		}
 	}
-#endif
 
 	memset(&mac_info, 0, sizeof(mac_info));
 
@@ -197,12 +200,12 @@ int hinic3_del_mac(void *hwdev, const u8 *mac_addr, u16 vlan_id, u16 func_id)
 	if (!hwdev || !mac_addr)
 		return -EINVAL;
 
-#ifdef HINIC3_TRAFFIC_BIFUR
-	if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
-		PMD_DRV_LOG(WARNING, "Share mode vf do not support change mac");
-		return 0;
+ 	if (IS_BIFUR_MODE()) {
+		if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
+			PMD_DRV_LOG(WARNING, "Share mode vf do not support change mac");
+			return 0;
+		}
 	}
-#endif
 
 	if (vlan_id >= VLAN_N_VID) {
 		PMD_DRV_LOG(ERR, "Invalid VLAN number: %d", vlan_id);
@@ -241,12 +244,12 @@ int hinic3_update_mac(void *hwdev, u8 *old_mac, u8 *new_mac, u16 vlan_id,
 	if (!hwdev || !old_mac || !new_mac)
 		return -EINVAL;
 
-#ifdef HINIC3_TRAFFIC_BIFUR
-	if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
-		PMD_DRV_LOG(WARNING, "Share mode vf do not support change mac");
-		return 0;
+ 	if (IS_BIFUR_MODE()) {
+		if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
+			PMD_DRV_LOG(WARNING, "Share mode vf do not support change mac");
+			return 0;
+		}
 	}
-#endif
 
 	if (vlan_id >= VLAN_N_VID) {
 		PMD_DRV_LOG(ERR, "Invalid VLAN number: %d", vlan_id);
@@ -291,12 +294,12 @@ int hinic3_get_default_mac(void *hwdev, u8 *mac_addr, int ether_len)
 	if (!hwdev || !mac_addr)
 		return -EINVAL;
 
-#ifdef HINIC3_TRAFFIC_BIFUR
-	if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
-		return hinic3_bifur_get_default_mac(((struct hinic3_hwdev *)hwdev)->pci_dev,
-			mac_addr, ether_len);
+ 	if (IS_BIFUR_MODE()) {
+		if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
+			return hinic3_bifur_get_default_mac(((struct hinic3_hwdev *)hwdev)->pci_dev,
+				mac_addr, ether_len);
+		}
 	}
-#endif
 
 	memset(&mac_info, 0, sizeof(mac_info));
 	mac_info.func_id = hinic3_global_func_id(hwdev);
@@ -1421,16 +1424,17 @@ int hinic3_add_tcam_rule(void *hwdev, struct hinic3_tcam_cfg_rule *tcam_rule, u8
 	memset(&tcam_cmd, 0, sizeof(struct hinic3_fdir_add_rule));
 	tcam_cmd.func_id = hinic3_global_func_id(hwdev);
 
-#ifdef HINIC3_TRAFFIC_BIFUR
-	/* Process of enabling group ext_info in the MPU */
-	u8 bifur_en, iso_en;
+ 	if (IS_BIFUR_MODE()) {
+		/* Process of enabling group ext_info in the MPU */
+		u8 bifur_en, iso_en;
 
-	if (hinic3_get_bifur_enable(hwdev, &bifur_en, &iso_en, 0) != 0)
-		PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable status failed.");
+		if (hinic3_get_bifur_enable(hwdev, &bifur_en, &iso_en, 0) != 0)
+			PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable status failed.");
 
-	if (bifur_en)
-		tcam_cmd.bifur_rss_en = 1;
-#endif
+		if (bifur_en)
+			tcam_cmd.bifur_rss_en = 1;
+	}
+	
 	memcpy((void *)&tcam_cmd.rule, (void *)tcam_rule,
 		sizeof(struct hinic3_tcam_cfg_rule));
 	tcam_cmd.type = tcam_rule_type;
@@ -2391,6 +2395,23 @@ int hinic3_get_fec_mode(struct hinic3_hwdev *hwdev, u8 *advertised_fec, u8 *supp
 
 	if (supported_fec != NULL)
 		hinic3_fec_param_covert(HINIC3_FEC_MODE_OPCODE_GET, fec_msg.supported_fec, supported_fec);
+
+	return 0;
+}
+
+int hinic3_qinfo_type_init(const char *dev_file)
+{
+	if (access(BIFUR_GDEV_PATH, F_OK) == 0) {
+		g_qinfo_type = HINIC3_QINFO_TYPE_BIFUR;
+	    	return 0;
+	}
+
+	if (access(dev_file, F_OK) == 0) {
+		g_qinfo_type = HINIC3_QINFO_TYPE_QPOOL;
+		return 0;
+	}
+
+	g_qinfo_type = HINIC3_QINFO_TYPE_NORMAL;
 
 	return 0;
 }
