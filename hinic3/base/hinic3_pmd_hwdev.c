@@ -408,23 +408,6 @@ dma_attr_init_err:
 	return err;
 }
 
-static int hinic3_init_qpool_cmdqs(struct hinic3_hwdev *hwdev)
-{
-	char cmdq_pool_name[RTE_MEMPOOL_NAMESIZE] = {0};
-	(void)snprintf(cmdq_pool_name, sizeof(cmdq_pool_name), "hinic3_cmdq_%u", hwdev->port_id);
-
-	hwdev->cmd_buf_pool = rte_pktmbuf_pool_create(cmdq_pool_name,
-						      HINIC3_CMDQ_DEPTH * HINIC3_MAX_CMDQ_TYPES,
-						      0, 0, HINIC3_CMDQ_BUF_SIZE,
-						      (int)rte_socket_id());
-	if (!hwdev->cmd_buf_pool) {
-		PMD_DRV_LOG(ERR, "Create cmdq buffer pool failed.");
-		return -ENOMEM;
-	}
-
-	return 0;
-}
-
 static int hinic3_init_comm_ch(struct hinic3_hwdev *hwdev)
 {
 	int err;
