@@ -523,6 +523,11 @@ static int hinic3_dev_set_link_up(struct rte_eth_dev *dev)
 	struct rte_eth_link link = {0};
 	int err;
 
+	if (IS_QPOOL_MODE()) {
+ 		PMD_DRV_LOG(WARNING, "Qpool mode not support set link up.");
+ 		return -EAGAIN;
+ 	}
+
 	/* Vport enable will set function valid in mpu.
 	   So dev start status need to be checked before vport enable.*/
 	if (hinic3_get_bit(HINIC3_DEV_START, &nic_dev->dev_status)) {
@@ -573,6 +578,11 @@ static int hinic3_dev_set_link_down(struct rte_eth_dev *dev)
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct rte_eth_link link = {0};
 	int err;
+
+	if (IS_QPOOL_MODE()) {
+ 	 	PMD_DRV_LOG(WARNING, "Qpool mode not support set link down.");
+ 	 	return -EAGAIN;
+ 	}
 
 	err = hinic3_set_vport_enable(nic_dev->hwdev, false);
 	if (err) {
@@ -2133,6 +2143,11 @@ static int hinic3_dev_set_mtu(struct rte_eth_dev *dev, uint16_t mtu)
 	uint32_t frame_size = mtu + HINIC3_ETH_OVERHEAD;
 	int err = 0;
 
+	if (IS_QPOOL_MODE()) {
+ 	 	PMD_DRV_LOG(WARNING, "Qpool mode not support set mtu.");
+ 	 	return -EINVAL;
+ 	}
+
 	PMD_DRV_LOG(INFO, "Set port mtu, port_id: %d, mtu: %d, max_pkt_len: %d",
 		    dev->data->port_id, mtu, HINIC3_MTU_TO_PKTLEN(mtu));
 
@@ -2293,6 +2308,11 @@ static int hinic3_dev_allmulticast_enable(struct rte_eth_dev *dev)
 	u32 rx_mode;
 	int err;
 
+	if (IS_QPOOL_MODE()) {
+ 		PMD_DRV_LOG(WARNING, "Qpool mode not support set allmulticast enable.");
+ 		return -ENOTSUP;
+ 	}
+
 	err = hinic3_mutex_lock(&nic_dev->rx_mode_mutex);
 	if (err)
 		return err;
@@ -2330,6 +2350,11 @@ static int hinic3_dev_allmulticast_disable(struct rte_eth_dev *dev)
 	u32 rx_mode;
 	int err;
 
+ 	if (IS_QPOOL_MODE()) {
+ 		PMD_DRV_LOG(WARNING, "Qpool mode not support set allmulticast disable.");
+ 		return -ENOTSUP;
+ 	}
+
 	err = hinic3_mutex_lock(&nic_dev->rx_mode_mutex);
 	if (err)
 		return err;
@@ -2366,6 +2391,11 @@ static int hinic3_dev_promiscuous_enable(struct rte_eth_dev *dev)
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	u32 rx_mode;
 	int err;
+
+	if (IS_QPOOL_MODE()) {
+ 	 	PMD_DRV_LOG(WARNING, "Qpool mode not support set promiscuous enable.");
+ 	 	return -ENOTSUP;
+ 	}
 
 	if (!(nic_dev->feature_cap & NIC_F_PROMISC)) {
 		PMD_DRV_LOG(ERR, "nic_dev: %s, port_id: %d, do not support vf promisc: %" PRIu64 "",
@@ -2410,6 +2440,11 @@ static int hinic3_dev_promiscuous_disable(struct rte_eth_dev *dev)
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	u32 rx_mode;
 	int err;
+
+	if (IS_QPOOL_MODE()) {
+ 	 	PMD_DRV_LOG(WARNING, "Qpool mode not support set promiscuous disable.");
+ 	 	return -ENOTSUP;
+ 	}
 
 	if (!(nic_dev->feature_cap & NIC_F_PROMISC)) {
 		PMD_DRV_LOG(ERR, "nic_dev: %s, port_id: %d, do not support vf promisc: %" PRIu64 "",
@@ -3207,6 +3242,11 @@ static void hinic3_mac_addr_remove(struct rte_eth_dev *dev, uint32_t index)
 	u16 func_id;
 	int err;
 
+	if (IS_QPOOL_MODE()) {
+ 	 	PMD_DRV_LOG(WARNING, "Qpool mode not support remove mac addr.");
+ 	 	return;
+ 	}
+
 	if (index >= HINIC3_MAX_UC_MAC_ADDRS) {
 		PMD_DRV_LOG(INFO, "Remove MAC index(%u) is out of range",
 			    index);
@@ -3245,6 +3285,11 @@ static int hinic3_mac_addr_add(struct rte_eth_dev *dev,
 	u16 func_id;
 	int err;
 
+	if (IS_QPOOL_MODE()) {
+ 	 	PMD_DRV_LOG(WARNING, "Qpool mode not support add mac addr.");
+ 	 	return -EINVAL;
+ 	}
+
 	if (!rte_is_valid_assigned_ether_addr(mac_addr)) {
 		PMD_DRV_LOG(ERR, "Add invalid MAC address");
 		return -EINVAL;
@@ -3276,6 +3321,11 @@ static void hinic3_delete_mc_addr_list(struct hinic3_nic_dev *nic_dev)
 {
 	u16 func_id;
 	u32 i;
+
+	if (IS_QPOOL_MODE()) {
+ 	 	PMD_DRV_LOG(WARNING, "Qpool mode not support set mac addr list.");
+ 	 	return -EINVAL;
+ 	}
 
 	func_id = hinic3_global_func_id(nic_dev->hwdev);
 
