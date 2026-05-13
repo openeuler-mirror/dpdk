@@ -130,7 +130,9 @@ enum hinic3_nic_cmd {
 	HINIC3_NIC_CMD_QOS_PORT_CFG, /**< Get QoS port cfg @see > hinic3_cmd_qos_port_cfg */
 	HINIC3_NIC_CMD_QOS_MAP_CFG, /**< Get QoS map cfg @see > hinic3_cmd_qos_map_cfg */
 
-    HINIC3_NIC_CMD_SET_PORT_FLOW_BIFUR_ENABLE = 117,
+	HINIC3_NIC_CMD_GET_CIR_DROP = 115, /**< Get CPB cir drop @see > hinic3_get_cir_drop */
+
+	HINIC3_NIC_CMD_SET_PORT_FLOW_BIFUR_ENABLE = 117,
 
 	/* MISC */
 	HINIC3_NIC_CMD_BIOS_CFG = 120,

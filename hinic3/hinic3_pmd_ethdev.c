@@ -98,6 +98,11 @@ struct hinic3_xstats_name_off {
 	u32  offset;
 };
 
+#define HINIC3_CIR_DROP_STAT(_stat_item) { \
+	.name = #_stat_item, \
+	.offset = offsetof(struct hinic3_cir_drop, _stat_item) \
+}
+
 #define HINIC3_FUNC_STAT(_stat_item) {	\
 	.name = #_stat_item, \
 	.offset = offsetof(struct hinic3_vport_stats, _stat_item) \
@@ -107,6 +112,13 @@ struct hinic3_xstats_name_off {
 	.name = #_stat_item, \
 	.offset = offsetof(struct mag_phy_port_stats, _stat_item) \
 }
+
+static struct hinic3_xstats_name_off hinic3_cir_drop_stats_strings[] = {
+	HINIC3_CIR_DROP_STAT(rx_discard_phy),
+};
+
+#define HINIC3_CIR_DROP_XSTATS_NUM (sizeof(hinic3_cir_drop_stats_strings) / \
+		sizeof(hinic3_cir_drop_stats_strings[0]))
 
 static const struct hinic3_xstats_name_off hinic3_vport_stats_strings[] = {
 	HINIC3_FUNC_STAT(tx_unicast_pkts_vport),
@@ -281,10 +293,12 @@ static int hinic3_xstats_calc_num(struct hinic3_nic_dev *nic_dev)
 {
 	if (HINIC3_IS_VF(nic_dev->hwdev)) {
 		return (HINIC3_VPORT_XSTATS_NUM +
+			HINIC3_CIR_DROP_XSTATS_NUM +
 			HINIC3_RXQ_XSTATS_NUM * nic_dev->num_rqs +
 			HINIC3_TXQ_XSTATS_NUM * nic_dev->num_sqs);
 	} else {
 		return (HINIC3_VPORT_XSTATS_NUM +
+			HINIC3_CIR_DROP_XSTATS_NUM +
 			HINIC3_PHYPORT_XSTATS_NUM +
 			HINIC3_RXQ_XSTATS_NUM * nic_dev->num_rqs +
 			HINIC3_TXQ_XSTATS_NUM * nic_dev->num_sqs);
@@ -2929,6 +2943,35 @@ static int hinic3_dev_stats_reset(struct rte_eth_dev *dev)
 	return 0;
 }
 
+static u16
+get_port_cir_drop(struct hinic3_nic_dev *nic_dev,
+		  struct rte_eth_xstat *xstats)
+{
+	struct hinic3_cir_drop port_stats;
+	u16 i;
+	int err;
+
+	memset(&port_stats, 0, sizeof(port_stats));
+
+	err = hinic3_get_cir_drop(nic_dev->hwdev, &port_stats);
+	if (err) {
+		PMD_DRV_LOG(ERR, "Failed to get CPB cir drops from fw.");
+
+		for (i = 0; i < ARRAY_LEN(hinic3_cir_drop_stats_strings); i++)
+			xstats[i].value = 0;
+
+		return ARRAY_LEN(hinic3_cir_drop_stats_strings);
+	}
+
+	for (i = 0; i < ARRAY_LEN(hinic3_cir_drop_stats_strings); i++) {
+		memcpy(&xstats[i].value,
+		       (const char *)&port_stats + hinic3_cir_drop_stats_strings[i].offset,
+		       sizeof(u64));
+	}
+
+	return ARRAY_LEN(hinic3_cir_drop_stats_strings);
+}
+
 /**
  * Get device extended statistics.
  *
@@ -3019,6 +3062,9 @@ static int hinic3_dev_xstats_get(struct rte_eth_dev *dev,
 		xstats[count].id = count;
 		count++;
 	}
+
+	/* Get stats from phy CPB stats structure */
+	count += get_port_cir_drop(nic_dev, &xstats[count]);
 
 	if (HINIC3_IS_VF(nic_dev->hwdev))
 		return count;
@@ -3114,6 +3160,14 @@ static int hinic3_dev_xstats_get_names(struct rte_eth_dev *dev,
 		snprintf(xstats_names[count].name,
 			 sizeof(xstats_names[count].name),
 			 "%s", hinic3_vport_stats_strings[i].name);
+		count++;
+	}
+
+	/* Get phy CPB stats name */
+	for (i = 0; i < HINIC3_CIR_DROP_XSTATS_NUM; i++) {
+		snprintf(xstats_names[count].name,
+			 sizeof(xstats_names[count].name),
+			 "%s", hinic3_cir_drop_stats_strings[i].name);
 		count++;
 	}
 
