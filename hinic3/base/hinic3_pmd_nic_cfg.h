@@ -472,6 +472,18 @@ struct hinic3_port_stats_info {
 	u16 rsvd1;
 };
 
+#define HINIC3_CMD_MAX_DP_DATA_NUM 50
+struct hinic3_cir_drop {
+	u64 rx_discard_phy;
+};
+
+struct hinic3_cmd_get_dp_info_resp {
+	struct mgmt_msg_head msg_head;
+	u16 length;
+	u16 rsvd;
+	u64 value[HINIC3_CMD_MAX_DP_DATA_NUM];
+};
+
 struct hinic3_vport_stats {
 	u64 tx_unicast_pkts_vport;
 	u64 tx_unicast_bytes_vport;
@@ -1434,6 +1446,19 @@ int hinic3_get_pause_info(void *hwdev, struct nic_pause_config *nic_pause);
  * @retval non-zero : Failure
  */
 int hinic3_get_vport_stats(void *hwdev, struct hinic3_vport_stats *stats);
+
+/**
+ * Get CPB cir drop counter
+ *
+ * @param[in] hwdev
+ *   Device pointer to hwdev
+ * @param[out] stats
+ *   Function stats
+ *
+ * @retval zero : Success
+ * @retval non-zero : Failure
+ */
+int hinic3_get_cir_drop(void *hwdev, struct hinic3_cir_drop *stats);
 
 /**
  * Get port stats
