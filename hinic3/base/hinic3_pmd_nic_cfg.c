@@ -545,6 +545,35 @@ int hinic3_get_pause_info(void *hwdev, struct nic_pause_config *nic_pause)
 	return hinic3_cfg_hw_pause(hwdev, HINIC3_CMD_OP_GET, nic_pause);
 }
 
+int hinic3_get_cir_drop(void *hwdev, struct hinic3_cir_drop *stats)
+{
+	struct hinic3_port_stats_info stats_info;
+	struct hinic3_cmd_get_dp_info_resp vport_stats;
+	u16 out_size = sizeof(vport_stats);
+	int err;
+
+	if (!hwdev || !stats)
+		return -EINVAL;
+
+	memset(&stats_info, 0, sizeof(stats_info));
+	memset(&vport_stats, 0, sizeof(vport_stats));
+
+	stats_info.func_id = hinic3_global_func_id(hwdev);
+
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_GET_CIR_DROP,
+				     &stats_info, sizeof(stats_info),
+				     &vport_stats, &out_size);
+	if (err || !out_size || vport_stats.msg_head.status) {
+		PMD_DRV_LOG(ERR, "Get port stats failed, err: %d, status: 0x%x, out size: 0x%x",
+			    err, vport_stats.msg_head.status, out_size);
+		return -EIO;
+	}
+
+	memcpy(stats, vport_stats.value, sizeof(*stats));
+
+	return 0;
+}
+
 int hinic3_get_vport_stats(void *hwdev, struct hinic3_vport_stats *stats)
 {
 	struct hinic3_port_stats_info stats_info;
