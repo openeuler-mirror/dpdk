@@ -2,10 +2,16 @@
  * Copyright(c) 2019 Huawei Technologies Co., Ltd
  */
 
+#include <fcntl.h>
+#include <stdlib.h>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
+
 #include <rte_bus_pci.h>
 #include "hinic3_compat.h"
 #include "hinic3_pmd_csr.h"
 #include "hinic3_pmd_hwdev.h"
+#include "hinic3_pmd_ethdev.h"
 #include "hinic3_pmd_hwif.h"
 
 #define WAIT_HWIF_READY_TIMEOUT			10000
@@ -147,7 +153,9 @@
 #define HINIC3_IS_VF_DEV(pdev) ( \
 	((pdev)->id.device_id == HINIC3_DEV_ID_VF_SP620) || \
 	((pdev)->id.device_id == HINIC3_DEV_ID_VF_BP2_620) || \
-	((pdev)->id.device_id == HINIC3_DEV_ID_VF_BP3_620) \
+	((pdev)->id.device_id == HINIC3_DEV_ID_VF_BP3_620) || \
+	((pdev)->id.device_id == HINIC3_DEV_ID_VF_SP560) || \
+	((pdev)->id.device_id == HINIC3_DEV_ID_HYPER_VF_SP560) \
 )
 
 u32 hinic3_hwif_read_reg(struct hinic3_hwif *hwif, u32 reg)
@@ -560,6 +568,100 @@ static int wait_until_doorbell_and_outbound_enabled(struct hinic3_hwif *hwif)
 	return -EFAULT;
 }
 
+ static int hinic3_mmap_bar_addr(struct hinic3_hwdev *hwdev)
+{
+	struct rte_pci_device *pci_dev = hwdev->pci_dev;
+	struct hinic3_hwif *hwif = hwdev->hwif;
+	void *cfg_regs_base = NULL;
+	void *mgmt_reg_base = NULL;
+	void *db_base = NULL;
+	int fd;
+
+	fd = ((struct hinic3_nic_dev *)hwdev->dev_handle)->fd;
+	if (fd < 0) {
+		PMD_DRV_LOG(ERR, "Failed to open fd: %d.", fd);
+		return -EFAULT;
+	}
+
+	if (!HINIC3_IS_VF_DEV(pci_dev)) {
+		/* Region 1: CFG BAR */
+		cfg_regs_base = mmap(NULL,
+			pci_dev->mem_resource[HINIC3_PF_PCI_CFG_REG_BAR].len,
+			PROT_READ | PROT_WRITE, MAP_SHARED,
+			fd, HINIC3_PF_PCI_CFG_REG_BAR << 12);
+		if (cfg_regs_base == MAP_FAILED) {
+			PMD_DRV_LOG(ERR, "Failed to map cfg reg.");
+			goto err_out;
+		}
+
+		/* Region 3: MGMT BAR */
+		mgmt_reg_base = mmap(NULL,
+			pci_dev->mem_resource[HINIC3_PCI_MGMT_REG_BAR].len,
+			PROT_READ | PROT_WRITE, MAP_SHARED,
+			fd, HINIC3_PCI_MGMT_REG_BAR << 12);
+		if (mgmt_reg_base == MAP_FAILED) {
+			PMD_DRV_LOG(ERR, "Failed to map mgmt reg.");
+			goto err_unmap_cfg;
+		}
+
+		/* Region 4: DB BAR */
+		db_base = mmap(NULL,
+			pci_dev->mem_resource[HINIC3_PCI_DB_BAR].len,
+			PROT_READ | PROT_WRITE, MAP_SHARED,
+			fd, HINIC3_PCI_DB_BAR << 12);
+		if (db_base == MAP_FAILED) {
+			PMD_DRV_LOG(ERR, "Failed to map db.");
+			goto err_unmap_mgmt;
+		}
+
+		hwif->db_dwqe_len = pci_dev->mem_resource[HINIC3_PCI_DB_BAR].len;
+	} else {
+		/* Region 0: VF CFG BAR */
+		cfg_regs_base = mmap(NULL,
+			pci_dev->mem_resource[HINIC3_VF_PCI_CFG_REG_BAR].len,
+			PROT_READ | PROT_WRITE, MAP_SHARED,
+			fd, HINIC3_VF_PCI_CFG_REG_BAR << 12);
+		if (cfg_regs_base == MAP_FAILED) {
+			PMD_DRV_LOG(ERR, "Failed to map cfg reg.");
+			goto err_out;
+		}
+
+		/* Region 4: VF DB BAR */
+		db_base = mmap(NULL,
+			pci_dev->mem_resource[HINIC3_PCI_DB_BAR].len,
+			PROT_READ | PROT_WRITE, MAP_SHARED,
+			fd, HINIC3_PCI_DB_BAR << 12);
+		if (db_base == MAP_FAILED) {
+			PMD_DRV_LOG(ERR, "Failed to map db.");
+			goto err_unmap_cfg;
+		}
+
+		hwif->db_dwqe_len = pci_dev->mem_resource[HINIC3_PCI_DB_BAR].len;
+	}
+
+	/* If function is VF, mgmt_regs_base will be NULL */
+	if (!mgmt_reg_base)
+		hwif->cfg_regs_base = (u8 *)cfg_regs_base + HINIC3_VF_CFG_REG_OFFSET;
+	else
+		hwif->cfg_regs_base = cfg_regs_base;
+
+	hwif->mgmt_regs_base = mgmt_reg_base;
+	hwif->db_base = db_base;
+
+	return 0;
+
+err_unmap_mgmt:
+	munmap(mgmt_reg_base,
+		pci_dev->mem_resource[HINIC3_PCI_MGMT_REG_BAR].len);
+err_unmap_cfg:
+	munmap(cfg_regs_base,
+		HINIC3_IS_VF_DEV(pci_dev) ?
+		pci_dev->mem_resource[HINIC3_VF_PCI_CFG_REG_BAR].len :
+		pci_dev->mem_resource[HINIC3_PF_PCI_CFG_REG_BAR].len);
+err_out:
+	return -EFAULT;
+}
+
 static int hinic3_get_bar_addr(struct hinic3_hwdev *hwdev)
 {
 	struct rte_pci_device *pci_dev = hwdev->pci_dev;
@@ -627,7 +729,11 @@ int hinic3_init_hwif(void *dev)
 	hwdev = (struct hinic3_hwdev *)dev;
 	hwdev->hwif = hwif;
 
-	err = hinic3_get_bar_addr(hwdev);
+	if (IS_QPOOL_MODE())
+ 		err = hinic3_mmap_bar_addr(hwdev);
+ 	else 
+ 		err = hinic3_get_bar_addr(hwdev);
+
 	if (err != 0) {
 		PMD_DRV_LOG(ERR, "get bar addr fail");
 		goto hwif_ready_err;
@@ -650,14 +756,22 @@ int hinic3_init_hwif(void *dev)
 		goto hwif_ready_err;
 	}
 
-	if (!HINIC3_IS_VF(hwdev)) {
-		set_ppf(hwif);
-
-		if (HINIC3_IS_PPF(hwdev))
-			set_mpf(hwif);
-
-		get_mpf(hwif);
-	}
+	if (IS_QPOOL_MODE()) {
+ 		if (!HINIC3_IS_VF(hwdev))
+ 			get_mpf(hwif);
+ 	} else {
+ 		if (!HINIC3_IS_VF(hwdev)) {
+ 			set_ppf(hwif);
+ 	
+ 			if (HINIC3_IS_PPF(hwdev))
+ 				set_mpf(hwif);
+ 	
+ 			get_mpf(hwif);
+ 		}
+ 		disable_all_msix(hwdev);
+ 		/* Disable mgmt cpu reporting any event */
+ 		hinic3_set_pf_status(hwdev->hwif, HINIC3_PF_STATUS_INIT);
+ 	}
 
 	disable_all_msix(hwdev);
 	/* Disable mgmt cpu reporting any event */

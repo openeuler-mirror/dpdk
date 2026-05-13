@@ -132,6 +132,9 @@ struct hinic3_hwdev {
 	u8 link_status : 1;
 	u8 vf_valid_status : 1; /* vport_enable: 1, vport_disable: 0 */
 	u32 speed;
+
+	struct rte_mempool *cmd_buf_pool;
+ 	u16 qpool_qgrp_id;
 };
 
 bool hinic3_is_vfio_iommu_enable(const struct rte_eth_dev *rte_dev);

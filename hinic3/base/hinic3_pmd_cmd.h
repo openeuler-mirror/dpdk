@@ -24,6 +24,7 @@
 #define NIC_UP_RSS_EN				0x01
 #define NIC_UP_RSS_INVALID_GROUP_ID		0x7F
 
+#define NIC_RSS_CMD_TEMP_QPOOL_FREE		0x00
 #define NIC_RSS_CMD_TEMP_ALLOC			0x01
 #define NIC_RSS_CMD_TEMP_FREE			0x02
 
@@ -150,6 +151,7 @@ enum hinic3_nic_cmd {
 
 	HINIC3_NIC_CMD_QUEUE_GROUP = 258,
 	HINIC3_NIC_CMD_FDIR_EXT = 260,
+	HINIC3_NIC_CMD_CLEAR_ASSIGN_QP_RES = 261, /** < clear resources of assigned qp */
 	HINIC3_NIC_CMD_MAX = 1024
 };
 

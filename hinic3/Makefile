@@ -48,6 +48,7 @@ CFLAGS += -Wno-cast-qual
 CFLAGS += -I$(RTE_SDK)/drivers/net/hinic3/
 CFLAGS += -I$(RTE_SDK)/drivers/net/hinic3/base
 CFLAGS += -I$(RTE_SDK)/drivers/net/hinic3/mml
+CFLAGS += -I$(RTE_SDK)/drivers/net/hinic3/stn
 
 LDLIBS += -lrte_eal -lrte_mbuf -lrte_mempool -lrte_ring
 LDLIBS += -lrte_ethdev -lrte_net -lrte_hash
@@ -77,6 +78,7 @@ endif
 
 VPATH += $(SRCDIR)/base
 VPATH += $(SRCDIR)/mml
+VPATH += $(SRCDIR)/stn
 #
 # all source are stored in SRCS-y
 #
@@ -108,5 +110,6 @@ SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_mml_lib.c
 SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_mml_main.c
 SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_mml_queue.c
 SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_hairpin.c
+SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_stn_cmdq.c
 
 include $(RTE_SDK)/mk/rte.lib.mk
