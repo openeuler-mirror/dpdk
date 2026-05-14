@@ -12,7 +12,6 @@
 #include "hinic3_pmd_mml_cmd.h"
 #include "hinic3_compat.h"
 #include "hinic3_pmd_mgmt.h"
-#include "hinic3_pmd_nic_cfg.h"
 
 #define MAX_DEV_LEN	      16
 #define TRGET_UNKNOWN_BUS_NUM (-1)
@@ -164,15 +163,6 @@ struct mpu_cmd_st {
 	uint32_t cmd : 16;
 };
 
- /* 队列池化 */
-enum nic_driver_qpool_cmd_type {
-	GET_USER_QUEUE_ID,    /**< 队列池化中获取用户态队列ID */
-	DEL_USER_QUEUE_ID,    /**< 队列池化中删除用户态队列ID */
-	CFG_RSS_TEMPLATE,     /**< 队列池化中申请/释放q group id以及RSS模板 */
-	SET_RSS_INDIR_TBL,    /**< 队列池化中设置RSS间接表 */
-	GET_KERN_DEV_DATA,    /**< 队列池化中获取rx、tx队列深度、mtu、netdev_state  */
-};
-
 struct msg_module {
 	char device_name[DEV_NAME_LEN];
 	uint32_t module;
@@ -189,91 +179,6 @@ struct msg_module {
 	void *out_buf;
 	int bus_num;
 	uint32_t rsvd2[5];
-};
-
-struct cdev_msg_head {
-	int status;
-	u32 rsvd;
-};
-
-struct nic_rss_indirect_tbl_user_data {
-#if defined(BYTE_ORDER) && (BYTE_ORDER == BIG_ENDIAN)
-	u32 op_code : 8; /* 0:old option 1:new fdir-rss */
-	u32 qgrp_id : 8; /* need add 2048 */
-	u32 rsvd : 16;
-#else
-	u32 rsvd : 16;
-	u32 qgrp_id : 8; /* need add 2048 */
-	u32 op_code : 8; /* 0:old option 1:new fdir-rss */
-#endif
-};
-
-struct nic_rss_indirect_tbl {
-	union {
-		struct {
-#if defined(BYTE_ORDER) && (BYTE_ORDER == BIG_ENDIAN)
-			u32 op_code : 8; /* 0:old option 1:new fdir-rss */
-			u32 qgrp_id : 8; /* The value of qgrp_id must be 2048 less */
-			u32 rsvd : 16;
-#else
-			u32 rsvd : 16;
-			u32 qgrp_id : 8; /* The value of qgrp_id must be 2048 less */
-			u32 op_code : 8; /* 0:old option 1:new fdir-rss */
-#endif
-		} bs;
-		u32 value;
-		u32 user_data;
-	} dw0;
-	union {
-		struct {
-#if defined(BYTE_ORDER) && (BYTE_ORDER == BIG_ENDIAN)
-			u32 rss_temp_id : 12;
-			u32 rss_instance_id : 6;
-			u32 rss_node_id : 5;
-			u32 rsvd0 : 1;
-			u32 rss_level : 2;
-			u32 rsvd1 : 6;
-#else
-			u32 rsvd1 : 6;
-			u32 rss_level : 2;
-			u32 rsvd0 : 1;
-			u32 rss_node_id : 5;
-			u32 rss_instance_id : 6;
-			u32 rss_temp_id : 12;
-#endif
-		} fdir_rss;
-		u32 value;
-	} dw1;
-	u32 rsvd0[2]; /* Make sure that 16B before entry[] */
-	u16 entry[HINIC3_RSS_INDIR_SIZE];
-};
-
-struct drv_cmd_rss_indir_tbl {
-	struct cdev_msg_head head;
-	struct nic_rss_indirect_tbl rss_indir;
-};
-
-struct drv_cmd_user_queue_get {
-	struct cdev_msg_head head;
-	u16 qid;
-	u16 local_qid;
-	u32 rsvd[15];
-};
-
-struct drv_cmd_cfg_rss_temp {
-	struct cdev_msg_head head;
-	u16 opcode;
-	u16 q_grp_id;
-	u32 rsvd1[15];
-};
-
-struct drv_cmd_kernel_nic_data {
-	struct cdev_msg_head head;
-	u32 rx_q_depth;
-	u32 tx_q_depth;
-	u16 mtu;
-	u16 netdev_state;
-	u32 rsvd1[13];
 };
 
 /*

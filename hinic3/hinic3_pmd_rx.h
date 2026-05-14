@@ -6,6 +6,7 @@
 #define _HINIC3_PMD_RX_H_
 
 #include "hinic3_pmd_wq.h"
+#include "hinic3_pmd_nic_io.h"
 
 #define RQ_CQE_OFFOLAD_TYPE_PTYPE_OFFLOAD_SHIFT		0
 #define RQ_CQE_OFFOLAD_TYPE_PKT_TYPE_SHIFT		0
@@ -147,54 +148,6 @@
 #define HINIC3_GET_ESP_NEXT_HEAD(decry_info)	\
 	RQ_CQE_DECRY_INFO_GET(decry_info, ESP_NEXT_HEAD)
 
-/* compact cqe field */
- 	 /* cqe dw0 */
-#define RQ_COMPACT_CQE_STATUS_RXDONE_SHIFT		31
-#define RQ_COMPACT_CQE_STATUS_CQE_TYPE_SHIFT		30
-#define RQ_COMPACT_CQE_STATUS_TS_FLAG_SHIFT		29
-#define RQ_COMPACT_CQE_STATUS_VLAN_EN_SHIFT		28
-#define RQ_COMPACT_CQE_STATUS_PKT_FORMAT_SHIFT		25
-#define RQ_COMPACT_CQE_STATUS_IP_TYPE_SHIFT		24
-#define RQ_COMPACT_CQE_STATUS_CQE_LEN_SHIFT		23
-#define RQ_COMPACT_CQE_STATUS_PKT_MC_SHIFT		21
-#define RQ_COMPACT_CQE_STATUS_CSUM_ERR_SHIFT		19
-#define RQ_COMPACT_CQE_STATUS_PKT_TYPE_SHIFT		16
-#define RQ_COMPACT_CQE_STATUS_PTYPE_SHIFT		16
-#define RQ_COMPACT_CQE_STATUS_PKT_LEN_SHIFT		0
-
-#define RQ_COMPACT_CQE_STATUS_RXDONE_MASK		0x1U
-#define RQ_COMPACT_CQE_STATUS_CQE_TYPE_MASK		0x1U
-#define RQ_COMPACT_CQE_STATUS_TS_FLAG_MASK		0x1U
-#define RQ_COMPACT_CQE_STATUS_VLAN_EN_MASK		0x1U
-#define RQ_COMPACT_CQE_STATUS_PKT_FORMAT_MASK		0x7U
-#define RQ_COMPACT_CQE_STATUS_IP_TYPE_MASK		0x1U
-#define RQ_COMPACT_CQE_STATUS_CQE_LEN_MASK		0x1U
-#define RQ_COMPACT_CQE_STATUS_PKT_MC_MASK		0x3U
-#define RQ_COMPACT_CQE_STATUS_CSUM_ERR_MASK		0x3U
-#define RQ_COMPACT_CQE_STATUS_PKT_TYPE_MASK		0x7U
-#define RQ_COMPACT_CQE_STATUS_PTYPE_MASK		0xFFFU
-#define RQ_COMPACT_CQE_STATUS_PKT_LEN_MASK		0xFFFFU
-
-#define HINIC3_RQ_COMPACT_CQE_STATUS_GET(val, member) \
-	((((val) >> RQ_COMPACT_CQE_STATUS_##member##_SHIFT) & \
-	 	RQ_COMPACT_CQE_STATUS_##member##_MASK))
-
-#define HINIC3_RQ_CQE_SEPARATE 	0
-#define HINIC3_RQ_CQE_INTEGRATE 1
-
-/* cqe dw2 */
-#define RQ_COMPACT_CQE_OFFLOAD_NUM_LRO_SHIFT		24
-#define RQ_COMPACT_CQE_OFFLOAD_VLAN_SHIFT		8
-
-#define RQ_COMPACT_CQE_OFFLOAD_NUM_LRO_MASK		0xFFU
-#define RQ_COMPACT_CQE_OFFLOAD_VLAN_MASK		0xFFFFU
-
-#define HINIC3_RQ_COMPACT_CQE_OFFLOAD_GET(val, member) \
-	(((val) >> RQ_COMPACT_CQE_OFFLOAD_##member##_SHIFT) & RQ_COMPACT_CQE_OFFLOAD_##member##_MASK)
-
-#define HINIC3_RQ_COMPACT_CQE_16BYTE	0
-#define HINIC3_RQ_COMPACT_CQE_8BYTE 	1
-
 /* Rx cqe checksum err */
 #define HINIC3_RX_CSUM_IP_CSUM_ERR	BIT(0)
 #define HINIC3_RX_CSUM_TCP_CSUM_ERR	BIT(1)
@@ -205,13 +158,6 @@
 #define HINIC3_RX_CSUM_SCTP_CRC_ERR	BIT(6)
 #define HINIC3_RX_CSUM_HW_CHECK_NONE	BIT(7)
 #define HINIC3_RX_CSUM_IPSU_OTHER_ERR	BIT(8)
-
-enum hinic3_compact_cqe_csum_err_type {
-	HINIC3_RX_COMPACT_CSUM_NO_ERROR = 0,
-	HINIC3_RX_COMPACT_L3_L4_CSUM_ERROR,
-	HINIC3_RX_COMPACT_CSUM_OTHER_ERROR,
-	HINIC3_RX_COMPACT_HW_BYPASS_ERROR
-};
 
 #define HINIC3_DEFAULT_RX_CSUM_OFFLOAD	0xFFF
 #define HINIC3_CQE_LEN 32
@@ -229,8 +175,6 @@ enum hinic3_compact_cqe_csum_err_type {
 	ETH_RSS_NONFRAG_IPV6_OTHER)
 
 #define HINIC3_L4_PYTPE_SHIFT	16
-#define HINIC3_COMPACT_CQE_PTYPE_SHIFT 16
-
 /* keep same with IPSU_METADATA_L3_TP_E */
 enum HINIC3_RX_CQE_PT_L3 {
     HINIC3_RX_CQE_L3_IPV4 = 0u,
@@ -338,23 +282,6 @@ struct hinic3_rq_cqe {
 	u32 pkt_info;
 } __rte_cache_aligned;
 
-struct hinic3_cqe_info {
-	u8 data_offset;
-	u8 lro_num;
-	u8 vlan_offload;
-	u8 cqe_len;
-	u8 cqe_type;
-	u8 ts_flag;
-
-	u16 csum_err;
-	u16 vlan_tag;
-	u16 ptype;
-	u16 pkt_len;
-	u16 rss_type;
-
-	u32 rss_hash_value;
-};
-
 /*
  * Attention: please do not add any member in hinic3_rx_info because rxq bulk
  * rearm mode will write mbuf in rx_info
@@ -380,37 +307,17 @@ struct hinic3_rq_normal_wqe {
 	u32 cqe_lo_addr;
 };
 
-
-struct hinic3_rq_compact_wqe {
-	u32 buf_hi_addr;
-	u32 buf_lo_addr;
-};
-
 struct hinic3_rq_wqe {
 	union {
-		struct hinic3_rq_compact_wqe compact_wqe;
 		struct hinic3_rq_normal_wqe normal_wqe;
 		struct hinic3_rq_extend_wqe extend_wqe;
 	};
-};
-
-struct hinic3_rq_ci_wb {
-	union {
-		struct {
-			u16 cqe_num;
-			u16 hw_ci;
-		} bs;
-		u32 value;
-	} dw1;
-
-	u32 rsvd[3];
 };
 
 struct hinic3_rxq {
 	struct hinic3_nic_dev *nic_dev;
 
 	u16 q_id;
-	u16 local_qid;
 	u16 q_depth;
 	u16 q_mask;
 	u16 buf_len;
@@ -446,10 +353,6 @@ struct hinic3_rxq {
 	struct hinic3_rq_cqe *rx_cqe;
 	struct rte_mempool *mb_pool;
 
-	const struct rte_memzone *ci_mz;
- 	struct hinic3_rq_ci_wb *rq_ci;
- 	rte_iova_t rq_ci_paddr;
-
 	const struct rte_memzone *cqe_mz;
 	rte_iova_t cqe_start_paddr;
 	void *cqe_start_vaddr;
@@ -481,7 +384,9 @@ int hinic3_init_rx_ptype_table(struct rte_eth_dev *dev);
 
 int hinic3_poll_rq_empty(struct hinic3_rxq *rxq);
 
-int hinic3_poll_integrated_cqe_rq_empty(struct hinic3_rxq *rxq);
+void hinic3_dump_cqe_status(struct hinic3_rxq *rxq, u32 *cqe_done_cnt,
+			    u32 *cqe_hole_cnt, u32 *head_ci,
+			    u32 *head_done);
 
 int hinic3_stop_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq);
 
@@ -505,57 +410,36 @@ void hinic3_get_stats(struct hinic3_rxq *rxq);
 #endif
 
 /**
- * Get receive cqe information
+ * Get receive queue local ci
  *
- * @param[in] rx_queue
+ * @param[in] rxq
  *   Receive queue
- * @param[in] rx_cqe
- *   Receive cqe
- * @param[in] cqe_info
- *   Packet information parsed from cqe
- */
-void hinic3_rx_get_cqe_info(struct hinic3_rxq *rxq,
-			    volatile struct hinic3_rq_cqe *rx_cqe,
-			    struct hinic3_cqe_info *cqe_info);
-
-/**
- * Get receive compact cqe information
- *
- * @param[in] rx_queue
- *   Receive queue
- * @param[in] rx_cqe
- *   Receive compact cqe
- * @param[in] cqe_info
- *   Packet information parsed from cqe
- */
-void hinic3_rx_get_compact_cqe_info(struct hinic3_rxq *rxq,
-				    volatile struct hinic3_rq_cqe *rx_cqe,
-				    struct hinic3_cqe_info *cqe_info);
-
-/**
- * Judge whether pkt is received when CQE is separated
- *
- * @param[in] rx_queue
- *   Receive queue
- * @param[in] rx_cqe
- *   The CQE written by hw
  * @return
- *   True: Packet is received
- *   False: Packet is not received
+ *   Receive queue local ci
  */
-bool rx_separate_cqe_done(struct hinic3_rxq *rxq, volatile struct hinic3_rq_cqe **rx_cqe);
+static inline u16 hinic3_get_rq_local_ci(struct hinic3_rxq *rxq)
+{
+	return MASKED_QUEUE_IDX(rxq, rxq->cons_idx);
+}
+
+static inline u16 hinic3_get_rq_free_wqebb(struct hinic3_rxq *rxq)
+{
+	return rxq->delta - 1;
+}
 
 /**
- * Judge whether pkt is received when CQE is integrated
+ * Update receive queue local ci
  *
- * @param[in] rx_queue
+ * @param[in] rxq
  *   Receive queue
- * @param[in] rx_cqe
- *   The CQE written by hw
- * @return
- *   True: Packet is received
- *   False: Packet is not received
+ * @param[in] wqe_cnt
+ *   Wqebb counters
  */
-bool rx_integrated_cqe_done(struct hinic3_rxq *rxq, volatile struct hinic3_rq_cqe **rx_cqe);
+static inline void hinic3_update_rq_local_ci(struct hinic3_rxq *rxq,
+					     u16 wqe_cnt)
+{
+	rxq->cons_idx += wqe_cnt;
+	rxq->delta += wqe_cnt;
+}
 #endif /* _HINIC3_PMD_RX_H_ */
 
