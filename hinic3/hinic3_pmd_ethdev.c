@@ -348,7 +348,51 @@ static void hinic3_copy_mempool_uninit(struct hinic3_nic_dev *nic_dev);
 
 static void hinic3_dev_interrupt_handler_qpool(void *param)
 {
-	return;
+	struct rte_eth_dev *dev = param;
+ 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+ 	struct rte_intr_handle *intr_handle = dev->intr_handle;
+ 	struct netdev_event event;
+ 	struct rte_eth_link link;
+ 	ssize_t bytes_read;
+ 	u8 link_state = 0;
+ 	int processed = 0;
+ 	 
+ 	if (!hinic3_get_bit(HINIC3_DEV_INTR_EN, &nic_dev->dev_status)) {
+ 		PMD_DRV_LOG(WARNING,
+ 			    "Intr is disabled, ignore intr event, dev_name: %s, port_id: %d",
+ 			    nic_dev->dev_name, dev->data->port_id);
+ 		return;
+ 	}
+ 	 
+ 	while (processed < MAX_PROCESS &&
+ 		(bytes_read = read(intr_handle->fd, &event, sizeof(event))) == sizeof(event)) {
+ 		if (event.type == NETDEV_UP) {
+ 			link_state = 1;
+ 			get_port_info(nic_dev->hwdev, link_state, &link);
+ 			rte_eth_linkstatus_set(dev, &link);
+ 		} else if (event.type == NETDEV_DOWN) {
+ 			link_state = 0;
+ 			get_port_info(nic_dev->hwdev, link_state, &link);
+ 			rte_eth_linkstatus_set(dev, &link);
+ 		} else if (event.type == NETDEV_CHANGEADDR) {
+ 			u8 addr_bytes[RTE_ETHER_ADDR_LEN];
+ 			memmove(addr_bytes, event.data, RTE_ETHER_ADDR_LEN);
+ 			rte_ether_addr_copy((struct rte_ether_addr *)addr_bytes,
+ 				&dev->data->mac_addrs[0]);
+ 			if (rte_is_zero_ether_addr(&dev->data->mac_addrs[0]))
+ 				PMD_DRV_LOG(INFO, "mac addr is zero");
+ 		} else if (event.type == NETDEV_CHANGEMTU) {
+ 			PMD_DRV_LOG(INFO, "Set new mtu address");
+ 			nic_dev->mtu_size = event.data_mtu;
+ 			dev->data->mtu = event.data_mtu;
+ 		} else {
+ 			PMD_DRV_LOG(INFO, "event type not support");
+ 		}
+ 	}
+ 	 
+ 	if (bytes_read < 0 && errno != EAGAIN) {
+ 		PMD_DRV_LOG(ERR, "interrupt handler fd read error: %d.", errno);
+ 	}
 }
 
 static void hinic3_dev_interrupt_handler(void *param)
@@ -505,17 +549,74 @@ void hinic3_dev_info_get(struct rte_eth_dev_info *info, struct hinic3_nic_dev *n
 
 static int hinic3_get_link_state_qpool(struct hinic3_nic_dev *nic_dev)
 {
-	return 0;
+ 	struct drv_cmd_kernel_nic_data cfg_kernel_data;
+ 	struct msg_module msg_to_kernel;
+ 	int in_size, out_size, err;
+ 	
+ 	(void)memset(&msg_to_kernel, 0, sizeof(msg_to_kernel));
+ 	in_size = sizeof(cfg_kernel_data);
+ 	out_size = sizeof(cfg_kernel_data);
+ 	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NIC_DRIVER, GET_KERN_DEV_DATA,
+ 			in_size, out_size,
+ 			&cfg_kernel_data, &cfg_kernel_data);
+ 	
+ 	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
+ 	if (err < 0)
+ 		PMD_DRV_LOG(ERR, "Get kernel netdev state failed, err: %d.", err);
+ 	
+ 	if (cfg_kernel_data.netdev_state == 0)
+ 		err = -EIO;
+ 	
+ 	return err;
 }
 
 static int hinic3_get_kernel_mtu(struct rte_eth_dev *eth_dev)
 {
-	return 0;
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
+ 	struct drv_cmd_kernel_nic_data cfg_kernel_data  = { 0 };
+ 	struct msg_module msg_to_kernel = { 0 };
+ 	int err = 0;
+ 	
+ 	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NIC_DRIVER, GET_KERN_DEV_DATA,
+ 		       sizeof(cfg_kernel_data), sizeof(cfg_kernel_data),
+ 		       &cfg_kernel_data, &cfg_kernel_data);
+ 	
+ 	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
+ 	if (err < 0) {
+ 		PMD_DRV_LOG(WARNING, "Get kernel mtu failed");
+ 		return err;
+ 	}
+ 	
+ 	eth_dev->data->mtu = cfg_kernel_data.mtu;
+ 	
+ 	return err;
 }
 
 static int hinic3_verify_queue_depth(struct hinic3_nic_dev *nic_dev, u16 *q_depth, u16 type)
 {
-	return 0;
+	struct drv_cmd_kernel_nic_data cfg_kernel_data  = { 0 };
+ 	struct msg_module msg_to_kernel = { 0 };
+ 	int err = 0;
+ 	
+ 	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NIC_DRIVER, GET_KERN_DEV_DATA,
+ 		       sizeof(cfg_kernel_data), sizeof(cfg_kernel_data),
+ 		       &cfg_kernel_data, &cfg_kernel_data);
+ 	
+ 	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
+ 	if (err < 0)
+ 		return err;
+ 	
+ 	if (type == HINIC3_VERIFY_RX_DEPTH && *q_depth != cfg_kernel_data.rx_q_depth) {
+ 		*q_depth = cfg_kernel_data.rx_q_depth;
+ 		PMD_DRV_LOG(WARNING, "[WARNING] Rxq depth adjusted to %d to match kernel", *q_depth);
+ 	}
+ 	
+ 	if (type == HINIC3_VERIFY_TX_DEPTH && *q_depth != cfg_kernel_data.tx_q_depth) {
+ 		*q_depth = cfg_kernel_data.tx_q_depth;
+ 		PMD_DRV_LOG(WARNING, "[WARNING] Txq depth adjusted to %d to match kernel", *q_depth);
+ 	}
+ 	
+ 	return err;
 }
 
 /**
