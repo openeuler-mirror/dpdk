@@ -5,8 +5,6 @@
 #ifndef _HINIC3_PMD_NIC_CFG_H_
 #define _HINIC3_PMD_NIC_CFG_H_
 
-#include "hinic3_pmd_mgmt.h"
-
 #ifndef ETH_ALEN
 #define ETH_ALEN			6
 #endif
@@ -82,21 +80,6 @@
 #define NIC_DCB_DSCP_NUM   0x8
 #define NIC_DCB_IP_PRI_MAX 0x40
 
-#define HINIC3_SUPPORT_FEATURE(dev, feature) \
-	((hinic3_get_driver_feature(dev) & feature) != 0)
-#define HINIC3_SUPPORT_RX_HW_COMPACT_CQE(dev) \
-	HINIC3_SUPPORT_FEATURE(dev, NIC_F_RX_HW_COMPACT_CQE)
-#define HINIC3_SUPPORT_RX_SW_COMPACT_CQE(dev) \
-	HINIC3_SUPPORT_FEATURE(dev, NIC_F_RX_SW_COMPACT_CQE)	
-#define HINIC3_SUPPORT_TX_WQE_COMPACT_TASK(dev) \
-	HINIC3_SUPPORT_FEATURE(dev, NIC_F_TX_WQE_COMPACT_TASK)
-#define HINIC3_SUPPORT_VXLAN_OFFLOAD(dev) \
-	HINIC3_SUPPORT_FEATURE(dev, NIC_F_VXLAN_OFFLOAD)
-#define HINIC3_SUPPORT_GENEVE_OFFLOAD(dev) \
-	HINIC3_SUPPORT_FEATURE(dev, NIC_F_GENEVE_OFFLOAD)
-#define HINIC3_SUPPORT_IPXIP_OFFLOAD(dev) \
- 	 	HINIC3_SUPPORT_FEATURE(dev, NIC_F_IPXIP_OFFLOAD)
-
 #define CMD_QOS_OP_SET 1
 #define CMD_QOS_OP_GET 0
 
@@ -109,19 +92,6 @@
 
 #define PCP_MAX_UP	  8
 #define DSCP_MAC_UP	  64
-
-extern int g_qinfo_type;
-
-enum hinic3_qinfo_type {
- 	HINIC3_QINFO_TYPE_NORMAL,
- 	HINIC3_QINFO_TYPE_BIFUR,
- 	HINIC3_QINFO_TYPE_QPOOL,
- 	HINIC3_QINFO_TYPE_RSV,
-};
-
-#define IS_NORMAL_MODE() (g_qinfo_type == HINIC3_QINFO_TYPE_NORMAL)
-#define IS_BIFUR_MODE() (g_qinfo_type == HINIC3_QINFO_TYPE_BIFUR)
-#define IS_QPOOL_MODE() (g_qinfo_type == HINIC3_QINFO_TYPE_QPOOL)
 
 struct hinic3_rss_type {
 	u8 tcp_ipv6_ext;
@@ -379,16 +349,6 @@ struct hinic3_ppa_fdir_query_cmd {
     u64 pkt_bytes;
 };
 
-struct hinic3_indir_tbl_qid_lqid {
-	TAILQ_ENTRY(hinic3_indir_tbl_qid_lqid) entries;
- 	u16 q_id;
- 	u16 local_qid;
-};
- 	 
-TAILQ_HEAD(hinic3_indir_qid_lqid_list, hinic3_indir_tbl_qid_lqid);
-static struct hinic3_indir_qid_lqid_list g_qid_lqid_list = 
- 	  	TAILQ_HEAD_INITIALIZER(g_qid_lqid_list);
-
 #define HINIC3_CMD_OP_ADD	1
 #define HINIC3_CMD_OP_DEL	0
 
@@ -505,33 +465,11 @@ struct hinic3_cmd_clear_qp_resource {
 	u16 rsvd1;
 };
 
-#define FUNC_MAX_CLEAR_QP_NUM 256
-struct hinic3_cmd_clear_assign_qp_res {
-	struct mgmt_msg_head msg_head;
-
-	u16 func_id;
-	u16 qp_num;
-	u32 rsvd[4];
-	u16 qp[FUNC_MAX_CLEAR_QP_NUM];
-};
-
 struct hinic3_port_stats_info {
 	struct mgmt_msg_head msg_head;
 
 	u16 func_id;
 	u16 rsvd1;
-};
-
-#define HINIC3_CMD_MAX_DP_DATA_NUM 50
-struct hinic3_cir_drop {
-	u64 rx_discard_phy;
-};
-
-struct hinic3_cmd_get_dp_info_resp {
-	struct mgmt_msg_head msg_head;
-	u16 length;
-	u16 rsvd;
-	u64 value[HINIC3_CMD_MAX_DP_DATA_NUM];
 };
 
 struct hinic3_vport_stats {
@@ -938,6 +876,25 @@ struct hinic3_rss_indir_table {
 
 #define HINIC3_QGRP_START_INDEX 2048
 
+struct nic_rss_indirect_tbl {
+	union {
+		struct {
+#if (RTE_BYTE_ORDER == RTE_BIG_ENDIAN)
+			u32 op_code : 8; /* 1: new fdir_rss */
+			u32 qgrp_id : 8; /* The value of qgrp_id must be 2048 less */
+			u32 rsvd1 : 16;
+#else
+			u32 rsvd1 : 16;
+			u32 qgrp_id : 8; /* The value of qgrp_id must be 2048 less */
+			u32 op_code : 8; /* 1: new fdir_rss */
+#endif
+		} bs;
+		u32 value;
+	} dw0;
+	u32 rsvd[3]; /* Make sure that 16B beyond entry[] */
+	u16 entry[HINIC3_RSS_INDIR_SIZE];
+};
+
 enum hinic3_qpool_subcmd {
 	HINIC3_NIC_QPOOL_CMD_CFG_QGRP_ID = 0x0,         /** < alloc/free q_grp_id */
 	HINIC3_NIC_QPOOL_CMD_GET_RSS_ID,                /** < get temp_id/inst_id/node_id */
@@ -1007,7 +964,6 @@ struct hinic3_cmd_register_vf {
 };
 
 enum {
-	HINIC3_ACTION_QUEUE = 0,
 	HINIC3_ACTION_RSS = 1,
 	HINIC3_ACTION_PORT = 2,
 	HINIC3_ACTION_DROP = 5,
@@ -1440,7 +1396,6 @@ int hinic3_get_link_state(void *hwdev, u8 *link_state);
  */
 int hinic3_flush_qps_res(void *hwdev);
 
-int hinic3_flush_assign_qps_res(void *hwdev);
 /**
  * Set pause info
  *
@@ -1479,19 +1434,6 @@ int hinic3_get_pause_info(void *hwdev, struct nic_pause_config *nic_pause);
  * @retval non-zero : Failure
  */
 int hinic3_get_vport_stats(void *hwdev, struct hinic3_vport_stats *stats);
-
-/**
- * Get CPB cir drop counter
- *
- * @param[in] hwdev
- *   Device pointer to hwdev
- * @param[out] stats
- *   Function stats
- *
- * @retval zero : Success
- * @retval non-zero : Failure
- */
-int hinic3_get_cir_drop(void *hwdev, struct hinic3_cir_drop *stats);
 
 /**
  * Get port stats
@@ -1641,7 +1583,6 @@ int hinic3_rss_set_indir_tbl(void *hwdev, const u32 *indir_table, u32 indir_tabl
  */
 int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table, u32 indir_table_size);
 
-int hinic3_rss_set_indir_tbl_qpool(void *hwdev, const u32 *indir_table, u32 indir_table_size);
 /**
  * Set RSS type
  *
@@ -1926,12 +1867,8 @@ int hinic3_fdir_flush_sec_tcam_rule(void *hwdev);
 
 int hinic3_fdir_cfg_sec_tcam(void *hwdev, u8 *en);
 
-int hinic3_indir_set_qid_mmap(u16 q_id, u16 local_qid);
-
 int hinic3_set_fec_mode(struct hinic3_hwdev *hwdev, u8 fecparam);
 
 int hinic3_get_fec_mode(struct hinic3_hwdev *hwdev, u8 *advertised_fec, u8 *supported_fec);
-
- int hinic3_qinfo_type_init(const char *dev_file);
 
 #endif /* _HINIC3_PMD_NIC_CFG_H_ */

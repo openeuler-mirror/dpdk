@@ -34,11 +34,60 @@
 #define WQ_PREFETCH_MIN			1
 #define WQ_PREFETCH_THRESHOLD		256
 
+#define HINIC3_Q_CTXT_MAX		(u16)(((HINIC3_CMDQ_BUF_SIZE - 8) - RTE_PKTMBUF_HEADROOM) / 64)
+
+enum hinic3_qp_ctxt_type {
+	HINIC3_QP_CTXT_TYPE_SQ,
+	HINIC3_QP_CTXT_TYPE_RQ,
+};
+
 struct hinic3_qp_ctxt_header {
 	u16 num_queues;
 	u16 queue_type;
 	u16 start_qid;
 	u16 rsvd;
+};
+
+struct hinic3_sq_ctxt {
+	u32 ci_pi;
+	u32 drop_mode_sp;
+	u32 wq_pfn_hi_owner;
+	u32 wq_pfn_lo;
+
+	u32 rsvd0;
+	u32 pkt_drop_thd;
+	u32 global_sq_id;
+	u32 vlan_ceq_attr;
+
+	u32 pref_cache;
+	u32 pref_ci_owner;
+	u32 pref_wq_pfn_hi_ci;
+	u32 pref_wq_pfn_lo;
+
+	u32 rsvd8;
+	u32 rsvd9;
+	u32 wq_block_pfn_hi;
+	u32 wq_block_pfn_lo;
+};
+
+struct hinic3_rq_ctxt {
+	u32 ci_pi;
+	u32 ceq_attr;
+	u32 wq_pfn_hi_type_owner;
+	u32 wq_pfn_lo;
+
+	u32 rsvd[3];
+	u32 cqe_sge_len;
+
+	u32 pref_cache;
+	u32 pref_ci_owner;
+	u32 pref_wq_pfn_hi_ci;
+	u32 pref_wq_pfn_lo;
+
+	u32 pi_paddr_hi;
+	u32 pi_paddr_lo;
+	u32 wq_block_pfn_hi;
+	u32 wq_block_pfn_lo;
 };
 
 struct hinic3_sq_ctxt_block {
@@ -257,7 +306,7 @@ static void hinic3_qp_prepare_cmdq_header(
 	hinic3_cpu_to_be32(qp_ctxt_hdr, sizeof(*qp_ctxt_hdr));
 }
 
-void hinic3_sq_prepare_ctxt(struct hinic3_txq *sq, u16 sq_id,
+static void hinic3_sq_prepare_ctxt(struct hinic3_txq *sq, u16 sq_id,
 				   struct hinic3_sq_ctxt *sq_ctxt)
 {
 	u64 wq_page_addr;
@@ -330,7 +379,7 @@ void hinic3_sq_prepare_ctxt(struct hinic3_txq *sq, u16 sq_id,
 	hinic3_cpu_to_be32(sq_ctxt, sizeof(*sq_ctxt));
 }
 
-void hinic3_rq_prepare_ctxt(struct hinic3_rxq *rq, struct hinic3_rq_ctxt *rq_ctxt)
+static void hinic3_rq_prepare_ctxt(struct hinic3_rxq *rq, struct hinic3_rq_ctxt *rq_ctxt)
 {
 	u64 wq_page_addr, wq_page_pfn, wq_block_pfn;
 	u32 wq_page_pfn_hi, wq_page_pfn_lo, wq_block_pfn_hi, wq_block_pfn_lo;

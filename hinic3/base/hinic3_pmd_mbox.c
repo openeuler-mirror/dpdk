@@ -2,9 +2,6 @@
  * Copyright(c) 2019 Huawei Technologies Co., Ltd
  */
 
-#include <fcntl.h>
-#include <sys/ioctl.h>
-#include "mml/hinic3_pmd_mml_lib.h"
 #include "hinic3_compat.h"
 #include "hinic3_pmd_hwdev.h"
 #include "hinic3_pmd_csr.h"
@@ -14,9 +11,6 @@
 #include "hinic3_pmd_hw_cfg.h"
 #include "hinic3_pmd_mbox.h"
 #include "hinic3_pmd_nic_event.h"
-#include "hinic3_pmd_nic_cfg.h"
-#include "hinic3_pmd_ethdev.h"
-#include "hinic3_pmd_mbox.h"
 
 #define HINIC3_MBOX_INT_DST_FUNC_SHIFT				0
 #define HINIC3_MBOX_INT_DST_AEQN_SHIFT				10
@@ -192,17 +186,16 @@ static void response_for_recv_func_mbox(struct hinic3_mbox *func_to_func,
 					int err, u16 out_size, u16 src_func_idx)
 {
 	struct mbox_msg_info msg_info = {0};
-	int use_tlp;
 
 	if (recv_mbox->ack_type == HINIC3_MSG_ACK) {
 		msg_info.msg_id = recv_mbox->msg_info.msg_id;
 		if (err)
 			msg_info.status = HINIC3_MBOX_PF_SEND_ERR;
-
-		use_tlp = IS_TLP_MBX(src_func_idx) &&
- 	 				(!IS_BIFUR_MODE() || (hinic3_pcie_itf_id(func_to_func->hwdev) != SPU_HOST_ID));
- 	 
- 	 	if (use_tlp)
+#ifdef HINIC3_TRAFFIC_BIFUR
+		if (IS_TLP_MBX(src_func_idx) && (hinic3_pcie_itf_id(func_to_func->hwdev) != SPU_HOST_ID))
+#else
+		if (IS_TLP_MBX(src_func_idx))
+#endif
 			send_tlp_mbox_to_func(func_to_func, recv_mbox->mod,
 					      recv_mbox->cmd,
 					      recv_mbox->buf_out, out_size,
@@ -801,7 +794,6 @@ static int hinic3_mbox_to_func(struct hinic3_mbox *func_to_func,
 	struct hinic3_eq *aeq = NULL;
 	u16 mbox_rsp_idx;
 	u32 time;
-	int use_tlp;
 	int err;
 
 	mbox_rsp_idx = (u16)hinic3_mbox_get_index(dst_func);
@@ -815,10 +807,11 @@ static int hinic3_mbox_to_func(struct hinic3_mbox *func_to_func,
 
 	set_mbox_to_func_event(func_to_func, EVENT_START);
 
-	use_tlp = IS_TLP_MBX(dst_func) && 
-		(!IS_BIFUR_MODE() || (hinic3_pcie_itf_id(func_to_func->hwdev) != SPU_HOST_ID));
-
-	if (use_tlp)
+#ifdef HINIC3_TRAFFIC_BIFUR
+	if (IS_TLP_MBX(dst_func) && (hinic3_pcie_itf_id(func_to_func->hwdev) != SPU_HOST_ID))
+#else
+	if (IS_TLP_MBX(dst_func))
+#endif
 		err = send_tlp_mbox_to_func(func_to_func, mod, cmd, buf_in,
 					    in_size, dst_func,
 					    HINIC3_MSG_DIRECT_SEND,
@@ -907,7 +900,6 @@ static int hinic3_mbox_to_func_no_ack(struct hinic3_hwdev *hwdev, u16 func_idx,
 {
 	struct hinic3_mbox *func_to_func = hwdev->func_to_func;
 	struct mbox_msg_info msg_info = {0};
-	int use_tlp;
 	int err;
 
 	err = mbox_func_params_valid(hwdev->func_to_func, buf_in, in_size);
@@ -918,10 +910,12 @@ static int hinic3_mbox_to_func_no_ack(struct hinic3_hwdev *hwdev, u16 func_idx,
 	if (err)
 		return err;
 
-	use_tlp =  IS_TLP_MBX(func_idx) &&
-		(!IS_BIFUR_MODE() || (hinic3_pcie_itf_id(func_to_func->hwdev) != SPU_HOST_ID));
 
-	if (use_tlp)
+#ifdef HINIC3_TRAFFIC_BIFUR
+	if (IS_TLP_MBX(func_idx) && (hinic3_pcie_itf_id(func_to_func->hwdev) != SPU_HOST_ID))
+#else
+	if (IS_TLP_MBX(func_idx))
+#endif
 		err = send_tlp_mbox_to_func(func_to_func, mod, cmd,
 					    buf_in, in_size, func_idx,
 					    HINIC3_MSG_DIRECT_SEND,
@@ -939,47 +933,6 @@ static int hinic3_mbox_to_func_no_ack(struct hinic3_hwdev *hwdev, u16 func_idx,
 	return err;
 }
 
-void fill_ioctl_msg(struct msg_module *msg, unsigned int module,
-	unsigned int msg_formate,
-	unsigned int in_buff_len, unsigned int out_buff_len,
-	void *in_buf, void *out_buf)
-{
-	msg->module = module;
-	msg->msg_formate = msg_formate;
-	msg->buf_in_size = in_buff_len;
-	msg->buf_out_size = out_buff_len;
-	msg->in_buf = in_buf;
-	msg->out_buf = out_buf;
-}
-
-int hinic3_send_mbox_to_kernel(struct hinic3_hwdev *hwdev,
- 	 			enum hinic3_mod_type mod, u16 cmd, void *buf_in,
- 	 			u16 in_size, void *buf_out, u16 *out_size,
- 	 			enum module_name module, unsigned int msg_formate)
-{
-	struct msg_module msg_to_kernel = {0};
-	struct hinic3_nic_dev *nic_dev = hwdev->dev_handle;
-	int err;
-	int fd;
-
-	fill_ioctl_msg(&msg_to_kernel, module, msg_formate, in_size, *out_size,
-		buf_in, buf_out);
-
-	if (module == SEND_TO_MPU) {
-		msg_to_kernel.mpu_cmd.api_type = 1; /**< API_TYPE_MBOX */
-		msg_to_kernel.mpu_cmd.mod = mod;
-		msg_to_kernel.mpu_cmd.cmd = cmd;
-	}
-
-	fd = nic_dev->fd;
-	err = ioctl(fd, 0, &msg_to_kernel);
-	if (err < 0) {
-		return -1;
-	}
-
-	return 0;
-}
-
 int hinic3_send_mbox_to_mgmt(struct hinic3_hwdev *hwdev,
 			     enum hinic3_mod_type mod, u16 cmd, void *buf_in,
 			     u16 in_size, void *buf_out, u16 *out_size,
@@ -987,13 +940,6 @@ int hinic3_send_mbox_to_mgmt(struct hinic3_hwdev *hwdev,
 {
 	struct hinic3_mbox *func_to_func = hwdev->func_to_func;
 	int err;
-
-	enum module_name module;
- 	if (IS_QPOOL_MODE()) {
- 		module = SEND_TO_MPU;
- 		return hinic3_send_mbox_to_kernel(hwdev, mod, cmd, buf_in,
- 					in_size, buf_out, out_size, module, 0);
- 	}
 
 	err = mbox_func_params_valid(func_to_func, buf_in, in_size);
 	if (err)
@@ -1009,15 +955,16 @@ void hinic3_response_mbox_to_mgmt(struct hinic3_hwdev *hwdev,
 {
 	struct mbox_msg_info msg_info;
 	u16 dst_func;
-	int use_tlp;
 
 	msg_info.msg_id = (u8)msg_id;
 	msg_info.status = 0;
 	dst_func = HINIC3_MGMT_SRC_ID;
 
-	use_tlp = IS_TLP_MBX(dst_func) &&
-		(!IS_BIFUR_MODE() || (hinic3_pcie_itf_id(hwdev->func_to_func->hwdev) != SPU_HOST_ID));
-	if (use_tlp)
+#ifdef HINIC3_TRAFFIC_BIFUR
+	if (IS_TLP_MBX(dst_func) && (hinic3_pcie_itf_id(hwdev->func_to_func->hwdev) != SPU_HOST_ID))
+#else
+	if (IS_TLP_MBX(dst_func))
+#endif
 		send_tlp_mbox_to_func(hwdev->func_to_func, mod, cmd, buf_in,
 				      in_size, HINIC3_MGMT_SRC_ID,
 				      HINIC3_MSG_RESPONSE, HINIC3_MSG_NO_ACK,

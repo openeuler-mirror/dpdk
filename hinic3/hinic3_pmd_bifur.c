@@ -1,6 +1,8 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2024-2024. All rights reserved.
  */
+#ifdef HINIC3_TRAFFIC_BIFUR
+
 #include <string.h>
 #include <dirent.h>
 #include <stdio.h>
@@ -30,6 +32,11 @@
 #ifndef PCI_DBDF
 #define PCI_DBDF(dom, bus, dev, func) (((u32)(dom) << 16) | ((u32)(bus) << 8) | ((u32)(dev) << 3) | ((u32)(func)&0x7))
 #endif
+
+/* bifur kenerl define. */
+#define BIFUR_GDEV_PATH "/dev/bifur_gdev"
+#define BIFUR_PROC_PATH "/proc/net/bifur"
+#define BIFUR_DEV_NAME	"bifur_vdev"
 
 #define MEMZONE_NAME "bifur_pci_addr_zone"
 /* Memory size required for allocating PCI addresses. */
@@ -992,3 +999,5 @@ hinic3_bifur_get_default_mac(struct rte_pci_device *pci_dev, u8 *mac_addr, int e
 	memcpy(mac_addr, rsp.mac, RTE_ETHER_ADDR_LEN);
 	return 0;
 }
+
+#endif
