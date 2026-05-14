@@ -5,6 +5,7 @@
 #ifndef _HINIC3_PMD_CMDQ_H_
 #define _HINIC3_PMD_CMDQ_H_
 
+#include "hinic3_pmd_wq.h"
 #include "hinic3_pmd_mgmt.h"
 
 #define HINIC3_SCMD_DATA_LEN		16

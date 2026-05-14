@@ -10,6 +10,7 @@
 #include "hinic3_pmd_wq.h"
 #include "hinic3_pmd_cmd.h"
 #include "hinic3_pmd_mgmt.h"
+#include "hinic3_pmd_nic_cfg.h"
 #include "hinic3_pmd_cmdq.h"
 
 #define CMDQ_CMD_TIMEOUT				5000 /* Millisecond */
@@ -170,14 +171,23 @@ struct hinic3_cmd_buf *hinic3_alloc_cmd_buf(void *hwdev)
 		return NULL;
 	}
 
-	cmd_buf->mbuf = rte_pktmbuf_alloc(cmdqs->cmd_buf_pool);
-	if (!cmd_buf->mbuf) {
-		PMD_DRV_LOG(ERR, "Allocate cmd from the pool failed");
-		goto alloc_pci_buf_err;
-	}
+  	if (IS_QPOOL_MODE()) {
+ 		cmd_buf->mbuf = rte_pktmbuf_alloc(((struct hinic3_hwdev *)hwdev)->cmd_buf_pool);
+ 		if (!cmd_buf->mbuf) {
+ 			PMD_DRV_LOG(ERR, "Allocate cmd from the pool failed");
+ 			goto alloc_pci_buf_err;
+ 		}
+ 	} else {
+ 		cmd_buf->mbuf = rte_pktmbuf_alloc(cmdqs->cmd_buf_pool);
+ 		if (!cmd_buf->mbuf) {
+ 			PMD_DRV_LOG(ERR, "Allocate cmd from the pool failed");
+ 			goto alloc_pci_buf_err;
+ 		}
+ 	
+ 		cmd_buf->dma_addr = rte_mbuf_data_iova(cmd_buf->mbuf);
+ 	}
 
-	cmd_buf->dma_addr = rte_mbuf_data_iova(cmd_buf->mbuf);
-	cmd_buf->buf = rte_pktmbuf_mtod(cmd_buf->mbuf, void *);
+ 	cmd_buf->buf = rte_pktmbuf_mtod(cmd_buf->mbuf, void *);
 
 	return cmd_buf;
 

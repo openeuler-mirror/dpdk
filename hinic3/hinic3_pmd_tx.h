@@ -33,6 +33,35 @@ struct hinic3_tx_offload_info {
 	u8 rsvd0;
 };
 
+struct hinic3_queue_info {
+	u8 pri;
+	u8 uc;
+	u8 sctp;
+	u8 udp_dp_en;
+	u8 tso;
+	u8 ufo;
+	u8 payload_offset;
+	u8 pkt_type;
+	u16 mss;
+	u16 rsvd;
+};
+
+/* sq wqe offload info */
+struct hinic3_offload_info {
+	u8 encapsulation;
+	u8 esp_next_proto;
+	u8 inner_l4_en;
+	u8 inner_l3_en;
+	u8 out_l4_en;
+	u8 out_l3_en;
+	u8 ipsec_offload;
+	u8 pkt_1588;
+	u8 vlan_sel;
+	u8 vlan_valid;
+	u16 vlan_tag;
+	u32 ip_identify;
+};
+
 /* tx wqe ctx */
 struct hinic3_wqe_info {
 	u8 around;
@@ -50,7 +79,8 @@ struct hinic3_wqe_info {
 	u16 wqebb_cnt;
 	u16 rsvd1;
 
-	u32 queue_info;
+	struct hinic3_queue_info queue_info;
+	struct hinic3_offload_info offload_info;
 };
 
 struct hinic3_sq_wqe_desc {
@@ -105,8 +135,14 @@ struct hinic3_sq_wqe_combo {
 };
 
 /* SQ ctrl info */
-enum sq_wqe_data_format {
+enum sq_wqe_type {
 	SQ_NORMAL_WQE = 0,
+	SQ_DIRECT_WQE = 1,
+};
+
+enum sq_wqe_data_format {
+	SQ_WQE_SGL = 0,
+	SQ_WQE_INLINE_DATA = 1,
 };
 
 enum sq_wqe_ec_type {
@@ -117,7 +153,7 @@ enum sq_wqe_ec_type {
 #define COMPACT_WQE_MAX_CTRL_LEN		0x3FFF
 
 enum sq_wqe_tasksect_len_type {
-	SQ_WQE_TASKSECT_46BITS = 0,
+	SQ_WQE_TASKSECT_4BYTES = 0,
 	SQ_WQE_TASKSECT_16BYTES = 1,
 };
 
@@ -182,6 +218,45 @@ enum sq_wqe_tasksect_len_type {
 	((val) & (~(SQ_CTRL_QUEUE_INFO_##member##_MASK << \
 	SQ_CTRL_QUEUE_INFO_##member##_SHIFT)))
 
+/* compact queue info */
+#define SQ_CTRL_COMPACT_QUEUE_INFO_PKT_TYPE_SHIFT	14
+#define SQ_CTRL_COMPACT_QUEUE_INFO_PLDOFF_SHIFT		16
+#define SQ_CTRL_COMPACT_QUEUE_INFO_UFO_SHIFT		24
+#define SQ_CTRL_COMPACT_QUEUE_INFO_TSO_SHIFT		25
+#define SQ_CTRL_COMPACT_QUEUE_INFO_UDP_DP_EN_SHIFT	26
+#define SQ_CTRL_COMPACT_QUEUE_INFO_SCTP_SHIFT		27
+
+#define SQ_CTRL_COMPACT_QUEUE_INFO_PKT_TYPE_MASK	0x3U
+#define SQ_CTRL_COMPACT_QUEUE_INFO_PLDOFF_MASK		0xFFU
+#define SQ_CTRL_COMPACT_QUEUE_INFO_UFO_MASK		0x1U
+#define SQ_CTRL_COMPACT_QUEUE_INFO_TSO_MASK		0x1U
+#define SQ_CTRL_COMPACT_QUEUE_INFO_UDP_DP_EN_MASK	0x1U
+#define SQ_CTRL_COMPACT_QUEUE_INFO_SCTP_MASK		0x1U
+
+#define SQ_CTRL_COMPACT_QUEUE_INFO_SET(val, member) \
+	(((u32)(val) & SQ_CTRL_COMPACT_QUEUE_INFO_##member##_MASK) << \
+	 SQ_CTRL_COMPACT_QUEUE_INFO_##member##_SHIFT)
+
+#define SQ_CTRL_COMPACT_QUEUE_INFO_GET(val, member) \
+	(((val) >> SQ_CTRL_COMPACT_QUEUE_INFO_##member##_SHIFT) & \
+	 SQ_CTRL_COMPACT_QUEUE_INFO_##member##_MASK)
+
+#define SQ_CTRL_COMPACT_QUEUE_INFO_CLEAR(val, member) \
+	((val) & (~(SQ_CTRL_COMPACT_QUEUE_INFO_##member##_MASK << \
+		    SQ_CTRL_COMPACT_QUEUE_INFO_##member##_SHIFT)))
+
+#define SQ_CTRL_QUEUE_INFO_SET(val, member)	\
+	(((u32)(val) & SQ_CTRL_QUEUE_INFO_##member##_MASK) \
+	<< SQ_CTRL_QUEUE_INFO_##member##_SHIFT)
+
+#define SQ_CTRL_QUEUE_INFO_GET(val, member)	\
+	(((val) >> SQ_CTRL_QUEUE_INFO_##member##_SHIFT) \
+	& SQ_CTRL_QUEUE_INFO_##member##_MASK)
+
+#define SQ_CTRL_QUEUE_INFO_CLEAR(val, member)	\
+	((val) & (~(SQ_CTRL_QUEUE_INFO_##member##_MASK << \
+	SQ_CTRL_QUEUE_INFO_##member##_SHIFT)))
+
 #define	SQ_TASK_INFO0_TUNNEL_FLAG_SHIFT		19
 #define	SQ_TASK_INFO0_ESP_NEXT_PROTO_SHIFT	22
 #define	SQ_TASK_INFO0_INNER_L4_EN_SHIFT		24
@@ -233,6 +308,37 @@ enum sq_wqe_tasksect_len_type {
 		(((val) >> SQ_TASK_INFO3_##member##_SHIFT) &	\
 		SQ_TASK_INFO3_##member##_MASK)
 
+ /* compact wqe task field */
+#define SQ_TASK_INFO_PKT_1588_SHIFT		31
+#define SQ_TASK_INFO_IPSEC_PROTO_SHIFT		30
+#define SQ_TASK_INFO_OUT_L3_EN_SHIFT		28
+#define SQ_TASK_INFO_OUT_L4_EN_SHIFT		27
+#define SQ_TASK_INFO_INNER_L3_EN_SHIFT		25
+#define SQ_TASK_INFO_INNER_L4_EN_SHIFT		24
+#define SQ_TASK_INFO_ESP_NEXT_PROTO_SHIFT	22
+#define SQ_TASK_INFO_VLAN_VALID_SHIFT		19
+#define SQ_TASK_INFO_VLAN_SEL_SHIFT		16
+#define SQ_TASK_INFO_VLAN_TAG_SHIFT		0
+
+#define SQ_TASK_INFO_PKT_1588_MASK 		0x1U
+#define SQ_TASK_INFO_IPSEC_PROTO_MASK 		0x1U
+#define SQ_TASK_INFO_OUT_L3_EN_MASK 		0x1U
+#define SQ_TASK_INFO_OUT_L4_EN_MASK 		0x1U
+#define SQ_TASK_INFO_INNER_L3_EN_MASK 		0x1U
+#define SQ_TASK_INFO_INNER_L4_EN_MASK 		0x1U
+#define SQ_TASK_INFO_ESP_NEXT_PROTO_MASK 	0x3U
+#define SQ_TASK_INFO_VLAN_VALID_MASK 		0x1U
+#define SQ_TASK_INFO_VLAN_SEL_MASK 		0x7U
+#define SQ_TASK_INFO_VLAN_TAG_MASK 		0xFFFFU
+
+#define SQ_TASK_INFO_SET(val, member) \
+	(((u32)(val) & SQ_TASK_INFO_##member##_MASK) << \
+	SQ_TASK_INFO_##member##_SHIFT)
+
+#define SQ_TASK_INFO_GET(val, member) \
+	(((val) >> SQ_TASK_INFO_##member##_SHIFT) & \
+ 	 	SQ_TASK_INFO_##member##_MASK)
+
 enum hinic3_txq_status {
 	HINIC3_TXQ_STATUS_START = 0,
 	HINIC3_TXQ_STATUS_STOP,
@@ -278,6 +384,7 @@ struct hinic3_txq {
 	struct hinic3_nic_dev *nic_dev;
 
 	u16 q_id;
+	u16 local_qid;
 	u16 q_depth;
 	u16 q_mask;
 	u16 wqebb_size;
@@ -310,6 +417,9 @@ struct hinic3_txq {
 	u64 sq_bot_sge_addr;
 
 	u32 cos;
+
+	u8 tx_wqe_compact_task;
+ 	u8 rsvd[3];
 
 	struct hinic3_txq_stats txq_stats;
 #ifdef HINIC3_XSTAT_PROF_TX
@@ -354,5 +464,27 @@ int hinic3_start_all_sqs(struct rte_eth_dev *eth_dev);
 
 int hinic3_tx_done_cleanup(void *txq, uint32_t free_cnt);
 int hinic3_tx_burst_mode_get(struct rte_eth_dev *dev, uint16_t tx_queue_id, struct rte_eth_burst_mode *mode);
+
+/**
+ * Set wqe task section
+ *
+ * @param[in] wqe_info
+ *	 packet info parsed from mbuf
+ * @param[in] wqe_combo
+ * 	 the wqe need to format
+ */
+void hinic3_tx_set_normal_task_offload(struct hinic3_wqe_info *wqe_info,
+				       struct hinic3_sq_wqe_combo *wqe_combo);
+
+/**
+ * Set compact wqe task section
+ *
+ * @param[in] wqe_info
+ *	 packet info parsed from mbuf
+ * @param[in] wqe_combo
+ * 	 the wqe need to format
+ */
+void hinic3_tx_set_compact_task_offload(struct hinic3_wqe_info *wqe_info,
+					struct hinic3_sq_wqe_combo *wqe_combo);
 #endif /* _HINIC3_PMD_TX_H_ */
 

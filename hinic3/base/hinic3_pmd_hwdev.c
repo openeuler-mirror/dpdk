@@ -15,6 +15,7 @@
 #include "hinic3_pmd_wq.h"
 #include "hinic3_pmd_cmdq.h"
 #include "hinic3_pmd_hw_cfg.h"
+#include "hinic3_pmd_nic_cfg.h"
 #include "hinic3_pmd_hwdev.h"
 #include "hinic3_pmd_hw_comm.h"
 
@@ -407,6 +408,23 @@ dma_attr_init_err:
 	return err;
 }
 
+static int hinic3_init_qpool_cmdqs(struct hinic3_hwdev *hwdev)
+{
+	char cmdq_pool_name[RTE_MEMPOOL_NAMESIZE] = {0};
+	(void)snprintf(cmdq_pool_name, sizeof(cmdq_pool_name), "hinic3_cmdq_%u", hwdev->port_id);
+
+	hwdev->cmd_buf_pool = rte_pktmbuf_pool_create(cmdq_pool_name,
+						      HINIC3_CMDQ_DEPTH * HINIC3_MAX_CMDQ_TYPES,
+						      0, 0, HINIC3_CMDQ_BUF_SIZE,
+						      (int)rte_socket_id());
+	if (!hwdev->cmd_buf_pool) {
+		PMD_DRV_LOG(ERR, "Create cmdq buffer pool failed.");
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+
 static int hinic3_init_comm_ch(struct hinic3_hwdev *hwdev)
 {
 	int err;
@@ -453,6 +471,11 @@ get_func_info_err:
 	return err;
 }
 
+static void hinic3_uninit_comm_ch_qpool(struct hinic3_hwdev *hwdev)
+{
+	hinic3_set_func_svc_used_state(hwdev, HINIC3_MOD_COMM, 0);
+}
+
 static void hinic3_uninit_comm_ch(struct hinic3_hwdev *hwdev)
 {
 	hinic3_set_pf_status(hwdev->hwif, HINIC3_PF_STATUS_INIT);
@@ -490,7 +513,20 @@ int hinic3_init_hwdev(struct hinic3_hwdev *hwdev)
 		goto init_hwif_err;
 	}
 
-	err = hinic3_init_comm_ch(hwdev);
+	if (IS_QPOOL_MODE()) {
+ 		err = hinic3_init_qpool_cmdqs(hwdev);
+ 		if (err) {
+ 			PMD_DRV_LOG(ERR, "Qpool Init cmdq failed");
+ 			return err;
+ 		}
+ 	} else {
+ 		err = hinic3_init_comm_ch(hwdev);
+ 		if (err) {
+ 			PMD_DRV_LOG(ERR, "Init communication channel failed");
+ 			goto init_comm_ch_err;
+ 		}
+ 	}
+
 	if (err) {
 		PMD_DRV_LOG(ERR, "Init communication channel failed");
 		goto init_comm_ch_err;
@@ -528,7 +564,10 @@ void hinic3_free_hwdev(struct hinic3_hwdev *hwdev)
 {
 	hinic3_deinit_cfg_mgmt(hwdev);
 
-	hinic3_uninit_comm_ch(hwdev);
+	if (IS_QPOOL_MODE())
+ 		hinic3_uninit_comm_ch_qpool(hwdev);
+ 	else
+ 		hinic3_uninit_comm_ch(hwdev);
 
 	hinic3_free_hwif(hwdev);
 
