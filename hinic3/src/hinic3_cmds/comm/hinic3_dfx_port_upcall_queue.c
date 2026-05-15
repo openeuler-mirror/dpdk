@@ -272,7 +272,7 @@ static const struct hinic3_opt upcall_queue_cmd_opts[] = {
     {"-h",        REQUIRED_ARGUMENT, 0, HINIC3_HELP_QUEUE_OPT},
     {"--help",    REQUIRED_ARGUMENT, 0, HINIC3_HELP_QUEUE_OPT},
     {"-a",        REQUIRED_ARGUMENT, 0, HINIC3_ALL_QUEUE_OPT},
-    {"-all",     REQUIRED_ARGUMENT, 0, HINIC3_ALL_QUEUE_OPT},
+    {"-all",      REQUIRED_ARGUMENT, 0, HINIC3_ALL_QUEUE_OPT},
     {"-p",        OPTIONAL_ARGUMENT, 0, HINIC3_PORT_QUEUE_OPT},
     {"-port",     OPTIONAL_ARGUMENT, 0, HINIC3_PORT_QUEUE_OPT},
     {"-v",        OPTIONAL_ARGUMENT, 0, HINIC3_VIRTUAL_QUEUE_OPT},

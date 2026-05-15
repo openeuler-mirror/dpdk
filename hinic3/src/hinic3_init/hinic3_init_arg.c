@@ -329,7 +329,7 @@ struct hinic3_init_arg init_arg_combd_standard_dpu_virt = {
     .support_hardware_flow_age = true,
     .virtio_queue_depth = 1024,
     .support_vlan_tci = true,
-    .support_payload_capture = false,
+    .support_payload_capture = true,
 };
 
 struct hinic3_init_arg init_arg_combd_standard_dpu_metal = {
@@ -370,7 +370,7 @@ struct hinic3_init_arg init_arg_combd_standard_dpu_metal = {
     .support_hardware_flow_age = true,
     .virtio_queue_depth = 1024,
     .support_vlan_tci = true,
-    .support_payload_capture = false,
+    .support_payload_capture = true,
 };
 
  

@@ -79,6 +79,12 @@ enum {
     ENPCAP_QUERY_OPT,
 };
 
+enum hinic3_pcap_mode {
+    FULLY_CAPTURE = 0,
+    LIMITED_CAPTURE = 1,
+    ONLY_HEADER = 2,
+};
+
 enum PCAP_CPU_USAGE_TYPE {
     PCAP_CPU_HIGH,
     PCAP_CPU_LOW
@@ -283,6 +289,8 @@ struct pcap_task_mgr_t* pcap_get_task_mgr(void);
 void pcap_port_tasks_get(struct pcap_task_batch *task_batch, struct pcap_port_t *port_mirror);
 int pcap_port_tasks_count_no_lock(uint32_t port_no);
 int pcap_port_info_get_by_name(const char *port_name, struct pcap_port_t *port_info, struct ds *ds);
+void pcap_mode_set(enum hinic3_pcap_mode pcap_mode);
+enum hinic3_pcap_mode pcap_mode_get(void);
 void pcap_cpu_usage_set(enum PCAP_CPU_USAGE_TYPE value);
 enum PCAP_CPU_USAGE_TYPE pcap_cpu_usage_get(void);
 int pcap_switch_get(void);
