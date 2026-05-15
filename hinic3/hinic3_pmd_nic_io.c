@@ -31,7 +31,7 @@
 #include "hinic3_pmd_rx.h"
 #include "hinic3_pmd_ethdev.h"
 
-#define HINIC3_DEAULT_TX_CI_PENDING_LIMIT	40
+#define HINIC3_DEAULT_TX_CI_PENDING_LIMIT	2
 #define HINIC3_DEAULT_TX_CI_COALESCING_TIME	2
 
 #define CI_IDX_HIGH_SHIFH				12
@@ -472,8 +472,8 @@ void hinic3_get_func_rx_buf_size(void *dev)
 	nic_dev->rx_buff_len = buf_size;
 }
 
-#define HINIC3_RX_CQE_TIMER_LOOP 		15
-#define HINIC3_RX_CQE_COALESCE_NUM		63
+#define HINIC3_RX_CQE_TIMER_LOOP 		8
+#define HINIC3_RX_CQE_COALESCE_NUM		7
 
 int hinic3_init_rq_cqe_ctxts(struct hinic3_nic_dev *nic_dev)
 {

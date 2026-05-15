@@ -436,6 +436,8 @@ struct hinic3_rxq {
 	u16 next_to_update;
 	u16 port_id;
 
+	bool prefetch_flag;
+
 	struct rte_eth_hairpin_conf hairpin_conf;
 	bool is_hairpin;
 
@@ -454,6 +456,7 @@ struct hinic3_rxq {
 
 	const struct rte_memzone *ci_mz;
 	struct hinic3_rq_ci_wb *rq_ci;
+	u16 hw_cons_idx;
 	rte_iova_t rq_ci_paddr;
 
 	const struct rte_memzone *cqe_mz;
