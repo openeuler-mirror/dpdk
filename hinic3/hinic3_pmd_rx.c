@@ -899,10 +899,26 @@ int hinic3_poll_integrated_cqe_rq_empty(struct hinic3_rxq *rxq)
 	struct hinic3_rq_ci_wb rq_ci;
 	u16 sw_ci;
 	u16 hw_ci;
+	u16 sw_pi;
+        unsigned long timeout;
 
 	sw_ci = hinic3_get_rq_local_ci(rxq);
+	sw_pi = hinic3_get_rq_local_pi(rxq);
 	rq_ci.dw1.value = hinic3_hw_cpu32(__atomic_load_n(&rxq->rq_ci->dw1.value, __ATOMIC_ACQUIRE));
 	hw_ci = rq_ci.dw1.bs.hw_ci;
+
+        timeout = msecs_to_jiffies(HINIC3_FLUSH_QUEUE_TIMEOUT) + jiffies;
+        do {
+                rq_ci.dw1.value = hinic3_hw_cpu32(__atomic_load_n(&rxq->rq_ci->dw1.value, __ATOMIC_ACQUIRE));
+                hw_ci = rq_ci.dw1.bs.hw_ci;
+                if (sw_pi == hw_ci)
+                        break;
+
+                rte_delay_us(1);
+        } while (time_before(jiffies, timeout));
+
+        if (sw_pi != hw_ci)
+                return -EFAULT;
 
 	while (sw_ci != hw_ci) {
 		rx_info = &rxq->rx_info[sw_ci];
@@ -1352,10 +1368,12 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 	u16 sw_ci, rx_buf_len, pkts = 0;
 	u32 pkt_len;
 	u64 rx_bytes = 0;
+
 #ifdef HINIC3_XSTAT_PROF_RX
 	uint64_t t1 = rte_get_tsc_cycles();
 	uint64_t t2;
 #endif
+
 	if (((rte_get_timer_cycles() - rxq->rxq_stats.tsc) < rxq->wait_time_cycle) &&
 	    rxq->rxq_stats.empty >= HINIC3_RX_EMPTY_THRESHOLD)
 		goto out;
