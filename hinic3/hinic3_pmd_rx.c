@@ -899,10 +899,26 @@ int hinic3_poll_integrated_cqe_rq_empty(struct hinic3_rxq *rxq)
 	struct hinic3_rq_ci_wb rq_ci;
 	u16 sw_ci;
 	u16 hw_ci;
+	u16 sw_pi;
+        unsigned long timeout;
 
 	sw_ci = hinic3_get_rq_local_ci(rxq);
+	sw_pi = hinic3_get_rq_local_pi(rxq);
 	rq_ci.dw1.value = hinic3_hw_cpu32(__atomic_load_n(&rxq->rq_ci->dw1.value, __ATOMIC_ACQUIRE));
 	hw_ci = rq_ci.dw1.bs.hw_ci;
+
+        timeout = msecs_to_jiffies(HINIC3_FLUSH_QUEUE_TIMEOUT) + jiffies;
+        do {
+                rq_ci.dw1.value = hinic3_hw_cpu32(__atomic_load_n(&rxq->rq_ci->dw1.value, __ATOMIC_ACQUIRE));
+                hw_ci = rq_ci.dw1.bs.hw_ci;
+                if (sw_pi == hw_ci)
+                        break;
+
+                rte_delay_us(1);
+        } while (time_before(jiffies, timeout));
+
+        if (sw_pi != hw_ci)
+                return -EFAULT;
 
 	while (sw_ci != hw_ci) {
 		rx_info = &rxq->rx_info[sw_ci];
@@ -1315,15 +1331,20 @@ bool rx_integrated_cqe_done(struct hinic3_rxq *rxq, volatile struct hinic3_rq_cq
 {
 	struct hinic3_rq_ci_wb rq_ci;
 	struct rte_mbuf *rxm = NULL;
-	uint16_t sw_ci, hw_ci;
+	uint16_t sw_ci;
 
 	sw_ci = hinic3_get_rq_local_ci(rxq);
-	rq_ci.dw1.value = hinic3_hw_cpu32(__atomic_load_n(&rxq->rq_ci->dw1.value, __ATOMIC_ACQUIRE));
-	hw_ci = rq_ci.dw1.bs.hw_ci;
 
-	if (hw_ci == sw_ci)
+        /* Avoid excessive CI memory access */
+        if (sw_ci == rxq->hw_cons_idx) {
+                rq_ci.dw1.value = hinic3_hw_cpu32(__atomic_load_n(&rxq->rq_ci->dw1.value, __ATOMIC_ACQUIRE));
+                rxq->hw_cons_idx = rq_ci.dw1.bs.hw_ci;
+        }
+
+        if (sw_ci == rxq->hw_cons_idx)
 		return false;
 
+        rxq->prefetch_flag = false;
 	rxm = rxq->rx_info[sw_ci].mbuf;
 #ifdef DPDK_21_11
 	*rx_cqe = (struct hinic3_rq_cqe *)rte_mbuf_data_addr_default(rxm);
@@ -1349,20 +1370,28 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 	volatile struct hinic3_rq_cqe *rx_cqe = NULL;
 	struct hinic3_cqe_info cqe_info = {0};
 	struct rte_mbuf *rxm = NULL;
+        struct rte_mbuf *prefetch_mbuf = NULL;
 	u16 sw_ci, rx_buf_len, pkts = 0;
+        u16 hw_ci;
+        u16 idx, pos;
+        u16 nb_prefetch = 0;
 	u32 pkt_len;
 	u64 rx_bytes = 0;
+
 #ifdef HINIC3_XSTAT_PROF_RX
 	uint64_t t1 = rte_get_tsc_cycles();
 	uint64_t t2;
 #endif
+
 	if (((rte_get_timer_cycles() - rxq->rxq_stats.tsc) < rxq->wait_time_cycle) &&
 	    rxq->rxq_stats.empty >= HINIC3_RX_EMPTY_THRESHOLD)
 		goto out;
 
 	sw_ci = hinic3_get_rq_local_ci(rxq);
+        rxq->hw_cons_idx = sw_ci;
 
-	while (pkts < nb_pkts) {
+	rxq->prefetch_flag = false;
+        while (pkts < nb_pkts) {
 		if (!nic_dev->tx_rx_ops.nic_rx_cqe_done(rxq, &rx_cqe)) {
 			rxq->rxq_stats.empty++;
 			break;
@@ -1380,12 +1409,24 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 		rx_info = &rxq->rx_info[sw_ci];
 		rxm = rx_info->mbuf;
 
-		/* 1. Next ci point and prefetch. */
+                /* 1. Prefetch next (hw_ci - sw_ci) cqe */
+                if (rxq->prefetch_flag == false) {
+                        hw_ci = rxq->hw_cons_idx;
+                        idx = sw_ci;
+                        while(idx != hw_ci && nb_prefetch++ < nb_pkts) {
+                                pos = idx & rxq->q_mask;
+                                prefetch_mbuf = rxq->rx_info[pos].mbuf;
+
+                                rte_prefetch0(prefetch_mbuf);
+                                rte_prefetch0(rte_mbuf_buf_addr((prefetch_mbuf), prefetch_mbuf->pool) + RTE_PKTMBUF_HEADROOM);
+                                idx++;
+                        }
+                        rxq->prefetch_flag = true;
+                }
+
+		/* 2. Next ci point */
 		sw_ci++;
 		sw_ci &= rxq->q_mask;
-
-		/* 2. Prefetch next mbuf first 64B. */
-		rte_prefetch0(rxq->rx_info[sw_ci].mbuf);
 
 		/* 3. Jumbo frame process */
 		if  (rte_eth_devices[rxq->port_id].data->scattered_rx) {
@@ -1435,6 +1476,8 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 
 		rx_bytes += pkt_len;
 		rx_pkts[pkts++] = rxm;
+
+                hinic3_rearm_rxq_mbuf(rxq);
 	}
 
 	if (pkts) {

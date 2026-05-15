@@ -30,6 +30,8 @@
 #define HINIC3_TX_OUTER_CHECKSUM_FLAG_NO_SET    0
 #define MAX_TSO_NUM_FRAG 1024
 
+#define HINIC3_MAX_TX_FREE_LOOP 1000000
+
 #define HINIC3_TX_OFFLOAD_MASK (	\
 		HINIC3_TX_CKSUM_OFFLOAD_MASK | \
 		HINIC3_PKT_TX_VLAN_PKT | \
@@ -1363,6 +1365,7 @@ hinic3_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
 	u64 tx_bytes = 0;
 	u16 free_wqebb_cnt, nb_tx;
 	u16 bifur_mode = txq->nic_dev->hwdev->bifur_mode;
+	u64 tx_free_loop = 0;
 	int err;
 
 #ifdef HINIC3_XSTAT_PROF_TX
@@ -1403,13 +1406,13 @@ hinic3_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
 		}
 
 		free_wqebb_cnt = hinic3_get_sq_free_wqebbs(txq);
-		if (unlikely(wqe_info.wqebb_cnt > free_wqebb_cnt)) {
-			/* Reclaim again. */
+		while (wqe_info.wqebb_cnt > free_wqebb_cnt) {
 			hinic3_xmit_mbuf_cleanup(txq, free_cnt);
 			free_wqebb_cnt = hinic3_get_sq_free_wqebbs(txq);
-			if (unlikely(wqe_info.wqebb_cnt > free_wqebb_cnt)) {
+
+			if ((tx_free_loop++) > HINIC3_MAX_TX_FREE_LOOP) {
 				txq->txq_stats.tx_busy += (nb_pkts - nb_tx);
-				break;
+				goto end;
 			}
 		}
 
@@ -1449,6 +1452,7 @@ hinic3_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
 		tx_bytes += mbuf_pkt->pkt_len;
 	}
 
+end:
 	/* Update txq stats. */
 	if (nb_tx) {
 		hinic3_write_db(txq->db_addr, bifur_mode != HINIC3_BIFUR_MODE_QPOOL ? txq->q_id : txq->local_qid, (int)(txq->cos),
