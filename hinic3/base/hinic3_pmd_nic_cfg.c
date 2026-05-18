@@ -420,6 +420,7 @@ int hinic3_set_vport_enable(void *hwdev, bool enable)
 	struct hinic3_vport_state en_state;
 	u16 out_size = sizeof(en_state);
 	int err;
+	struct hinic3_nic_dev *nic_dev = (struct hinic3_nic_dev*)((struct hinic3_hwdev *)hwdev)->dev_handle;
 
 	if (!hwdev)
 		return -EINVAL;
@@ -432,6 +433,8 @@ int hinic3_set_vport_enable(void *hwdev, bool enable)
 	memset(&en_state, 0, sizeof(en_state));
 	en_state.func_id = hinic3_global_func_id(hwdev);
 	en_state.state = enable ? 1 : 0;
+	en_state.num_qps = nic_dev->num_rqs;
+	en_state.rx_compact_wqe_en = HINIC3_SUPPORT_RX_SW_COMPACT_CQE(nic_dev);
 
 	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_SET_VPORT_ENABLE,
 				     &en_state, sizeof(en_state),
@@ -2775,4 +2778,13 @@ int hinic3_qinfo_type_init(const char *dev_file)
 	g_qinfo_type = HINIC3_QINFO_TYPE_NORMAL;
 
 	return 0;
+}
+
+u64 hinic3_get_driver_feature(void *dev)
+{
+	struct hinic3_nic_dev *nic_dev = NULL;
+
+	nic_dev = (struct hinic3_nic_dev *)dev;
+
+	return nic_dev->feature_cap;
 }

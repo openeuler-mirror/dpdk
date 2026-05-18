@@ -30,6 +30,7 @@
 #include "base/hinic3_pmd_nic_event.h"
 #include "base/hinic3_pmd_nic_cfg.h"
 #include "mml/hinic3_pmd_mml_lib.h"
+#include "stn/hinic3_stn_cmdq.h"
 #include "hinic3_pmd_nic_io.h"
 #include "hinic3_pmd_tx.h"
 #include "hinic3_pmd_rx.h"
@@ -49,9 +50,11 @@
 #define HINIC3_DEFAULT_RX_FREE_THRESH	32
 #define HINIC3_DEFAULT_TX_FREE_THRESH	32
 
-#define HINIC3_RX_WAIT_CYCLE_THRESH	500
+#define HINIC3_RX_WAIT_CYCLE_THRESH	150
 
 #define HINIC3_FEC_CAPA_NUM_PER_SPEED	1
+
+#define RQ_WQE_TYPE_PATH "/sys/module/hinic5/parameters/rq_wqe_type"
 
 /*
  * Vlan_id is a 12 bit number. The VFTA array is actually a 4096 bit array,
@@ -86,6 +89,10 @@ static const struct rte_pci_id pci_id_hinic3_map[] = {
 	{RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI, HINIC3_DEV_ID_SP620)},
 	{RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI, HINIC3_DEV_ID_VF_SP620)},
 	{RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI, HINIC3_DEV_ID_SP920)},
+
+	{RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI, HINIC3_DEV_ID_SP560)},
+	{RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI, HINIC3_DEV_ID_VF_SP560)},
+	{RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI, HINIC3_DEV_ID_HYPER_VF_SP560)},
 
 	{RTE_PCI_DEVICE(PCI_VENDOR_ID_BP1, HINIC3_DEV_ID_SP620)},
 	{RTE_PCI_DEVICE(PCI_VENDOR_ID_BP1, HINIC3_DEV_ID_VF_SP620)},
@@ -933,12 +940,14 @@ hinic3_rx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_rxq *rxq,
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_hwdev *hwdev = nic_dev->hwdev;
 	const struct rte_memzone *rq_mz = NULL;
-	const struct rte_memzone *cqe_mz = NULL;
+	const struct rte_memzone *cqe_mz = NULL; /**< normal cqe */
+	const struct rte_memzone *ci_mz = NULL; /**< compact cqe */
 	const struct rte_memzone *pi_mz = NULL;
 	u32 queue_buf_size;
 	void *db_addr = NULL;
 	int wqe_count;
 	int err;
+	int ci_mz_size = sizeof(*rxq->rq_ci), ci_mz_align = RTE_CACHE_LINE_SIZE;
 
 	if (IS_QPOOL_MODE()) {
 		/* Get user queue */
@@ -994,28 +1003,44 @@ hinic3_rx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_rxq *rxq,
 		goto alloc_rx_info_fail;
 	}
 
-	cqe_mz = hinic3_dma_zone_reserve(dev, "hinic3_cqe_mz", qid,
-					 rxq->q_depth * sizeof(*rxq->rx_cqe),
-					 RTE_CACHE_LINE_SIZE, (int)socket_id);
-	if (!cqe_mz) {
-		PMD_DRV_LOG(ERR, "Allocate cqe mem zone failed, dev_name: %s",
-			    dev->data->name);
-		err = -ENOMEM;
-		goto alloc_cqe_ci_mz_fail;
-	}
-	memset(cqe_mz->addr, 0, rxq->q_depth * sizeof(*rxq->rx_cqe));
-	rxq->cqe_mz = cqe_mz;
-	rxq->cqe_start_paddr = cqe_mz->iova;
-	rxq->cqe_start_vaddr = cqe_mz->addr;
-	rxq->rx_cqe = (struct hinic3_rq_cqe *)rxq->cqe_start_vaddr;
+	if (HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev) ||
+	    HINIC3_SUPPORT_RX_SW_COMPACT_CQE(nic_dev)) {
+		ci_mz = hinic3_dma_zone_reserve(dev, "hinic3_ci_mz", qid,
+						ci_mz_size, ci_mz_align, (int)socket_id);
 
-	/* step5 fill cqe dma addr*/
-	wqe_count = hinic3_rx_fill_wqe(rxq);
-	if (wqe_count != rxq->q_depth) {
-		PMD_DRV_LOG(ERR, "Fill rx wqe failed, wqe_count: %d, dev_name: %s",
-			    wqe_count, dev->data->name);
-		err = -ENOMEM;
-		goto fill_rx_wqe_fail;
+		if (!ci_mz) {
+			PMD_DRV_LOG(ERR, "Allocate ci mem zone failed, dev_name: %s", dev->data->name);
+			err = -ENOMEM;
+			goto alloc_cqe_ci_mz_fail;
+		}
+
+		memset(ci_mz->addr, 0, sizeof(*rxq->rq_ci));
+		rxq->rq_ci = (struct hinic3_rq_ci_wb *)ci_mz->addr;
+		rxq->rq_ci_paddr = ci_mz->iova;
+	} else {
+		cqe_mz = hinic3_dma_zone_reserve(dev, "hinic3_cqe_mz", qid,
+						rxq->q_depth * sizeof(*rxq->rx_cqe),
+						RTE_CACHE_LINE_SIZE, (int)socket_id);
+		if (!cqe_mz) {
+			PMD_DRV_LOG(ERR, "Allocate cqe mem zone failed, dev_name: %s",
+				dev->data->name);
+			err = -ENOMEM;
+			goto alloc_cqe_ci_mz_fail;
+		}
+		memset(cqe_mz->addr, 0, rxq->q_depth * sizeof(*rxq->rx_cqe));
+		rxq->cqe_mz = cqe_mz;
+		rxq->cqe_start_paddr = cqe_mz->iova;
+		rxq->cqe_start_vaddr = cqe_mz->addr;
+		rxq->rx_cqe = (struct hinic3_rq_cqe *)rxq->cqe_start_vaddr;
+
+		/* step5 fill cqe dma addr*/
+		wqe_count = hinic3_rx_fill_wqe(rxq);
+		if (wqe_count != rxq->q_depth) {
+			PMD_DRV_LOG(ERR, "Fill rx wqe failed, wqe_count: %d, dev_name: %s",
+				wqe_count, dev->data->name);
+			err = -ENOMEM;
+			goto fill_rx_wqe_fail;
+		}
 	}
 
 	return 0;
@@ -1166,10 +1191,17 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 		goto adjust_bufsize_fail;
 	}
 
-	if ((buf_size >= HINIC3_RX_BUF_SIZE_4K) && (buf_size < HINIC3_RX_BUF_SIZE_16K))
-		rxq->wqe_type = HINIC3_EXTEND_RQ_WQE;
-	else
-		rxq->wqe_type = HINIC3_NORMAL_RQ_WQE;
+
+	if (HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev) ||
+	    HINIC3_SUPPORT_RX_SW_COMPACT_CQE(nic_dev)) {
+		/* Default rx wqe type set to compact wqe if NIC supports compact rx CQE */
+		rxq->wqe_type = HINIC3_COMPACT_RQ_WQE;
+	} else {
+		if ((buf_size >= HINIC3_RX_BUF_SIZE_4K) && (buf_size < HINIC3_RX_BUF_SIZE_16K))
+			rxq->wqe_type = HINIC3_EXTEND_RQ_WQE;
+		else
+			rxq->wqe_type = HINIC3_NORMAL_RQ_WQE;
+	}
 
 	rxq->wqebb_shift = HINIC3_RQ_WQEBB_SHIFT + rxq->wqe_type;
 	rxq->wqebb_size = (u16)BIT(rxq->wqebb_shift);
@@ -1409,6 +1441,8 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	else
 		txq->cos = nic_dev->default_cos;
 
+	txq->tx_wqe_compact_task = HINIC3_SUPPORT_TX_WQE_COMPACT_TASK(nic_dev);
+
 	err = hinic3_tx_queue_dma_create(dev, txq, qid, socket_id);
 	if (err)
 		return -ENOMEM;
@@ -1417,7 +1451,7 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	dev->data->tx_queues[qid] = txq;
 
 	return 0;
-	
+
 get_queue_depth_fail:
 	nic_dev->txqs[qid] = NULL;
 	rte_free(txq);
@@ -2136,7 +2170,6 @@ static void hinic3_print_hairpin_map(struct rte_eth_dev *dev)
 static int hinic3_dev_start_qpool(struct rte_eth_dev *eth_dev)
 {
 	struct hinic3_nic_dev *nic_dev = NULL;
-	u64 nic_features;
 	struct hinic3_rxq *rxq = NULL;
 	int i;
 	int err;
@@ -2146,13 +2179,6 @@ static int hinic3_dev_start_qpool(struct rte_eth_dev *eth_dev)
 	err = hinic3_get_kernel_mtu(eth_dev);
 	if (err)
 		return err;
-
-	nic_features = hinic3_get_driver_feature(nic_dev);
-	/* You can update the features supported by the driver according to the
-	 * scenario here
-	 */
-	nic_features &= DEFAULT_DRV_FEATURE;
-	hinic3_update_driver_feature(nic_dev, nic_features);
 
 	err = hinic3_set_feature_to_hw(nic_dev->hwdev, &nic_dev->feature_cap, 1);
 	if (err) {
@@ -2164,6 +2190,9 @@ static int hinic3_dev_start_qpool(struct rte_eth_dev *eth_dev)
 	/* reset rx and tx queue */
 	hinic3_reset_rx_queue(eth_dev);
 	hinic3_reset_tx_queue(eth_dev);
+
+	/* Init txq and rxq context */
+	hinic3_flush_assign_qps_res(nic_dev->hwdev);
 
 	err = hinic3_init_qp_ctxts(nic_dev);
 	if (err) {
@@ -2244,6 +2273,13 @@ static int hinic3_dev_start(struct rte_eth_dev *eth_dev)
 	}
 	hinic3_update_msix_info(nic_dev->hwdev->hwif);
 
+	nic_features = hinic3_get_driver_feature(nic_dev);
+	/* You can update the features supported by the driver according to the
+	 * scenario here
+	 */
+	nic_features &= DEFAULT_DRV_FEATURE;
+	hinic3_update_driver_feature(nic_dev, nic_features);
+
 	if (IS_QPOOL_MODE()) {
  		return hinic3_dev_start_qpool(eth_dev);
  	}
@@ -2271,13 +2307,6 @@ static int hinic3_dev_start(struct rte_eth_dev *eth_dev)
 			    eth_dev->data->name);
 		goto init_func_tbl_fail;
 	}
-
-	nic_features = hinic3_get_driver_feature(nic_dev);
-	/* You can update the features supported by the driver according to the
-	 * scenario here
-	 */
-	nic_features &= DEFAULT_DRV_FEATURE;
-	hinic3_update_driver_feature(nic_dev, nic_features);
 
 	err = hinic3_set_feature_to_hw(nic_dev->hwdev, &nic_dev->feature_cap, 1);
 	if (err) {
@@ -2447,7 +2476,7 @@ static void hinic3_dev_stop(struct rte_eth_dev *dev)
 	}
 
 	if (nic_dev->dcb->dcb_on) {
-		if (nic_dev->feature_cap == SP600_NIC_FEATURE ||
+		if (IS_SP600_NIC_FEATURE(nic_dev) ||
 		    !HINIC3_IS_VF(nic_dev->hwdev))
 			hinic3_sync_dcb_state(nic_dev->hwdev, 1, 0);
 	}
@@ -4452,6 +4481,25 @@ static int hinic3_check_fw_version(struct rte_eth_dev *eth_dev)
 	return 0;
 }
 
+static void hinic3_nic_tx_rx_ops_init(struct hinic3_nic_dev *nic_dev)
+{
+	if (HINIC3_SUPPORT_TX_WQE_COMPACT_TASK(nic_dev))
+		nic_dev->tx_rx_ops.nic_tx_set_wqe_offload = hinic3_tx_set_compact_task_offload;
+	else
+		nic_dev->tx_rx_ops.nic_tx_set_wqe_offload = hinic3_tx_set_normal_task_offload;
+
+	if (HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev) ||
+	    HINIC3_SUPPORT_RX_SW_COMPACT_CQE(nic_dev)) {
+		nic_dev->tx_rx_ops.nic_rx_get_cqe_info = hinic3_rx_get_compact_cqe_info;
+		nic_dev->tx_rx_ops.nic_rx_cqe_done = rx_integrated_cqe_done;
+		nic_dev->tx_rx_ops.nic_rx_poll_rq_empty = hinic3_poll_integrated_cqe_rq_empty;
+	} else {
+		nic_dev->tx_rx_ops.nic_rx_get_cqe_info = hinic3_rx_get_cqe_info;
+		nic_dev->tx_rx_ops.nic_rx_cqe_done = rx_separate_cqe_done;
+		nic_dev->tx_rx_ops.nic_rx_poll_rq_empty = hinic3_poll_rq_empty;
+	}
+}
+
 static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 {
 	struct hinic3_tcam_info *tcam_info = NULL;
@@ -4587,6 +4635,9 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 			    eth_dev->data->name);
 		goto get_cap_fail;
 	}
+
+	nic_dev->cmdq_ops = hinic3_nic_cmdq_get_stn_ops();
+	hinic3_nic_tx_rx_ops_init(nic_dev);
 
 	err = hinic3_init_sw_rxtxqs(nic_dev);
 	if (err) {
@@ -4726,6 +4777,7 @@ static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev)
 	struct hinic3_tcam_info *tcam_info = NULL;
 	struct hinic3_nic_dev *nic_dev = NULL;
 	struct rte_pci_device *pci_dev = NULL;
+	unsigned long compact_cqe = 0;
 	int err;
 
 	pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
@@ -4849,6 +4901,24 @@ static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev)
 	else
 		eth_dev->dev_ops = &hinic3_pmd_ops;
 
+	err = hinic3_get_feature_from_hw(nic_dev->hwdev, &nic_dev->feature_cap, 1);
+	if (err) {
+		PMD_DRV_LOG(ERR, "Get nic feature from hardware failed, dev_name: %s",
+			    eth_dev->data->name);
+		goto get_cap_fail;
+	}
+
+	if (!IS_SP600_NIC_FEATURE(nic_dev)) {
+		if (hinic3_parse_sysfs_value(RQ_WQE_TYPE_PATH, &compact_cqe) != 0)
+			goto get_cap_fail;
+
+		if (compact_cqe == 1)
+			nic_dev->feature_cap &= ~(NIC_F_RX_SW_COMPACT_CQE | NIC_F_RX_HW_COMPACT_CQE);
+	}
+
+	nic_dev->cmdq_ops = hinic3_nic_cmdq_get_stn_ops();
+	hinic3_nic_tx_rx_ops_init(nic_dev);
+
 	err = hinic3_init_sw_rxtxqs(nic_dev);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Init sw rxqs or txqs failed, dev_name: %s",
@@ -4931,6 +5001,7 @@ set_default_feature_fail:
 init_sw_rxtxqs_fail:
 	hinic3_free_nic_hwdev(nic_dev->hwdev);
 
+get_cap_fail:
 alloc_template_fail:
 init_hwdev_fail:
 link_state_err:

@@ -155,6 +155,31 @@ struct hinic3_rq_ctxt {
 	u32 wq_block_pfn_lo;
 };
 
+struct hinic3_rq_cqe_ctx {
+	struct mgmt_msg_head msg_head;
+
+	u8 cqe_type;
+	u8 rq_id;
+	u8 threshold_cqe_num;
+	u8 rsvd1;
+
+	u16 msix_entry_idx;
+	u16 rsvd2;
+
+	u32 ci_addr_hi;
+	u32 ci_addr_lo;
+
+	u16 timer_loop;
+	u16 rsvd3;
+};
+
+struct hinic3_rq_enable {
+	struct mgmt_msg_head msg_head;
+
+	u32 rq_id;
+	u8 rq_enable;
+	u8 rsvd[3];
+};
 
 /* Prepare cmd to clean tso/lro space */
 typedef uint8_t  (*prepare_cmd_buf_clean_tso_lro_space_t)(struct hinic3_nic_dev *nic_dev,
@@ -281,12 +306,37 @@ void hinic3_get_func_rx_buf_size(void *dev);
 int hinic3_init_qp_ctxts(void *dev);
 
 /**
+ * Initialize RQ integrated CQE context
+ *
+ * @param[in] nic_dev
+ * Pointer to ethernet device structure.
+ *
+ * @return
+ * 0 on success, non-zero on failure.
+ */
+int hinic3_init_rq_cqe_ctxts(struct hinic3_nic_dev *nic_dev);
+
+/**
  * Free queue pair context
  *
  * @param[in] hwdev
  *   Device pointer to hwdev
  */
 void hinic3_free_qp_ctxts(void *hwdev);
+
+/**
+ * Set RQ disable or enable
+ *
+ * @param[in] nic_dev
+ * Pointer to ethernet device structure.
+ * @param[in] q_id
+ * Receive queue id.
+ * @param[in] enable
+ *   1: enable  0: disable
+ * @return
+ * 0 on success, non-zero on failure.
+ */
+int hinic3_set_rq_enable(struct hinic3_nic_dev *nic_dev, u16 q_id, bool enable);
 
 /**
  * Update service feature driver supported
@@ -299,18 +349,6 @@ void hinic3_free_qp_ctxts(void *hwdev);
  * @retval non-zero: Failure
  */
 void hinic3_update_driver_feature(void *dev, u64 s_feature);
-
-/**
- * Get service feature driver supported
- *
- * @param[in] dev
- *   Device pointer to nic device
- * @param[out] s_feature
- *   s_feature driver supported
- * @retval zero: Success
- * @retval non-zero: Failure
- */
-u64 hinic3_get_driver_feature(void *dev);
 
 /**
  * Prepare rq context
