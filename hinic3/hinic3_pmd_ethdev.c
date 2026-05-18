@@ -52,7 +52,7 @@
 
 #define HINIC3_RX_WAIT_CYCLE_THRESH	150
 
-#define RQ_WQE_TYPE_PATH "/sys/module/hinic3/parameters/rq_wqe_type"
+#define RQ_WQE_TYPE_PATH "/sys/module/hinic5/parameters/rq_wqe_type"
 
 /*
  * Vlan_id is a 12 bit number. The VFTA array is actually a 4096 bit array,
