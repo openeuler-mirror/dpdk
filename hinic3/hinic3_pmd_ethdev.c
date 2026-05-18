@@ -542,12 +542,74 @@ void hinic3_dev_info_get(struct rte_eth_dev_info *info, struct hinic3_nic_dev *n
 
 static int hinic3_get_link_state_qpool(struct hinic3_nic_dev *nic_dev)
 {
-	return 0;
+	struct drv_cmd_kernel_nic_data cfg_kernel_data;
+ 	struct msg_module msg_to_kernel;
+ 	int in_size, out_size, err;
+ 	
+ 	(void)memset(&msg_to_kernel, 0, sizeof(msg_to_kernel));
+ 	in_size = sizeof(cfg_kernel_data);
+ 	out_size = sizeof(cfg_kernel_data);
+ 	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NIC_DRIVER, GET_KERN_DEV_DATA,
+ 			in_size, out_size,
+ 			&cfg_kernel_data, &cfg_kernel_data);
+ 	
+ 	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
+ 	if (err < 0)
+ 		PMD_DRV_LOG(ERR, "Get kernel netdev state failed, err: %d.", err);
+ 	
+ 	if (cfg_kernel_data.netdev_state == 0)
+ 		err = -EIO;
+ 	
+ 	return err;
 }
 
 static int hinic3_get_kernel_mtu(struct rte_eth_dev *eth_dev)
 {
-	return 0;
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
+ 	struct drv_cmd_kernel_nic_data cfg_kernel_data  = { 0 };
+ 	struct msg_module msg_to_kernel = { 0 };
+ 	int err = 0;
+ 	
+ 	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NIC_DRIVER, GET_KERN_DEV_DATA,
+ 		       sizeof(cfg_kernel_data), sizeof(cfg_kernel_data),
+ 		       &cfg_kernel_data, &cfg_kernel_data);
+ 	
+ 	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
+ 	if (err < 0) {
+ 		PMD_DRV_LOG(WARNING, "Get kernel mtu failed");
+ 		return err;
+ 	}
+ 	
+ 	eth_dev->data->mtu = cfg_kernel_data.mtu;
+ 	
+ 	return err;
+}
+
+static int hinic3_verify_queue_depth(struct hinic3_nic_dev *nic_dev, u16 *q_depth, u16 type)
+{
+	struct drv_cmd_kernel_nic_data cfg_kernel_data  = { 0 };
+ 	struct msg_module msg_to_kernel = { 0 };
+ 	int err = 0;
+ 	
+ 	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NIC_DRIVER, GET_KERN_DEV_DATA,
+ 		       sizeof(cfg_kernel_data), sizeof(cfg_kernel_data),
+ 		       &cfg_kernel_data, &cfg_kernel_data);
+ 	
+ 	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
+ 	if (err < 0)
+ 		return err;
+ 	
+ 	if (type == HINIC3_VERIFY_RX_DEPTH && *q_depth != cfg_kernel_data.rx_q_depth) {
+ 		*q_depth = cfg_kernel_data.rx_q_depth;
+ 		PMD_DRV_LOG(WARNING, "[WARNING] Rxq depth adjusted to %d to match kernel", *q_depth);
+ 	}
+ 	
+ 	if (type == HINIC3_VERIFY_TX_DEPTH && *q_depth != cfg_kernel_data.tx_q_depth) {
+ 		*q_depth = cfg_kernel_data.tx_q_depth;
+ 		PMD_DRV_LOG(WARNING, "[WARNING] Txq depth adjusted to %d to match kernel", *q_depth);
+ 	}
+ 	
+ 	return err;
 }
 
 /**
@@ -607,6 +669,11 @@ static int hinic3_dev_set_link_up(struct rte_eth_dev *dev)
 	struct rte_eth_link link = {0};
 	int err;
 
+	if (IS_QPOOL_MODE()) {
+ 		PMD_DRV_LOG(WARNING, "Qpool mode not support set link up.");
+ 		return -EAGAIN;
+ 	}
+
 	/* Vport enable will set function valid in mpu.
 	   So dev start status need to be checked before vport enable.*/
 	if (hinic3_get_bit(HINIC3_DEV_START, &nic_dev->dev_status)) {
@@ -657,6 +724,11 @@ static int hinic3_dev_set_link_down(struct rte_eth_dev *dev)
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct rte_eth_link link = {0};
 	int err;
+
+	if (IS_QPOOL_MODE()) {
+ 	 	PMD_DRV_LOG(WARNING, "Qpool mode not support set link down.");
+ 	 	return -EAGAIN;
+ 	}
 
 	err = hinic3_set_vport_enable(nic_dev->hwdev, false);
 	if (err) {
@@ -1012,6 +1084,12 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 				qid, nb_desc, nic_dev->rxqs[0]->q_depth);	 
 			nb_desc = nic_dev->rxqs[0]->q_depth;
 		}
+	} else {
+		err = hinic3_verify_queue_depth(nic_dev, &nb_desc, HINIC3_VERIFY_RX_DEPTH);
+ 		if (err) {
+ 			PMD_DRV_LOG(ERR, "Get queue depth failed");
+ 			goto get_queue_depth_fail;
+ 		}
 	}
 
 	/* Queue depth must be power of 2, otherwise will be aligned up */
@@ -1109,6 +1187,7 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	return 0;
 
 adjust_bufsize_fail:
+get_queue_depth_fail:
 	rte_free(rxq);
 	nic_dev->rxqs[qid] = NULL;
 
@@ -1261,6 +1340,12 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 				qid, nb_desc, nic_dev->txqs[0]->q_depth);	 
 			nb_desc = nic_dev->txqs[0]->q_depth;
 		}
+	} else {
+		err = hinic3_verify_queue_depth(nic_dev, &nb_desc, HINIC3_VERIFY_TX_DEPTH);
+ 		if (err) {
+ 			PMD_DRV_LOG(ERR, "Get queue depth failed");
+ 			goto get_queue_depth_fail;
+ 		}	
 	}
 
 	/* Queue depth must be power of 2, otherwise will be aligned up */
@@ -1332,6 +1417,11 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	dev->data->tx_queues[qid] = txq;
 
 	return 0;
+	
+get_queue_depth_fail:
+	nic_dev->txqs[qid] = NULL;
+	rte_free(txq);
+	return err;
 }
 
 #ifndef DPDK_21_11
@@ -2558,6 +2648,11 @@ static int hinic3_dev_set_mtu(struct rte_eth_dev *dev, uint16_t mtu)
 	uint32_t frame_size = mtu + HINIC3_ETH_OVERHEAD;
 	int err = 0;
 
+	if (IS_QPOOL_MODE()) {
+ 	 	PMD_DRV_LOG(WARNING, "Qpool mode not support set mtu.");
+ 	 	return -EINVAL;
+ 	}
+
 	PMD_DRV_LOG(INFO, "Set port mtu, port_id: %d, mtu: %d, max_pkt_len: %d",
 		    dev->data->port_id, mtu, HINIC3_MTU_TO_PKTLEN(mtu));
 
@@ -2718,6 +2813,11 @@ static int hinic3_dev_allmulticast_enable(struct rte_eth_dev *dev)
 	u32 rx_mode;
 	int err;
 
+	if (IS_QPOOL_MODE()) {
+ 		PMD_DRV_LOG(WARNING, "Qpool mode not support set allmulticast enable.");
+ 		return -ENOTSUP;
+ 	}
+
 	err = hinic3_mutex_lock(&nic_dev->rx_mode_mutex);
 	if (err)
 		return err;
@@ -2755,6 +2855,12 @@ static int hinic3_dev_allmulticast_disable(struct rte_eth_dev *dev)
 	u32 rx_mode;
 	int err;
 
+	if (IS_QPOOL_MODE()) {
+ 		PMD_DRV_LOG(WARNING, "Qpool mode not support set allmulticast disable.");
+ 		return -ENOTSUP;
+ 	}
+
+
 	err = hinic3_mutex_lock(&nic_dev->rx_mode_mutex);
 	if (err)
 		return err;
@@ -2791,6 +2897,11 @@ static int hinic3_dev_promiscuous_enable(struct rte_eth_dev *dev)
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	u32 rx_mode;
 	int err;
+
+	if (IS_QPOOL_MODE()) {
+ 	 	PMD_DRV_LOG(WARNING, "Qpool mode not support set promiscuous enable.");
+ 	 	return -ENOTSUP;
+ 	}
 
 	if (!(nic_dev->feature_cap & NIC_F_PROMISC)) {
 		PMD_DRV_LOG(ERR, "nic_dev: %s, port_id: %d, do not support vf promisc: %" PRIu64 "",
@@ -2835,6 +2946,12 @@ static int hinic3_dev_promiscuous_disable(struct rte_eth_dev *dev)
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	u32 rx_mode;
 	int err;
+
+	if (IS_QPOOL_MODE()) {
+ 	 	PMD_DRV_LOG(WARNING, "Qpool mode not support set promiscuous disable.");
+ 	 	return -ENOTSUP;
+ 	}
+
 
 	if (!(nic_dev->feature_cap & NIC_F_PROMISC)) {
 		PMD_DRV_LOG(ERR, "nic_dev: %s, port_id: %d, do not support vf promisc: %" PRIu64 "",
@@ -2909,6 +3026,11 @@ static int hinic3_dev_flow_ctrl_set(struct rte_eth_dev *dev,
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct nic_pause_config nic_pause;
 	int err;
+
+	if (IS_QPOOL_MODE()) {
+ 	 	PMD_DRV_LOG(WARNING, "Qpool mode not support ctrl set.");
+ 	 	return -ENOTSUP;
+ 	}
 
 	err = hinic3_mutex_lock(&nic_dev->pause_mutuex);
 	if (err)
@@ -3699,6 +3821,11 @@ static void hinic3_mac_addr_remove(struct rte_eth_dev *dev, uint32_t index)
 	u16 func_id;
 	int err;
 
+	if (IS_QPOOL_MODE()) {
+ 	 	PMD_DRV_LOG(WARNING, "Qpool mode not support remove mac addr.");
+ 	 	return;
+ 	}
+
 	if (index >= HINIC3_MAX_UC_MAC_ADDRS) {
 		PMD_DRV_LOG(INFO, "Remove MAC index(%u) is out of range",
 			    index);
@@ -3737,6 +3864,11 @@ static int hinic3_mac_addr_add(struct rte_eth_dev *dev,
 	u16 func_id;
 	int err;
 
+	if (IS_QPOOL_MODE()) {
+ 	 	PMD_DRV_LOG(WARNING, "Qpool mode not support add mac addr.");
+ 	 	return -EINVAL;
+ 	}
+
 	if (!rte_is_valid_assigned_ether_addr(mac_addr)) {
 		PMD_DRV_LOG(ERR, "Add invalid MAC address");
 		return -EINVAL;
@@ -3768,6 +3900,12 @@ static void hinic3_delete_mc_addr_list(struct hinic3_nic_dev *nic_dev)
 {
 	u16 func_id;
 	u32 i;
+
+	if (IS_QPOOL_MODE()) {
+ 	 	PMD_DRV_LOG(WARNING, "Qpool mode not support set mac addr list.");
+ 	 	return;
+ 	}
+
 
 	func_id = hinic3_global_func_id(nic_dev->hwdev);
 

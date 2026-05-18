@@ -423,6 +423,11 @@ int hinic3_set_vport_enable(void *hwdev, bool enable)
 
 	if (!hwdev)
 		return -EINVAL;
+	
+	if (IS_QPOOL_MODE()) {
+		PMD_DRV_LOG(WARNING, "Qpool not support set vport enable");
+		return 0;
+	}
 
 	memset(&en_state, 0, sizeof(en_state));
 	en_state.func_id = hinic3_global_func_id(hwdev);
