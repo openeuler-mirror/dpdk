@@ -2118,8 +2118,9 @@ static int hinic3_dev_start(struct rte_eth_dev *eth_dev)
 	hinic3_reset_rx_queue(eth_dev);
 	hinic3_reset_tx_queue(eth_dev);
 
-	nic_dev->lro_en = (eth_dev->data->dev_conf.rxmode.offloads & DEV_RX_OFFLOAD_TCP_LRO) &
-			  (nic_dev->feature_cap & NIC_F_LRO) ? true : false;
+	nic_dev->lro_en = (eth_dev->data->dev_conf.rxmode.offloads & DEV_RX_OFFLOAD_TCP_LRO) &&
+			  (nic_dev->feature_cap & NIC_F_LRO);
+	PMD_DRV_LOG(INFO, "lro is %d.", nic_dev->lro_en);
 
 
 
