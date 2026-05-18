@@ -476,6 +476,11 @@ hinic3_dcb_rss_init(struct hinic3_nic_dev *nic_dev, u8 dcb_en)
 	u8 cos_map[NIC_DCB_UP_MAX] = {0};
 	u8 cfg_map[NIC_DCB_UP_MAX] = {0};
 
+	if (IS_QPOOL_MODE()) {
+		PMD_DRV_LOG(ERR, "Qpool mode not support DCB config");
+		return -EINVAL;
+	}
+
 	if (dcb_en) {
 		cos_num = hinic3_get_dev_user_cos_num(nic_dev);
 
@@ -524,10 +529,13 @@ hinic3_configure_dcb_hw(struct hinic3_nic_dev *nic_dev, u8 dcb_en)
 		return err;
 	}
 
-	err = hinic3_sync_dcb_state(nic_dev->hwdev, CMD_QOS_OP_SET, dcb_en);
-	if (err) {
-		PMD_DRV_LOG(ERR, "Set dcb state failed");
-		return err;
+	if(nic_dev->feature_cap == SP600_NIC_FEATURE ||
+	   !HINIC3_IS_VF(nic_dev->hwdev)) {
+		err = hinic3_sync_dcb_state(nic_dev->hwdev, CMD_QOS_OP_SET, dcb_en);
+		if (err) {
+			PMD_DRV_LOG(ERR, "Set dcb state failed");
+			return err;
+		}
 	}
 
 	hinic3_update_qp_cos_cfg(nic_dev, user_cos_num);

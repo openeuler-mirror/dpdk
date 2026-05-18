@@ -2,6 +2,8 @@
  * Copyright(c) 2019 Huawei Technologies Co., Ltd
  */
 
+#include <sys/ioctl.h>
+
 #include <rte_io.h>
 #include <rte_pci.h>
 #include <rte_bus_pci.h>
@@ -15,11 +17,13 @@
 #include "base/hinic3_compat.h"
 #include "base/hinic3_pmd_cmd.h"
 #include "base/hinic3_pmd_wq.h"
+#include "base/hinic3_pmd_mbox.h"
 #include "base/hinic3_pmd_mgmt.h"
 #include "base/hinic3_pmd_cmdq.h"
 #include "base/hinic3_pmd_hwdev.h"
 #include "base/hinic3_pmd_hw_comm.h"
 #include "base/hinic3_pmd_nic_cfg.h"
+#include "mml/hinic3_pmd_mml_lib.h"
 #include "hinic3_pmd_nic_io.h"
 #include "hinic3_pmd_tx.h"
 #include "hinic3_pmd_rx.h"
@@ -636,6 +640,148 @@ void hinic3_get_func_rx_buf_size(void *dev)
 	nic_dev->rx_buff_len = buf_size;
 }
 
+static int hinic3_cmd_modify_tx_queue_ctx(struct hinic3_nic_dev *nic_dev,
+					struct hinic3_sq_ctxt_block *sq_ctxt_block)
+{
+	struct msg_module msg_to_kernel = {0};
+	int err;
+
+	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NPU, 0,
+			sizeof(struct hinic3_sq_ctxt_block),
+			sizeof(struct hinic3_sq_ctxt_block),
+			sq_ctxt_block, sq_ctxt_block);
+	msg_to_kernel.npu_cmd.direct_resp = 1;
+	msg_to_kernel.npu_cmd.mod = HINIC3_MOD_L2NIC;
+	msg_to_kernel.npu_cmd.cmd = HINIC3_UCODE_CMD_MODIFY_QUEUE_CTX;
+	msg_to_kernel.npu_cmd.ack_type = HINIC3_ACK_TYPE_CMDQ;
+
+	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
+	if (err < 0)
+		PMD_DRV_LOG(ERR, "Modify tx queue ctx error: %d.", errno);
+	return err;
+}
+
+static int init_sq_ctxts_qpool(struct hinic3_nic_dev *nic_dev)
+{
+	struct hinic3_sq_ctxt_block *sq_ctxt_block = NULL;
+	struct hinic3_sq_ctxt *sq_ctxt = NULL;
+	struct hinic3_cmd_buf *cmd_buf = NULL;
+	struct hinic3_txq *sq = NULL;
+	u16 q_id, curr_id, max_ctxts, i;
+	int err = 0;
+
+	cmd_buf = hinic3_alloc_cmd_buf(nic_dev->hwdev);
+	if (!cmd_buf) {
+		PMD_DRV_LOG(ERR, "Allocate cmd buf for sq ctx failed.");
+		return -ENOMEM;
+	}
+
+	q_id = 0;
+	while (q_id < nic_dev->num_sqs) {
+		sq_ctxt_block = cmd_buf->buf;
+		sq_ctxt = sq_ctxt_block->sq_ctxt;
+
+		max_ctxts = (nic_dev->num_sqs - q_id) > HINIC3_Q_CTXT_MAX ?
+			     HINIC3_Q_CTXT_MAX : (nic_dev->num_sqs - q_id);
+
+		hinic3_qp_prepare_cmdq_header(&sq_ctxt_block->cmdq_hdr,
+					      HINIC3_QP_CTXT_TYPE_SQ,
+					      max_ctxts, nic_dev->txqs[q_id]->local_qid);
+
+		for (i = 0; i < max_ctxts; i++) {
+			curr_id = q_id + i;
+			sq = nic_dev->txqs[curr_id];
+			hinic3_sq_prepare_ctxt(sq, nic_dev->txqs[curr_id]->local_qid, &sq_ctxt[i]);
+		}
+
+		cmd_buf->size = SQ_CTXT_SIZE(max_ctxts);
+		rte_mb();
+
+		err = hinic3_cmd_modify_tx_queue_ctx(nic_dev, sq_ctxt_block);
+		if (err < 0) {
+			return err;
+		}
+
+		q_id += max_ctxts;
+	}
+
+	hinic3_free_cmd_buf(cmd_buf);
+	return err;
+}
+
+static int hinic3_cmd_modify_rx_queue_ctx(struct hinic3_rq_ctxt_block *rq_ctxt_block,
+					int fd)
+{
+	struct msg_module msg_to_kernel = { 0 };
+	int err;
+
+	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NPU, 0,
+			sizeof(struct hinic3_rq_ctxt_block),
+			sizeof(struct hinic3_rq_ctxt_block),
+			rq_ctxt_block, rq_ctxt_block);
+	msg_to_kernel.npu_cmd.direct_resp = 1;
+	msg_to_kernel.npu_cmd.mod = HINIC3_MOD_L2NIC;
+	msg_to_kernel.npu_cmd.cmd = HINIC3_UCODE_CMD_MODIFY_QUEUE_CTX;
+	msg_to_kernel.npu_cmd.ack_type = HINIC3_ACK_TYPE_CMDQ;
+
+	err = ioctl(fd, 0, &msg_to_kernel);
+	if (err < 0)
+		PMD_DRV_LOG(ERR, "Modify rx queue ctx error: %d.", err);
+	return err;
+}
+
+static int init_rq_ctxts_qpool(struct hinic3_nic_dev *nic_dev)
+{
+	struct hinic3_rq_ctxt_block *rq_ctxt_block = NULL;
+	struct hinic3_rq_ctxt *rq_ctxt = NULL;
+	struct hinic3_cmd_buf *cmd_buf = NULL;
+	struct hinic3_rxq *rq = NULL;
+	u16 q_id, curr_id, max_ctxts, i;
+	int err = 0;
+	int fd;
+
+	cmd_buf = hinic3_alloc_cmd_buf(nic_dev->hwdev);
+	if (!cmd_buf) {
+		PMD_DRV_LOG(ERR, "Allocate cmd buf for rq ctx failed");
+		return -ENOMEM;
+	}
+
+	fd = nic_dev->fd;
+
+	q_id = 0;
+	while (q_id < nic_dev->num_rqs) {
+		rq_ctxt_block = cmd_buf->buf;
+		rq_ctxt = rq_ctxt_block->rq_ctxt;
+
+		max_ctxts = (nic_dev->num_rqs - q_id) > HINIC3_Q_CTXT_MAX ?
+			    HINIC3_Q_CTXT_MAX : (nic_dev->num_rqs - q_id);
+
+		hinic3_qp_prepare_cmdq_header(&rq_ctxt_block->cmdq_hdr,
+					      HINIC3_QP_CTXT_TYPE_RQ, max_ctxts,
+					      nic_dev->rxqs[q_id]->local_qid);
+
+		for (i = 0; i < max_ctxts; i++) {
+			curr_id = q_id + i;
+			rq = nic_dev->rxqs[curr_id];
+			hinic3_rq_prepare_ctxt(rq, &rq_ctxt[i]);
+		}
+
+		cmd_buf->size = RQ_CTXT_SIZE(max_ctxts);
+		rte_mb();
+
+		err = hinic3_cmd_modify_rx_queue_ctx(rq_ctxt_block, fd);
+		if (err < 0) {
+			return err;
+		}
+
+		q_id += max_ctxts;
+	}
+
+	hinic3_free_cmd_buf(cmd_buf);
+	return err;
+}
+
+
 /* Init qps ctxt and set sq ci attr and arm all sq */
 int hinic3_init_qp_ctxts(void *dev)
 {
@@ -654,34 +800,48 @@ int hinic3_init_qp_ctxts(void *dev)
 	nic_dev = (struct hinic3_nic_dev *)dev;
 	hwdev = nic_dev->hwdev;
 
-	err = init_sq_ctxts(nic_dev);
-	if (err) {
-		PMD_DRV_LOG(ERR, "Init SQ ctxts failed");
-		return err;
-	}
+	if (IS_QPOOL_MODE()) {
+		err = init_sq_ctxts_qpool(nic_dev);
+		if (err) {
+			PMD_DRV_LOG(ERR, "Init SQ ctxts qpool failed");
+			return err;
+		}
 
-	err = init_rq_ctxts(nic_dev);
-	if (err) {
-		PMD_DRV_LOG(ERR, "Init RQ ctxts failed");
-		return err;
-	}
+		err = init_rq_ctxts_qpool(nic_dev);
+		if (err) {
+			PMD_DRV_LOG(ERR, "Init RQ ctxts qpool failed");
+			return err;
+		}
+	} else {
+		err = init_sq_ctxts(nic_dev);
+		if (err) {
+			PMD_DRV_LOG(ERR, "Init SQ ctxts failed");
+			return err;
+		}
 
-	err = clean_qp_offload_ctxt(nic_dev);
-	if (err) {
-		PMD_DRV_LOG(ERR, "Clean qp offload ctxts failed");
-		return err;
-	}
+		err = init_rq_ctxts(nic_dev);
+		if (err) {
+			PMD_DRV_LOG(ERR, "Init RQ ctxts failed");
+			return err;
+		}
 
-	if (nic_dev->num_rqs != 0)
-		rq_depth = ((u32)nic_dev->rxqs[0]->q_depth) << nic_dev->rxqs[0]->wqe_type;
+		err = clean_qp_offload_ctxt(nic_dev);
+		if (err) {
+			PMD_DRV_LOG(ERR, "Clean qp offload ctxts failed");
+			return err;
+		}
 
-	if (nic_dev->num_sqs != 0)
-		sq_depth = nic_dev->txqs[0]->q_depth;
+		if (nic_dev->num_rqs != 0)
+			rq_depth = ((u32)nic_dev->rxqs[0]->q_depth) << nic_dev->rxqs[0]->wqe_type;
 
-	err = hinic3_set_root_ctxt(hwdev, rq_depth, sq_depth, nic_dev->rx_buff_len);
-	if (err) {
-		PMD_DRV_LOG(ERR, "Set root context failed");
-		return err;
+		if (nic_dev->num_sqs != 0)
+			sq_depth = nic_dev->txqs[0]->q_depth;
+
+		err = hinic3_set_root_ctxt(hwdev, rq_depth, sq_depth, nic_dev->rx_buff_len);
+		if (err) {
+			PMD_DRV_LOG(ERR, "Set root context failed");
+			return err;
+		}
 	}
 
 	for (q_id = 0; q_id < nic_dev->num_sqs; q_id++) {
@@ -693,7 +853,7 @@ int hinic3_init_qp_ctxts(void *dev)
 		sq_attr.coalescing_time = HINIC3_DEAULT_TX_CI_COALESCING_TIME;
 		sq_attr.intr_en = 0;
 		sq_attr.intr_idx = 0; /* Tx doesn't need intr */
-		sq_attr.l2nic_sqn = q_id;
+		sq_attr.l2nic_sqn = nic_dev->txqs[q_id]->local_qid;
 		sq_attr.dma_attr_off = 0;
 		err = hinic3_set_ci_table(hwdev, &sq_attr);
 		if (err) {

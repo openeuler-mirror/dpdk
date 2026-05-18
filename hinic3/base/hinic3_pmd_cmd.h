@@ -24,6 +24,7 @@
 #define NIC_UP_RSS_EN				0x01
 #define NIC_UP_RSS_INVALID_GROUP_ID		0x7F
 
+#define NIC_RSS_CMD_TEMP_QPOOL_FREE		0x00
 #define NIC_RSS_CMD_TEMP_ALLOC			0x01
 #define NIC_RSS_CMD_TEMP_FREE			0x02
 
@@ -41,6 +42,8 @@
 
 #define HINIC3_RSS_TYPE_GET(val, member)	\
 	(((u32)(val) >> HINIC3_RSS_TYPE_##member##_SHIFT) & 0x1)
+
+#define CMDQ_PFN(addr, page_size)	((addr) >> (ilog2(page_size)))
 
 /* NIC CMDQ MODE */
 typedef enum hinic3_ucode_cmd {
@@ -149,7 +152,9 @@ enum hinic3_nic_cmd {
 	HINIC3_NIC_CMD_CLEAN_PORT_STAT,
 
 	HINIC3_NIC_CMD_QUEUE_GROUP = 258,
+	HINIC3_NIC_CMD_GTP_OUTER_PARSE_STATUS = 259, /** < GTP控制使能状态 */
 	HINIC3_NIC_CMD_FDIR_EXT = 260,
+	HINIC3_NIC_CMD_CLEAR_ASSIGN_QP_RES = 261, /** < clear resources of assigned qp */
 	HINIC3_NIC_CMD_MAX = 1024
 };
 
