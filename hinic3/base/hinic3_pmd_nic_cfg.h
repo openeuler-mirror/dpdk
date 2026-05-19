@@ -82,6 +82,21 @@
 #define NIC_DCB_DSCP_NUM   0x8
 #define NIC_DCB_IP_PRI_MAX 0x40
 
+#define HINIC3_SUPPORT_FEATURE(dev, feature) \
+	((hinic3_get_driver_feature(dev) & feature) != 0)
+#define HINIC3_SUPPORT_RX_HW_COMPACT_CQE(dev) \
+	HINIC3_SUPPORT_FEATURE(dev, NIC_F_RX_HW_COMPACT_CQE)
+#define HINIC3_SUPPORT_RX_SW_COMPACT_CQE(dev) \
+	HINIC3_SUPPORT_FEATURE(dev, NIC_F_RX_SW_COMPACT_CQE)	
+#define HINIC3_SUPPORT_TX_WQE_COMPACT_TASK(dev) \
+	HINIC3_SUPPORT_FEATURE(dev, NIC_F_TX_WQE_COMPACT_TASK)
+#define HINIC3_SUPPORT_VXLAN_OFFLOAD(dev) \
+	HINIC3_SUPPORT_FEATURE(dev, NIC_F_VXLAN_OFFLOAD)
+#define HINIC3_SUPPORT_GENEVE_OFFLOAD(dev) \
+	HINIC3_SUPPORT_FEATURE(dev, NIC_F_GENEVE_OFFLOAD)
+#define HINIC3_SUPPORT_IPXIP_OFFLOAD(dev) \
+	HINIC3_SUPPORT_FEATURE(dev, NIC_F_IPXIP_OFFLOAD)
+
 #define CMD_QOS_OP_SET 1
 #define CMD_QOS_OP_GET 0
 
@@ -455,7 +470,9 @@ struct hinic3_vport_state {
 	u16 func_id;
 	u16 rsvd1;
 	u8 state;  /* 0--disable, 1--enable */
-	u8 rsvd2[3];
+	u8 num_qps;
+	u8 rx_compact_wqe_en;
+	u8 rsvd2;
 };
 
 #define MAG_CMD_PORT_DISABLE  0x0
@@ -1924,5 +1941,17 @@ int hinic3_get_fec_mode(struct hinic3_hwdev *hwdev, u8 *advertised_fec, u8 *supp
  int hinic3_qinfo_type_init(const char *dev_file);
 
  int hinic3_indir_set_qid_mmap(u16 q_id, u16 local_qid);
+
+/**
+* Get service feature driver supported
+*
+* @param[in] dev
+*   Device pointer to nic device
+* @param[out] s_feature
+*   s_feature driver supported
+* @retval zero: Success
+* @retval non-zero: Failure
+*/
+u64 hinic3_get_driver_feature(void *dev);
 
 #endif /* _HINIC3_PMD_NIC_CFG_H_ */

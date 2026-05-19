@@ -181,10 +181,18 @@ init_default_dcb_cfg(struct hinic3_nic_dev *nic_dev,
 	dcb_cfg->pcp_valid_cos_map = hw_dft_cos_map;
 	dcb_cfg->dscp_valid_cos_map = hw_dft_cos_map;
 
-	err = hinic3_sync_qos_map(nic_dev->hwdev, dcb_cfg);
-	if (err) {
-		PMD_DRV_LOG(ERR, "Set qos map failed");
-		return err;
+	if(IS_SP600_NIC_FEATURE(nic_dev) ||
+	   !HINIC3_IS_VF(nic_dev->hwdev)) {
+		err = hinic3_sync_qos_map(nic_dev->hwdev, dcb_cfg);
+		if (err) {
+			PMD_DRV_LOG(ERR, "Set qos map failed");
+			return err;
+		}
+	} else {
+		for (i = 0; i < NIC_DCB_UP_MAX; i++)
+			dcb_cfg->pcp2cos[i] = i;
+		for (i = 0; i < NIC_DCB_IP_PRI_MAX; i++)
+			dcb_cfg->dscp2cos[i] = i % NIC_DCB_DSCP_NUM;
 	}
 
 	return 0;
@@ -529,7 +537,7 @@ hinic3_configure_dcb_hw(struct hinic3_nic_dev *nic_dev, u8 dcb_en)
 		return err;
 	}
 
-	if(nic_dev->feature_cap == SP600_NIC_FEATURE ||
+	if(IS_SP600_NIC_FEATURE(nic_dev) ||
 	   !HINIC3_IS_VF(nic_dev->hwdev)) {
 		err = hinic3_sync_dcb_state(nic_dev->hwdev, CMD_QOS_OP_SET, dcb_en);
 		if (err) {

@@ -7,9 +7,12 @@
 
 #include <rte_ethdev.h>
 #include <rte_ethdev_core.h>
+#include "base/hinic3_pmd_csr.h"
 #include "base/hinic3_pmd_nic_cfg.h"
 #include "hinic3_pmd_fdir.h"
 #include "hinic3_pmd_tm.h"
+#include "hinic3_pmd_tx.h"
+#include "hinic3_pmd_rx.h"
 
 #ifdef GLOBAL_VERSION_STR
 #define HINIC3_PMD_DRV_VERSION GLOBAL_VERSION_STR
@@ -177,12 +180,12 @@ enum hinic3_function_mode {
 	HINIC3_FUNC_SHARED,
 };
 
-#define DEFAULT_DRV_FEATURE 0x3FFF
-#define SP600_NIC_FEATURE   0x3ffef
-#define SP560_NIC_FEATURE   0x8809ffef
+#define DEFAULT_DRV_FEATURE 0x0BFC3FFF
+#define SP600_NIC_FEATURE   0x0003FFEF
+#define SP560_NIC_FEATURE   0x88C9FFEF
 
 #define IS_SP600_NIC_FEATURE(nic_dev) \
-	((nic_dev)->feature_cap == SP600_NIC_FEATURE)
+	(((struct rte_pci_device*)((nic_dev)->hwdev->pci_dev))->id.device_id == HINIC3_DEV_ID_SP620)
 #define IS_SP560_NIC_FEATURE(nic_dev) \
 	((nic_dev)->feature_cap == SP560_NIC_FEATURE)
 
@@ -199,6 +202,29 @@ struct hinic3_ptype_table {
 #else
 	uint32_t ptype[HINIC3_PTYPE_NUM] __rte_cache_aligned;
 #endif
+};
+
+/* Tx WQE offload set callback function */
+typedef void (*nic_tx_set_wqe_offload_t)(struct hinic3_wqe_info *wqe_info,
+					  struct hinic3_sq_wqe_combo *wqe_combo);
+
+/* Rx CQE info get callback function */
+typedef void (*nic_rx_get_cqe_info_t)(struct hinic3_rxq *rx_queue, 
+				       volatile struct hinic3_rq_cqe *rx_cqe,
+				       struct hinic3_cqe_info *cqe_info);
+
+/* Rx CQE check status callback funcion */
+typedef bool (*nic_rx_cqe_done_t)(struct hinic3_rxq *rxq,
+				  volatile struct hinic3_rq_cqe **rx_cqe);
+
+/* Rx CQE empty poll callback function */
+typedef int (*nic_rx_poll_rq_empty_t)(struct hinic3_rxq *rxq);
+
+struct hinic3_nic_tx_rx_ops {
+	nic_tx_set_wqe_offload_t		nic_tx_set_wqe_offload;
+	nic_rx_get_cqe_info_t			nic_rx_get_cqe_info;
+	nic_rx_cqe_done_t			nic_rx_cqe_done;
+	nic_rx_poll_rq_empty_t			nic_rx_poll_rq_empty;
 };
 
 struct hinic3_nic_dev {
@@ -256,6 +282,9 @@ struct hinic3_nic_dev {
 	struct hinic3_ethertype_filter_list filter_ethertype_list;
 	struct hinic3_fdir_rule_filter_list filter_fdir_rule_list;
 	struct hinic3_rss_template_list rss_template_list;
+
+	struct hinic3_nic_cmdq_ops *cmdq_ops;
+	struct hinic3_nic_tx_rx_ops tx_rx_ops;
 
 	struct hinic3_ptype_table* ptype_tbl;
 
