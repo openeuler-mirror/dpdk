@@ -6,6 +6,11 @@
 
 #include <rte_bus_pci.h>
 
+/* bifur kenerl define. */
+#define BIFUR_GDEV_PATH "/dev/bifur_gdev"
+#define BIFUR_PROC_PATH "/proc/net/bifur"
+#define BIFUR_DEV_NAME	"bifur_vdev"
+
 enum BIFUR_ACTION {
 	BIFUR_DONE,
 	BIFUR_CONTINUE,
