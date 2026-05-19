@@ -38,60 +38,11 @@
 #define WQ_PREFETCH_MIN			1
 #define WQ_PREFETCH_THRESHOLD		256
 
-#define HINIC3_Q_CTXT_MAX		(u16)(((HINIC3_CMDQ_BUF_SIZE - 8) - RTE_PKTMBUF_HEADROOM) / 64)
-
-enum hinic3_qp_ctxt_type {
-	HINIC3_QP_CTXT_TYPE_SQ,
-	HINIC3_QP_CTXT_TYPE_RQ,
-};
-
 struct hinic3_qp_ctxt_header {
 	u16 num_queues;
 	u16 queue_type;
 	u16 start_qid;
 	u16 rsvd;
-};
-
-struct hinic3_sq_ctxt {
-	u32 ci_pi;
-	u32 drop_mode_sp;
-	u32 wq_pfn_hi_owner;
-	u32 wq_pfn_lo;
-
-	u32 rsvd0;
-	u32 pkt_drop_thd;
-	u32 global_sq_id;
-	u32 vlan_ceq_attr;
-
-	u32 pref_cache;
-	u32 pref_ci_owner;
-	u32 pref_wq_pfn_hi_ci;
-	u32 pref_wq_pfn_lo;
-
-	u32 rsvd8;
-	u32 rsvd9;
-	u32 wq_block_pfn_hi;
-	u32 wq_block_pfn_lo;
-};
-
-struct hinic3_rq_ctxt {
-	u32 ci_pi;
-	u32 ceq_attr;
-	u32 wq_pfn_hi_type_owner;
-	u32 wq_pfn_lo;
-
-	u32 rsvd[3];
-	u32 cqe_sge_len;
-
-	u32 pref_cache;
-	u32 pref_ci_owner;
-	u32 pref_wq_pfn_hi_ci;
-	u32 pref_wq_pfn_lo;
-
-	u32 pi_paddr_hi;
-	u32 pi_paddr_lo;
-	u32 wq_block_pfn_hi;
-	u32 wq_block_pfn_lo;
 };
 
 struct hinic3_sq_ctxt_block {
@@ -149,16 +100,6 @@ struct hinic3_clean_queue_ctxt {
 					SQ_CTXT_WQ_PAGE_##member##_MASK) \
 					<< SQ_CTXT_WQ_PAGE_##member##_SHIFT)
 
-#define SQ_CTXT_PKT_DROP_THD_ON_SHIFT			0
-#define SQ_CTXT_PKT_DROP_THD_OFF_SHIFT			16
-
-#define SQ_CTXT_PKT_DROP_THD_ON_MASK			0xFFFFU
-#define SQ_CTXT_PKT_DROP_THD_OFF_MASK			0xFFFFU
-
-#define SQ_CTXT_PKT_DROP_THD_SET(val, member)		(((val) & \
-					SQ_CTXT_PKT_DROP_##member##_MASK) \
-					<< SQ_CTXT_PKT_DROP_##member##_SHIFT)
-
 #define SQ_CTXT_GLOBAL_SQ_ID_SHIFT			0
 
 #define SQ_CTXT_GLOBAL_SQ_ID_MASK			0x1FFFU
@@ -181,30 +122,6 @@ struct hinic3_clean_queue_ctxt {
 #define SQ_CTXT_VLAN_CEQ_SET(val, member)		(((val) & \
 					SQ_CTXT_VLAN_##member##_MASK) \
 					<< SQ_CTXT_VLAN_##member##_SHIFT)
-
-#define SQ_CTXT_PREF_CACHE_THRESHOLD_SHIFT		0
-#define SQ_CTXT_PREF_CACHE_MAX_SHIFT			14
-#define SQ_CTXT_PREF_CACHE_MIN_SHIFT			25
-
-#define SQ_CTXT_PREF_CACHE_THRESHOLD_MASK		0x3FFFU
-#define SQ_CTXT_PREF_CACHE_MAX_MASK			0x7FFU
-#define SQ_CTXT_PREF_CACHE_MIN_MASK			0x7FU
-
-#define SQ_CTXT_PREF_CI_HI_SHIFT			0
-#define SQ_CTXT_PREF_OWNER_SHIFT			4
-
-#define SQ_CTXT_PREF_CI_HI_MASK				0xFU
-#define SQ_CTXT_PREF_OWNER_MASK				0x1U
-
-#define SQ_CTXT_PREF_WQ_PFN_HI_SHIFT			0
-#define SQ_CTXT_PREF_CI_LOW_SHIFT			20
-
-#define SQ_CTXT_PREF_WQ_PFN_HI_MASK			0xFFFFFU
-#define SQ_CTXT_PREF_CI_LOW_MASK			0xFFFU
-
-#define SQ_CTXT_PREF_SET(val, member)			(((val) & \
-					SQ_CTXT_PREF_##member##_MASK) \
-					<< SQ_CTXT_PREF_##member##_SHIFT)
 
 #define SQ_CTXT_WQ_BLOCK_PFN_HI_SHIFT			0
 
@@ -256,29 +173,15 @@ struct hinic3_clean_queue_ctxt {
 					RQ_CTXT_##member##_MASK) << \
 					RQ_CTXT_##member##_SHIFT)
 
-#define RQ_CTXT_PREF_CACHE_THRESHOLD_SHIFT		0
-#define RQ_CTXT_PREF_CACHE_MAX_SHIFT			14
-#define RQ_CTXT_PREF_CACHE_MIN_SHIFT			25
+#define RQ_CTXT_CQE_LEN_SHIFT				28
+#define RQ_CTXT_MAX_COUNT_SHIFT				18
 
-#define RQ_CTXT_PREF_CACHE_THRESHOLD_MASK		0x3FFFU
-#define RQ_CTXT_PREF_CACHE_MAX_MASK			0x7FFU
-#define RQ_CTXT_PREF_CACHE_MIN_MASK			0x7FU
+#define RQ_CTXT_CQE_LEN_MASK				0x3U
+#define RQ_CTXT_MAX_COUNT_MASK				0x3FFU
 
-#define RQ_CTXT_PREF_CI_HI_SHIFT			0
-#define RQ_CTXT_PREF_OWNER_SHIFT			4
-
-#define RQ_CTXT_PREF_CI_HI_MASK				0xFU
-#define RQ_CTXT_PREF_OWNER_MASK				0x1U
-
-#define RQ_CTXT_PREF_WQ_PFN_HI_SHIFT			0
-#define RQ_CTXT_PREF_CI_LOW_SHIFT			20
-
-#define RQ_CTXT_PREF_WQ_PFN_HI_MASK			0xFFFFFU
-#define RQ_CTXT_PREF_CI_LOW_MASK			0xFFFU
-
-#define RQ_CTXT_PREF_SET(val, member)			(((val) & \
-					RQ_CTXT_PREF_##member##_MASK) << \
-					RQ_CTXT_PREF_##member##_SHIFT)
+#define RQ_CTXT_CQE_LEN_SET(val, member)		(((val) & \
+					RQ_CTXT_##member##_MASK) << \
+					RQ_CTXT_##member##_SHIFT)
 
 #define RQ_CTXT_WQ_BLOCK_PFN_HI_SHIFT			0
 
@@ -286,7 +189,7 @@ struct hinic3_clean_queue_ctxt {
 
 #define RQ_CTXT_WQ_BLOCK_SET(val, member)		(((val) & \
 					RQ_CTXT_WQ_BLOCK_##member##_MASK) << \
-					RQ_CTXT_WQ_BLOCK_##member##_SHIFT)
+					RQ_CTXT_WQ_BLOCK_##member##_SHIFT)				
 
 #define SIZE_16BYTES(size)		(RTE_ALIGN((size), 16) >> 4)
 
@@ -310,7 +213,7 @@ static void hinic3_qp_prepare_cmdq_header(
 	hinic3_cpu_to_be32(qp_ctxt_hdr, sizeof(*qp_ctxt_hdr));
 }
 
-static void hinic3_sq_prepare_ctxt(struct hinic3_txq *sq, u16 sq_id,
+void hinic3_sq_prepare_ctxt(struct hinic3_txq *sq, u16 sq_id,
 				   struct hinic3_sq_ctxt *sq_ctxt)
 {
 	u64 wq_page_addr;
@@ -383,7 +286,7 @@ static void hinic3_sq_prepare_ctxt(struct hinic3_txq *sq, u16 sq_id,
 	hinic3_cpu_to_be32(sq_ctxt, sizeof(*sq_ctxt));
 }
 
-static void hinic3_rq_prepare_ctxt(struct hinic3_rxq *rq, struct hinic3_rq_ctxt *rq_ctxt)
+void hinic3_rq_prepare_ctxt(struct hinic3_rxq *rq, struct hinic3_rq_ctxt *rq_ctxt)
 {
 	u64 wq_page_addr, wq_page_pfn, wq_block_pfn;
 	u32 wq_page_pfn_hi, wq_page_pfn_lo, wq_block_pfn_hi, wq_block_pfn_lo;

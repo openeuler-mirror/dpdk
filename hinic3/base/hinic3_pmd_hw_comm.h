@@ -129,7 +129,7 @@ struct hinic3_cmd_root_ctxt {
 	u8  cmdq_depth;
 	u16 rx_buf_sz;
 	u8  lro_en;
-	u8  rsvd1;
+	u8  cmdq_mode;
 	u16 sq_depth;
 	u16 rq_depth;
 	u64 rsvd2;

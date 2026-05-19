@@ -5,6 +5,8 @@
 #ifndef _HINIC3_PMD_NIC_CFG_H_
 #define _HINIC3_PMD_NIC_CFG_H_
 
+#include "hinic3_pmd_mgmt.h"
+
 #ifndef ETH_ALEN
 #define ETH_ALEN			6
 #endif
