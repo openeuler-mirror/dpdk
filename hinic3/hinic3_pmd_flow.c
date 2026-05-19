@@ -1186,6 +1186,53 @@ hinic3_check_rss_queues(struct rte_eth_dev		 *dev,
 	return 0;
 }
 
+static int hinic3_flow_set_normal_rss_action_config_qpool(struct hinic3_nic_dev *nic_dev,
+ 	 						const struct rte_flow_action_rss *act_r,
+ 	 						const struct rte_flow_action *act,
+ 	 						struct rte_flow_error *error,
+ 	 						struct hinic3_rss_template_entry **template_entry_out)
+{
+	int ret;
+	struct hinic3_rss_template_entry *template_entry = NULL;
+
+	if (act_r->types == 0) {
+			ret = hinic3_cmdq_set_rss_queue_type(nic_dev->hwdev, nic_dev->rss_type, 0,  0);
+		} else {
+			struct hinic3_rss_type rss_type = {0};
+			rss_type.ipv4 = (act_r->types & (ETH_RSS_IPV4 | ETH_RSS_FRAG_IPV4)) ? 1 : 0;
+			rss_type.tcp_ipv4 = (act_r->types & ETH_RSS_NONFRAG_IPV4_TCP) ? 1 : 0;
+			rss_type.ipv6 = (act_r->types & (ETH_RSS_IPV6 | ETH_RSS_FRAG_IPV6)) ? 1 : 0;
+			rss_type.tcp_ipv6 = (act_r->types & ETH_RSS_NONFRAG_IPV6_TCP) ? 1 : 0;
+			rss_type.udp_ipv4 = (act_r->types & ETH_RSS_NONFRAG_IPV4_UDP) ? 1 : 0;
+			rss_type.udp_ipv6 = (act_r->types & ETH_RSS_NONFRAG_IPV6_UDP) ? 1 : 0;
+			ret = hinic3_cmdq_set_rss_queue_type(nic_dev->hwdev, rss_type, 0, 1);
+	}
+
+	if (ret) {
+			rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION, act,
+					"Failed to set rss queue types");
+			return ret;
+	}
+
+	template_entry = rte_zmalloc("template_entry", sizeof(struct hinic3_rss_template_entry), 0);
+	if (template_entry == NULL) {
+			rte_flow_error_set(error, ENOMEM, HINIC3_FLOW_ERROR_TYPE_ACTION, act,
+						"Failed to alloc memory for template entry");
+			return -1;
+	}
+
+	/* Fill the information in the template_entry */
+	template_entry->q_grp_id = hinic3_global_func_id(nic_dev->hwdev);
+	template_entry->queue_num = act_r->queue_num;
+	template_entry->ref_count = 1;
+	template_entry->types = act_r->types;
+	rte_memcpy(template_entry->queues, act_r->queue, act_r->queue_num * sizeof(uint16_t));
+
+	*template_entry_out = template_entry;
+
+	return 0;
+}
+
 static int hinic3_flow_set_normal_rss_action_config(struct rte_eth_dev *dev,
 							const struct rte_flow_action_rss *act_r,
 							const struct rte_flow_action *act,
@@ -1199,6 +1246,10 @@ static int hinic3_flow_set_normal_rss_action_config(struct rte_eth_dev *dev,
 	u32 template_count = 0;
 	u32 j;
 	u16 q_grp_id = 0;
+
+	if (IS_QPOOL_MODE()) {
+ 		return hinic3_flow_set_normal_rss_action_config_qpool(nic_dev, act_r, act, error, template_entry_out);
+ 	}
 
 	/* Traverse the existing RSS template list to check if there is already a matching queue configureation */
 	TAILQ_FOREACH(template_entry, &nic_dev->rss_template_list, node) {
@@ -2440,10 +2491,16 @@ hinic3_fillout_indir_tbl_by_rss_template(struct hinic3_nic_dev *nic_dev,
 	queue_idx = 0;
 
 	/* fillout indir table used queue list */
-	for (i = 0; i < HINIC3_RSS_INDIR_SIZE; i++) {
-		indir[i] = template_entry->queues[queue_idx];
-		queue_idx = (queue_idx + 1) % queue_num;
-	}
+	if (IS_QPOOL_MODE()) {
+ 		for (i = 0; i < HINIC3_RSS_INDIR_SIZE; i++) {
+ 			indir[i] = i % nic_dev->num_rqs;
+ 		}
+ 	} else {
+ 		for (i = 0; i < HINIC3_RSS_INDIR_SIZE; i++) {
+ 			indir[i] = template_entry->queues[queue_idx];
+ 			queue_idx = (queue_idx + 1) % queue_num;
+ 		}
+ 	}
 }
 
 static void hinic3_flow_release_rss_template(struct hinic3_nic_dev *nic_dev,
@@ -2472,7 +2529,9 @@ static void hinic3_flow_release_rss_template(struct hinic3_nic_dev *nic_dev,
 	if (ret != 0)
 		PMD_DRV_LOG(ERR, "Failed to free q_grp_id: %u, ret: %d", q_grp_id, ret);
 
-	TAILQ_REMOVE(&nic_dev->rss_template_list, template_entry, node);
+	if (!IS_QPOOL_MODE())
+ 	  	TAILQ_REMOVE(&nic_dev->rss_template_list, template_entry, node);
+
 	rte_free(template_entry);
 	PMD_DRV_LOG(INFO, "RSS template q_grp_id: %u deleted and removed from list", q_grp_id);
 
@@ -2561,7 +2620,11 @@ hinic3_flow_create(struct rte_eth_dev          *dev,
 		template_entry = filter_rules->template_entry;
 		if (template_entry->ref_count == 1) {
 			hinic3_fillout_indir_tbl_by_rss_template(nic_dev, template_entry, indirtbl);
-			ret = hinic3_rss_queue_set_indir_tbl(nic_dev->hwdev, indirtbl, HINIC3_RSS_INDIR_SIZE, template_entry->q_grp_id);
+			if (IS_QPOOL_MODE())
+ 	  	  		ret = hinic3_rss_set_indir_tbl_qpool(nic_dev->hwdev, indirtbl, HINIC3_RSS_INDIR_SIZE);
+ 	  	  	else
+ 	  	  		ret = hinic3_rss_queue_set_indir_tbl(nic_dev->hwdev, indirtbl, HINIC3_RSS_INDIR_SIZE, template_entry->q_grp_id);
+
 			if (ret) {
 				PMD_DRV_LOG(ERR, "Set rss queue indir tbl failed");
 				TAILQ_REMOVE(&nic_dev->filter_fdir_rule_list, flow, node);
