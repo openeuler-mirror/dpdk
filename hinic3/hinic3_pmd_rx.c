@@ -556,7 +556,11 @@ int hinic3_refill_indir_rqid(struct hinic3_rxq *rxq)
 	/* build indir tbl according to the number of rss queue */
 	hinic3_fill_indir_tbl(nic_dev, indir_tbl);
 
-	err = hinic3_rss_set_indir_tbl(nic_dev->hwdev, indir_tbl, HINIC3_RSS_INDIR_SIZE);
+	if (IS_QPOOL_MODE()) {
+		err = hinic3_rss_set_indir_tbl_qpool(nic_dev->hwdev, indir_tbl, HINIC3_RSS_INDIR_SIZE);
+	} else {
+		err = hinic3_rss_set_indir_tbl(nic_dev->hwdev, indir_tbl, HINIC3_RSS_INDIR_SIZE);
+	}
 	if (err) {
 		PMD_DRV_LOG(ERR, "Set indrect table failed, eth_dev:%s, queue_idx:%d\n",
 			    nic_dev->dev_name, rxq->q_id);

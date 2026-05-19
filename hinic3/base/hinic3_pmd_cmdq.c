@@ -10,6 +10,7 @@
 #include "hinic3_pmd_wq.h"
 #include "hinic3_pmd_cmd.h"
 #include "hinic3_pmd_mgmt.h"
+#include "hinic3_pmd_nic_cfg.h"
 #include "hinic3_pmd_cmdq.h"
 
 #define CMDQ_CMD_TIMEOUT				5000 /* Millisecond */
@@ -126,8 +127,6 @@
 
 #define CMDQ_DB_ADDR(db_base, pi)	(((u8 *)(db_base)) + CMDQ_DB_PI_OFF(pi))
 
-#define CMDQ_PFN(addr, page_size)	((addr) >> (ilog2(page_size)))
-
 #define FIRST_DATA_TO_WRITE_LAST	sizeof(u64)
 
 #define WQE_LCMD_SIZE		64
@@ -170,13 +169,22 @@ struct hinic3_cmd_buf *hinic3_alloc_cmd_buf(void *hwdev)
 		return NULL;
 	}
 
-	cmd_buf->mbuf = rte_pktmbuf_alloc(cmdqs->cmd_buf_pool);
-	if (!cmd_buf->mbuf) {
-		PMD_DRV_LOG(ERR, "Allocate cmd from the pool failed");
-		goto alloc_pci_buf_err;
-	}
 
-	cmd_buf->dma_addr = rte_mbuf_data_iova(cmd_buf->mbuf);
+	if (!IS_QPOOL_MODE()) {
+		cmd_buf->mbuf = rte_pktmbuf_alloc(cmdqs->cmd_buf_pool);
+		if (!cmd_buf->mbuf) {
+			PMD_DRV_LOG(ERR, "Allocate cmd from the pool failed");
+			goto alloc_pci_buf_err;
+		}
+
+		cmd_buf->dma_addr = rte_mbuf_data_iova(cmd_buf->mbuf);
+	} else {
+		cmd_buf->mbuf = rte_pktmbuf_alloc(((struct hinic3_hwdev *)hwdev)->cmd_buf_pool);
+		if (!cmd_buf->mbuf) {
+			PMD_DRV_LOG(ERR, "Allocate cmd from the pool failed");
+			goto alloc_pci_buf_err;
+		}
+	}
 	cmd_buf->buf = rte_pktmbuf_mtod(cmd_buf->mbuf, void *);
 
 	return cmd_buf;
@@ -814,6 +822,23 @@ alloc_wqs_err:
 	rte_free(cmdqs);
 
 	return err;
+}
+
+int hinic3_init_qpool_cmdqs(struct hinic3_hwdev *hwdev)
+{
+	char cmdq_pool_name[RTE_MEMPOOL_NAMESIZE] = {0};
+	(void)snprintf(cmdq_pool_name, sizeof(cmdq_pool_name), "hinic3_cmdq_%u", hwdev->port_id);
+
+	hwdev->cmd_buf_pool = rte_pktmbuf_pool_create(cmdq_pool_name,
+						      HINIC3_CMDQ_DEPTH * HINIC3_MAX_CMDQ_TYPES,
+						      0, 0, HINIC3_CMDQ_BUF_SIZE,
+						      (int)rte_socket_id());
+	if (!hwdev->cmd_buf_pool) {
+		PMD_DRV_LOG(ERR, "Create cmdq buffer pool failed.");
+		return -ENOMEM;
+	}
+
+	return 0;
 }
 
 void hinic3_cmdqs_free(struct hinic3_hwdev *hwdev)
