@@ -79,8 +79,10 @@ hinic3_telemetry_info(const char *cmd, const char *params, struct rte_tel_data *
 
 	for (i = 0; i < mbox_cnt.func_num; i++) {
 		func_data = rte_tel_data_alloc();
-		if (func_data == NULL)
+		if (func_data == NULL) {
+			rte_tel_data_free(i_data);
 			return -ENOMEM;
+		}
 
 		rte_tel_data_start_dict(func_data);
 		rte_tel_data_add_dict_int(func_data, "send_cnt", mbox_cnt.func_info[i].send_cnt);

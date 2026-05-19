@@ -1185,14 +1185,14 @@ static int hinic3_get_tx_user_queue(struct hinic3_nic_dev *nic_dev, struct hinic
  * @param[in] socket_id
  *   Socket index on which memory must be allocated.
  * @param[in] tx_conf
- *   Tx queue configuration parameters (unused_).
+ *   Tx queue configuration parameters.
  *
  * @retval zero : Success
  * @retval non-zero : Failure
  */
 static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 			 uint16_t nb_desc, unsigned int socket_id,
-			 __rte_unused const struct rte_eth_txconf *tx_conf)
+			 const struct rte_eth_txconf *tx_conf)
 {
 	struct hinic3_nic_dev *nic_dev;
 	struct hinic3_hwdev *hwdev;
@@ -1249,7 +1249,7 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	 *  -tx_free_thresh must be less than the size of the ring minus 1.
 	 * When set to zero use default values.
 	 */
-	tx_free_thresh = (u16)((tx_conf->tx_free_thresh) ?
+	tx_free_thresh = (u16)((tx_conf != NULL && tx_conf->tx_free_thresh != 0) ?
 		tx_conf->tx_free_thresh : HINIC3_DEFAULT_TX_FREE_THRESH);
 	if (tx_free_thresh >= (sq_depth - 1)) {
 		PMD_DRV_LOG(ERR, "tx_free_thresh must be less than the number of tx "
@@ -1346,6 +1346,7 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	return 0;
 
 alloc_tx_info_fail:
+	txq->db_addr = NULL;
 alloc_db_err_fail:
 	hinic3_memzone_free(txq->sq_mz);
 
@@ -2045,8 +2046,10 @@ start_rqs_fail:
 		hinic3_free_rxq_mbufs(rxq);
 		hinic3_dev_rx_queue_intr_disable(eth_dev, rxq->q_id);
 		eth_dev->data->rx_queue_state[i] = RTE_ETH_QUEUE_STATE_STOPPED;
-		eth_dev->data->tx_queue_state[i] = RTE_ETH_QUEUE_STATE_STOPPED;
 	}
+
+	for (i = 0; i < nic_dev->num_sqs; i++)
+		eth_dev->data->tx_queue_state[i] = RTE_ETH_QUEUE_STATE_STOPPED;
 	hinic3_free_qp_ctxts(nic_dev->hwdev);
 
 init_qp_fail:
@@ -4357,6 +4360,10 @@ get_cap_fail:
 link_state_err:
 get_fd_fail:
 init_hwdev_fail:
+	if (nic_dev->fd >= 0) {
+		(void)close(nic_dev->fd);
+		nic_dev->fd = -1;
+	}
 	rte_free(nic_dev->hwdev);
 	nic_dev->hwdev = NULL;
 

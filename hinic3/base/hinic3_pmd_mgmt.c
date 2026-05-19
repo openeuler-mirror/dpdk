@@ -44,7 +44,7 @@ int hinic3_msg_to_mgmt_sync(void *hwdev, enum hinic3_mod_type mod, u16 cmd,
 	if (((struct hinic3_hwdev *)hwdev)->bifur_mode == HINIC3_BIFUR_MODE_QPOOL)
 		err = hinic3_send_mbox_to_kernel(hwdev, mod, cmd, buf_in, in_size,
 				 		 buf_out, out_size, timeout);
-	else 
+	else
 		err = hinic3_send_mbox_to_mgmt(hwdev, mod, cmd, buf_in, in_size,
 					       buf_out, out_size, timeout);
 	return err;
@@ -384,6 +384,8 @@ void hinic3_pf_to_mgmt_free(struct hinic3_hwdev *hwdev)
 {
 	struct hinic3_msg_pf_to_mgmt *pf_to_mgmt = hwdev->pf_to_mgmt;
 
+	if (!pf_to_mgmt)
+		return;
 	free_msg_buf(pf_to_mgmt);
 	hinic3_mutex_destroy(&pf_to_mgmt->sync_msg_mutex);
 	rte_free(pf_to_mgmt);

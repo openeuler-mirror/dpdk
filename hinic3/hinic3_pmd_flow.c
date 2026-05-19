@@ -1104,6 +1104,12 @@ hinic3_flow_set_rss_action_config(struct rte_eth_dev	       *dev,
 
 	act_r = (struct rte_flow_action_rss *)actions->conf;
 	rss_conf.rss_hf = act_r->types;
+	if (act_r->key_len > HINIC3_RSS_KEY_SIZE) {
+		rte_flow_error_set(error, EINVAL,
+				   HINIC3_FLOW_ERROR_TYPE_ACTION,
+				   actions, "Invalid RSS key length.");
+		return -rte_errno;
+	}
 	rte_memcpy(hash, act_r->key, act_r->key_len);
 	rss_conf.rss_key = hash;
 	rss_conf.rss_key_len = act_r->key_len;
@@ -2591,9 +2597,6 @@ hinic3_flow_destroy(struct rte_eth_dev *dev,
 		if (!ret)
 			TAILQ_REMOVE(&nic_dev->filter_ethertype_list, flow, node);
 
-		flow->rule = rules;
-		flow->filter_type = rules->filter_type;
-		TAILQ_REMOVE(&nic_dev->filter_ethertype_list, flow, node);
 		break;
 
 	case RTE_ETH_FILTER_FDIR:
