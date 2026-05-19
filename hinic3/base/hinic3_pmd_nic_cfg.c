@@ -2631,6 +2631,7 @@ int hinic3_fdir_flush_sec_tcam_rule(void *hwdev)
 
 int hinic3_fdir_cfg_sec_tcam(void *hwdev, u8 *en)
 {
+	struct hinic3_nic_dev *nic_dev = ((struct hinic3_hwdev *)hwdev)->dev_handle;
 	struct nic_cmd_fdir_ext cmd_buf = {0};
 	u16 out_size = sizeof(cmd_buf);
 	int err;
@@ -2639,6 +2640,9 @@ int hinic3_fdir_cfg_sec_tcam(void *hwdev, u8 *en)
 		return -EINVAL;
 
 	cmd_buf.op_code = TCAM_EXTEND_OPCODE_GET_FLAG;
+
+	if(nic_dev->feature_cap != SP600_NIC_FEATURE)
+ 	 	return 0;
 
 	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_FDIR_EXT,
 				     &cmd_buf,
