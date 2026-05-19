@@ -353,6 +353,39 @@ struct netdev_event {
 	u16 rsvd;
 };
 
+bool
+is_sp620_nic(struct hinic3_nic_dev *nic_dev)
+{
+	struct rte_pci_device *pci_dev = (struct rte_pci_device *)nic_dev->hwdev->pci_dev;
+
+	switch (pci_dev->id.device_id) {
+	case HINIC3_DEV_ID_SP620:
+	case HINIC3_DEV_ID_VF_SP620:
+	case HINIC3_DEV_ID_BP2_620:
+	case HINIC3_DEV_ID_VF_BP2_620:
+	case HINIC3_DEV_ID_BP3_620:
+	case HINIC3_DEV_ID_VF_BP3_620:
+		return true;
+	default:
+		return false;
+	}
+}
+
+bool
+is_sp560_nic(struct hinic3_nic_dev *nic_dev)
+{
+	struct rte_pci_device *pci_dev = (struct rte_pci_device *)nic_dev->hwdev->pci_dev;
+
+	switch (pci_dev->id.device_id) {
+	case HINIC3_DEV_ID_SP560:
+	case HINIC3_DEV_ID_VF_SP560:
+	case HINIC3_DEV_ID_HYPER_VF_SP560:
+		return true;
+	default:
+		return false;
+	}
+}
+
 static void hinic3_dev_interrupt_handler_qpool(void *param)
 {
 	struct rte_eth_dev *dev = param;
@@ -2489,7 +2522,7 @@ static void hinic3_dev_stop(struct rte_eth_dev *dev)
 	}
 
 	if (nic_dev->dcb->dcb_on) {
-		if (IS_SP600_NIC_FEATURE(nic_dev) ||
+		if (is_sp620_nic(nic_dev) ||
 		    !HINIC3_IS_VF(nic_dev->hwdev))
 			hinic3_sync_dcb_state(nic_dev->hwdev, 1, 0);
 	}
@@ -4760,7 +4793,7 @@ static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev, enum hinic3_qinfo
 		goto get_cap_fail;
 	}
 
-	if (!IS_SP600_NIC_FEATURE(nic_dev)) {
+	if (!is_sp620_nic(nic_dev)) {
 		if (hinic3_parse_sysfs_value(RQ_WQE_TYPE_PATH, &compact_cqe) != 0)
 			goto get_cap_fail;
 

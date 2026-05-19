@@ -7,6 +7,7 @@
 
 #include <rte_ethdev.h>
 #include <rte_ethdev_core.h>
+#include "base/hinic3_pmd_csr.h"
 #include "base/hinic3_pmd_nic_cfg.h"
 #include "hinic3_pmd_fdir.h"
 #include "hinic3_pmd_tm.h"
@@ -183,11 +184,6 @@ enum hinic3_function_mode {
 #define SP600_NIC_FEATURE   0x0003FFEF
 #define SP560_NIC_FEATURE   0x88C9FFEF
 
-#define IS_SP600_NIC_FEATURE(nic_dev) \
-	((nic_dev)->feature_cap == SP600_NIC_FEATURE)
-#define IS_SP560_NIC_FEATURE(nic_dev) \
-	((nic_dev)->feature_cap == SP560_NIC_FEATURE)
-
 TAILQ_HEAD(hinic3_ethertype_filter_list, rte_flow);
 TAILQ_HEAD(hinic3_fdir_rule_filter_list, rte_flow);
 
@@ -293,6 +289,8 @@ struct hinic3_nic_dev {
 
 extern const struct rte_flow_ops hinic3_flow_ops;
 
+bool is_sp620_nic(struct hinic3_nic_dev *nic_dev);
+bool is_sp560_nic(struct hinic3_nic_dev *nic_dev);
 int hinic3_dev_rx_queue_intr_enable(struct rte_eth_dev *dev, uint16_t queue_id);
 int hinic3_dev_rx_queue_intr_disable(struct rte_eth_dev *dev,
 				     uint16_t queue_id);
