@@ -1247,9 +1247,8 @@ static int hinic3_flow_set_normal_rss_action_config(struct rte_eth_dev *dev,
 	u32 j;
 	u16 q_grp_id = 0;
 
-	if (IS_QPOOL_MODE()) {
+	if (IS_QPOOL_MODE())
  		return hinic3_flow_set_normal_rss_action_config_qpool(nic_dev, act_r, act, error, template_entry_out);
- 	}
 
 	/* Traverse the existing RSS template list to check if there is already a matching queue configureation */
 	TAILQ_FOREACH(template_entry, &nic_dev->rss_template_list, node) {

@@ -549,11 +549,10 @@ void hinic3_free_hwdev(struct hinic3_hwdev *hwdev)
 {
 	hinic3_deinit_cfg_mgmt(hwdev);
 
-	if (IS_QPOOL_MODE()) {
+	if (IS_QPOOL_MODE())
 		hinic3_uninit_comm_ch_qpool(hwdev);
-	} else {
+	else
 		hinic3_uninit_comm_ch(hwdev);
-	}
 
 	hinic3_free_hwif(hwdev);
 
