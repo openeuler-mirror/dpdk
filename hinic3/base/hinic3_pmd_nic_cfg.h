@@ -83,7 +83,7 @@
 #define NIC_DCB_IP_PRI_MAX 0x40
 
 #define HINIC3_SUPPORT_FEATURE(dev, feature) \
-	((hinic3_get_driver_feature(dev) & feature) != 0)
+	((hinic3_get_driver_feature(dev) & (feature)) != 0)
 #define HINIC3_SUPPORT_RX_HW_COMPACT_CQE(dev) \
 	HINIC3_SUPPORT_FEATURE(dev, NIC_F_RX_HW_COMPACT_CQE)
 #define HINIC3_SUPPORT_RX_SW_COMPACT_CQE(dev) \
@@ -519,14 +519,12 @@ struct hinic3_cmd_clear_assign_qp_res {
 	u16 qp[FUNC_MAX_CLEAR_QP_NUM];
 };
 
-
 struct hinic3_port_stats_info {
 	struct mgmt_msg_head msg_head;
 
 	u16 func_id;
 	u16 rsvd1;
 };
-
 
 #define HINIC3_CMD_MAX_DP_DATA_NUM 50
 struct hinic3_cir_drop {

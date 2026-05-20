@@ -2201,8 +2201,6 @@ static int hinic3_dev_start_qpool(struct rte_eth_dev *eth_dev)
 		goto handle_err;
 	}
 
-	eth_dev->data->mtu = nic_dev->mtu_size;
-
 	/* Set rx configuration: rss/checksum/rxmode/lro */
 	err = hinic3_set_rxtx_configure(eth_dev);
 	if (err) {
@@ -2280,9 +2278,8 @@ static int hinic3_dev_start(struct rte_eth_dev *eth_dev)
 	nic_features &= DEFAULT_DRV_FEATURE;
 	hinic3_update_driver_feature(nic_dev, nic_features);
 
-	if (IS_QPOOL_MODE()) {
+	if (IS_QPOOL_MODE())
  		return hinic3_dev_start_qpool(eth_dev);
- 	}
 
 	hinic3_disable_interrupt(eth_dev);
 
@@ -2889,7 +2886,6 @@ static int hinic3_dev_allmulticast_disable(struct rte_eth_dev *dev)
  		return -ENOTSUP;
  	}
 
-
 	err = hinic3_mutex_lock(&nic_dev->rx_mode_mutex);
 	if (err)
 		return err;
@@ -2980,7 +2976,6 @@ static int hinic3_dev_promiscuous_disable(struct rte_eth_dev *dev)
  	 	PMD_DRV_LOG(WARNING, "Qpool mode not support set promiscuous disable.");
  	 	return -ENOTSUP;
  	}
-
 
 	if (!(nic_dev->feature_cap & NIC_F_PROMISC)) {
 		PMD_DRV_LOG(ERR, "nic_dev: %s, port_id: %d, do not support vf promisc: %" PRIu64 "",
@@ -3411,7 +3406,6 @@ hinic3_dev_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 		stats->oerrors += (txq->txq_stats.tx_busy +
 				  txq->txq_stats.off_errs);
 	}
-
 	
 	if (IS_QPOOL_MODE()) {
 		q_num = (nic_dev->num_rqs < HINIC3_QUEUE_STAT_CNTRS) ?
@@ -3934,7 +3928,6 @@ static void hinic3_delete_mc_addr_list(struct hinic3_nic_dev *nic_dev)
  	 	PMD_DRV_LOG(WARNING, "Qpool mode not support set mac addr list.");
  	 	return;
  	}
-
 
 	func_id = hinic3_global_func_id(nic_dev->hwdev);
 
