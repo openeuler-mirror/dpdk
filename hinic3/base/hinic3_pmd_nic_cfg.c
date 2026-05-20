@@ -153,6 +153,11 @@ int hinic3_set_mac(void *hwdev, const u8 *mac_addr, u16 vlan_id, u16 func_id)
 	if (!hwdev || !mac_addr)
 		return -EINVAL;
 
+	if (IS_QPOOL_MODE()) {
+	    PMD_DRV_LOG(WARNING, "Qpool mode not support set mac.");
+	    return 0;
+	}
+
  	if (IS_BIFUR_MODE()) {
 		if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
 			PMD_DRV_LOG(WARNING, "Share mode vf do not support change mac");

@@ -4858,7 +4858,6 @@ static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev)
 	nic_dev->hwdev->eth_dev = eth_dev;
 	nic_dev->hwdev->port_id = eth_dev->data->port_id;
 
-
 	nic_dev->fd = hinic3_get_nic_fd(nic_dev->hwdev);
 	if (nic_dev->fd < 0) {
 		PMD_DRV_LOG(ERR, "Qpool func init get nic fd failed, fd: %d",
@@ -4919,12 +4918,11 @@ static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev)
 		goto init_sw_rxtxqs_fail;
 	}
 
-	/* Set hardware feature to default status */
-	err = hinic3_set_default_hw_feature(nic_dev);
+	err = hinic3_init_mac_table(eth_dev);
 	if (err) {
-		PMD_DRV_LOG(ERR, "Set hw default features failed, dev_name: %s",
+		PMD_DRV_LOG(ERR, "Init mac table failed, dev_name: %s",
 			    eth_dev->data->name);
-		goto set_default_feature_fail;
+		goto init_mac_table_fail;
 	}
 
 #ifdef DPDK_21_11
@@ -4990,6 +4988,9 @@ init_rx_ptype_table_fail:
 reg_intr_cb_fail:
 set_default_feature_fail:
 	hinic3_deinit_mac_addr(eth_dev);
+
+init_mac_table_fail:
+	hinic3_deinit_sw_rxtxqs(nic_dev);
 
 init_sw_rxtxqs_fail:
 	hinic3_free_nic_hwdev(nic_dev->hwdev);
