@@ -292,6 +292,13 @@ static inline u16 hinic3_get_rq_local_pi(struct hinic3_rxq *rxq)
 	return MASKED_QUEUE_IDX(rxq, rxq->prod_idx);
 }
 
+static inline u16 hinic3_get_rq_hw_ci(struct hinic3_rxq *rxq)
+{
+	struct hinic3_rq_ci_wb rq_ci;
+	rq_ci.dw1.value = hinic3_hw_cpu32(__atomic_load_n(&rxq->rq_ci->dw1.value, __ATOMIC_ACQUIRE));
+	return rq_ci.dw1.bs.hw_ci;
+}
+
 /**
  * Update receive queue hardware pi
  *
@@ -896,7 +903,6 @@ int hinic3_poll_rq_empty(struct hinic3_rxq *rxq)
 int hinic3_poll_integrated_cqe_rq_empty(struct hinic3_rxq *rxq)
 {
 	struct hinic3_rx_info *rx_info;
-	struct hinic3_rq_ci_wb rq_ci;
 	u16 sw_ci;
 	u16 hw_ci;
 	u16 sw_pi;
@@ -904,22 +910,19 @@ int hinic3_poll_integrated_cqe_rq_empty(struct hinic3_rxq *rxq)
 
 	sw_ci = hinic3_get_rq_local_ci(rxq);
 	sw_pi = hinic3_get_rq_local_pi(rxq);
-	rq_ci.dw1.value = hinic3_hw_cpu32(__atomic_load_n(&rxq->rq_ci->dw1.value, __ATOMIC_ACQUIRE));
-	hw_ci = rq_ci.dw1.bs.hw_ci;
-
-        timeout = msecs_to_jiffies(HINIC3_FLUSH_QUEUE_TIMEOUT) + jiffies;
-        do {
-                rq_ci.dw1.value = hinic3_hw_cpu32(__atomic_load_n(&rxq->rq_ci->dw1.value, __ATOMIC_ACQUIRE));
-                hw_ci = rq_ci.dw1.bs.hw_ci;
-                if (sw_pi == hw_ci)
-                        break;
-
-                rte_delay_us(1);
-        } while (time_before(jiffies, timeout));
-
-        if (sw_pi != hw_ci)
+	hw_ci = hinic3_get_rq_hw_ci(rxq);
+	if ((hinic3_get_driver_feature(rxq->nic_dev) & NIC_F_HTN_FDIR) == 0) {
+		timeout = msecs_to_jiffies(HINIC3_FLUSH_QUEUE_TIMEOUT) + jiffies;
+		do {
+			hw_ci = hinic3_get_rq_hw_ci(rxq);
+			if (sw_pi == hw_ci)
+				break;
+			rte_delay_us(1);
+		} while (time_before(jiffies, timeout));
+		if (sw_pi != hw_ci)
                 return -EFAULT;
-
+	}
+        
 	while (sw_ci != hw_ci) {
 		rx_info = &rxq->rx_info[sw_ci];
 		rte_pktmbuf_free(rx_info->mbuf);
@@ -1329,16 +1332,16 @@ bool rx_separate_cqe_done(struct hinic3_rxq *rxq, volatile struct hinic3_rq_cqe 
 
 bool rx_integrated_cqe_done(struct hinic3_rxq *rxq, volatile struct hinic3_rq_cqe **rx_cqe)
 {
-	struct hinic3_rq_ci_wb rq_ci;
 	struct rte_mbuf *rxm = NULL;
 	uint16_t sw_ci;
+	uint16_t hw_ci;
 
 	sw_ci = hinic3_get_rq_local_ci(rxq);
 
         /* Avoid excessive CI memory access */
         if (sw_ci == rxq->hw_cons_idx) {
-                rq_ci.dw1.value = hinic3_hw_cpu32(__atomic_load_n(&rxq->rq_ci->dw1.value, __ATOMIC_ACQUIRE));
-                rxq->hw_cons_idx = rq_ci.dw1.bs.hw_ci;
+                hw_ci = hinic3_get_rq_hw_ci(rxq);
+                rxq->hw_cons_idx = hw_ci;
         }
 
         if (sw_ci == rxq->hw_cons_idx)
