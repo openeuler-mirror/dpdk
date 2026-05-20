@@ -247,7 +247,7 @@ pcap_key_file_parse(struct pcap_key_t *cap_key, const char *key_name, const char
     if (ret != 0)
         return -1;
 
-    resolve_path = (char*)hinic3_calloc(1, PATH_MAX + 1, HINIC3_CAPTURE);
+    resolve_path = (char*)hinic3_calloc(1, PATH_MAX, HINIC3_CAPTURE);
     if (!resolve_path) {
         hinic3_ds_put_format(ds, HINIC3_UI_LEADING_SIGN_ERROR HINIC3_UI_FILE_PATH_MALLOC_TIPS_STRING);
         return -1;

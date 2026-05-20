@@ -99,7 +99,7 @@ hinic3_agent_parse_output_file_path(struct hinic3_dump_all_flows_mgmt_t *m, cons
         return -1;
     }
 
-    char *resolve_path = (char *)hinic3_calloc(1, PATH_MAX + 1, HINIC3_COMMAND);
+    char *resolve_path = (char *)hinic3_calloc(1, PATH_MAX, HINIC3_COMMAND);
     if (resolve_path == NULL) {
         m->file = NULL;
         hinic3_ds_put_format(ds, "%s%s\n", HINIC3_UI_LEADING_SIGN_FAILURE, HINIC3_UI_FILE_PATH_MALLOC_TIPS_STRING);

@@ -125,7 +125,7 @@ bool hinic3_smap_equal(const struct smap *smap1, const struct smap *smap2)
 static struct smap_node *hinic3_smap_add__(struct smap *smap, char *key, void *value, size_t hash,
     enum hinic3_module module_id)
 {
-    struct smap_node *node = hinic3_xmalloc(sizeof *node, module_id);
+    struct smap_node *node = hinic3_xmalloc(sizeof (struct smap_node), module_id);
     if (node == NULL) {
         HINIC3_LOG(ERR, AGENT, "Malloc failed when smap add node!");
         return NULL;

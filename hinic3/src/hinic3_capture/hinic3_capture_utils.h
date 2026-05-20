@@ -46,9 +46,9 @@
 #define PCAP_CMD_SHOW_MIN_PARAM     1
 #define PCAP_CMD_SHOW_MAX_PARAM     2
 #define PCAP_CMD_ENABLE_MAX_PARAM   2
-#define PCAP_CMD_TOO_MANY_ARGS      -1
-#define PCAP_CMD_TOO_FEW_ARGS       -2
-#define PCAP_CMD_ERR_ARGS           -3
+#define PCAP_CMD_TOO_MANY_ARGS      (-1)
+#define PCAP_CMD_TOO_FEW_ARGS       (-2)
+#define PCAP_CMD_ERR_ARGS           (-3)
 
 #define PCAP_STOP_CHECK_PERIOD_MS   5
 #define PCAP_STOP_TIME_OUT_MS      (10 * 1000)

@@ -86,7 +86,7 @@ static struct shash_node* hinic3_shash_add_nocopy__(struct shash *sh, char *name
 {
     struct shash_node *node = NULL;
 
-    node = hinic3_xmalloc(sizeof *node, module_id);
+    node = hinic3_xmalloc(sizeof (struct shash_node), module_id);
     if (node == NULL) {
         return NULL;
     }
