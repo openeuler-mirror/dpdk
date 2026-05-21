@@ -282,7 +282,7 @@ index 0000000..38059fd
 +++ b/drivers/net/hinic3/hinic3_pmd_bifur.c
 @@ -0,0 +1,993 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#ifdef HINIC3_TRAFFIC_BIFUR
@@ -1282,7 +1282,7 @@ index 0000000..84e75e1
 +++ b/drivers/net/hinic3/hinic3_pmd_bifur.h
 @@ -0,0 +1,20 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +#ifndef _HINIC3_PMD_BIFUR_H_
 +#define _HINIC3_PMD_BIFUR_H_
