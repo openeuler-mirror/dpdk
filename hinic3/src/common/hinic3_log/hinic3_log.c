@@ -382,7 +382,7 @@ static int hinic3_key_module_name_parse(const char *value, struct ds *ds)
     module = hinic3_get_log_module_name(value);
     if (!module) {
         hinic3_ds_put_format(ds, HINIC3_UI_LEADING_SIGN_ERROR HINIC3_UI_ERROR_WRONG_PARAMETER
-                ", unknown module name: %s, please input -h or –help to get help info!\n", value);
+                ", unknown module name: %s, please input -h or –-help to get help info!\n", value);
         return -1;
     }
     g_set_log_level_input_key.module = module;
@@ -395,7 +395,7 @@ static int hinic3_key_log_level_parse(const char *value, struct ds *ds)
     log_level = hinic3_get_log_level_from_name(value);
     if (log_level == -1) {
         hinic3_ds_put_format(ds, HINIC3_UI_LEADING_SIGN_ERROR HINIC3_UI_ERROR_WRONG_PARAMETER
-                ", invalid log level: %s, please input -h or –help to get help info!\n", value);
+                ", invalid log level: %s, please input -h or –-help to get help info!\n", value);
         return -1;
     }
     g_set_log_level_input_key.log_level = log_level;

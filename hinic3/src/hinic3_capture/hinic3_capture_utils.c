@@ -38,7 +38,8 @@ struct rte_mempool *g_pcap_shared_mp = NULL;
 
 static int g_cap_switch = 0;
 static int g_pcap_task = 0;
-static int g_cap_cpu_usage = 0;
+static enum PCAP_CPU_USAGE_TYPE g_cap_cpu_usage = PCAP_CPU_HIGH;
+static enum hinic3_pcap_mode g_current_pcap_mode = ONLY_HEADER;
 static long long g_no_pcap_task_time = 0;
 struct pcap_task_mgr_t g_cap_task_mgr;
 struct pcap_task_save_t g_cap_task_save = {0};
@@ -1333,6 +1334,16 @@ void pcap_task_stop_as_eth_port_del(uint16_t vport_id)
     }
 
     return;
+}
+
+void pcap_mode_set(enum hinic3_pcap_mode pcap_mode)
+{
+    g_current_pcap_mode = pcap_mode;
+}
+
+enum hinic3_pcap_mode pcap_mode_get(void)
+{
+    return g_current_pcap_mode;
 }
 
 void pcap_cpu_usage_set(enum PCAP_CPU_USAGE_TYPE value)

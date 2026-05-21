@@ -647,11 +647,83 @@ _complete_enable_capture_probe() {
     local cur prev
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    if [[ ${COMP_CWORD} -eq 2 ]]; then
-        COMPREPLY=( $(compgen -W "-c -q -h" -- ${cur}) )
-    elif [[ ${COMP_CWORD} -eq 3 && ${prev} == "-c" ]]; then
-        COMPREPLY=( $(compgen -W "high low" -- ${cur}) )
-    fi
+
+    # 可用选项列表（短选项和长选项）
+    local main_options="-c --cpu -p --pcap"
+    local alone_options="-q --query -h --help"
+    local cpu_options="high low"
+    local probe_modes="limited-capture fully-capture"
+
+    # 检查是否已经使用了独立选项(-q/--query或-h/--help)
+    local has_standalone_option=0
+    for word in "${COMP_WORDS[@]:1:COMP_CWORD}"; do
+        if [[ "$word" == "-q" || "$word" == "--query" ||
+              "$word" == "-h" || "$word" == "--help" ]]; then
+            has_standalone_option=1
+            break
+        fi
+    done
+
+    case ${COMP_CWORD} in
+        2)
+            COMPREPLY=( $(compgen -W "$main_options $alone_options" -- ${cur}) )
+            ;;
+        3)
+            case ${prev} in
+                -c|--cpu)
+                    COMPREPLY=( $(compgen -W "$cpu_options" -- ${cur}) )
+                    ;;
+                -p|--pcap)
+                    COMPREPLY=( $(compgen -W "$probe_modes" -- ${cur}) )
+                    ;;
+                -q|--query|-h|--help)
+                    # 独立选项不需要进一步补全
+                    COMPREPLY=()
+                    ;;
+                *)
+                    # 默认情况，显示所有选项
+                    COMPREPLY=( $(compgen -W "$main_options $alone_options" -- ${cur}) )
+                    ;;
+            esac
+            ;;
+        *)
+            if [[ $has_standalone_option -eq 1 ]]; then
+                # 如果已经使用了独立选项，不再补全
+                COMPREPLY=()
+            else
+                # 检查已使用的主选项
+                local used_main_options=""
+                for word in "${COMP_WORDS[@]:1:COMP_CWORD-1}"; do
+                    if [[ "$word" == "-c" || "$word" == "--cpu" ||
+                          "$word" == "-p" || "$word" == "--pcap" ]]; then
+                        used_main_options="$used_main_options $word"
+                    fi
+                done
+
+                # 根据前一个参数决定补全内容
+                case ${prev} in
+                    -c|--cpu)
+                        COMPREPLY=( $(compgen -W "$cpu_options" -- ${cur}) )
+                        ;;
+                    -p|--pcap)
+                        COMPREPLY=( $(compgen -W "$probe_modes" -- ${cur}) )
+                        ;;
+                    *)
+                        # 如果不是跟在选项后面，提供可用的主选项
+                        local available_options=""
+                        if [[ ! $used_main_options =~ "-c" && ! $used_main_options =~ "--cpu" ]]; then
+                            available_options="$available_options -c --cpu"
+                        fi
+                        if [[ ! $used_main_options =~ "-p" && ! $used_main_options =~ "--pcap" ]]; then
+                            available_options="$available_options -p --pcap"
+                        fi
+
+                        COMPREPLY=( $(compgen -W "$available_options" -- ${cur}) )
+                        ;;
+                esac
+            fi
+            ;;
+    esac
 }
 
 _complete_capture_probe() {
