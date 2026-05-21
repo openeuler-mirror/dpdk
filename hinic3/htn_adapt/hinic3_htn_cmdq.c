@@ -8,7 +8,7 @@
 #include "hinic3_htn_cmdq.h"
 #include "hinic3_pmd_hwdev.h"
 #include "hinic3_pmd_ethdev.h"
-
+#include "hinic3_pmd_rx.h"
 
 #define HINIC3_DEAULT_DROP_THD_OFF	0xFFFF
 
@@ -203,12 +203,11 @@ static void prepare_sq_ctxt_drop_and_prefetch(struct hinic3_sq_ctxt *sq_ctxt)
 			      SQ_CTXT_PREF_SET(SQ_PREFETCH_THRESHOLD, CACHE_THRESHOLD);
 }
 
-static void prepare_rq_ctxt_ceq_and_prefetch(struct hinic3_rq_ctxt *rq_ctxt, u16 wqe_type __rte_unused,
-	u16 msix_entry_idx, bool support_rq_sw_compact_cqe __rte_unused, u8 intr_disable)
+static void prepare_rq_ctxt_ceq_and_prefetch(struct hinic3_rxq *rq, struct hinic3_rq_ctxt *rq_ctxt)
 {
-	rq_ctxt->ceq_attr = RQ_CTXT_CEQ_ATTR_SET(intr_disable, EN) |
+	rq_ctxt->ceq_attr = RQ_CTXT_CEQ_ATTR_SET(rq->dp_intr_en ? 0 : 1, EN) |
 			    RQ_CTXT_CEQ_ATTR_SET(RQ_PFH_TH, PFH_TH) |
-			    RQ_CTXT_CEQ_ATTR_SET(msix_entry_idx, INTR);
+			    RQ_CTXT_CEQ_ATTR_SET(rq->msix_entry_idx, INTR);
 	
 	rq_ctxt->pref_cache = RQ_CTXT_PREF_SET(RQ_PREFETCH_MIN, CACHE_MIN) |
 			      RQ_CTXT_PREF_SET(RQ_PREFETCH_MAX, CACHE_MAX) |

@@ -28,7 +28,7 @@ foreach flag: extra_flags
         endif
 endforeach
 
-deps += ['hash']
+deps += ['hash', 'kvargs']
 c_args = cflags
 includes += include_directories('../')
 

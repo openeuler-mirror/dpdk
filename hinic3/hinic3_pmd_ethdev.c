@@ -7,6 +7,7 @@
 #include <rte_mbuf.h>
 #include <rte_malloc.h>
 #include <rte_mempool.h>
+#include <rte_dev.h>
 #include <rte_errno.h>
 #include <rte_ether.h>
 #include <rte_interrupts.h>
@@ -92,6 +93,10 @@ static const struct rte_pci_id pci_id_hinic3_map[] = {
 	{RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI, HINIC3_DEV_ID_SP620)},
 	{RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI, HINIC3_DEV_ID_VF_SP620)},
 	{RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI, HINIC3_DEV_ID_SP920)},
+
+	{RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI, HINIC3_DEV_ID_SP560)},
+ 	{RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI, HINIC3_DEV_ID_VF_SP560)},
+ 	{RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI, HINIC3_DEV_ID_HYPER_VF_SP560)},
 
 	{RTE_PCI_DEVICE(PCI_VENDOR_ID_BP1, HINIC3_DEV_ID_SP620)},
 	{RTE_PCI_DEVICE(PCI_VENDOR_ID_BP1, HINIC3_DEV_ID_VF_SP620)},
@@ -1008,8 +1013,7 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 		goto adjust_bufsize_fail;
 	}
 
-	if (HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev) ||
-	    HINIC3_SUPPORT_RX_SW_COMPACT_CQE(nic_dev)) {
+	if (nic_dev->config.rx_cqe_compact_en) {
 		/* Default rx wqe type set to compact wqe if NIC supports compact rx CQE */
 		rxq->wqe_type = HINIC3_COMPACT_RQ_WQE;
 	} else {
@@ -1087,8 +1091,7 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 		goto alloc_rx_info_fail;
 	}
 
-	if (HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev) ||
-	    HINIC3_SUPPORT_RX_SW_COMPACT_CQE(nic_dev)) {
+	if (nic_dev->config.rx_cqe_compact_en) {
 		ci_mz = hinic3_dma_zone_reserve(dev, "hinic3_ci_mz", qid,
 						ci_mz_size, ci_mz_align, (int)socket_id);
 
@@ -1390,7 +1393,7 @@ static void hinic3_rx_queue_release(struct rte_eth_dev *dev, uint16_t queue_id)
 	if (IS_QPOOL_MODE(nic_dev))
 		hinic3_release_user_queue(nic_dev, rxq->q_id);
 	if (!rxq->is_hairpin) {
-		if (HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev))
+		if (nic_dev->config.rx_cqe_compact_en)
 			hinic3_memzone_free(rxq->ci_mz);
 		else
 			hinic3_memzone_free(rxq->cqe_mz);
@@ -4128,16 +4131,92 @@ static void hinic3_nic_tx_rx_ops_init(struct hinic3_nic_dev *nic_dev)
 	else
 		nic_dev->tx_rx_ops.nic_tx_set_wqe_offload = hinic3_tx_set_normal_task_offload;
 
-	if (HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev) ||
-	    HINIC3_SUPPORT_RX_SW_COMPACT_CQE(nic_dev)) {
-		nic_dev->tx_rx_ops.nic_rx_get_cqe_info = hinic3_rx_get_compact_cqe_info;
+	if (nic_dev->config.rx_cqe_compact_en) {
 		nic_dev->tx_rx_ops.nic_rx_cqe_done = rx_integrated_cqe_done;
 		nic_dev->tx_rx_ops.nic_rx_poll_rq_empty = hinic3_poll_integrated_cqe_rq_empty;
 	} else {
-		nic_dev->tx_rx_ops.nic_rx_get_cqe_info = hinic3_rx_get_cqe_info;
 		nic_dev->tx_rx_ops.nic_rx_cqe_done = rx_separate_cqe_done;
 		nic_dev->tx_rx_ops.nic_rx_poll_rq_empty = hinic3_poll_rq_empty;
 	}
+
+	/* The structure of the htn separation and integration CQE is consistent */
+	if (nic_dev->config.rx_cqe_compact_en || HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev)) {
+		nic_dev->tx_rx_ops.nic_rx_get_cqe_info = hinic3_rx_get_compact_cqe_info;
+	} else {
+		nic_dev->tx_rx_ops.nic_rx_get_cqe_info = hinic3_rx_get_cqe_info;
+	}
+}
+
+static void hinic3_nic_feature_init(struct hinic3_nic_dev *nic_dev)
+{
+	if ((HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev) || HINIC3_SUPPORT_RX_SW_COMPACT_CQE(nic_dev)) &&
+		(nic_dev->config.rx_cqe_compact_en == HINIC3_DEFAULT_CQE_COMPACT_EN)) {
+		nic_dev->config.rx_cqe_compact_en = 1;
+		PMD_DRV_LOG(INFO, "nic compact_cqe is on.");
+	} else {
+		nic_dev->config.rx_cqe_compact_en = 0;
+		PMD_DRV_LOG(INFO, "nic compact_cqe is off.");
+	}
+}
+
+static int hinic3_nic_common_args_check_handler(const char *key, const char *val, void *opaque)
+{
+	struct hinic3_nic_common_dev_config *config = opaque;
+	signed long tmp;
+
+	if (val == NULL || *val == '\0') {
+		PMD_DRV_LOG(ERR, "Key %s is missing value.", key);
+		return -EINVAL;
+	}
+	errno = 0;
+	tmp = strtol(val, NULL, 0);
+	if (errno) {
+		rte_errno = errno;
+		PMD_DRV_LOG(WARNING, "%s: \"%s\" is an invalid integer.", key, val);
+		return -rte_errno;
+	}
+	if (strcmp(key, "tx_pending_limit") == 0) {
+		config->tx_pending_limit = tmp / HINIC3_CI_PENDING_LIMIT_UNIT;
+	} else if (strcmp(key, "tx_coalescing_time") == 0) {
+		config->tx_coalescing_time = tmp / HINIC3_CI_COALESCING_TIME_UNIT;
+	} else if (strcmp(key, "rx_cqe_compact_en") == 0) {
+		config->rx_cqe_compact_en = !!tmp;
+	} else if (strcmp(key, "rx_cqe_coalesce_num") == 0) {
+		config->rx_cqe_coalesce_num = tmp / HINIC3_CI_PENDING_LIMIT_UNIT;
+	} else if (strcmp(key, "rx_cqe_timer_loop") == 0) {
+		config->rx_cqe_timer_loop = tmp / HINIC3_CI_COALESCING_TIME_UNIT;
+	}
+	return 0;
+}
+
+static int hinic3_nic_common_config_get(struct rte_pci_device *pci_dev, struct hinic3_nic_common_dev_config *config)
+{
+	int ret = 0;
+	struct rte_kvargs *kvlist;
+	struct rte_device *eal_dev = &pci_dev->device;
+
+	/* Set private param defaults. */
+	config->tx_pending_limit = HINIC3_DEFAULT_TX_CI_PENDING_LIMIT;
+	config->tx_coalescing_time = HINIC3_DEFAULT_TX_CI_COALESCING_TIME;
+	config->rx_cqe_compact_en = HINIC3_DEFAULT_CQE_COMPACT_EN;
+	config->rx_cqe_coalesce_num = HINIC3_RX_CQE_COALESCE_NUM;
+	config->rx_cqe_timer_loop = HINIC3_RX_CQE_TIMER_LOOP;
+	if (eal_dev->devargs == NULL)
+		return 0;
+	kvlist = rte_kvargs_parse(eal_dev->devargs->args, NULL);
+	if (kvlist == NULL) {
+		PMD_DRV_LOG(ERR, "nic private parameter err, the format must be '-a dev,[key]=[value]'.");
+		return -EINVAL;
+	}
+	ret = rte_kvargs_process(kvlist, NULL, hinic3_nic_common_args_check_handler, config);
+	if (ret)
+		ret = -rte_errno;
+	rte_kvargs_free(kvlist);
+	PMD_DRV_LOG(
+		INFO, "tx_pending_limit:%upkt, tx_coalescing_time:%uus, rx_cqe_coalesce_num:%upkt, rx_cqe_timer_loop:%uus.",
+		config->tx_pending_limit * HINIC3_CI_PENDING_LIMIT_UNIT, config->tx_coalescing_time * HINIC3_CI_COALESCING_TIME_UNIT,
+		config->rx_cqe_coalesce_num * HINIC3_CI_PENDING_LIMIT_UNIT, config->rx_cqe_timer_loop * HINIC3_CI_COALESCING_TIME_UNIT);
+	return ret;
 }
 
 static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev)
@@ -4186,6 +4265,13 @@ static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev)
 		 "dbdf-%.4x:%.2x:%.2x.%x",
 		 pci_dev->addr.domain, pci_dev->addr.bus,
 		 pci_dev->addr.devid, pci_dev->addr.function);
+
+	err = hinic3_nic_common_config_get(pci_dev, &nic_dev->config);
+	if (err < 0) {
+		PMD_DRV_LOG(ERR, "Failed to get nic device arguments: %s", strerror(rte_errno));
+		rte_free(nic_dev);
+		return err;
+	}
 
 	/* Alloc mac_addrs */
 	eth_dev->data->mac_addrs = rte_zmalloc("hinic3_mac",
@@ -4270,6 +4356,7 @@ static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev)
 		goto get_cap_fail;
 	}
 
+	hinic3_nic_feature_init(nic_dev);
 	hinic3_nic_cmdq_adapt_init(nic_dev);
 	hinic3_nic_tx_rx_ops_init(nic_dev);
 
@@ -4427,6 +4514,13 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 		 pci_dev->addr.domain, pci_dev->addr.bus,
 		 pci_dev->addr.devid, pci_dev->addr.function);
 
+	err = hinic3_nic_common_config_get(pci_dev, &nic_dev->config);
+	if (err < 0) {
+		PMD_DRV_LOG(ERR, "Failed to get nic device arguments: %s", strerror(rte_errno));
+		rte_free(nic_dev);
+		return err;
+	}
+
 	/* Alloc mac_addrs */
 	eth_dev->data->mac_addrs = rte_zmalloc("hinic3_mac",
 		HINIC3_MAX_UC_MAC_ADDRS * sizeof(struct rte_ether_addr), 0);
@@ -4504,6 +4598,7 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 		goto get_cap_fail;
 	}
 
+	hinic3_nic_feature_init(nic_dev);
 	hinic3_nic_cmdq_adapt_init(nic_dev);
 	hinic3_nic_tx_rx_ops_init(nic_dev);
 
