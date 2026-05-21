@@ -7,6 +7,7 @@
 
 #include "mml/hinic3_pmd_mml_lib.h"
 #include "hinic3_compat.h"
+#include "hinic3_pmd_cmd.h"
 #include "hinic3_pmd_hwdev.h"
 #include "hinic3_pmd_csr.h"
 #include "hinic3_pmd_mgmt.h"
@@ -814,7 +815,7 @@ static int hinic3_mbox_to_func(struct hinic3_mbox *func_to_func,
 
 	set_mbox_to_func_event(func_to_func, EVENT_START);
 
-	use_tlp = IS_TLP_MBX(dst_func) && 
+	use_tlp = IS_TLP_MBX(dst_func) &&
 		(!IS_BIFUR_MODE() || (hinic3_pcie_itf_id(func_to_func->hwdev) != SPU_HOST_ID));
 
 	if (use_tlp)
@@ -849,9 +850,28 @@ static int hinic3_mbox_to_func(struct hinic3_mbox *func_to_func,
 
 	func_to_func->mbox_ack_cnt++;
 	if (mod != mbox_for_resp->mod || cmd != mbox_for_resp->cmd) {
-		PMD_DRV_LOG(ERR, "Invalid response mbox message, mod: 0x%x, cmd: 0x%x, expect mod: 0x%x, cmd: 0x%x\n",
-			    mbox_for_resp->mod, mbox_for_resp->cmd, mod, cmd);
-		hinic3_dump_aeq_mbox_info(func_to_func->hwdev);
+		if (cmd != HINIC3_NIC_CMD_FDIR_EXT)
+			PMD_DRV_LOG(ERR, "Invalid response mbox message, mod: 0x%x, cmd: 0x%x, expect mod: 0x%x, cmd: 0x%x\n",
+				    mbox_for_resp->mod, mbox_for_resp->cmd, mod, cmd);
+
+		if (buf_out && out_size) {
+ 	 		if (*out_size < mbox_for_resp->mbox_len) {
+ 	 			PMD_DRV_LOG(ERR, "Invalid response mbox message length: %d for "
+ 	 				    "mod: %d cmd: %d, should less than: %d",
+ 	 				    mbox_for_resp->mbox_len, mod, cmd,
+ 	 				    *out_size);
+ 	 			hinic3_dump_aeq_mbox_info(func_to_func->hwdev);
+ 	 			err = -EFAULT;
+ 	 			goto send_err;
+ 	 		}
+
+ 	 		if (mbox_for_resp->mbox_len)
+ 	 			memcpy(buf_out, mbox_for_resp->mbox,
+ 	 			       (size_t)(mbox_for_resp->mbox_len));
+
+ 	 		*out_size = mbox_for_resp->mbox_len;
+ 	 	}
+
 		err = -EFAULT;
 		goto send_err;
 	}

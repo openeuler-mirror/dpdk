@@ -429,7 +429,7 @@ int hinic3_set_vport_enable(void *hwdev, bool enable)
 
 	if (!hwdev)
 		return -EINVAL;
-	
+
 	if (IS_QPOOL_MODE()) {
 		PMD_DRV_LOG(WARNING, "Qpool not support set vport enable");
 		return 0;
@@ -1716,7 +1716,7 @@ int hinic3_add_tcam_rule(void *hwdev, struct hinic3_tcam_cfg_rule *tcam_rule, u8
 		if (bifur_en)
 			tcam_cmd.bifur_rss_en = 1;
 	}
-	
+
 	memcpy((void *)&tcam_cmd.rule, (void *)tcam_rule,
 		sizeof(struct hinic3_tcam_cfg_rule));
 	tcam_cmd.type = tcam_rule_type;
@@ -1830,7 +1830,7 @@ int hinic3_flush_tcam_rule(void *hwdev)
 	if (IS_QPOOL_MODE())
  	 	tcam_flush.func_id = ((struct hinic3_hwdev*)hwdev)->qpool_qgrp_id;
  	else
- 		tcam_flush.func_id = hinic3_global_func_id(hwdev);	
+ 		tcam_flush.func_id = hinic3_global_func_id(hwdev);
 
 	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_FLUSH_TCAM,
 				     &tcam_flush,
@@ -1903,7 +1903,7 @@ static int hinic3_set_rq_flush_qpool(struct hinic3_cmd_set_rq_flush *rq_flush_ms
 	err = ioctl(fd, 0, &msg_to_kernel);
 	if (err < 0)
 		PMD_DRV_LOG(ERR, "Set qpool rx flush err : %d.", errno);
-	
+
 	return err;
 }
 
@@ -1983,7 +1983,7 @@ int hinic3_set_link_status_follow(void *hwdev, enum hinic3_link_follow_status st
 	if (!hwdev)
 		return -EINVAL;
 
-	
+
 	if (IS_QPOOL_MODE()) {
  	  	PMD_DRV_LOG(WARNING, "Qpool mode not support set link status flow.");
  	 	return 0;
@@ -2213,7 +2213,7 @@ hinic3_get_bifur_enable(void *hwdev, u8 *bifur_en, u8 *iso_en, u8 *bifur_type)
 
 	if (bifur_type != NULL)
 		*bifur_type = bifur_cmd.flow_bifur_type;
-	
+
 	return 0;
 }
 
@@ -2624,10 +2624,7 @@ int hinic3_fdir_flush_sec_tcam_rule(void *hwdev)
 				     &cmd_buf,
 				     sizeof(struct hinic3_flush_tcam_rules),
 				     &cmd_buf, &out_size);
-	if (cmd_buf.msg_head.status == HINIC3_MGMT_CMD_UNSUPPORTED) {
-		err = HINIC3_MGMT_CMD_UNSUPPORTED;
-		PMD_DRV_LOG(ERR, "Firmware/uP doesn't support flush tcam fdir");
-	} else if (err || (!out_size) || cmd_buf.msg_head.status) {
+	if (err || (!out_size) || cmd_buf.msg_head.status) {
 		PMD_DRV_LOG(ERR,
 			    "Flush tcam fdir rules failed, err: %d, status: 0x%x, out size: 0x%x",
 			    err, cmd_buf.msg_head.status, out_size);
@@ -2656,11 +2653,15 @@ int hinic3_fdir_cfg_sec_tcam(void *hwdev, u8 *en)
 				     &cmd_buf,
 				     sizeof(struct hinic3_flush_tcam_rules),
 				     &cmd_buf, &out_size);
-	if (err || cmd_buf.msg_head.status || !out_size) {
-		PMD_DRV_LOG(ERR,
-			    "Flush tcam fdir rules failed, err: %d, status: 0x%x, out size: 0x%x",
-			    err, cmd_buf.msg_head.status, out_size);
-		err = -EIO;
+	if (cmd_buf.msg_head.status == HINIC3_MGMT_CMD_UNSUPPORTED) {
+ 	 	return 0;
+	} else {
+		if (err || cmd_buf.msg_head.status || !out_size) {
+			PMD_DRV_LOG(ERR,
+				    "Flush tcam fdir rules failed, err: %d, status: 0x%x, out size: 0x%x",
+				    err, cmd_buf.msg_head.status, out_size);
+			err = -EIO;
+		}
 	}
 
 	if (en != NULL)
@@ -2718,7 +2719,7 @@ int hinic3_set_fec_mode(struct hinic3_hwdev *hwdev, u8 fecparam)
 
 	err = mag_msg_to_mgmt_sync(hwdev, MAG_CMD_CFG_FEC_MODE, &fec_msg, sizeof(fec_msg),
 				   &fec_msg, &out_size);
-	
+
 	if ((fec_msg.head.status != 0) || err) {
 		PMD_DRV_LOG(ERR, "Failed to set fec mode failed, err: %d, status: 0x%x, out size: 0x%x\n",
 			    err, fec_msg.head.status, out_size);
@@ -2749,7 +2750,7 @@ int hinic3_get_fec_mode(struct hinic3_hwdev *hwdev, u8 *advertised_fec, u8 *supp
 
 	err = mag_msg_to_mgmt_sync(hwdev, MAG_CMD_CFG_FEC_MODE, &fec_msg, sizeof(fec_msg),
 				   &fec_msg, &out_size);
-	
+
 	if ((fec_msg.head.status != 0) || err) {
 		PMD_DRV_LOG(ERR, "Failed to get fec mode failed, err: %d, status: 0x%x, out size: 0x%x\n",
 			    err, fec_msg.head.status, out_size);
