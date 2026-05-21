@@ -84,7 +84,7 @@ pcap_hook_rx_pre(void)
     for (i = 0; i < task_batch.count; i++) {
         pcap_task_record = task_batch.task_array[i];
         if (pcap_timeout_check_s(pcap_task_record->key.task_start_time, pcap_task_record->key.task_time)) {
-            pcap_task_record->stop_flag = true;
+            pcap_task_record->remain_count = 0;
             pcap_task_record->key.task_time = 0;
         }
 
@@ -94,7 +94,7 @@ pcap_hook_rx_pre(void)
 
     for (i = 0; i < task_batch.count; i++) {
         pcap_task_record = task_batch.task_array[i];
-        if (pcap_task_record->stop_flag == true && pcap_task_record->key.task_time == 0) {
+        if (pcap_task_record->remain_count == 0 && pcap_task_record->key.task_time == 0) {
             HINIC3_LOG(INFO, CAPTURE, "Going to stop capture task %d because timeout.", pcap_task_record->pcap_id);
             int ret = pcap_stop_timeout_task(pcap_task_record->pcap_id);
             if (ret != 0)
