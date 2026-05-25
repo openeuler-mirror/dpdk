@@ -1863,6 +1863,12 @@ hinic3_flow_parse_ethertype_pattern(__rte_unused struct rte_eth_dev *dev,
 
 			case RTE_ETHER_TYPE_LLDP:
 				break;
+			
+			case RTE_ETHER_TYPE_CNM:
+				break;
+			
+			case RTE_ETHER_TYPE_ECP:
+				break;
 
 			default:
 				rte_flow_error_set(error, EINVAL,
