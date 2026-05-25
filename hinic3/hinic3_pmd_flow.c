@@ -1168,104 +1168,97 @@ hinic3_check_rss_queues(struct rte_eth_dev		 *dev,
 	return 0;
 }
 
-static int hinic3_flow_set_normal_rss_action_config(struct rte_eth_dev *dev,
-							const struct rte_flow_action_rss *act_r,
-							const struct rte_flow_action *act,
-							struct rte_flow_error *error,
-							struct hinic3_rss_template_entry **template_entry_out)
+static bool
+hinic3_flow_rss_queues_equal(const struct hinic3_rss_template_entry *template_entry,
+			     const struct rte_flow_action_rss *act_r)
+{
+	u32 j;
+
+	if (template_entry->queue_num != act_r->queue_num)
+		return false;
+
+	for (j = 0; j < act_r->queue_num; j++) {
+		if (template_entry->queues[j] != act_r->queue[j])
+			return false;
+	}
+
+	return true;
+}
+
+static u8
+hinic3_flow_alloc_rss_group_id(struct hinic3_nic_dev *nic_dev)
+{
+	struct hinic3_rss_template_entry *entry;
+	u8 used_mask = 0;
+	u8 group_id;
+
+	TAILQ_FOREACH(entry, &nic_dev->rss_template_list, node)
+		used_mask |= (u8)(1U << entry->rss_group_id);
+
+	for (group_id = HINIC3_RSS_FUNC_GROUP_ID + 1;
+	     group_id <= HINIC3_FLOW_RSS_GROUP_MAX; group_id++) {
+		if (!(used_mask & (1U << group_id)))
+			return group_id;
+	}
+
+	return 0;
+}
+
+static int
+hinic3_flow_set_group_rss_action_config(struct rte_eth_dev *dev,
+					const struct rte_flow_action_rss *act_r,
+					const struct rte_flow_action *act,
+					struct rte_flow_error *error,
+					struct hinic3_rss_template_entry **template_entry_out)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_rss_template_entry *template_entry = NULL;
 	bool queues_match = false;
-	int ret;
 	u32 template_count = 0;
-	u32 j;
-	u16 q_grp_id = 0;
+	u8 rss_group_id;
 
-	/* Traverse the existing RSS template list to check if there is already a matching queue configureation */
 	TAILQ_FOREACH(template_entry, &nic_dev->rss_template_list, node) {
-		if (template_entry->queue_num != act_r->queue_num || template_entry->types != act_r->types)
+		if (!hinic3_flow_rss_queues_equal(template_entry, act_r))
 			continue;
-		/* The same number of elements are compared element by element*/
-		queues_match = true;
-		for (j = 0; j < act_r->queue_num; j++) {
-			if (template_entry->queues[j] != act_r->queue[j]) {
-				queues_match = false;
-				break;
-			}
-		}
 
-		/* If all elements match, the same queue list is found, and the existing template is reused */
-		if (queues_match) {
-			q_grp_id = template_entry->q_grp_id;
-			template_entry->ref_count++;
-			break;
-		}
+		queues_match = true;
+		template_entry->ref_count++;
+		break;
 	}
 
-	/* The matching fails, Apply for a new RSS template.*/
 	if (!queues_match) {
-		/* The number of function templates connot exceed 32. */
 		TAILQ_FOREACH(template_entry, &nic_dev->rss_template_list, node)
 			template_count++;
 
-		if (template_count >= FUNC_MAX_DPDK_NUM) {
-			rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION, act, "RSS template entries exceeds max");
+		if (template_count >= HINIC3_FLOW_RSS_GROUP_MAX) {
+			rte_flow_error_set(error, EINVAL,
+					   HINIC3_FLOW_ERROR_TYPE_ACTION, act,
+					   "Flow RSS group exceeds max");
 			return -rte_errno;
 		}
 
-		/* Alloc global group id*/
-		ret = hinic3_mgmt_cfg_qgrp_id(nic_dev->hwdev, HINIC3_QUEUE_GROUP_ID_ALLOC, &q_grp_id);
-		if (ret != 0) {
-			rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION, act,
-						"Failed to alloc q_grp_id");
-			return ret;
+		rss_group_id = hinic3_flow_alloc_rss_group_id(nic_dev);
+		if (rss_group_id == 0) {
+			rte_flow_error_set(error, EINVAL,
+					   HINIC3_FLOW_ERROR_TYPE_ACTION, act,
+					   "No available flow RSS group");
+			return -rte_errno;
 		}
 
-		/* Alloc rss template */
-		ret = hinic3_rss_template_alloc(nic_dev->hwdev, q_grp_id);
-		if (ret != 0) {
-			rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION, act,
-						"Failed to alloc rss template");
-			goto free_g_grp_id;
-		}
-
-		/* If RSS types are set in the rule, the RSS types are delivered.
-		 * Otherwise, the RSS types of the func are used.
-		 */
-		if (act_r->types == 0) {
-			ret = hinic3_cmdq_set_rss_queue_type(nic_dev->hwdev, nic_dev->rss_type, q_grp_id, 0);
-		} else {
-			struct hinic3_rss_type rss_type = {0};
-			rss_type.ipv4 = (act_r->types & (ETH_RSS_IPV4 | ETH_RSS_FRAG_IPV4)) ? 1 : 0;
-			rss_type.tcp_ipv4 = (act_r->types & ETH_RSS_NONFRAG_IPV4_TCP) ? 1 : 0;
-			rss_type.ipv6 = (act_r->types & (ETH_RSS_IPV6 | ETH_RSS_FRAG_IPV6)) ? 1 : 0;
-			rss_type.tcp_ipv6 = (act_r->types & ETH_RSS_NONFRAG_IPV6_TCP) ? 1 : 0;
-			rss_type.udp_ipv4 = (act_r->types & ETH_RSS_NONFRAG_IPV4_UDP) ? 1 : 0;
-			rss_type.udp_ipv6 = (act_r->types & ETH_RSS_NONFRAG_IPV6_UDP) ? 1 : 0;
-			ret = hinic3_cmdq_set_rss_queue_type(nic_dev->hwdev, rss_type, q_grp_id, 1);
-		}
-
-		if (ret) {
-			rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION, act,
-					"Failed to set rss queue types");
-			goto free_rss_template;
-		}
-
-		template_entry = rte_zmalloc("template_entry", sizeof(struct hinic3_rss_template_entry), 0);
+		template_entry = rte_zmalloc("template_entry",
+					   sizeof(struct hinic3_rss_template_entry), 0);
 		if (template_entry == NULL) {
-			rte_flow_error_set(error, ENOMEM, HINIC3_FLOW_ERROR_TYPE_ACTION, act,
-						"Failed to alloc memory for template entry");
-			goto free_rss_template;
-
+			rte_flow_error_set(error, ENOMEM,
+					   HINIC3_FLOW_ERROR_TYPE_ACTION, act,
+					   "Failed to alloc memory for template entry");
+			return -rte_errno;
 		}
 
-		/* Fill the information in the template_entry */
-		template_entry->q_grp_id = q_grp_id;
+		template_entry->rss_group_id = rss_group_id;
 		template_entry->queue_num = act_r->queue_num;
 		template_entry->ref_count = 1;
-		template_entry->types = act_r->types;
-		rte_memcpy(template_entry->queues, act_r->queue, act_r->queue_num * sizeof(uint16_t));
+		rte_memcpy(template_entry->queues, act_r->queue,
+			   act_r->queue_num * sizeof(uint16_t));
 
 		TAILQ_INSERT_TAIL(&nic_dev->rss_template_list, template_entry, node);
 	}
@@ -1273,15 +1266,7 @@ static int hinic3_flow_set_normal_rss_action_config(struct rte_eth_dev *dev,
 	*template_entry_out = template_entry;
 
 	return 0;
-
-	free_rss_template:
-	hinic3_rss_template_free(nic_dev->hwdev, q_grp_id);
-
-	free_g_grp_id:
-	hinic3_mgmt_cfg_qgrp_id(nic_dev->hwdev, HINIC3_QUEUE_GROUP_ID_FREE, &q_grp_id);
-
-	return ret;
-	}
+}
 
 static int
 hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
@@ -1345,7 +1330,7 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 			if ((dr_feature & NIC_F_HTN_CMDQ)) {
 				rte_flow_error_set(error, EINVAL,
 						   HINIC3_FLOW_ERROR_TYPE_ACTION, act,
-						   "Not support rss acrion.");
+						   "Not support rss action.");
 				return -rte_errno;
 			}
 #endif
@@ -1376,11 +1361,6 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 
 			break;
 		} else {
-			if (hinic3_get_driver_feature(nic_dev) & NIC_F_HTN_CMDQ) {
-				rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION, act,
-						   "Not support rss acrion.");
-				return -rte_errno;
-			}
 			act_r = (const struct rte_flow_action_rss *)act->conf;
 
 			if (!act_r || act_r->queue_num == 0) {
@@ -1397,13 +1377,13 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 				}
 			}
 
-			err = hinic3_flow_set_normal_rss_action_config(dev, act_r, act, error, &filter->template_entry);
+			err = hinic3_flow_set_group_rss_action_config(dev, act_r, act, error, &filter->template_entry);
 			if (err)
 				return err;
 
-			filter->fdir_filter.q_grp_id = filter->template_entry->q_grp_id;
-			filter->fdir_filter.level = act_r->level;
 			filter->fdir_filter.action = RTE_FLOW_ACTION_TYPE_RSS;
+			filter->fdir_filter.rss_group_id = filter->template_entry->rss_group_id;
+
 			break;
 		}
 
@@ -2421,12 +2401,23 @@ hinic3_flow_validate(struct rte_eth_dev          *dev,
 				 &filter_rules);
 }
 
+static int
+hinic3_flow_cfg_rss_indir_group_num(struct hinic3_nic_dev *nic_dev, u8 group_num)
+{
+	u8 prio_tc[HINIC3_DCB_UP_MAX] = {0};
+
+	if (nic_dev->rss_state != HINIC3_RSS_ENABLE)
+		return 0;
+
+	return hinic3_rss_cfg(nic_dev->hwdev, HINIC3_RSS_ENABLE, group_num, prio_tc);
+}
+
 static void
-hinic3_fillout_indir_tbl_by_rss_template(struct hinic3_nic_dev *nic_dev,
+hinic3_fillout_indir_tbl_by_rss_group(struct hinic3_nic_dev *nic_dev,
 					struct hinic3_rss_template_entry *template_entry,
 					u32 *indir)
 {
-	u32 i;
+	u32 start_idx, i;
 	u16 queue_idx;
 	u16 queue_num;
 
@@ -2436,12 +2427,13 @@ hinic3_fillout_indir_tbl_by_rss_template(struct hinic3_nic_dev *nic_dev,
 		return;
 	}
 
+	start_idx = template_entry->rss_group_id * HINIC3_RSS_INDIR_GROUP_SIZE;
 	queue_num = template_entry->queue_num;
 	queue_idx = 0;
 
 	/* fillout indir table used queue list */
-	for (i = 0; i < HINIC3_RSS_INDIR_SIZE; i++) {
-		indir[i] = template_entry->queues[queue_idx];
+	for (i = 0; i < HINIC3_RSS_INDIR_GROUP_SIZE; i++) {
+		indir[start_idx + i] = template_entry->queues[queue_idx];
 		queue_idx = (queue_idx + 1) % queue_num;
 	}
 }
@@ -2519,9 +2511,21 @@ hinic3_flow_create(struct rte_eth_dev           *dev,
 			break;
 
 		template_entry = filter_rules->template_entry;
+		ret = hinic3_flow_cfg_rss_indir_group_num(nic_dev,
+				HINIC3_RSS_INDIR_GROUP_NUM);
+		if (ret) {
+			PMD_DRV_LOG(ERR, "Set rss indir group num failed");
+			goto free_flow;
+		}
 		if (template_entry->ref_count == 1) {
-			hinic3_fillout_indir_tbl_by_rss_template(nic_dev, template_entry, indirtbl);
-			ret = hinic3_rss_queue_set_indir_tbl(nic_dev->hwdev, indirtbl, HINIC3_RSS_INDIR_SIZE, template_entry->q_grp_id);
+			ret = hinic3_rss_get_indir_tbl(nic_dev->hwdev, indirtbl);
+			if (ret) {
+				PMD_DRV_LOG(ERR, "Get rss indir table failed");
+				goto free_flow;
+			}
+
+			hinic3_fillout_indir_tbl_by_rss_group(nic_dev, template_entry, indirtbl);
+			ret = hinic3_rss_set_indir_tbl(nic_dev->hwdev, indirtbl);
 			if (ret) {
 				PMD_DRV_LOG(ERR, "Set rss queue indir tbl failed");
 				goto free_flow;
@@ -2545,37 +2549,40 @@ free_flow:
 	return NULL;
 }
 
-static void hinic3_flow_release_rss_template(struct hinic3_nic_dev *nic_dev,
+static void hinic3_flow_release_rss_group(struct hinic3_nic_dev *nic_dev,
 						struct hinic3_rss_template_entry *template_entry)
 {
-	int ret = 0;
-	u16 q_grp_id;
+	u32 indirtbl[HINIC3_RSS_INDIR_SIZE] = {0};
+	u32 start_idx, i;
+	int ret;
 
 	if (template_entry == NULL)
 		return;
 
-	/* Check the reference count */
 	if (template_entry->ref_count > 1) {
 		template_entry->ref_count--;
-		PMD_DRV_LOG(INFO, "RSS template q_grp_id: %u ref_count decreased to %u",
-				template_entry->q_grp_id, template_entry->ref_count);
 		return;
 	}
 
-	/* If reference count is 1，delete RSS template and q_grp_id */
-	q_grp_id = template_entry->q_grp_id;
+	ret = hinic3_rss_get_indir_tbl(nic_dev->hwdev, indirtbl);
+	if (ret == 0) {
+		start_idx = template_entry->rss_group_id * HINIC3_RSS_INDIR_GROUP_SIZE;
+		for (i = 0; i < HINIC3_RSS_INDIR_GROUP_SIZE; i++)
+			indirtbl[start_idx + i] = (start_idx + i) % nic_dev->num_rqs;
 
-	hinic3_rss_template_free(nic_dev->hwdev, q_grp_id);
-
-	ret = hinic3_mgmt_cfg_qgrp_id(nic_dev->hwdev, HINIC3_QUEUE_GROUP_ID_FREE, &q_grp_id);
-	if (ret != 0)
-		PMD_DRV_LOG(ERR, "Failed to free q_grp_id: %u, ret: %d", q_grp_id, ret);
+		ret = hinic3_rss_set_indir_tbl(nic_dev->hwdev, indirtbl);
+		if (ret != 0)
+			PMD_DRV_LOG(ERR, "Reset rss group %u indir table failed",
+				    template_entry->rss_group_id);
+	}
 
 	TAILQ_REMOVE(&nic_dev->rss_template_list, template_entry, node);
+	if (TAILQ_EMPTY(&nic_dev->rss_template_list)) {
+		ret = hinic3_flow_cfg_rss_indir_group_num(nic_dev, 0);
+		if (ret != 0)
+			PMD_DRV_LOG(ERR, "Restore rss indir group num failed");
+	}
 	rte_free(template_entry);
-	PMD_DRV_LOG(INFO, "RSS template q_grp_id: %u deleted and removed from list", q_grp_id);
-
-	return;
 }
 
 static int
@@ -2612,7 +2619,7 @@ hinic3_flow_destroy(struct rte_eth_dev *dev,
 			TAILQ_REMOVE(&nic_dev->filter_fdir_rule_list, flow, node);
 
 		if (!ret && rules->template_entry != NULL)
- 	 			hinic3_flow_release_rss_template(nic_dev,rules->template_entry);
+ 	 			hinic3_flow_release_rss_group(nic_dev,rules->template_entry);
 
 		break;
 	default:
@@ -2653,7 +2660,7 @@ hinic3_flow_flush_fdir_filter(struct rte_eth_dev *dev)
 			return ret;
 
 		if (filter_rules->template_entry != NULL)
- 	 			hinic3_flow_release_rss_template(nic_dev, filter_rules->template_entry);
+ 	 			hinic3_flow_release_rss_group(nic_dev, filter_rules->template_entry);
 
 		TAILQ_REMOVE(&nic_dev->filter_fdir_rule_list, flow, node);
 		rte_free(filter_rules);

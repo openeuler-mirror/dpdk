@@ -70,8 +70,7 @@ struct hinic3_fdir_filter {
 	uint8_t outer_ip_type;
 	uint8_t tunnel_type;
  	uint8_t action;
- 	uint32_t level;
-	uint16_t q_grp_id;
+	uint16_t rss_group_id;
 	struct hinic3_fdir_rule_key key_mask;
 	struct hinic3_fdir_rule_key key_spec;
 	uint32_t rq_index; /**< Queue assigned when matched. */
@@ -733,14 +732,20 @@ struct hinic3_tcam_info {
 #define HINIC3_QUEUE_MAX          16
 #endif
 
+/* 256-entry RSS indir table split into 8 groups; group0 for func RSS */
+#define HINIC3_RSS_INDIR_GROUP_NUM	8
+#define HINIC3_RSS_INDIR_GROUP_SIZE	(HINIC3_RSS_INDIR_SIZE / HINIC3_RSS_INDIR_GROUP_NUM)
+#define HINIC3_RSS_FUNC_GROUP_ID	0
+#define HINIC3_FLOW_RSS_GROUP_MAX	(HINIC3_RSS_INDIR_GROUP_NUM - 1)
+
 /* RSS template entry structure for managing RSS templates */
 struct hinic3_rss_template_entry {
 	TAILQ_ENTRY(hinic3_rss_template_entry) node;
-	u64 types;
-	u16 q_grp_id;					/* Queue group ID */
-	u16 queue_num;					/* Number of queues */
-	u16 queues[HINIC3_QUEUE_MAX];	/* Queue list */
+	u16 queue_num;			/* Number of queues */
+	u16 rss_group_id;		/* Indir group id: 1-7 for flow rss */
 	u16 ref_count;
+	u16 rsvd;
+	u16 queues[HINIC3_QUEUE_MAX];	/* Queue list */
 };
 
 /* RSS template list head */
