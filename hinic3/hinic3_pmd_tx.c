@@ -897,7 +897,7 @@ static int hinic3_set_tx_offload(struct hinic3_nic_dev *nic_dev,
 		offload_info->vlan_sel = HINIC3_TX_TPID0;
 	}
 
-	if (hinic3_is_ipinip(mbuf) && IS_SP600_NIC_FEATURE(nic_dev)) {
+	if (hinic3_is_ipinip(mbuf) && is_sp620_nic(nic_dev)) {
 		if(hinic3_ipinip_cksum(mbuf) != 0)
 			return -EINVAL;
 	}
