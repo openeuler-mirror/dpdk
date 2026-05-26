@@ -632,6 +632,8 @@ void hinic3_init_rx_queue_list(struct hinic3_nic_dev *nic_dev)
 	nic_dev->num_rss = 0;
 }
 
+/* Invalid value in indir tbl */
+#define HINIC3_INDIR_INVALID_QUEUE 0xFFFF
 static void hinic3_fill_indir_tbl(struct hinic3_nic_dev *nic_dev,
 				  u32 *indir_tbl)
 {
@@ -642,7 +644,7 @@ static void hinic3_fill_indir_tbl(struct hinic3_nic_dev *nic_dev,
 	if (rss_queue_count == 0) {
 		/* delete q_id from indir tbl */
 		for (i = 0; i < HINIC3_RSS_INDIR_SIZE; i++)
-			indir_tbl[i] = 0xFFFF; /* Invalid value in indir tbl */
+			indir_tbl[i] = HINIC3_INDIR_INVALID_QUEUE;
 	} else {
 		while (i < HINIC3_RSS_INDIR_SIZE)
 			for (j = 0; (j < rss_queue_count) &&

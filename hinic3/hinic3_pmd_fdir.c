@@ -1015,7 +1015,7 @@ int hinic3_enable_rxq_fdir_filter(struct rte_eth_dev *dev, u32 queue_id, u32 abl
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_tcam_filter *it;
 	struct hinic3_tcam_cfg_rule fdir_tcam_rule;
-	int ret;
+	int ret = 0;
 	u32 queue_res;
 	uint16_t index;
 
