@@ -4932,10 +4932,10 @@ static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev)
 		PMD_DRV_LOG(ERR, "intr fd set failed, err = %d", err);
 		goto set_default_feature_fail;
 	}
-#else	
+#else
 	pci_dev->intr_handle.fd = nic_dev->fd;
 	pci_dev->intr_handle.type = RTE_INTR_HANDLE_EXT;
-#endif	
+#endif
 
 	/* Register callback func to eal lib */
 	err = rte_intr_callback_register(PCI_DEV_TO_INTR_HANDLE(pci_dev),
@@ -4986,7 +4986,9 @@ static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev)
 dcb_init_fail:
 init_rx_ptype_table_fail:
 reg_intr_cb_fail:
+#ifdef DPDK_21_11
 set_default_feature_fail:
+#endif
 	hinic3_deinit_mac_addr(eth_dev);
 
 init_mac_table_fail:
