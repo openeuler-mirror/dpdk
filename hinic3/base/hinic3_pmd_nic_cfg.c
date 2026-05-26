@@ -2646,7 +2646,7 @@ int hinic3_fdir_cfg_sec_tcam(void *hwdev, u8 *en)
 
 	cmd_buf.op_code = TCAM_EXTEND_OPCODE_GET_FLAG;
 
-	if(nic_dev->feature_cap != SP600_NIC_FEATURE)
+	if(!is_sp620_nic(nic_dev))
  	 	return 0;
 
 	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_FDIR_EXT,
