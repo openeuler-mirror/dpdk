@@ -6,6 +6,8 @@
 #define _HINIC3_PMD_ETHDEV_H_
 
 #include <rte_ethdev.h>
+#include <rte_kvargs.h>
+#include <rte_devargs.h>
 #include <rte_ethdev_core.h>
 #include "base/hinic3_pmd_nic_cfg.h"
 #include "hinic3_pmd_fdir.h"
@@ -102,6 +104,15 @@
 #define HINIC3_VFTA_SIZE                 (4096 / HINIC3_UINT32_BIT_SIZE)
 #define HINIC3_MAX_QUEUE_NUM             256
 
+#define HINIC3_DEFAULT_TX_CI_PENDING_LIMIT	2
+#define HINIC3_DEFAULT_TX_CI_COALESCING_TIME	2
+#define HINIC3_DEFAULT_CQE_COMPACT_EN 1
+#define HINIC3_RX_CQE_TIMER_LOOP 		8
+#define HINIC3_RX_CQE_COALESCE_NUM		7
+
+#define HINIC3_CI_PENDING_LIMIT_UNIT 8
+#define HINIC3_CI_COALESCING_TIME_UNIT 5
+
 #define HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev) \
 	((struct hinic3_nic_dev *)(dev)->data->dev_private)
 
@@ -197,6 +208,14 @@ struct hinic3_nic_tx_rx_ops {
 	nic_rx_poll_rq_empty_t			nic_rx_poll_rq_empty;
 };
 
+struct hinic3_nic_common_dev_config {
+	unsigned int tx_pending_limit; /* TX CI coalescing parameter pending_limit. */
+	unsigned int tx_coalescing_time; /* TX CI coalescing parameter coalescing_time. */
+	unsigned int rx_cqe_compact_en; /* cqe mode, 0 -- separate cqe, 1 -- compact cqe. */
+	unsigned int rx_cqe_coalesce_num; /* RX CQE parameter coalesce_num. */
+	unsigned int rx_cqe_timer_loop; /* RX CQE parameter time_loop. */
+};
+
 struct hinic3_nic_dev {
 	struct hinic3_hwdev *hwdev; /* Hardware device */
 
@@ -238,6 +257,7 @@ struct hinic3_nic_dev {
 	bool lro_en;
 	pthread_mutex_t pause_mutuex;
 	struct nic_pause_config nic_pause;
+	struct hinic3_nic_common_dev_config config;
 
 	struct rte_ether_addr default_addr;
 	struct rte_ether_addr *mc_list;

@@ -68,6 +68,19 @@
 					RQ_CTXT_CEQ_ATTR_##member##_MASK) \
 					<< RQ_CTXT_CEQ_ATTR_##member##_SHIFT)
 
+#define RQ_CTXT_CQE_LEN_SHIFT				28
+#define RQ_CTXT_MAX_COUNT_SHIFT				18
+
+#define RQ_CTXT_CQE_LEN_MASK				0x3U
+#define RQ_CTXT_MAX_COUNT_MASK				0x3FFU
+#define RQ_CTXT_CQE_LEN_SET(val, member)		(((val) & \
+					RQ_CTXT_##member##_MASK) << \
+					RQ_CTXT_##member##_SHIFT)
+
+#define SQ_CI_ADDR_SHIFT	2
+#define RQ_CI_ADDR_SHIFT	4
+#define RQ_CQE_AGGREGATE_NUM 		768
+
 enum hinic3_qp_ctxt_type {
 	HINIC3_QP_CTXT_TYPE_SQ,
 	HINIC3_QP_CTXT_TYPE_RQ,
@@ -186,11 +199,8 @@ typedef void     (*cmd_buf_to_rss_indir_table_t)(const struct hinic3_cmd_buf *cm
 						 uint32_t *indir_table);
 typedef void     (*cmd_buf_to_rss_indir_table_qpool_t)(const struct hinic3_cmd_buf *cmd_buf,
 						 uint32_t *indir_table, uint16_t indir_table_size);
-typedef void	 (*prepare_rq_ctxt_ceq_and_prefetch_t)(struct hinic3_rq_ctxt *rq_ctxt,
-						       u16 wqe_type,
-						       u16 msix_entry_idx,
-						       bool support_rq_sw_compact_cqe,
-						       u8 intr_disable);
+typedef void	 (*prepare_rq_ctxt_ceq_and_prefetch_t)(struct hinic3_rxq *rq,
+						 struct hinic3_rq_ctxt *rq_ctxt);
 
 typedef void	 (*prepare_sq_ctxt_drop_and_prefetch_t)(struct hinic3_sq_ctxt *sq_ctxt);
 

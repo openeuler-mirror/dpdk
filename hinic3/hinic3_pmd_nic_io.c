@@ -31,9 +31,6 @@
 #include "hinic3_pmd_rx.h"
 #include "hinic3_pmd_ethdev.h"
 
-#define HINIC3_DEAULT_TX_CI_PENDING_LIMIT	2
-#define HINIC3_DEAULT_TX_CI_COALESCING_TIME	2
-
 #define CI_IDX_HIGH_SHIFH				12
 
 #define CI_HIGN_IDX(val)		((val) >> CI_IDX_HIGH_SHIFH)
@@ -133,15 +130,6 @@
 					RQ_CTXT_WQ_PAGE_##member##_MASK) << \
 					RQ_CTXT_WQ_PAGE_##member##_SHIFT)
 
-#define RQ_CTXT_CQE_LEN_SHIFT				28
-#define RQ_CTXT_MAX_COUNT_SHIFT				18
-
-#define RQ_CTXT_CQE_LEN_MASK				0x3U
-#define RQ_CTXT_MAX_COUNT_MASK				0x3FFU
-#define RQ_CTXT_CQE_LEN_SET(val, member)		(((val) & \
-					RQ_CTXT_##member##_MASK) << \
-					RQ_CTXT_##member##_SHIFT)
-
 #define RQ_CTXT_PREF_CI_HI_SHIFT			0
 #define RQ_CTXT_PREF_OWNER_SHIFT			4
 
@@ -168,10 +156,6 @@
 
 #define WQ_PAGE_PFN(page_addr)		((page_addr) >> WQ_PAGE_PFN_SHIFT)
 
-
-#define SQ_CI_ADDR_SHIFT	2
-#define RQ_CI_ADDR_SHIFT	4
-#define RQ_CQE_AGGREGATE_NUM 		768
 void hinic3_sq_prepare_ctxt(struct hinic3_txq *sq, u16 sq_id, struct hinic3_sq_ctxt *sq_ctxt)
 {
 	u64 wq_page_addr;
@@ -243,8 +227,6 @@ void hinic3_rq_prepare_ctxt(struct hinic3_rxq *rq, struct hinic3_rq_ctxt *rq_ctx
 	u32 wq_page_pfn_hi, wq_page_pfn_lo, wq_block_pfn_hi, wq_block_pfn_lo;
 	u16 pi_start, ci_start;
 	u16 wqe_type = rq->wqe_type;
-	u8 intr_disable;
-	bool support_rq_sw_compact_cqe = false;
 
 	/* RQ depth is in unit of 8 Bytes */
 	ci_start = (u16)((rq->cons_idx & rq->q_mask) << wqe_type);
@@ -266,10 +248,7 @@ void hinic3_rq_prepare_ctxt(struct hinic3_rxq *rq, struct hinic3_rq_ctxt *rq_ctx
 	rq_ctxt->ci_pi = RQ_CTXT_CI_PI_SET(ci_start, CI_IDX) | RQ_CTXT_CI_PI_SET(pi_start, PI_IDX);
 
 	/* RQ doesn't need ceq, msix_entry_idx set 1, but mask not enable */
-	intr_disable = rq->dp_intr_en ? 0 : 1;
-	support_rq_sw_compact_cqe = HINIC3_SUPPORT_RX_SW_COMPACT_CQE(rq->nic_dev);
-	rq->nic_dev->cmdq_ops->prepare_rq_ctxt_ceq_and_prefetch(
-		rq_ctxt, wqe_type, rq->msix_entry_idx, support_rq_sw_compact_cqe, intr_disable);
+	rq->nic_dev->cmdq_ops->prepare_rq_ctxt_ceq_and_prefetch(rq, rq_ctxt);
 
 	/* Use 32Byte WQE with SGE for CQE in default */
 	rq_ctxt->wq_pfn_hi_type_owner = RQ_CTXT_WQ_PAGE_SET(wq_page_pfn_hi, HI_PFN) |
@@ -290,11 +269,6 @@ void hinic3_rq_prepare_ctxt(struct hinic3_rxq *rq, struct hinic3_rq_ctxt *rq_ctx
 	case HINIC3_COMPACT_RQ_WQE:
 		/* Use 8Byte WQE without SGE for CQE */
 		rq_ctxt->wq_pfn_hi_type_owner |= RQ_CTXT_WQ_PAGE_SET(3, WQE_TYPE);
-		if (HINIC3_SUPPORT_RX_SW_COMPACT_CQE(rq->nic_dev)) {
-			rq_ctxt->cqe_sge_len |= RQ_CTXT_CQE_LEN_SET(RQ_CQE_AGGREGATE_NUM, MAX_COUNT);
-			rq_ctxt->pi_paddr_hi = upper_32_bits(rq->rq_ci_paddr >> RQ_CI_ADDR_SHIFT);
-			rq_ctxt->pi_paddr_lo = lower_32_bits(rq->rq_ci_paddr >> RQ_CI_ADDR_SHIFT);
-		}
 		break;
 	default:
 		PMD_DRV_LOG(INFO, "Invalid rq wqe type: %u", wqe_type);
@@ -472,9 +446,6 @@ void hinic3_get_func_rx_buf_size(void *dev)
 	nic_dev->rx_buff_len = buf_size;
 }
 
-#define HINIC3_RX_CQE_TIMER_LOOP 		8
-#define HINIC3_RX_CQE_COALESCE_NUM		7
-
 int hinic3_init_rq_cqe_ctxts(struct hinic3_nic_dev *nic_dev)
 {
 	struct hinic3_hwdev *hwdev = NULL;
@@ -503,8 +474,8 @@ int hinic3_init_rq_cqe_ctxts(struct hinic3_nic_dev *nic_dev)
 			rq_ci_paddr = rxq->rq_ci_paddr >> RQ_CI_ADDR_SHIFT;
 			cqe_ctx.ci_addr_hi = upper_32_bits(rq_ci_paddr);
 			cqe_ctx.ci_addr_lo = lower_32_bits(rq_ci_paddr);
-			cqe_ctx.threshold_cqe_num = HINIC3_RX_CQE_COALESCE_NUM;
-			cqe_ctx.timer_loop = HINIC3_RX_CQE_TIMER_LOOP;
+			cqe_ctx.threshold_cqe_num = nic_dev->config.rx_cqe_coalesce_num;
+			cqe_ctx.timer_loop = nic_dev->config.rx_cqe_timer_loop;
 		} else {
 			cqe_ctx.threshold_cqe_num = 0;
 			cqe_ctx.timer_loop = 0;
@@ -579,8 +550,8 @@ int hinic3_init_qp_ctxts(void *dev)
 
 	for (q_id = 0; q_id < nic_dev->num_sqs; q_id++) {
 		sq_attr.ci_dma_base = nic_dev->txqs[q_id]->ci_dma_base >> SQ_CI_ADDR_SHIFT;
-		sq_attr.pending_limit = HINIC3_DEAULT_TX_CI_PENDING_LIMIT;
-		sq_attr.coalescing_time = HINIC3_DEAULT_TX_CI_COALESCING_TIME;
+		sq_attr.pending_limit = nic_dev->config.tx_pending_limit;
+		sq_attr.coalescing_time = nic_dev->config.tx_coalescing_time;
 		sq_attr.intr_en = 0;
 		sq_attr.intr_idx = 0; /* Tx doesn't need intr */
 		sq_attr.l2nic_sqn = hwdev->bifur_mode == HINIC3_BIFUR_MODE_QPOOL ? 
