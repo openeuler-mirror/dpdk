@@ -100,9 +100,9 @@ struct hinic3_hw_stats {
 #define MAX_DRV_BUF_SIZE		4096
 
 #define HINIC3_SUPPORT_ONLY_ENHANCE_CMDQ(hwdev) \
-	(((struct hinic3_hwdev *)hwdev)->features[0] & HINIC3_F_ONLY_ENHANCE_CMDQ)
+	(((struct hinic3_hwdev *)(hwdev))->features[0] & HINIC3_F_ONLY_ENHANCE_CMDQ)
 #define HINIC3_IS_USE_REAL_RX_BUF_SIZE(hwdev) \
-	(((struct hinic3_hwdev *)hwdev)->features[0] & HINIC3_F_USE_REAL_RX_BUF_SIZE)
+	(((struct hinic3_hwdev *)(hwdev))->features[0] & HINIC3_F_USE_REAL_RX_BUF_SIZE)
 
 struct nic_cmd_chip_fault_stats {
 	u32 offset;
