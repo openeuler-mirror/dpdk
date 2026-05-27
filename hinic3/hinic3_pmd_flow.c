@@ -1362,10 +1362,15 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 			break;
 		} else {
 			act_r = (const struct rte_flow_action_rss *)act->conf;
-
-			if (!act_r || act_r->queue_num == 0) {
+			if (act_r->level != 0) {
 				rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION, act,
-								"Invalid rss queue num is zero");
+								"Current rss not support level");
+				return -rte_errno;
+			}
+
+			if (!act_r || act_r->queue_num == 0 || act_r->queue_num > 32) {
+				rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION, act,
+								"Invalid rss queue num, queue num is zero or exceed 32");
 				return -rte_errno;
 			}
 
@@ -1843,10 +1848,10 @@ hinic3_flow_parse_ethertype_pattern(__rte_unused struct rte_eth_dev *dev,
 
 			case RTE_ETHER_TYPE_LLDP:
 				break;
-			
+
 			case RTE_ETHER_TYPE_CNM:
 				break;
-			
+
 			case RTE_ETHER_TYPE_ECP:
 				break;
 
