@@ -313,13 +313,17 @@ hinic3_packet_detect_mode_cmd(struct unixctl_conn *conn, int argc __rte_unused, 
 void
 unixctl_hinic3_cmd_forward_register(void)
 {
-    hinic3_command_register("hwoff/set-forward-mode", "{ low_latency | high_throughput | { -h | --help } }",
-        1, 1, hinic3_forward_mode_set_cmd, NULL);
-    hinic3_command_register("hwoff/show-forward-mode", "", 0, 0, hinic3_forward_mode_get_cmd, NULL);
+    if (hinic3_card_mod_get() != PROG_MODE) {
+        hinic3_command_register("hwoff/set-forward-mode", "{ low_latency | high_throughput | { -h | --help } }",
+            1, 1, hinic3_forward_mode_set_cmd, NULL);
+        hinic3_command_register("hwoff/show-forward-mode", "", 0, 0, hinic3_forward_mode_get_cmd, NULL);
+    }
     hinic3_command_register("hwoff/flow-escape-mode",
         "{ enable | disable | show | { -h | --help } }",
         1, 1, hinic3_flow_escape_mode_cmd, NULL);
-    hinic3_command_register("hwoff/packet-detect-mode",
-        "{ --enable | --disable | --show | { -h | --help } }",
-        1, 1, hinic3_packet_detect_mode_cmd, NULL);
+    if (hinic3_user_scenario_get() == COM_BD) {  
+        hinic3_command_register("hwoff/packet-detect-mode",
+            "{ --enable | --disable | --show | { -h | --help } }",
+            1, 1, hinic3_packet_detect_mode_cmd, NULL);
+    }
 }

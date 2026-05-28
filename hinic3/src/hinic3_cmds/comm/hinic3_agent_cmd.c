@@ -71,16 +71,20 @@ void hinic3_agent_cmd_init(void)
 
     unixctl_hinic3_flow_cmd_init();
     unixctl_hinic3_flow_dump_cmd_init();
-    unixctl_hinic3_multi_qos_dfx_init();
+    if(hinic3_user_scenario_get() == COM_BD) {
+        unixctl_hinic3_multi_qos_dfx_init();
+        unixctl_meter_dfx_init();
+        unixctl_hinic3_agent_cmd_init();
+    }
     unixctl_hinic3_port_cmd_init();
-    unixctl_hinic3_agent_cmd_init();
-    unixctl_hinic3_trace_flow_init();
     unixctl_thread_status_dfx_init();
     unixctl_common_cmd_register();
-    unixctl_hinic3_query_cmd_init();
-    unixctl_hinic3_delete_cmd_init();
-    unixctl_meter_dfx_init();
-
-    if (hinic3_check_fuzzy_flow_switch() == true)
-        unixctl_hinic3_mega_flow_dump_cmd_init();
+    if (hinic3_card_mod_get() != PROG_MODE) {
+        unixctl_hinic3_trace_flow_init();
+        unixctl_hinic3_query_cmd_init();
+        unixctl_hinic3_delete_cmd_init();
+        if (hinic3_check_fuzzy_flow_switch() == true) {
+            unixctl_hinic3_mega_flow_dump_cmd_init();
+        }
+    }   
 }
