@@ -47,6 +47,7 @@ struct hinic3_command_mgr {
 };
 
 struct hinic3_command_mgr g_command_mgr = {0};
+static bool hinic3_command_mgr_init_flag = false;
 
 static void
 hinic3_list_commands(struct unixctl_conn *conn, int argc HINIC3_UNUSED, const char *argv[] HINIC3_UNUSED, void *aux)
@@ -635,6 +636,7 @@ void
 hinic3_command_hmap_init(void)
 {
     hinic3_shash_init(&g_command_mgr.command_map);
+    hinic3_command_mgr_init_flag = true;
 }
 
 static int
@@ -694,6 +696,8 @@ hinic3_command_mgr_init(void)
 void
 hinic3_command_mgr_uninit(void)
 {
-    hinic3_shash_destroy_free_data(&g_command_mgr.command_map);
+    if (hinic3_command_mgr_init_flag) {
+        hinic3_shash_destroy_free_data(&g_command_mgr.command_map);
+    }
     g_command_mgr.thread_exit = HINIC3_THREAD_EXIT_STATUS;
 }
