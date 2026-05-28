@@ -635,9 +635,11 @@ void unixctl_hinic3_cmd_log_register(void)
     hinic3_command_register("hwoff/show-log-list", "", 0, 0, hinic3_show_log_list, NULL);
     hinic3_command_register("hwoff/set-log-level", "{ -m <module-name> -l <level> -t <duration> | { -h | --help } }",
         1, SET_LOG_MODULE_ARG_NUM, hinic3_set_log_level, NULL);
-    hinic3_command_register("hwoff/log-limit-ctl",
-        "{ --disable INTEGER<duration> | --enable | --show | { -h | --help } }",
-        1, SET_LOG_HELP_ARG_NUM, hinic3_log_limit_ctl_cmd, NULL);    
+    if (hinic3_card_mod_get() != PROG_MODE) {
+        hinic3_command_register("hwoff/log-limit-ctl",
+            "{ --disable INTEGER<duration> | --enable | --show | { -h | --help } }",
+            1, SET_LOG_HELP_ARG_NUM, hinic3_log_limit_ctl_cmd, NULL); 
+    }   
 }
 
 static inline unsigned int hinic3_sat_mul(unsigned int x, unsigned int y)
