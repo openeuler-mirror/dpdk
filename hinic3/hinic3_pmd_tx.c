@@ -1330,6 +1330,7 @@ static void hinic3_prepare_sq_ctrl(struct hinic3_sq_wqe_combo *wqe_combo,
 u16 hinic3_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, u16 nb_pkts)
 {
 	struct hinic3_txq *txq = tx_queue;
+	struct hinic3_nic_dev *nic_dev = txq->nic_dev;
 	struct hinic3_tx_info *tx_info = NULL;
 	struct rte_mbuf *mbuf_pkt = NULL;
 	struct hinic3_sq_wqe_combo wqe_combo = {0};
@@ -1340,6 +1341,7 @@ u16 hinic3_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, u16 nb_pkts)
 	u64 payload_len = 0;
 	u64 tx_bytes = 0;
 	u16 free_wqebb_cnt, nb_tx;
+	u64 tx_free_loop = 0;
 	int err;
 
 #ifdef  HINIC3_XSTAT_PROF_TX
@@ -1380,16 +1382,15 @@ u16 hinic3_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, u16 nb_pkts)
 		}
 
 		free_wqebb_cnt = hinic3_get_sq_free_wqebbs(txq);
-		if (unlikely(wqe_info.wqebb_cnt > free_wqebb_cnt)) {
+		while (wqe_info.wqebb_cnt > free_wqebb_cnt) {
 			/* Reclaim again */
 			hinic3_xmit_mbuf_cleanup(txq, free_cnt);
 			free_wqebb_cnt = hinic3_get_sq_free_wqebbs(txq);
-			if (unlikely(wqe_info.wqebb_cnt > free_wqebb_cnt)) {
+			if ((tx_free_loop++) > nic_dev->config.tx_free_loop) {
 				txq->txq_stats.tx_busy += (nb_pkts - nb_tx);
-				break;
+				goto end;
 			}
 		}
-
 
 		/* Task or bd section maybe warpped for one wqe */
 		hinic3_set_wqe_combo(txq, &wqe_combo, &wqe_info);
@@ -1436,6 +1437,7 @@ u16 hinic3_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, u16 nb_pkts)
 		tx_bytes += mbuf_pkt->pkt_len;
 	}
 
+end:
 	/* Update txq stats */
 	if (nb_tx) {
 		hinic3_write_db(txq->db_addr, txq->local_qid, (int)(txq->cos),

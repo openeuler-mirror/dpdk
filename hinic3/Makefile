@@ -51,7 +51,7 @@ CFLAGS += -I$(RTE_SDK)/drivers/net/hinic3/mml
 CFLAGS += -I$(RTE_SDK)/drivers/net/hinic3/stn
 
 LDLIBS += -lrte_eal -lrte_mbuf -lrte_mempool -lrte_ring
-LDLIBS += -lrte_ethdev -lrte_net -lrte_hash
+LDLIBS += -lrte_ethdev -lrte_net -lrte_hash -lrte_kvargs
 LDLIBS += -lrte_bus_pci
 LDLIBS += -lrte_pci
 LDLIBS += -lpthread

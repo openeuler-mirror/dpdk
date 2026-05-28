@@ -10,6 +10,7 @@
 
 #include <rte_pci.h>
 #include <rte_bus_pci.h>
+#include <rte_kvargs.h>
 #include <rte_mbuf.h>
 #include <rte_malloc.h>
 #include <rte_mempool.h>
@@ -46,6 +47,9 @@
 #define HINIC3_DEFAULT_NB_QUEUES	1
 #define HINIC3_DEFAULT_RING_SIZE	1024
 #define HINIC3_MAX_LRO_SIZE		65536
+
+#define HINIC3_RX_EMPTY_THRESHOLD 3
+#define HINIC3_MAX_TX_FREE_LOOP   1000
 
 #define HINIC3_DEFAULT_RX_FREE_THRESH	32
 #define HINIC3_DEFAULT_TX_FREE_THRESH	32
@@ -4765,6 +4769,64 @@ static int hinic3_get_nic_fd(struct hinic3_hwdev *hwdev)
 	return fd;
 }
 
+static int
+hinic3_nic_common_args_check_handler(const char *key, const char *val,
+				     void *opaque)
+{
+	struct hinic3_nic_common_dev_config *config = opaque;
+	signed long tmp;
+
+	if (val == NULL || *val == '\0') {
+		PMD_DRV_LOG(ERR, "Key %s is missing value.", key);
+		return -EINVAL;
+	}
+
+	errno = 0;
+	tmp = strtol(val, NULL, 0);
+	if (errno) {
+		rte_errno = errno;
+		PMD_DRV_LOG(WARNING, "%s: \"%s\" is an invalid integer.", key, val);
+		return -rte_errno;
+	}
+
+	if (strcmp(key, "rx_empty_threshold") == 0)
+		config->rx_empty_threshold = tmp;
+	else if (strcmp(key, "tx_free_loop") == 0)
+		config->tx_free_loop = tmp;
+
+	return 0;
+}
+
+static int
+hinic3_nic_common_config_get(struct rte_pci_device *pci_dev,
+			     struct hinic3_nic_common_dev_config *config)
+{
+	int ret = 0;
+	struct rte_kvargs *kvlist;
+	struct rte_device *eal_dev = &pci_dev->device;
+
+	/* Set private param defaults. */
+	config->rx_empty_threshold = HINIC3_RX_EMPTY_THRESHOLD;
+	config->tx_free_loop = HINIC3_MAX_TX_FREE_LOOP;
+
+	if (eal_dev->devargs == NULL)
+		return 0;
+
+	kvlist = rte_kvargs_parse(eal_dev->devargs->args, NULL);
+	if (kvlist == NULL) {
+		PMD_DRV_LOG(ERR, "nic private parameter err, the format must be '-a dev,[key]=[value]'.");
+		return -EINVAL;
+	}
+
+	ret = rte_kvargs_process(kvlist, NULL, hinic3_nic_common_args_check_handler, config);
+	if (ret)
+		ret = -rte_errno;
+
+	rte_kvargs_free(kvlist);
+
+	return ret;
+}
+
 static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev)
 {
 	struct hinic3_tcam_info *tcam_info = NULL;
@@ -5022,6 +5084,8 @@ alloc_eth_addr_fail:
 static int hinic3_dev_init(struct rte_eth_dev *eth_dev)
 {
 	struct rte_pci_device *pci_dev;
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
+	int err;
 
 	pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
 
@@ -5037,9 +5101,20 @@ static int hinic3_dev_init(struct rte_eth_dev *eth_dev)
 	eth_dev->tx_pkt_burst = hinic3_xmit_pkts;
 
 	if (IS_QPOOL_MODE())
- 	 	return hinic3_func_init_qpool(eth_dev);
+ 		err = hinic3_func_init_qpool(eth_dev);
+	else
+		err = hinic3_func_init(eth_dev);
+	if (err < 0)
+		return err;
 
-	return hinic3_func_init(eth_dev);
+	err = hinic3_nic_common_config_get(pci_dev, &nic_dev->config);
+	if (err < 0) {
+		PMD_DRV_LOG(ERR, "Failed to get nic device arguments: %s",
+			strerror(rte_errno));
+		return err;
+	}
+
+	return err;
 }
 
 static int hinic3_dev_uninit(struct rte_eth_dev *dev)
