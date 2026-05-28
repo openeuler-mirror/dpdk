@@ -179,9 +179,7 @@ pcap_cmd_enable_help(struct ds *ds)
 static int
 pcap_cmd_enable_set_pcap_mode(const char *mode_str)
 {
-    if (strcmp(mode_str, "only-header") == 0)
-        pcap_mode_set(ONLY_HEADER);
-    else if (strcmp(mode_str, "limited-capture") == 0)
+    if (strcmp(mode_str, "limited-capture") == 0)
         pcap_mode_set(LIMITED_CAPTURE);
     else if (strcmp(mode_str, "fully-capture") == 0)
         pcap_mode_set(FULLY_CAPTURE);
