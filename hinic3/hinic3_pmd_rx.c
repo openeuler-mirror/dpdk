@@ -1401,7 +1401,6 @@ rx_integrated_cqe_done(struct hinic3_rxq *rxq, volatile struct hinic3_rq_cqe **r
 	return true;
 }
 
-#define HINIC3_RX_EMPTY_THRESHOLD 3
 u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 {
 	struct hinic3_rxq *rxq = rx_queue;
@@ -1420,7 +1419,7 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 	uint64_t t2;
 #endif
 	if (((rte_get_timer_cycles() - rxq->rxq_stats.tsc) < rxq->wait_time_cycle) &&
-	    rxq->rxq_stats.empty >= HINIC3_RX_EMPTY_THRESHOLD)
+	    rxq->rxq_stats.empty >= nic_dev->config.rx_empty_threshold)
 		goto out;
 
 	sw_ci = hinic3_get_rq_local_ci(rxq);

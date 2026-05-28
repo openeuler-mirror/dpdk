@@ -222,6 +222,11 @@ struct hinic3_nic_tx_rx_ops {
 	nic_rx_poll_rq_empty_t			nic_rx_poll_rq_empty;
 };
 
+struct hinic3_nic_common_dev_config {
+	unsigned int rx_empty_threshold;
+	unsigned int tx_free_loop;
+};
+
 struct hinic3_nic_dev {
 	struct hinic3_hwdev *hwdev; /* Hardware device */
 
@@ -262,6 +267,7 @@ struct hinic3_nic_dev {
 	bool pause_set;
 	pthread_mutex_t pause_mutuex;
 	struct nic_pause_config nic_pause;
+	struct hinic3_nic_common_dev_config config;
 
 	struct rte_ether_addr default_addr;
 	struct rte_ether_addr *mc_list;
