@@ -184,11 +184,6 @@ enum hinic3_function_mode {
 #define SP600_NIC_FEATURE   0x0003FFEF
 #define SP560_NIC_FEATURE   0x88C9FFEF
 
-#define IS_SP600_NIC_FEATURE(nic_dev) \
-	(((struct rte_pci_device*)((nic_dev)->hwdev->pci_dev))->id.device_id == HINIC3_DEV_ID_SP620)
-#define IS_SP560_NIC_FEATURE(nic_dev) \
-	((nic_dev)->feature_cap == SP560_NIC_FEATURE)
-
 #define HINIC3_VERIFY_RX_DEPTH     1
 #define HINIC3_VERIFY_TX_DEPTH     0
 
@@ -319,6 +314,9 @@ struct netdev_event {
 };
 
 extern const struct rte_flow_ops hinic3_flow_ops;
+
+bool is_sp620_nic(struct hinic3_nic_dev *nic_dev);
+bool is_sp560_nic(struct hinic3_nic_dev *nic_dev);
 
 int hinic3_dev_rx_queue_intr_enable(struct rte_eth_dev *dev, uint16_t queue_id);
 int hinic3_dev_rx_queue_intr_disable(struct rte_eth_dev *dev,

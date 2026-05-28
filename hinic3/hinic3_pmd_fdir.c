@@ -834,7 +834,7 @@ static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
 		goto lookup_tcam_index_failed;
 	}
 
-	if (IS_QPOOL_MODE() || fdir_tcam_rule->data.dw1.bs.action != 0)
+	if (IS_QPOOL_MODE() || fdir_tcam_rule->data.dw1.bs.action != 0 || (IS_BIFUR_MODE() && is_sp560_nic(nic_dev)))
  	 	tcam_rule_type =  TCAM_RULE_Q_GROUP_TYPE;
  	else
  	 	tcam_rule_type = TCAM_RULE_FDIR_TYPE;
