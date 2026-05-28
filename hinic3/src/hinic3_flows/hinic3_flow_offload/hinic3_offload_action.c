@@ -197,8 +197,11 @@ static int hinic3_add_represented_port_id_action(const struct rte_flow_action *a
         HINIC3_LOG(ERR, FLOW, "port_id exceeds the maximum range of driver.");
         return -1;
     }
-    hinic3_nlattr_put_u16(&offload_action->act_nla, HINIC3_FLOW_ACT_DPDK_PORT_ID, htons((uint16_t)output_port_id));
-        offload_action->has_output = true;
+    if (hinic3_card_mod_get() == PROG_MODE)
+        hinic3_nlattr_put_u16(&offload_action->act_nla, HINIC3_FLOW_ACT_DPDK_PORT_ID, htons((uint16_t)output_port_id));
+    else
+        hinic3_nlattr_put_u16(&offload_action->act_nla, HINIC3_FLOW_ACT_OUTPUT, htons((uint16_t)output_port_id));
+    offload_action->has_output = true;
     return 0;
 }
 
