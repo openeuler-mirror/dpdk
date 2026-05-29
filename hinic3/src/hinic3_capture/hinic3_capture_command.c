@@ -359,9 +359,12 @@ pcap_cmd_enable_capture(struct unixctl_conn *conn, int argc, const char *argv[],
         goto end;
     }
 
-    ret = hinic3_set_pcap_mode(&ds);
-    if (ret != 0)
-        goto end;
+    if (hinic3_card_mod_get() == STANDARD_MODE) {
+        ret = hinic3_set_pcap_mode(&ds);
+        if (ret != 0)
+            goto end;
+    }
+
     pcap_switch_set(1);
     pcap_task_set(0);
     pcap_time_set(hinic3_time_sec());

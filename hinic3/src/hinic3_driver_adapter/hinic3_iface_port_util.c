@@ -137,7 +137,7 @@ static int smap_to_nlattr_u32(struct hinic3_nlattr *nla, char *value, int type)
 static int smap_to_nlattr_unspec(struct hinic3_nlattr *nla, char *value, int type)
 {
     uint64_t val;
-    int rc = sscanf(value, "%llu", &val);
+    int rc = sscanf(value, "%" PRIu64 "", &val);
     if (rc != 1) {
         HINIC3_LOG(ERR, DRIVER, "Failed to sscanf %d, err is %d!", type, rc);
         return -1;
@@ -241,7 +241,7 @@ static inline int nla_to_smap_u64(struct smap *unset_args, const hinic3_nlattr_i
 {
     char *value = NULL;
     char args_buf[MAX_ARGS_SIZE] = { 0 };
-    snprintf(args_buf, sizeof(args_buf) - 1, "%llu", hinic3_nlattr_get_itr_u64(nla));
+    snprintf(args_buf, sizeof(args_buf) - 1, "%" PRIu64 "", hinic3_nlattr_get_itr_u64(nla));
     value = args_buf;
     hinic3_smap_add(unset_args, key, value, HINIC3_DRIVER_ADAPTER);
     return 0;
