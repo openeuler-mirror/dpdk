@@ -25,7 +25,7 @@ index 0000000000..6b2c5f3223
 +++ b/drivers/net/hinic3/base/hinic3_mbox.c
 @@ -0,0 +1,1399 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2025 Huawei Technologies Co., Ltd
++ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#include <rte_atomic.h>
@@ -1430,7 +1430,7 @@ index 0000000000..60336000ab
 +++ b/drivers/net/hinic3/base/hinic3_mbox.h
 @@ -0,0 +1,199 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2025 Huawei Technologies Co., Ltd
++ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#ifndef _HINIC3_MBOX_H_

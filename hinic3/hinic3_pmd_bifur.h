@@ -1,5 +1,5 @@
-/*
- * Copyright (c) Huawei Technologies Co., Ltd. 2024-2024. All rights reserved.
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd
  */
 #ifndef HINIC3_PMD_BIFUR_H_
 #define HINIC3_PMD_BIFUR_H_
