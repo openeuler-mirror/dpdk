@@ -33,19 +33,19 @@ tar -xf dpdk-21.11.9.tar.xz
 方法一：直接下载
 下载后解压
 ```bash
-unzip dpdk-hinic3.zip
-# 解压后目录名：dpdk-hinic3
+unzip dpdk-hinic3_sp220_560_poc.zip
+# 解压后目录名：dpdk-hinic3_sp220_560_poc
 ```
 方法二：Git 克隆
 ```bash
-git clone https://atomgit.com/openeuler/dpdk.git -b hinic3 dpdk-hinic3
-# 默认目录名是dpdk，这里指定为了：dpdk-hinic3
+git clone https://atomgit.com/openeuler/dpdk.git -b hinic3_sp220_560_poc dpdk-hinic3_sp220_560_poc
+# 默认目录名是dpdk，这里指定为了：dpdk-hinic3_sp220_560_poc
 ```
 
 ---
 
 ## 2. 安装 hinic3 PMD 到 DPDK
-进入 dpdk-hinic3 目录，以下按需二选一执行
+进入 dpdk-hinic3_sp220_560_poc 目录，以下按需二选一执行
 ```bash
 # 直接安装
 sh install.sh ../dpdk-stable-21.11.9 install
@@ -90,8 +90,8 @@ wget https://fast.dpdk.org/rel/dpdk-21.11.9.tar.xz
 tar -xf dpdk-21.11.9.tar.xz
 
 # 获取 hinic3 PMD
-git clone https://atomgit.com/openeuler/dpdk.git -b hinic3 dpdk-hinic3
-cd dpdk-hinic3
+git clone https://atomgit.com/openeuler/dpdk.git -b hinic3_sp220_560_poc dpdk-hinic3_sp220_560_poc
+cd dpdk-hinic3_sp220_560_poc
 ```
 
 ### SP220&SP600&SP230 网卡
