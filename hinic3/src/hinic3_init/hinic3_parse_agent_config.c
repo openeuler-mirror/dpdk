@@ -280,7 +280,7 @@ static int hinic3_split_cpu_mask(const char *cpu_mask_type, uint32_t *cpu_mask_n
     int index = 0;
     uint32_t config_num;
 
-    if (strlen(cpu_mask_type) > sizeof(core_values)) {
+    if (strlen(cpu_mask_type) >= sizeof(core_values)) {
         HINIC3_LOG(ERR, AGENT, "cpu_mask_type is too long.");
         return -1;
     }

@@ -140,6 +140,9 @@ static struct smap_node *hinic3_smap_add__(struct smap *smap, char *key, void *v
 static void hinic3_smap_add_format_varg(struct smap *smap, const char *key, const char *format, va_list args,
     enum hinic3_module module_id)
 {
+    if (key == NULL||format == NULL) {
+        return;
+    }
     char *value;
     size_t key_len;
 

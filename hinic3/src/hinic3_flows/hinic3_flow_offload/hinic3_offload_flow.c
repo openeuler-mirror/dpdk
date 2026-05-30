@@ -625,24 +625,6 @@ static int hinic3_parse_hydra_mask(const struct rte_flow_item *item, struct hini
         return -1;
     }
 
-    hydra_masked_key = (struct hydra_flow_item *)hinic3_malloc(sizeof(struct hydra_flow_item), HIOVS_MEM);
-    if (hydra_masked_key == NULL) {
-        HINIC3_LOG(ERR, FLOW, "hwoffload flow error, hydra masked key malloc failed");
-        return -1;
-    }
-    hydra_masked_key->item_data_size = hydra_key_new->item_data_size;
-    hydra_masked_key->item_type = hydra_key_new->item_type;
-    hydra_masked_key->item_data = hinic3_malloc(hydra_key_new->item_data_size, HIOVS_MEM);
-    if (hydra_masked_key->item_data == NULL) {
-        hinic3_free(hydra_masked_key);
-        HINIC3_LOG(ERR, FLOW, "hwoffload flow error, hydra masked key data malloc failed");
-        return -1;
-    }
-
-    for (size_t i = 0; i < hydra_key_new->item_data_size; i++) { 
-        ((uint8_t *)hydra_masked_key->item_data)[i] = ((uint8_t *)hydra_mask_new->item_data)[i] & ((uint8_t *)hydra_key_new->item_data)[i]; 
-    } 
-
     ret = hinic3_insert_hydra_key(hydra_mask_new, &(mask->key));
     return ret;
 }
