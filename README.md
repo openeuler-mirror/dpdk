@@ -29,17 +29,17 @@ tar -xf dpdk-21.11.9.tar.xz
 - 方法一：直接下载
   下载后解压
   ```bash
-  unzip dpdk-hinic3.zip
-  # 解压后目录名：dpdk-hinic3
+  unzip dpdk-hinic3_sp680_qpool_poc.zip
+  # 解压后目录名：dpdk-hinic3_sp680_qpool_poc
   ```
 - 方法二：Git克隆
   ```bash
-  git clone https://atomgit.com/openeuler/dpdk.git -b hinic3 dpdk-hinic3
-  # 默认目录名是dpdk，这里指定为了：dpdk-hinic3
+  git clone https://atomgit.com/openeuler/dpdk.git -b hinic3_sp680_qpool_poc dpdk-hinic3_sp680_qpool_poc
+  # 默认目录名是dpdk，这里指定为了：dpdk-hinic3_sp680_qpool_poc
   ```
 
 ### 2.4 编译
-进入dpdk-hinic3目录，请用户按需选择进行安装编译：
+进入dpdk-hinic3_sp680_qpool_poc目录，请用户按需选择进行安装编译：
 
 ### SP200&SP600 网卡
 ```bash
