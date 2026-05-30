@@ -207,6 +207,11 @@ int hinic3_del_mac(void *hwdev, const u8 *mac_addr, u16 vlan_id, u16 func_id)
 	if (!hwdev || !mac_addr)
 		return -EINVAL;
 
+	if (IS_QPOOL_MODE()) {
+		PMD_DRV_LOG(WARNING, "Qpool mode do not support del mac.");
+		return 0;
+	}
+
  	if (IS_BIFUR_MODE()) {
 		if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
 			PMD_DRV_LOG(WARNING, "Share mode vf do not support change mac");
@@ -862,6 +867,10 @@ static int hinic3_vf_func_free(void *hwdev)
 	u16 out_size = sizeof(unregister);
 	int err;
 
+	/** vf not init qpool mode */
+	if (IS_QPOOL_MODE())
+ 	 	return 0;
+
 	if (hinic3_func_type(hwdev) != TYPE_VF)
 		return 0;
 
@@ -890,7 +899,7 @@ void hinic3_free_nic_hwdev(void *hwdev)
 		return;
 
 	if (hinic3_func_type(hwdev) != TYPE_VF)
-        (void)hinic3_set_link_status_follow(hwdev, HINIC3_LINK_FOLLOW_DEFAULT);
+        	(void)hinic3_set_link_status_follow(hwdev, HINIC3_LINK_FOLLOW_DEFAULT);
 
 	hinic3_vf_func_free(hwdev);
 }
@@ -1693,6 +1702,7 @@ int hinic3_add_tcam_rule(void *hwdev, struct hinic3_tcam_cfg_rule *tcam_rule, u8
 {
 	struct hinic3_fdir_add_rule tcam_cmd;
 	u16 out_size = sizeof(tcam_cmd);
+	u8 bifur_en = 0;
 	int err;
 
 	if (!hwdev || !tcam_rule)
@@ -1706,16 +1716,12 @@ int hinic3_add_tcam_rule(void *hwdev, struct hinic3_tcam_cfg_rule *tcam_rule, u8
 	memset(&tcam_cmd, 0, sizeof(struct hinic3_fdir_add_rule));
 	tcam_cmd.func_id = hinic3_global_func_id(hwdev);
 
- 	if (IS_BIFUR_MODE()) {
-		/* Process of enabling group ext_info in the MPU */
-		u8 bifur_en, iso_en;
-
-		if (hinic3_get_bifur_enable(hwdev, &bifur_en, &iso_en, 0) != 0)
-			PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable status failed.");
-
-		if (bifur_en)
-			tcam_cmd.bifur_rss_en = 1;
-	}
+	/* Process of enabling group ext_info in the MPU */
+	if (hinic3_get_bifur_enable(hwdev, &bifur_en, 0, 0) != 0)
+		PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable status failed.");
+	
+	if (bifur_en)
+		tcam_cmd.bifur_rss_en = 1;
 
 	memcpy((void *)&tcam_cmd.rule, (void *)tcam_rule,
 		sizeof(struct hinic3_tcam_cfg_rule));
