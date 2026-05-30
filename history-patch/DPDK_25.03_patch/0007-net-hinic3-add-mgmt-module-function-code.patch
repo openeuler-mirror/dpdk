@@ -25,7 +25,7 @@ index 0000000000..dfed1229e4
 +++ b/drivers/net/hinic3/base/hinic3_mgmt.c
 @@ -0,0 +1,392 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2025 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +#include <rte_ethdev.h>
 +
@@ -423,7 +423,7 @@ index 0000000000..23454773b9
 +++ b/drivers/net/hinic3/base/hinic3_mgmt.h
 @@ -0,0 +1,121 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2025 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#ifndef _HINIC3_MGMT_H_

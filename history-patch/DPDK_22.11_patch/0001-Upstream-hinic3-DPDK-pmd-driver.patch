@@ -122,7 +122,7 @@ index 0000000..ea89e19
 +++ b/drivers/net/hinic3/Makefile
 @@ -0,0 +1,106 @@
 +# SPDX-License-Identifier: BSD-3-Clause
-+# Copyright(c) 2019 Huawei Technologies Co., Ltd
++# Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 +
 +include $(RTE_SDK)/mk/rte.vars.mk
 +
@@ -234,7 +234,7 @@ index 0000000..0a98a60
 +++ b/drivers/net/hinic3/base/hinic3_compat.h
 @@ -0,0 +1,256 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#ifndef _HINIC3_COMPAT_H_
@@ -496,7 +496,7 @@ index 0000000..c07720b
 +++ b/drivers/net/hinic3/base/hinic3_pmd_cmd.h
 @@ -0,0 +1,232 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#ifndef _HINIC3_PMD_CMD_H_
@@ -734,7 +734,7 @@ index 0000000..d7497ce
 +++ b/drivers/net/hinic3/base/hinic3_pmd_cmdq.c
 @@ -0,0 +1,894 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#include <rte_mbuf.h>
@@ -1634,7 +1634,7 @@ index 0000000..7c6a37a
 +++ b/drivers/net/hinic3/base/hinic3_pmd_cmdq.h
 @@ -0,0 +1,248 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#ifndef _HINIC3_PMD_CMDQ_H_
@@ -1888,7 +1888,7 @@ index 0000000..fa10821
 +++ b/drivers/net/hinic3/base/hinic3_pmd_csr.h
 @@ -0,0 +1,113 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#ifndef _HINIC3_PMD_CSR_H_
@@ -2007,7 +2007,7 @@ index 0000000..8e876b1
 +++ b/drivers/net/hinic3/base/hinic3_pmd_eqs.c
 @@ -0,0 +1,670 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#include <rte_memory.h>
@@ -2683,7 +2683,7 @@ index 0000000..26dba92
 +++ b/drivers/net/hinic3/base/hinic3_pmd_eqs.h
 @@ -0,0 +1,102 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#ifndef _HINIC3_PMD_EQS_H_
@@ -2791,7 +2791,7 @@ index 0000000..6e28370
 +++ b/drivers/net/hinic3/base/hinic3_pmd_hw_cfg.c
 @@ -0,0 +1,226 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#include "hinic3_compat.h"
@@ -3023,7 +3023,7 @@ index 0000000..96dcdb3
 +++ b/drivers/net/hinic3/base/hinic3_pmd_hw_cfg.h
 @@ -0,0 +1,129 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#ifndef _HINIC3_PMD_HW_CFG_H_
@@ -3158,7 +3158,7 @@ index 0000000..1d44786
 +++ b/drivers/net/hinic3/base/hinic3_pmd_hw_comm.c
 @@ -0,0 +1,440 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#include <rte_bus_pci.h>
@@ -3604,7 +3604,7 @@ index 0000000..cf4ca94
 +++ b/drivers/net/hinic3/base/hinic3_pmd_hw_comm.h
 @@ -0,0 +1,257 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#ifndef _HINIC3_PMD_HW_COMM_H_
@@ -3867,7 +3867,7 @@ index 0000000..0ec5f90
 +++ b/drivers/net/hinic3/base/hinic3_pmd_hwdev.c
 @@ -0,0 +1,559 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#include <rte_bus_pci.h>
@@ -4432,7 +4432,7 @@ index 0000000..37b8ee3
 +++ b/drivers/net/hinic3/base/hinic3_pmd_hwdev.h
 @@ -0,0 +1,158 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#ifndef _HINIC3_PMD_HWDEV_H_
@@ -4596,7 +4596,7 @@ index 0000000..110b7e9
 +++ b/drivers/net/hinic3/base/hinic3_pmd_hwif.c
 @@ -0,0 +1,748 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#include <rte_bus_pci.h>
@@ -5350,7 +5350,7 @@ index 0000000..c52f636
 +++ b/drivers/net/hinic3/base/hinic3_pmd_hwif.h
 @@ -0,0 +1,149 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#ifndef _HINIC3_PMD_HWIF_H_
@@ -5505,7 +5505,7 @@ index 0000000..89d81df
 +++ b/drivers/net/hinic3/base/hinic3_pmd_mbox.c
 @@ -0,0 +1,1216 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#include "hinic3_compat.h"
@@ -6727,7 +6727,7 @@ index 0000000..2cb97c8
 +++ b/drivers/net/hinic3/base/hinic3_pmd_mbox.h
 @@ -0,0 +1,211 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#ifndef _HINIC3_PMD_MBOX_H_
@@ -6944,7 +6944,7 @@ index 0000000..73b9f18
 +++ b/drivers/net/hinic3/base/hinic3_pmd_mgmt.c
 @@ -0,0 +1,387 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +#include <rte_ethdev.h>
 +
@@ -7337,7 +7337,7 @@ index 0000000..20d2d74
 +++ b/drivers/net/hinic3/base/hinic3_pmd_mgmt.h
 @@ -0,0 +1,124 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#ifndef _HINIC3_PMD_MGMT_H_
@@ -7467,7 +7467,7 @@ index 0000000..bae626c
 +++ b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.c
 @@ -0,0 +1,1627 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#include <rte_ether.h>
@@ -9101,7 +9101,7 @@ index 0000000..00f05a6
 +++ b/drivers/net/hinic3/base/hinic3_pmd_nic_cfg.h
 @@ -0,0 +1,1521 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#ifndef _HINIC3_PMD_NIC_CFG_H_
@@ -10628,7 +10628,7 @@ index 0000000..3f5535c
 +++ b/drivers/net/hinic3/base/hinic3_pmd_nic_event.c
 @@ -0,0 +1,391 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#include "hinic3_compat.h"
@@ -11025,7 +11025,7 @@ index 0000000..936691f
 +++ b/drivers/net/hinic3/base/hinic3_pmd_nic_event.h
 @@ -0,0 +1,30 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#ifndef _HINIC3_PMD_NIC_EVENT_H_
@@ -11061,7 +11061,7 @@ index 0000000..a266f60
 +++ b/drivers/net/hinic3/base/hinic3_pmd_wq.c
 @@ -0,0 +1,137 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +#include <rte_pci.h>
 +#include <rte_bus_pci.h>
@@ -11204,7 +11204,7 @@ index 0000000..c001e68
 +++ b/drivers/net/hinic3/base/hinic3_pmd_wq.h
 @@ -0,0 +1,62 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#ifndef _HINIC3_PMD_WQ_H_
@@ -11272,7 +11272,7 @@ index 0000000..7c6a37a
 +++ b/drivers/net/hinic3/base/hinic3pmd_cmdq.h
 @@ -0,0 +1,248 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#ifndef _HINIC3_PMD_CMDQ_H_
@@ -11526,7 +11526,7 @@ index 0000000..b42375c
 +++ b/drivers/net/hinic3/base/meson.build
 @@ -0,0 +1,38 @@
 +# SPDX-License-Identifier: BSD-3-Clause
-+# Copyright(c) 2021 Huawei Technologies Co., Ltd
++# Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 +
 +sources = [
 +	'hinic3_pmd_hw_cfg.c',
@@ -11570,7 +11570,7 @@ index 0000000..e2421ad
 +++ b/drivers/net/hinic3/hinic3_pmd_ethdev.c
 @@ -0,0 +1,3634 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#include <rte_pci.h>
@@ -15210,7 +15210,7 @@ index 0000000..27e8fb9
 +++ b/drivers/net/hinic3/hinic3_pmd_ethdev.h
 @@ -0,0 +1,179 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#ifndef _HINIC3_PMD_ETHDEV_H_
@@ -15395,7 +15395,7 @@ index 0000000..1210f47
 +++ b/drivers/net/hinic3/hinic3_pmd_fdir.c
 @@ -0,0 +1,1081 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#include <stdio.h>
@@ -16482,7 +16482,7 @@ index 0000000..481490d
 +++ b/drivers/net/hinic3/hinic3_pmd_fdir.h
 @@ -0,0 +1,395 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#ifndef _HINIC3_PMD_FDIR_H_
@@ -16883,7 +16883,7 @@ index 0000000..0901d54
 +++ b/drivers/net/hinic3/hinic3_pmd_flow.c
 @@ -0,0 +1,1419 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#include <stdio.h>
@@ -18308,7 +18308,7 @@ index 0000000..9cf37ea
 +++ b/drivers/net/hinic3/hinic3_pmd_flow.h
 @@ -0,0 +1,80 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 + 
 +#ifndef _HINIC3_PMD_FLOW_H_
@@ -18395,7 +18395,7 @@ index 0000000..723e2ec
 +++ b/drivers/net/hinic3/hinic3_pmd_nic_io.c
 @@ -0,0 +1,737 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#include <rte_io.h>
@@ -19138,7 +19138,7 @@ index 0000000..79d935e
 +++ b/drivers/net/hinic3/hinic3_pmd_nic_io.h
 @@ -0,0 +1,154 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#ifndef _HINIC3_PMD_NIC_IO_H_
@@ -19298,7 +19298,7 @@ index 0000000..2d1f241
 +++ b/drivers/net/hinic3/hinic3_pmd_rx.c
 @@ -0,0 +1,1050 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +#include <rte_ether.h>
 +#include <rte_mbuf.h>
@@ -20354,7 +20354,7 @@ index 0000000..4494d4b
 +++ b/drivers/net/hinic3/hinic3_pmd_rx.h
 @@ -0,0 +1,360 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#ifndef _HINIC3_PMD_RX_H_
@@ -20720,7 +20720,7 @@ index 0000000..c3113f4
 +++ b/drivers/net/hinic3/hinic3_pmd_tx.c
 @@ -0,0 +1,938 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#include <rte_ether.h>
@@ -21664,7 +21664,7 @@ index 0000000..bfae4cf
 +++ b/drivers/net/hinic3/hinic3_pmd_tx.h
 @@ -0,0 +1,329 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2019 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#ifndef _HINIC3_PMD_TX_H_
@@ -21999,7 +21999,7 @@ index 0000000..e1b3aa9
 +++ b/drivers/net/hinic3/meson.build
 @@ -0,0 +1,44 @@
 +# SPDX-License-Identifier: BSD-3-Clause
-+# Copyright(c) 2021 Huawei Technologies Co., Ltd
++# Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 +
 +if not is_linux
 +        build = false
@@ -22049,7 +22049,7 @@ index 0000000..3cda479
 +++ b/drivers/net/hinic3/mml/hinic3_pmd_dbg.c
 @@ -0,0 +1,154 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright (c) Huawei Technologies Co., Ltd. 2022. All rights reserved.
++ * Copyright (c) Huawei Technologies Co., Ltd. 2025-2026. All rights reserved.
 + */
 +
 +#include "hinic3_compat.h"
@@ -22209,7 +22209,7 @@ index 0000000..7ddc634
 +++ b/drivers/net/hinic3/mml/hinic3_pmd_dbg.h
 @@ -0,0 +1,64 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright (c) Huawei Technologies Co., Ltd. 2022. All rights reserved.
++ * Copyright (c) Huawei Technologies Co., Ltd. 2025-2026. All rights reserved.
 + */
 +
 +#ifndef _HINIC3_PMD_MML_DBG_H
@@ -22280,7 +22280,7 @@ index 0000000..8e6553b
 @@ -0,0 +1,343 @@
 +/*
 + * SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright (c) Huawei Technologies Co., Ltd. 2022. All rights reserved.
++ * Copyright (c) Huawei Technologies Co., Ltd. 2025-2026. All rights reserved.
 + */
 +
 +#include "hinic3_pmd_mml_lib.h"
@@ -22629,7 +22629,7 @@ index 0000000..16b723a
 @@ -0,0 +1,77 @@
 +/*
 + * SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright (c) Huawei Technologies Co., Ltd. 2022. All rights reserved.
++ * Copyright (c) Huawei Technologies Co., Ltd. 2025-2026. All rights reserved.
 + */
 +
 +#ifndef _HINIC3_PMD_MML_CMD
@@ -22712,7 +22712,7 @@ index 0000000..2913031
 @@ -0,0 +1,203 @@
 +/*
 + * SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright (c) Huawei Technologies Co., Ltd. 2022. All rights reserved.
++ * Copyright (c) Huawei Technologies Co., Ltd. 2025-2026. All rights reserved.
 + */
 +#include <rte_ethdev.h>
 +#include <rte_pci.h>
@@ -22921,7 +22921,7 @@ index 0000000..e30d991
 @@ -0,0 +1,123 @@
 +/*
 + * SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright (c) Huawei Technologies Co., Ltd. 2022. All rights reserved.
++ * Copyright (c) Huawei Technologies Co., Ltd. 2025-2026. All rights reserved.
 + */
 +#include "hinic3_compat.h"
 +#include "hinic3_pmd_mml_lib.h"
@@ -23050,7 +23050,7 @@ index 0000000..d1ebcf8
 @@ -0,0 +1,233 @@
 +/*
 + * SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright (c) Huawei Technologies Co., Ltd. 2022. All rights reserved.
++ * Copyright (c) Huawei Technologies Co., Ltd. 2025-2026. All rights reserved.
 + */
 +
 +#ifndef _HINIC3_PMD_MML_LIB
@@ -23289,7 +23289,7 @@ index 0000000..36c24b1
 @@ -0,0 +1,122 @@
 +/*
 + * SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright (c) Huawei Technologies Co., Ltd. 2022. All rights reserved.
++ * Copyright (c) Huawei Technologies Co., Ltd. 2025-2026. All rights reserved.
 + */
 +
 +#include "hinic3_pmd_mml_lib.h"
@@ -23417,7 +23417,7 @@ index 0000000..2f079fa
 @@ -0,0 +1,533 @@
 +/*
 + * SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright (c) Huawei Technologies Co., Ltd. 2022. All rights reserved.
++ * Copyright (c) Huawei Technologies Co., Ltd. 2025-2026. All rights reserved.
 + */
 +
 +#include "hinic3_pmd_mml_lib.h"
@@ -23956,7 +23956,7 @@ index 0000000..cd9782a
 @@ -0,0 +1,235 @@
 +/*
 + * SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright (c) Huawei Technologies Co., Ltd. 2022. All rights reserved.
++ * Copyright (c) Huawei Technologies Co., Ltd. 2025-2026. All rights reserved.
 + * Description   : hinic3 mml for queue
 + */
 +
@@ -24196,7 +24196,7 @@ index 0000000..affb3b1
 +++ b/drivers/net/hinic3/mml/meson.build
 @@ -0,0 +1,49 @@
 +# SPDX-License-Identifier: BSD-3-Clause
-+# Copyright(c) 2017 Huawei Technologies Co., Ltd
++# Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 +
 +sources = [
 +    'hinic3_pmd_mml_cmd.c',
