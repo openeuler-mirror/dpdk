@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: BSD-3-Clause
- * Copyright(c) 2024 Huawei Technologies Co., Ltd
+ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
  */
 
 #ifndef _HINIC3_BASE_H_

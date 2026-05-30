@@ -7,13 +7,13 @@ hinic3 driver是华为SPx系列网卡在DPDK框架下的用户态驱动，旨在
 ---
 
 ## 2. 版本配套关系
-| 版本号 | 配套固件版本 | 发布日期 | 版本特性 |
-|--|--|--|--|
-| tag-tbd（出tag后刷新） | [IN220 2.6.RC4](https://support.huawei.com/enterprise/zh/huawei-computing-components/in220-pid-253287505/software/268283889?idAbsPath=fixnode01&#124;23710424&#124;251364417&#124;9856629&#124;253287505) | tbd（出tag后刷新） | [release note](./release_note.md#tag-tbd) |
-| [hinic3-26.0.rc1-0313.r1](https://gitcode.com/openeuler/dpdk/tags/hinic3-26.0.rc1-0313.r1) | [IN220 2.6.RC2](https://support.huawei.com/enterprise/zh/huawei-computing-components/in220-pid-253287505/software/268032408?idAbsPath=fixnode01&#124;23710424&#124;251364417&#124;9856629&#124;253287505) | 2026.03.13 | [release note](./release_note.md#hinic3-260rc1-0313r1) |
-| [hinic3-26.0.rc1-0307.r2](https://atomgit.com/openeuler/dpdk/tags/hinic3-26.0.rc1-0307.r2) | [IN220 2.6.RC2](https://support.huawei.com/enterprise/zh/huawei-computing-components/in220-pid-253287505/software/268032408?idAbsPath=fixnode01&#124;23710424&#124;251364417&#124;9856629&#124;253287505) | 2026.03.07 | [release note](./release_note.md#hinic3-260rc1-0307r2) |
-| [hinic3-26.0.rc1-0307.r1](https://atomgit.com/openeuler/dpdk/tags/hinic3-26.0.rc1-0307.r1) | [IN220 2.6.RC2](https://support.huawei.com/enterprise/zh/huawei-computing-components/in220-pid-253287505/software/268032408?idAbsPath=fixnode01&#124;23710424&#124;251364417&#124;9856629&#124;253287505) | 2026.03.07 | [release note](./release_note.md#hinic3-260rc1-0307r1) |
-| [hinic3-26.0.rc1-0214.r1](https://atomgit.com/openeuler/dpdk/tags/hinic3-26.0.rc1-0214.r1) | 请咨询技术支撑 | 2026.02.14 | [release note](./release_note.md#hinic3-260rc1-0214r1) |
+| 版本号 | commit id | 配套固件版本 | 发布日期 | 版本特性 |
+|--|--|--|--|--|
+| tag-tbd（出tag后刷新） | commit-id-tbd（出tag后刷新） | [IN220 2.6.RC4](https://support.huawei.com/enterprise/zh/huawei-computing-components/in220-pid-253287505/software/268283889?idAbsPath=fixnode01&#124;23710424&#124;251364417&#124;9856629&#124;253287505) | tbd（出tag后刷新） | [release note](./release_note.md#tag-tbd) |
+| [hinic3-26.0.rc1-0313.r1](https://gitcode.com/openeuler/dpdk/tags/hinic3-26.0.rc1-0313.r1) | 00baa641 | [IN220 2.6.RC2](https://support.huawei.com/enterprise/zh/huawei-computing-components/in220-pid-253287505/software/268032408?idAbsPath=fixnode01&#124;23710424&#124;251364417&#124;9856629&#124;253287505) | 2026.03.13 | [release note](./release_note.md#hinic3-260rc1-0313r1) |
+| [hinic3-26.0.rc1-0307.r2](https://atomgit.com/openeuler/dpdk/tags/hinic3-26.0.rc1-0307.r2) | 559db373 | [IN220 2.6.RC2](https://support.huawei.com/enterprise/zh/huawei-computing-components/in220-pid-253287505/software/268032408?idAbsPath=fixnode01&#124;23710424&#124;251364417&#124;9856629&#124;253287505) | 2026.03.07 | [release note](./release_note.md#hinic3-260rc1-0307r2) |
+| [hinic3-26.0.rc1-0307.r1](https://atomgit.com/openeuler/dpdk/tags/hinic3-26.0.rc1-0307.r1) | d01a660c | [IN220 2.6.RC2](https://support.huawei.com/enterprise/zh/huawei-computing-components/in220-pid-253287505/software/268032408?idAbsPath=fixnode01&#124;23710424&#124;251364417&#124;9856629&#124;253287505) | 2026.03.07 | [release note](./release_note.md#hinic3-260rc1-0307r1) |
+| [hinic3-26.0.rc1-0214.r1](https://atomgit.com/openeuler/dpdk/tags/hinic3-26.0.rc1-0214.r1) | cc93d8d3 | 请咨询技术支撑 | 2026.02.14 | [release note](./release_note.md#hinic3-260rc1-0214r1) |
  	 
 ---
 
@@ -26,7 +26,7 @@ PMD已归一到本项目的hinic3目录中，使用方式由原先的每个版�
 - 25以上DPDK版本请访问[DPDK github社区](https://github.com/DPDK/dpdk)
 ### 3.1 安装编译依赖
 ```bash
-yum install -y git gcc libatomic python3-devel meson ninja-build python3-pyelftools libibverbs numactl numactl-devel zlib-devel`
+yum install -y git gcc libatomic python3-devel meson ninja-build python3-pyelftools libibverbs numactl numactl-devel zlib-devel
 ```
 
 ### 3.2 下载DPDK
@@ -128,3 +128,7 @@ flow create port_id ingress pattern eth / ipv4 / tcp / end actions queue index q
 flow create port_id ingress pattern eth / ipv4 / end actions rss queues queue_num end / end
 flow create port_id ingress pattern eth / ipv4 / tcp / end actions rss queues queue_num end / end
 ```
+
+## 6. 开源许可
+hinic3 driver采用BSD 3-Clause "New" or "Revised" License开源许可
+Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.

@@ -193,7 +193,7 @@ index 0000000000..32fc5472bd
 +++ b/drivers/net/hinic3/hinic3_fdir.c
 @@ -0,0 +1,1394 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2025 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#include <errno.h>
@@ -1593,7 +1593,7 @@ index 0000000000..fbb2461a44
 +++ b/drivers/net/hinic3/hinic3_fdir.h
 @@ -0,0 +1,398 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2025 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#ifndef _HINIC3_FDIR_H_
@@ -1997,7 +1997,7 @@ index 0000000000..b3fde10c62
 +++ b/drivers/net/hinic3/hinic3_flow.c
 @@ -0,0 +1,1700 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2025 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#include <errno.h>
@@ -3703,7 +3703,7 @@ index 0000000000..9104337544
 +++ b/drivers/net/hinic3/hinic3_flow.h
 @@ -0,0 +1,80 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2025 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#ifndef _HINIC3_FLOW_H_

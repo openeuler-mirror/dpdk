@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-# Copyright(c) 2021 Huawei Technologies Co., Ltd
+# Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 
 sources = [
 	'hinic3_pmd_hw_cfg.c',

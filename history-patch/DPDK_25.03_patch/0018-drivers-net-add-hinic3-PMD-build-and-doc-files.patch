@@ -42,7 +42,7 @@ index 0000000000..b6a3a6cfe7
 +++ b/drivers/net/hinic3/base/meson.build
 @@ -0,0 +1,50 @@
 +# SPDX-License-Identifier: BSD-3-Clause
-+# Copyright(c) 2025 Huawei Technologies Co., Ltd
++# Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 +
 +sources = files(
 +        'hinic3_cmdq.c',
@@ -98,7 +98,7 @@ index 0000000000..42fb5bc194
 +++ b/drivers/net/hinic3/meson.build
 @@ -0,0 +1,33 @@
 +# SPDX-License-Identifier: BSD-3-Clause
-+# Copyright(c) 2025 Huawei Technologies Co., Ltd
++# Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 +
 +if not is_linux
 +    build = false
@@ -135,7 +135,7 @@ index f8d2650d8d..67bba4f067 100644
 --- a/drivers/net/hinic3/mml/meson.build
 +++ b/drivers/net/hinic3/mml/meson.build
 @@ -2,36 +2,19 @@
- # Copyright(c) 2025 Huawei Technologies Co., Ltd
+ # Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
  
  sources = files(
 -    'hinic3_dbg.c',

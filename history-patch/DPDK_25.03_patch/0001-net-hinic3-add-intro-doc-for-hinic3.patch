@@ -70,7 +70,7 @@ index 0000000000..c7080c8c1d
 +++ b/doc/guides/nics/hinic3.rst
 @@ -0,0 +1,52 @@
 +..  SPDX-License-Identifier: BSD-3-Clause
-+    Copyright(c) 2025 Huawei Technologies Co., Ltd
++    Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 +
 +
 +HINIC Poll Mode Driver

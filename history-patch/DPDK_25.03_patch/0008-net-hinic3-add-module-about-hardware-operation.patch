@@ -31,7 +31,7 @@ index 0000000000..ebe746a9ae
 +++ b/drivers/net/hinic3/base/hinic3_hw_cfg.c
 @@ -0,0 +1,240 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2025 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#include "hinic3_compat.h"
@@ -277,7 +277,7 @@ index 0000000000..8ded52faa9
 +++ b/drivers/net/hinic3/base/hinic3_hw_cfg.h
 @@ -0,0 +1,121 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2025 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#ifndef _HINIC3_HW_CFG_H_
@@ -404,7 +404,7 @@ index 0000000000..2055446f7f
 +++ b/drivers/net/hinic3/base/hinic3_hw_comm.c
 @@ -0,0 +1,452 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2025 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#include <rte_bus_pci.h>
@@ -862,7 +862,7 @@ index 0000000000..a2dc7273f4
 +++ b/drivers/net/hinic3/base/hinic3_hw_comm.h
 @@ -0,0 +1,366 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2025 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#ifndef _HINIC3_HW_COMM_H_
@@ -1234,7 +1234,7 @@ index 0000000000..fa63a9c68c
 +++ b/drivers/net/hinic3/base/hinic3_hwdev.c
 @@ -0,0 +1,573 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2025 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#include <rte_bus_pci.h>
@@ -1813,7 +1813,7 @@ index 0000000000..080d1400ed
 +++ b/drivers/net/hinic3/base/hinic3_hwdev.h
 @@ -0,0 +1,177 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
-+ * Copyright(c) 2025 Huawei Technologies Co., Ltd
++ * Copyright(c) 2025-2026 Huawei Technologies Co., Ltd
 + */
 +
 +#ifndef _HINIC3_HWDEV_H_
