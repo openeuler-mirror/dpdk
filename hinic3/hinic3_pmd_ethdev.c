@@ -347,7 +347,11 @@ static void hinic3_copy_mempool_uninit(struct hinic3_nic_dev *nic_dev);
 bool
 is_sp620_nic(struct hinic3_nic_dev *nic_dev)
 {
-	struct rte_pci_device *pci_dev = (struct rte_pci_device *)nic_dev->hwdev->pci_dev;
+	struct rte_pci_device *pci_dev = NULL;
+	struct hinic3_hwdev *hwdev = nic_dev->hwdev;
+	struct rte_eth_dev *eth_dev = &rte_eth_devices[hwdev->port_id];
+
+	pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
 
 	switch (pci_dev->id.device_id) {
 	case HINIC3_DEV_ID_SP620:
@@ -365,7 +369,11 @@ is_sp620_nic(struct hinic3_nic_dev *nic_dev)
 bool
 is_sp560_nic(struct hinic3_nic_dev *nic_dev)
 {
-	struct rte_pci_device *pci_dev = (struct rte_pci_device *)nic_dev->hwdev->pci_dev;
+	struct rte_pci_device *pci_dev = NULL;
+	struct hinic3_hwdev *hwdev = nic_dev->hwdev;
+	struct rte_eth_dev *eth_dev = &rte_eth_devices[hwdev->port_id];
+	
+	pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
 
 	switch (pci_dev->id.device_id) {
 	case HINIC3_DEV_ID_SP560:
@@ -4511,25 +4519,6 @@ static int hinic3_check_fw_version(struct rte_eth_dev *eth_dev)
 	return 0;
 }
 
-static void hinic3_nic_tx_rx_ops_init(struct hinic3_nic_dev *nic_dev)
-{
-	if (HINIC3_SUPPORT_TX_WQE_COMPACT_TASK(nic_dev))
-		nic_dev->tx_rx_ops.nic_tx_set_wqe_offload = hinic3_tx_set_compact_task_offload;
-	else
-		nic_dev->tx_rx_ops.nic_tx_set_wqe_offload = hinic3_tx_set_normal_task_offload;
-
-	if (HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev) ||
-	    HINIC3_SUPPORT_RX_SW_COMPACT_CQE(nic_dev)) {
-		nic_dev->tx_rx_ops.nic_rx_get_cqe_info = hinic3_rx_get_compact_cqe_info;
-		nic_dev->tx_rx_ops.nic_rx_cqe_done = rx_integrated_cqe_done;
-		nic_dev->tx_rx_ops.nic_rx_poll_rq_empty = hinic3_poll_integrated_cqe_rq_empty;
-	} else {
-		nic_dev->tx_rx_ops.nic_rx_get_cqe_info = hinic3_rx_get_cqe_info;
-		nic_dev->tx_rx_ops.nic_rx_cqe_done = rx_separate_cqe_done;
-		nic_dev->tx_rx_ops.nic_rx_poll_rq_empty = hinic3_poll_rq_empty;
-	}
-}
-
 static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 {
 	struct hinic3_tcam_info *tcam_info = NULL;
@@ -4626,7 +4615,8 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 		err = -ENOMEM;
 		goto alloc_hwdev_mem_fail;
 	}
-	nic_dev->hwdev->pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
+
+	nic_dev->hwdev->pci_dev = pci_dev;
 	nic_dev->hwdev->dev_handle = nic_dev;
 	nic_dev->hwdev->eth_dev = eth_dev;
 	nic_dev->hwdev->port_id = eth_dev->data->port_id;
@@ -4665,9 +4655,6 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 			    eth_dev->data->name);
 		goto get_cap_fail;
 	}
-
-	nic_dev->cmdq_ops = hinic3_nic_cmdq_get_stn_ops();
-	hinic3_nic_tx_rx_ops_init(nic_dev);
 
 	err = hinic3_init_sw_rxtxqs(nic_dev);
 	if (err) {
@@ -4784,9 +4771,9 @@ alloc_eth_addr_fail:
 	return err;
 }
 
-static int hinic3_get_nic_fd(struct hinic3_hwdev *hwdev)
+static int hinic3_get_nic_fd(struct rte_eth_dev *eth_dev)
 {
-	struct rte_pci_device *pci_dev = hwdev->pci_dev;
+	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
 	char dev_file[PATH_MAX];
 	int fd;
 
@@ -4953,7 +4940,7 @@ static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev)
 	nic_dev->hwdev->eth_dev = eth_dev;
 	nic_dev->hwdev->port_id = eth_dev->data->port_id;
 
-	nic_dev->fd = hinic3_get_nic_fd(nic_dev->hwdev);
+	nic_dev->fd = hinic3_get_nic_fd(eth_dev);
 	if (nic_dev->fd < 0) {
 		PMD_DRV_LOG(ERR, "Qpool func init get nic fd failed, fd: %d",
 			nic_dev->fd);
@@ -5002,9 +4989,6 @@ static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev)
 		if (compact_cqe == 1)
 			nic_dev->feature_cap &= ~(NIC_F_RX_SW_COMPACT_CQE | NIC_F_RX_HW_COMPACT_CQE);
 	}
-
-	nic_dev->cmdq_ops = hinic3_nic_cmdq_get_stn_ops();
-	hinic3_nic_tx_rx_ops_init(nic_dev);
 
 	err = hinic3_init_sw_rxtxqs(nic_dev);
 	if (err) {
@@ -5130,9 +5114,6 @@ static int hinic3_dev_init(struct rte_eth_dev *eth_dev)
 
 	PMD_DRV_LOG(INFO, "Network Interface pmd driver version: %s", HINIC3_PMD_DRV_VERSION);
 
-	eth_dev->rx_pkt_burst = hinic3_recv_pkts;
-	eth_dev->tx_pkt_burst = hinic3_xmit_pkts;
-
 	if (IS_QPOOL_MODE())
  		err = hinic3_func_init_qpool(eth_dev);
 	else
@@ -5145,6 +5126,14 @@ static int hinic3_dev_init(struct rte_eth_dev *eth_dev)
 		PMD_DRV_LOG(ERR, "Failed to get nic device arguments: %s",
 			strerror(rte_errno));
 		return err;
+	}
+
+	if (is_sp620_nic(nic_dev)) {
+		eth_dev->rx_pkt_burst = hinic3_recv_pkts;
+		eth_dev->tx_pkt_burst = hinic3_xmit_pkts;
+	} else {
+		eth_dev->rx_pkt_burst = hinic3_recv_pkts_compact_cqe;
+		eth_dev->tx_pkt_burst = hinic3_xmit_pkts_compact_cqe;
 	}
 
 	return err;

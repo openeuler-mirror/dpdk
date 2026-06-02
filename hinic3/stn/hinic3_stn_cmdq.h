@@ -70,4 +70,11 @@ struct hinic3_vlan_ctx {
  */
 struct hinic3_nic_cmdq_ops *hinic3_nic_cmdq_get_stn_ops(void);
 
+void hinic3_prepare_rq_ctxt_ceq_and_prefetch(struct hinic3_rq_ctxt *rq_ctxt, u16 wqe_type,
+				 u16 msix_entry_idx,
+				 bool support_rq_sw_compact_cqe,
+				 u8 intr_disable);
+
+void hinic3_prepare_sq_ctxt_drop_and_prefetch(struct hinic3_sq_ctxt *sq_ctxt);
+
 #endif /* _HINIC3_STN_CMDQ_H_ */
