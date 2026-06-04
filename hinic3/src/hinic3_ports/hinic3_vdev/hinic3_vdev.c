@@ -485,8 +485,10 @@ hinic3_mbuf_set_common_port(uint16_t upcall_num, struct hinic3_queue *rxq, struc
     int64_t upcall_byt = 0;
 
     vf_dev = (struct hinic3_vf_dev *)hinic3_get_private_data(rxq->dpdk_index_id);
-    if (vf_dev == NULL)
+    if (vf_dev == NULL) {
         hinic3_add_error_stats(HINIC3_VPORT_DEV_COMMOM_PORT_PRIVATE_DATA_NULL, 1);
+        return;
+    }
 
     for (uint16_t i = 0; i < upcall_num; i++) {
         mbuf = rx_pkts[i];

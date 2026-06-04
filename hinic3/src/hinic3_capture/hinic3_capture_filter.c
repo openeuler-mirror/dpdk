@@ -605,7 +605,7 @@ static int
 pcap_parse_ipv6_ext_hdr(struct pcap_pkt_parse_ctx *ctx, struct pcap_pkt_sub_hdr *sub_hdr,
                                    uint8_t nexthdr_para, bool *has_l4)
 {
-    uint8_t hdr_len;
+    uint16_t hdr_len;
     uint16_t hdr_cnt = 0;
     uint8_t xdr_auth_offset = 2;
     uint8_t xdr_bit_move = 3;
@@ -631,8 +631,8 @@ pcap_parse_ipv6_ext_hdr(struct pcap_pkt_parse_ctx *ctx, struct pcap_pkt_sub_hdr 
         else
             hdr_len = ((ext_hdr->hdrlen + 1) << xdr_bit_move);
 
-        if (!pcap_check_pkt_boundary(ctx->pkt_itr, hdr_len, ctx->pkt_end)) {
-            HINIC3_LOG(ERR, CAPTURE, "Length of packet is too small when extract ipv6 ext header!");
+        if (hdr_len >= UINT8_MAX || !pcap_check_pkt_boundary(ctx->pkt_itr, hdr_len, ctx->pkt_end)) {
+            HINIC3_LOG(ERR, CAPTURE, "Hdr len bigger than UINT8_MAX or ength of packet is too small when extract ipv6 ext header!");
             return -1;
         }
 

@@ -1238,6 +1238,10 @@ static int hinic3_qos_net_set(uint16_t port_id HINIC3_UNUSED, uint32_t meter_id,
     struct hinic3_mtr_profile_node *profile_node = NULL;
 
     meter = hinic3_meter_find(meter_id);
+    if (meter == NULL) {
+        HINIC3_LOG(ERR, QOS, "Multi qos net set: meter not find. meter id is %u.", meter_id);
+        return -1;
+    }
     profile_node = meter->profile;
 
     index = hinic3_get_multi_qos_show_tablehead(dir, profile_node->profile.packet_mode);
