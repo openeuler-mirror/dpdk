@@ -1365,15 +1365,11 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 	const struct rte_flow_action *act = actions;
 	const struct rte_flow_action_rss *act_r;
 	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(dev);
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_rxq *rxq;
 	uint32_t i;
+	u8 bifur_en;
 	int err;
-
-	if (IS_BIFUR_MODE()) {
-		for (i = 0; i < HINIC3_QUEUE_MAX; i++) {
-			rte_bit_relaxed_clear32(i, &filter->fdir_filter.rq_index);
-		}
-	}
 
 	/* find the last non-VOID action before END */
 	const struct rte_flow_action *last_act = NULL;
@@ -1387,8 +1383,12 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 				   "No valid action.");
 		return -rte_errno;
 	}
+
 	act = last_act;
 	filter->fdir_filter.action = act->type;
+
+	if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, 0, 0) != 0)
+		PMD_DRV_LOG(WARNING, "hinic3 get port table bifur enable status failed."); 
 
 	switch (act->type) {
 	case RTE_FLOW_ACTION_TYPE_QUEUE:
@@ -1396,7 +1396,7 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 		(const struct rte_flow_action_queue *)act->conf;
 		filter->fdir_filter.rq_index = act_q->index;
 
-		if (IS_BIFUR_MODE()) 
+		if ((IS_BIFUR_MODE() && bifur_en) || (IS_NORMAL_MODE() && bifur_en)) 
 			filter->fdir_filter.queue_num = 1;
 
 		rxq = dev->data->rx_queues[act_q->index];
@@ -1412,7 +1412,11 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 /* RSS process */
 	case RTE_FLOW_ACTION_TYPE_RSS:
 		act_r = (const struct rte_flow_action_rss *)act->conf;
-		if (IS_BIFUR_MODE()) {
+		if (IS_BIFUR_MODE() || (IS_NORMAL_MODE() && bifur_en)) {
+			for (i = 0; i < HINIC3_QUEUE_MAX; i++) {
+		 		rte_bit_relaxed_clear32(i, &filter->fdir_filter.rq_index);
+		 	}
+
 			err = hinic3_check_rss_queues(dev, pci_dev, act_r, act, error);
 			if (err) {
 				return err;
@@ -1705,8 +1709,10 @@ hinic3_flow_parse_fdir_pattern(__rte_unused struct rte_eth_dev *dev,
 			       struct rte_flow_error	       *error,
 			       struct hinic3_filter_t	       *filter)
 {
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	const struct rte_flow_item *flow_item = pattern;
 	enum rte_flow_item_type type;
+	u8 bifur_en;
 	int err;
 
 	filter->fdir_filter.ip_type = HINIC3_FDIR_IP_TYPE_ANY;
@@ -1720,7 +1726,10 @@ hinic3_flow_parse_fdir_pattern(__rte_unused struct rte_eth_dev *dev,
 		type = flow_item->type;
 		switch (type) {
 		case HINIC3_FLOW_ITEM_TYPE_ETH:
-			if (IS_BIFUR_MODE()) {
+			if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, 0, 0) != 0)
+				PMD_DRV_LOG(WARNING, "hinic3 get port table bifur enable status failed.");
+
+			if ((IS_BIFUR_MODE() && bifur_en) || (IS_NORMAL_MODE() && bifur_en)) {
 				err = hinic3_flow_fdir_eth(flow_item, filter, error);
 				if (err != 0)
 					return -rte_errno;
