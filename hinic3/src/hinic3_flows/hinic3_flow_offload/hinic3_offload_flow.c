@@ -607,7 +607,6 @@ static void hinic3_parse_eth_mask(const struct rte_flow_item *item, struct hinic
 
 static int hinic3_parse_hydra_mask(const struct rte_flow_item *item, struct hinic3_conntrack_full_key *mask)
 {
-    const struct hydra_flow_item *hydra_key_new = NULL;
     const struct hydra_flow_item *hydra_mask_new = NULL;
     int ret = 0;
     /* mask为空指针则报错返回 */
@@ -615,8 +614,7 @@ static int hinic3_parse_hydra_mask(const struct rte_flow_item *item, struct hini
         HINIC3_LOG(ERR, FLOW, "hwoffload fuzzy flow error, hydra mask is null");
         return -1;
     }
-    hydra_mask_new = (const struct hydra_flow_item *)item->mask;
-    hydra_key_new = (const struct hydra_flow_item *)item->spec;  
+    hydra_mask_new = (const struct hydra_flow_item *)item->mask; 
 
     /* 如果item_type非法，则不做处理 */
     if (!hinic3_flexda_flow_key_is_in_table(hydra_mask_new->item_type)) {

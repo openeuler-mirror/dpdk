@@ -564,7 +564,7 @@ hinic3_agent_dump_flows_by_block_id(int argc, const char *argv[], struct ds *ds)
     }
 
     uint32_t block_num = 0;
-    uint16_t block_id_input = 0;
+    uint32_t block_id_input = 0;
     char *endPtr = NULL;
     int ret = hinic3_flow_get_block_table_size(&block_num);
     if (ret != 0)

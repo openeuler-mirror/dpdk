@@ -159,6 +159,9 @@ static int smap_to_nlattr_unspec(struct hinic3_nlattr *nla, char *value, int typ
 
 static int port_smap_to_nlattr(struct hinic3_nlattr *nla, char *key, char *value)
 {
+    if (value == NULL) {
+        return -1;
+    }
     enum hinic3_port_arg_type nla_type = (enum hinic3_port_arg_type)port_smap_key_to_nla_type(key);
     if (nla_type == HINIC3_PORT_ARG_TYPE_MAX) {
         return 0;

@@ -30,6 +30,9 @@ static inline int hinic3_offload_parse_vlan_act(struct hinic3_offload_action *of
     const struct rte_flow_action_of_set_vlan_pcp *rte_vlan_pcp,
     const struct rte_flow_action_of_set_vlan_vid *rte_vlan_vid)
 {  
+    if (rte_vlan_pcp == NULL || rte_vlan_vid == NULL) {
+        return -1;
+    }
     uint16_t vlan_tci = 0;
     uint16_t vlan_id = 0;
     uint16_t vlan_pcp = 0;

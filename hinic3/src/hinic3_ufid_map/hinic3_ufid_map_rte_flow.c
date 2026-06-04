@@ -421,6 +421,7 @@ size_t hinic3_get_rte_flow_map_table_count(void)
 static int hinic3_flexda_ufid_map_segment(void)
 {
     int table_num = hinic3_flexda_flow_get_table_num();
+    uint32_t table_flow_num = 0;
     uint64_t flow_num = 0;
     uint64_t flow_num_all = hinic3_flexda_flow_get_total_flow_num();
     uint32_t remain_buckets = OFFLOAD_FLOW_BUCKETS;
@@ -430,7 +431,7 @@ static int hinic3_flexda_ufid_map_segment(void)
     for (int i = 0; i < table_num; i++) {
         /* 判断是否还剩余hash buckets */
         if (remain_buckets <= 0) {
-            HINIC3_LOG(INFO, AGENT, "hinic3_flexda_ufid_map_segment failed, no enough buckets for table segment.\n");
+            HINIC3_LOG(ERR, AGENT, "hinic3_flexda_ufid_map_segment failed, no enough buckets for table segment.\n");
             return -1;
         }
 
@@ -443,7 +444,12 @@ static int hinic3_flexda_ufid_map_segment(void)
         }
 
         /* 设置table id为i+1的表的hash buckets的数量 */
-        flow_num = (uint64_t)hinic3_flexda_flow_get_table_flow_num(i + 1);
+        if (hinic3_flexda_flow_get_table_flow_num(i + 1, &table_flow_num) != 0)
+        {
+            HINIC3_LOG(ERR, AGENT, "hinic3_flexda_flow_get_table_flow_num failed!");
+            return -1;
+        }
+        flow_num = (uint64_t)table_flow_num;
         hinic3_mpool_mgmt.table_segment_array[i].length = (uint32_t)((flow_num * cal_total_buckets) / flow_num_all);
         if (hinic3_mpool_mgmt.table_segment_array[i].length == 0) {
             hinic3_mpool_mgmt.table_segment_array[i].length = 1;

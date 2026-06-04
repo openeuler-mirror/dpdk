@@ -520,6 +520,11 @@ static int hinic3_get_meter_stats(struct hinic3_meter_node *meter, struct rte_mt
         ret = hinic3_get_qos_stats(stats_context, stats);
         break;
     case QOS_TYPE_FUNC_LIMIT:
+        if (meter->flow == NULL)
+        {
+            HINIC3_LOG(ERR, QOS, "Meter is not bind flow!");
+            return -1;
+        }
         RTE_ETH_VALID_PORTID_OR_ERR_RET(meter->flow->port_id, -1);
         dev = &rte_eth_devices[meter->flow->port_id];
         vf_dev = dev->data->dev_private;
