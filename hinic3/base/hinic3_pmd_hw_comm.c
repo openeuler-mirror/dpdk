@@ -247,7 +247,7 @@ size_matched:
 	return 0;
 }
 
-static u16 get_hw_rx_buf_size(void *hwdev, u32 rx_buf_sz)
+static u16 get_hw_rx_buf_size(void *hwdev, u16 rx_buf_sz)
 {
 	u16 num_hw_types =
 		sizeof(hinic3_hw_rx_buf_size) /
@@ -339,10 +339,14 @@ int hinic3_set_cmdq_depth(void *hwdev, u16 cmdq_depth)
 	root_ctxt.func_idx = hinic3_global_func_id(hwdev);
 	root_ctxt.set_cmdq_depth = 1;
 	root_ctxt.cmdq_depth = (u8)ilog2(cmdq_depth);
+	if (root_ctxt.cmdq_depth == 0) {
+		PMD_DRV_LOG(ERR, "Cmdq depth zero!");
+		return -ERANGE;
+	}
 
-	root_ctxt.cmdq_mode = ((struct hinic3_hwdev *)hwdev)->cmdqs->cmdq_mode;
+	root_ctxt.cmdq_mode = (u8)((struct hinic3_hwdev *)hwdev)->cmdqs->cmdq_mode;
 
-	if (root_ctxt.cmdq_mode == HINIC3_ENHANCE_CMDQ)
+	if (root_ctxt.cmdq_mode == (u8)HINIC3_ENHANCE_CMDQ)
 		root_ctxt.cmdq_depth--;
 
 	err = hinic3_msg_to_mgmt_sync(hwdev, HINIC3_MOD_COMM,

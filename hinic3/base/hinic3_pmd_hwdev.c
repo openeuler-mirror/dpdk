@@ -410,7 +410,12 @@ dma_attr_init_err:
 
 static void hinic3_uninit_comm_ch_qpool(struct hinic3_hwdev *hwdev)
 {
-	hinic3_set_func_svc_used_state(hwdev, HINIC3_MOD_COMM, 0);
+	int err;
+	err = hinic3_set_func_svc_used_state(hwdev, HINIC3_MOD_COMM, 0);
+	if (err)
+		PMD_DRV_LOG(ERR, "Set func used state failed");
+
+	return;
 }
 
 static int hinic3_init_comm_ch(struct hinic3_hwdev *hwdev)

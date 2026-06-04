@@ -443,7 +443,7 @@ int hinic3_set_vport_enable(void *hwdev, bool enable)
 	memset(&en_state, 0, sizeof(en_state));
 	en_state.func_id = hinic3_global_func_id(hwdev);
 	en_state.state = enable ? 1 : 0;
-	en_state.num_qps = nic_dev->num_rqs;
+	en_state.num_qps = (u8)nic_dev->num_rqs;
 	en_state.rx_compact_wqe_en = HINIC3_SUPPORT_RX_SW_COMPACT_CQE(nic_dev);
 
 	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_SET_VPORT_ENABLE,
@@ -2642,7 +2642,7 @@ int hinic3_fdir_flush_sec_tcam_rule(void *hwdev)
 
 int hinic3_fdir_cfg_sec_tcam(void *hwdev, u8 *en)
 {
-	struct hinic3_nic_dev *nic_dev = ((struct hinic3_hwdev *)hwdev)->dev_handle;
+	struct hinic3_nic_dev *nic_dev = NULL;
 	struct nic_cmd_fdir_ext cmd_buf = {0};
 	u16 out_size = sizeof(cmd_buf);
 	int err;
@@ -2650,6 +2650,7 @@ int hinic3_fdir_cfg_sec_tcam(void *hwdev, u8 *en)
 	if (!hwdev)
 		return -EINVAL;
 
+	nic_dev = ((struct hinic3_hwdev *)hwdev)->dev_handle;
 	cmd_buf.op_code = TCAM_EXTEND_OPCODE_GET_FLAG;
 
 	if(!is_sp620_nic(nic_dev))
