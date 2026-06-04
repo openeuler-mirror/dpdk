@@ -119,7 +119,7 @@ static inline int hinic3_flexda_flow_check_dump_format_type_valid(uint16_t dump_
 int hinic3_flexda_flow_parse_config_info(hovs_flexda_config_info_t *hovs_flexda_config);
 const char *hinic3_flexda_flow_get_hydra_name(hinic3_hydra_type hydra_type, uint32_t value);
 bool hinic3_flexda_flow_is_in_main_table(uint32_t table_id);
-uint32_t hinic3_flexda_flow_get_table_flow_num(uint32_t table_id);
+int hinic3_flexda_flow_get_table_flow_num(uint32_t table_id, uint32_t *table_flow_num);
 int hinic3_flexda_flow_get_table_type(uint32_t table_id);
 uint32_t hinic3_flexda_flow_get_total_flow_num(void);
 int hinic3_flexda_flow_get_table_num(void);

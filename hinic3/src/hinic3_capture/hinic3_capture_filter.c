@@ -1025,6 +1025,9 @@ pcap_pkt_nbits_cmp(uint8_t *src, uint8_t *dst, uint8_t bit_len)
     uint8_t left_bit_len;
     uint8_t last_byte_mask;
 
+    if (src == NULL || dst == NULL)
+        return false;
+
     byte_cnt = bit_len >> PCAP_OFFSET_3;
     left_bit_len = bit_len & PCAP_BIT_MASK;
 
@@ -1046,6 +1049,9 @@ static inline bool
 pcap_pkt_mem_cmp(struct pcap_mem_cmp_t *item)
 {
     int ret;
+
+    if (item->src == NULL || item->dst == NULL)
+        return false;
 
     if (item->type == PCAP_CMP_MEM_BIT)
         return pcap_pkt_nbits_cmp(item->src, item->dst, item->len);

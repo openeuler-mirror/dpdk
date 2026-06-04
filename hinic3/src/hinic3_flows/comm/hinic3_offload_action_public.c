@@ -218,7 +218,7 @@ static int hinic3_offload_set_tag_act(struct hinic3_nlattr *hinic3_actions, cons
     }
 
     struct hinic3_dp_extend_info *extend_info = hinic3_get_offload_extend_info();
-    if (extend_info == NULL) {
+    if (extend_info == NULL || extend_info->hw_offload == NULL) {
         return -1;
     }
 

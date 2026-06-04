@@ -741,7 +741,7 @@ static void hinic3_query_pattern_free(struct rte_flow_item *pattern)
 {
     int i = 0;
     for (i = 0; i < HINIC3_INPUT_ITEM_MAX_NUM; i++) {
-        if (pattern[i].type != RTE_FLOW_ITEM_TYPE_END && pattern[i].spec == NULL) {
+        if (pattern[i].type != RTE_FLOW_ITEM_TYPE_END && pattern[i].spec != NULL) {
                 hinic3_free((void*)(uintptr_t)pattern[i].spec);
                 pattern[i].spec = NULL;
         }
