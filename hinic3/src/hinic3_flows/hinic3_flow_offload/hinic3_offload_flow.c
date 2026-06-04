@@ -609,7 +609,6 @@ static int hinic3_parse_hydra_mask(const struct rte_flow_item *item, struct hini
 {
     const struct hydra_flow_item *hydra_key_new = NULL;
     const struct hydra_flow_item *hydra_mask_new = NULL;
-    struct hydra_flow_item *hydra_masked_key = NULL;
     int ret = 0;
     /* mask为空指针则报错返回 */
     if (item->mask == NULL) {
