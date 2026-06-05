@@ -266,7 +266,7 @@ struct hinic3_nic_dev {
 	struct hinic3_ptype_table* ptype_tbl;
 
 	u8 hinic3_function_mode;
-	
+
 	struct hinic3_ets *ets;
 
 	uint32_t fec_mode;  /* current FEC mode for ethdev */
@@ -287,6 +287,9 @@ struct hinic3_nic_dev {
 #define NETDEV_CHANGEADDR	0x0008
 
 #define MAX_PROCESS 64
+
+#define SELECT_OTHER_COS_ID(cos_id) ((cos_id) ^ 4)
+#define ODD_NUMBER_QUEUE_ID(q_id) ((q_id) & 1)
 
 struct netdev_event {
 	u32 type;

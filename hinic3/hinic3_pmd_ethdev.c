@@ -372,7 +372,7 @@ is_sp560_nic(struct hinic3_nic_dev *nic_dev)
 	struct rte_pci_device *pci_dev = NULL;
 	struct hinic3_hwdev *hwdev = nic_dev->hwdev;
 	struct rte_eth_dev *eth_dev = &rte_eth_devices[hwdev->port_id];
-	
+
 	pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
 
 	switch (pci_dev->id.device_id) {
@@ -402,14 +402,14 @@ static void hinic3_dev_interrupt_handler_qpool(void *param)
  	ssize_t bytes_read;
  	u8 link_state = 0;
  	int processed = 0;
- 	 
+
  	if (!hinic3_get_bit(HINIC3_DEV_INTR_EN, &nic_dev->dev_status)) {
  		PMD_DRV_LOG(WARNING,
  			    "Intr is disabled, ignore intr event, dev_name: %s, port_id: %d",
  			    nic_dev->dev_name, dev->data->port_id);
  		return;
  	}
- 	 
+
  	while (processed < MAX_PROCESS &&
  		(bytes_read = read(intr_handle->fd, &event, sizeof(event))) == sizeof(event)) {
  		if (event.type == NETDEV_UP) {
@@ -435,7 +435,7 @@ static void hinic3_dev_interrupt_handler_qpool(void *param)
  			PMD_DRV_LOG(INFO, "event type not support");
  		}
  	}
- 	 
+
  	if (bytes_read < 0 && errno != EAGAIN) {
  		PMD_DRV_LOG(ERR, "interrupt handler fd read error: %d.", errno);
  	}
@@ -597,21 +597,21 @@ static int hinic3_get_link_state_qpool(struct hinic3_nic_dev *nic_dev)
 	struct drv_cmd_kernel_nic_data cfg_kernel_data;
  	struct msg_module msg_to_kernel;
  	int in_size, out_size, err;
- 	
+
  	(void)memset(&msg_to_kernel, 0, sizeof(msg_to_kernel));
  	in_size = sizeof(cfg_kernel_data);
  	out_size = sizeof(cfg_kernel_data);
  	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NIC_DRIVER, GET_KERN_DEV_DATA,
  			in_size, out_size,
  			&cfg_kernel_data, &cfg_kernel_data);
- 	
+
  	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
  	if (err < 0)
  		PMD_DRV_LOG(ERR, "Get kernel netdev state failed, err: %d.", err);
- 	
+
  	if (cfg_kernel_data.netdev_state == 0)
  		err = -EIO;
- 	
+
  	return err;
 }
 
@@ -621,19 +621,19 @@ static int hinic3_get_kernel_mtu(struct rte_eth_dev *eth_dev)
  	struct drv_cmd_kernel_nic_data cfg_kernel_data  = { 0 };
  	struct msg_module msg_to_kernel = { 0 };
  	int err = 0;
- 	
+
  	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NIC_DRIVER, GET_KERN_DEV_DATA,
  		       sizeof(cfg_kernel_data), sizeof(cfg_kernel_data),
  		       &cfg_kernel_data, &cfg_kernel_data);
- 	
+
  	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
  	if (err < 0) {
  		PMD_DRV_LOG(WARNING, "Get kernel mtu failed");
  		return err;
  	}
- 	
+
  	eth_dev->data->mtu = cfg_kernel_data.mtu;
- 	
+
  	return err;
 }
 
@@ -642,25 +642,25 @@ static int hinic3_verify_queue_depth(struct hinic3_nic_dev *nic_dev, u16 *q_dept
 	struct drv_cmd_kernel_nic_data cfg_kernel_data  = { 0 };
  	struct msg_module msg_to_kernel = { 0 };
  	int err = 0;
- 	
+
  	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NIC_DRIVER, GET_KERN_DEV_DATA,
  		       sizeof(cfg_kernel_data), sizeof(cfg_kernel_data),
  		       &cfg_kernel_data, &cfg_kernel_data);
- 	
+
  	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
  	if (err < 0)
  		return err;
- 	
+
  	if (type == HINIC3_VERIFY_RX_DEPTH && *q_depth != cfg_kernel_data.rx_q_depth) {
  		*q_depth = cfg_kernel_data.rx_q_depth;
  		PMD_DRV_LOG(WARNING, "[WARNING] Rxq depth adjusted to %d to match kernel", *q_depth);
  	}
- 	
+
  	if (type == HINIC3_VERIFY_TX_DEPTH && *q_depth != cfg_kernel_data.tx_q_depth) {
  		*q_depth = cfg_kernel_data.tx_q_depth;
  		PMD_DRV_LOG(WARNING, "[WARNING] Txq depth adjusted to %d to match kernel", *q_depth);
  	}
- 	
+
  	return err;
 }
 
@@ -698,7 +698,7 @@ static int hinic3_fw_version_get(struct rte_eth_dev *dev, char *fw_version,
 		return -EIO;
 	}
 
-	if (fw_size < strlen((char *)mgmt_ver) + 1) 
+	if (fw_size < strlen((char *)mgmt_ver) + 1)
 		return (strlen((char *)mgmt_ver) + 1);
 
 	(void)snprintf(fw_version, fw_size, "%s", mgmt_ver);
@@ -1150,10 +1150,10 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	int err;
 
 	if (!IS_QPOOL_MODE()) {
-		/* Queue depth must be equal to queue 0 */	 
-		if (qid != 0 && (nb_desc != nic_dev->rxqs[0]->q_depth)) {	 
-			PMD_DRV_LOG(WARNING, "rxq%u depth:%u is not equal to queue0 depth:%u.\n",	 
-				qid, nb_desc, nic_dev->rxqs[0]->q_depth);	 
+		/* Queue depth must be equal to queue 0 */
+		if (qid != 0 && (nb_desc != nic_dev->rxqs[0]->q_depth)) {
+			PMD_DRV_LOG(WARNING, "rxq%u depth:%u is not equal to queue0 depth:%u.\n",
+				qid, nb_desc, nic_dev->rxqs[0]->q_depth);
 			nb_desc = nic_dev->rxqs[0]->q_depth;
 		}
 	} else {
@@ -1413,10 +1413,10 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	int err;
 
 	if (!IS_QPOOL_MODE()) {
-		/* Queue depth must be equal to queue 0 */	 
-		if (qid != 0 && (nb_desc != nic_dev->txqs[0]->q_depth)) {	 
-			PMD_DRV_LOG(WARNING, "txq%u depth:%u is not equal to queue0 depth:%u.\n",	 
-				qid, nb_desc, nic_dev->txqs[0]->q_depth);	 
+		/* Queue depth must be equal to queue 0 */
+		if (qid != 0 && (nb_desc != nic_dev->txqs[0]->q_depth)) {
+			PMD_DRV_LOG(WARNING, "txq%u depth:%u is not equal to queue0 depth:%u.\n",
+				qid, nb_desc, nic_dev->txqs[0]->q_depth);
 			nb_desc = nic_dev->txqs[0]->q_depth;
 		}
 	} else {
@@ -1424,7 +1424,7 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
  		if (err) {
  			PMD_DRV_LOG(ERR, "Get queue depth failed");
  			goto get_queue_depth_fail;
- 		}	
+ 		}
 	}
 
 	/* Queue depth must be power of 2, otherwise will be aligned up */
@@ -1485,8 +1485,13 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	txq->owner = 1;
 	if (nic_dev->dcb->dcb_on)
 		txq->cos = nic_dev->dcb->txq_cos[qid];
-	else
-		txq->cos = nic_dev->default_cos;
+	else {
+		if (!ODD_NUMBER_QUEUE_ID(qid) &&
+		    hinic3_cmd_vf_lag(nic_dev->hwdev, hinic3_global_func_id(nic_dev->hwdev), HINIC3_CMD_OPCODE_GET) == 1)
+			txq->cos = SELECT_OTHER_COS_ID(nic_dev->default_cos);
+		else
+			txq->cos = nic_dev->default_cos;
+		}
 
 	txq->tx_wqe_compact_task = HINIC3_SUPPORT_TX_WQE_COMPACT_TASK(nic_dev);
 
@@ -2539,13 +2544,13 @@ static void hinic3_dev_stop(struct rte_eth_dev *dev)
  			PMD_DRV_LOG(WARNING, "Disable phy port failed, error: %d, "
  					"dev_name: %s, port_id: %d", err, dev->data->name,
  					dev->data->port_id);
- 	
+
  		err = hinic3_set_vport_enable(nic_dev->hwdev, false);
  		if (err)
  			PMD_DRV_LOG(WARNING, "Disable vport failed, error: %d, "
  					"dev_name: %s, port_id: %d", err, dev->data->name,
  					dev->data->port_id);
- 	
+
  		/* disable dp interrupt */
  		hinic3_disable_queue_intr(dev);
  		hinic3_deinit_rxq_intr(dev);
@@ -2561,7 +2566,7 @@ static void hinic3_dev_stop(struct rte_eth_dev *dev)
 
 	if (!IS_QPOOL_MODE()) {
  		hinic3_flush_qps_res(nic_dev->hwdev);
- 	 
+
  		/* Clean root context */
  		hinic3_free_qp_ctxts(nic_dev->hwdev);
  	} else {
@@ -3454,11 +3459,11 @@ hinic3_dev_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 		stats->oerrors += (txq->txq_stats.tx_busy +
 				  txq->txq_stats.off_errs);
 	}
-	
+
 	if (IS_QPOOL_MODE()) {
 		q_num = (nic_dev->num_rqs < HINIC3_QUEUE_STAT_CNTRS) ?
 			nic_dev->num_rqs : HINIC3_QUEUE_STAT_CNTRS;
-		
+
 		for (i = 0; i < q_num; i++) {
 			rxq = nic_dev->rxqs[i];
 			stats->ipackets += rxq->rxq_stats.packets;
@@ -4132,7 +4137,7 @@ static int hinic3_fec_get(struct rte_eth_dev *dev, uint32_t *fec_capa)
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	u8 advertised_fec = 0;
 	int err;
-	
+
 	err = hinic3_get_fec_mode(nic_dev->hwdev, &advertised_fec, 0);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Get fec parma failed: %d.", err);
@@ -4166,7 +4171,7 @@ static int hinic3_fec_capability_get(struct rte_eth_dev *dev,
 		PMD_DRV_LOG(ERR, "Failed to get fec capability, err: %d.", err);
 		return err;
 	}
-	
+
 	speed_fec_capa->speed = nic_dev->hwdev->speed;
 	speed_fec_capa->capa = (u32)supported_fec;
 
@@ -4646,7 +4651,7 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 			    eth_dev->data->name);
 		goto init_nic_hwdev_fail;
 	}
-	
+
 	err = hinic3_check_fw_version(eth_dev);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Check firmware version failed, err: %d", err);
@@ -5178,7 +5183,7 @@ static int hinic3_pci_probe(struct rte_pci_driver *pci_drv,
 		 pci_dev->addr.bus,
 		 pci_dev->addr.devid,
 		 pci_dev->addr.function);
-	
+
 	ret = hinic3_qinfo_type_init(dev_file);
 	if (ret != 0) {
 		PMD_DRV_LOG(ERR, "Qinfo type init failed: %d, unable to know mode used.", ret);
