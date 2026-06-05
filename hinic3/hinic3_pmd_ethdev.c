@@ -989,6 +989,7 @@ hinic3_rx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_rxq *rxq,
 	const struct rte_memzone *ci_mz = NULL; /**< compact cqe */
 	const struct rte_memzone *pi_mz = NULL;
 	u32 queue_buf_size;
+	u16 vector_len;
 	void *db_addr = NULL;
 	int wqe_count;
 	int err;
@@ -1002,6 +1003,11 @@ hinic3_rx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_rxq *rxq,
 	} else {
 		rxq->local_qid = rxq->q_id;
 	}
+
+	if (nic_dev->vec_allowed)
+		vector_len = rxq->q_depth + HINIC3_DEFAULT_RX_BURST;
+	else
+		vector_len = rxq->q_depth;
 
 	pi_mz = hinic3_dma_zone_reserve(dev, "hinic3_rq_pi", qid,
 					 RTE_PGSIZE_4K, RTE_CACHE_LINE_SIZE,
@@ -1023,7 +1029,7 @@ hinic3_rx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_rxq *rxq,
 	}
 	rxq->db_addr = db_addr;
 
-	queue_buf_size = BIT(rxq->wqebb_shift) * rxq->q_depth;
+	queue_buf_size = BIT(rxq->wqebb_shift) * vector_len;
 	rq_mz = hinic3_dma_zone_reserve(dev, "hinic3_rq_mz", qid,
 					queue_buf_size, RTE_PGSIZE_256K,
 					(int)socket_id);
@@ -1039,7 +1045,7 @@ hinic3_rx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_rxq *rxq,
 	rxq->queue_buf_vaddr = rq_mz->addr;
 
 	rxq->rx_info = rte_zmalloc_socket("rx_info",
-					  rxq->q_depth * sizeof(*rxq->rx_info),
+					  vector_len * sizeof(*rxq->rx_info),
 					  RTE_CACHE_LINE_SIZE, (int)socket_id);
 	if (!rxq->rx_info) {
 		PMD_DRV_LOG(ERR, "Allocate rx_info failed, dev_name: %s",
@@ -1064,7 +1070,7 @@ hinic3_rx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_rxq *rxq,
 		rxq->rq_ci_paddr = ci_mz->iova;
 	} else {
 		cqe_mz = hinic3_dma_zone_reserve(dev, "hinic3_cqe_mz", qid,
-						rxq->q_depth * sizeof(*rxq->rx_cqe),
+						vector_len * sizeof(*rxq->rx_cqe),
 						RTE_CACHE_LINE_SIZE, (int)socket_id);
 		if (!cqe_mz) {
 			PMD_DRV_LOG(ERR, "Allocate cqe mem zone failed, dev_name: %s",
@@ -1072,7 +1078,7 @@ hinic3_rx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_rxq *rxq,
 			err = -ENOMEM;
 			goto alloc_cqe_ci_mz_fail;
 		}
-		memset(cqe_mz->addr, 0, rxq->q_depth * sizeof(*rxq->rx_cqe));
+		memset(cqe_mz->addr, 0, vector_len * sizeof(*rxq->rx_cqe));
 		rxq->cqe_mz = cqe_mz;
 		rxq->cqe_start_paddr = cqe_mz->iova;
 		rxq->cqe_start_vaddr = cqe_mz->addr;
@@ -1143,7 +1149,7 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_rxq *rxq = NULL;
-	u16 rq_depth, rx_free_thresh;
+	u16 rq_depth, rx_free_thresh, vec_len;
 	u32 buf_size;
 	int err;
 
@@ -5129,7 +5135,12 @@ static int hinic3_dev_init(struct rte_eth_dev *eth_dev)
 	}
 
 	if (is_sp620_nic(nic_dev)) {
-		eth_dev->rx_pkt_burst = hinic3_recv_pkts;
+#ifdef RTE_ARCH_ARM
+		if (nic_dev->vec_allowed == 1)
+			eth_dev->rx_pkt_burst = hinic3_recv_pkts_vec;
+		else
+#endif
+			eth_dev->rx_pkt_burst = hinic3_recv_pkts;
 		eth_dev->tx_pkt_burst = hinic3_xmit_pkts;
 	} else {
 		eth_dev->rx_pkt_burst = hinic3_recv_pkts_compact_cqe;

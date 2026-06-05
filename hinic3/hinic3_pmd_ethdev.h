@@ -272,6 +272,7 @@ struct hinic3_nic_dev {
 	uint32_t fec_mode;  /* current FEC mode for ethdev */
 
 	bool hinic3_offload_initialized;
+	bool vec_allowed;
 };
 
 #define NETDEV_UP	0x0001	/* For now you can't veto a device up/down */
