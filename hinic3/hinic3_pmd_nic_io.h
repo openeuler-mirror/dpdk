@@ -181,53 +181,6 @@ struct hinic3_rq_enable {
 	u8 rsvd[3];
 };
 
-/* Prepare cmd to clean tso/lro space */
-typedef uint8_t  (*prepare_cmd_buf_clean_tso_lro_space_t)(struct hinic3_nic_dev *nic_dev,
-							struct hinic3_cmd_buf *cmd_buf,
-							enum hinic3_qp_ctxt_type ctxt_type);
-/* Prepare cmd to store RQ and TQ ctxt */
-typedef uint8_t  (*prepare_cmd_buf_qp_context_multi_store_t)(struct hinic3_nic_dev *nic_dev,
-							struct hinic3_cmd_buf *cmd_buf,
-							enum hinic3_qp_ctxt_type ctxt_type,
-							uint16_t start_qid, uint16_t max_ctxts);
-/* Prepare cmd to modify vlan tag */
-typedef uint8_t  (*prepare_cmd_buf_modify_svlan_t)(struct hinic3_cmd_buf *cmd_buf, 
-						   uint16_t func_id,
-						   uint16_t vlan_tag,
-						   uint16_t q_id,
-						   uint8_t vlan_mode);
-/* Prepare cmd to set RSS indir table */
-typedef uint8_t  (*prepare_cmd_buf_set_rss_indir_table_t)(struct hinic3_nic_dev *nic_dev,
-							  const uint32_t *indir_table,
-							  struct hinic3_cmd_buf *cmd_buf);
-/* Prepare cmd to get RSS indir table */
-typedef uint8_t  (*prepare_cmd_buf_get_rss_indir_table_t)(struct hinic3_nic_dev *nic_dev,
-							  struct hinic3_cmd_buf *cmd_buf);
-/* Configure RSS indir table */
-typedef void     (*cmd_buf_to_rss_indir_table_t)(const struct hinic3_cmd_buf *cmd_buf,
-						 uint32_t *indir_table);
-typedef void     (*cmd_buf_to_rss_indir_table_qpool_t)(const struct hinic3_cmd_buf *cmd_buf,
-						 uint32_t *indir_table, uint16_t indir_table_size);
-typedef void	 (*prepare_rq_ctxt_ceq_and_prefetch_t)(struct hinic3_rq_ctxt *rq_ctxt,
-						       u16 wqe_type,
-						       u16 msix_entry_idx,
-						       bool support_rq_sw_compact_cqe,
-						       u8 intr_disable);
-
-typedef void	 (*prepare_sq_ctxt_drop_and_prefetch_t)(struct hinic3_sq_ctxt *sq_ctxt);
-
-struct hinic3_nic_cmdq_ops {
-	prepare_cmd_buf_clean_tso_lro_space_t		prepare_cmd_buf_clean_tso_lro_space;
-	prepare_cmd_buf_qp_context_multi_store_t	prepare_cmd_buf_qp_context_multi_store;
-	prepare_cmd_buf_modify_svlan_t			prepare_cmd_buf_modify_svlan;
-	prepare_cmd_buf_set_rss_indir_table_t		prepare_cmd_buf_set_rss_indir_table;
-	prepare_cmd_buf_get_rss_indir_table_t		prepare_cmd_buf_get_rss_indir_table;
-	cmd_buf_to_rss_indir_table_t			cmd_buf_to_rss_indir_table;
-	cmd_buf_to_rss_indir_table_qpool_t		cmd_buf_to_rss_indir_table_qpool;
-	prepare_rq_ctxt_ceq_and_prefetch_t		prepare_rq_ctxt_ceq_and_prefetch;
-	prepare_sq_ctxt_drop_and_prefetch_t		prepare_sq_ctxt_drop_and_prefetch;
-};
-
 #define DB_INFO_QID_SHIFT			0
 #define DB_INFO_NON_FILTER_SHIFT		22
 #define DB_INFO_CFLAG_SHIFT			23

@@ -215,7 +215,8 @@ void hinic3_sq_prepare_ctxt(struct hinic3_txq *sq, u16 sq_id,
 	u32 wq_block_pfn_hi, wq_block_pfn_lo;
 	u16 pi_start, ci_start;
 
-	sq->nic_dev->cmdq_ops->prepare_sq_ctxt_drop_and_prefetch(sq_ctxt);
+	if (is_sp560_nic(sq->nic_dev))
+		hinic3_prepare_sq_ctxt_drop_and_prefetch(sq_ctxt);
 
 	ci_start = sq->cons_idx & sq->q_mask;
 	pi_start = sq->prod_idx & sq->q_mask;
@@ -311,9 +312,19 @@ void hinic3_rq_prepare_ctxt(struct hinic3_rxq *rq, struct hinic3_rq_ctxt *rq_ctx
 
 	/* RQ doesn't need ceq, msix_entry_idx set 1, but mask not enable */
 	intr_disable = rq->dp_intr_en ? 0 : 1;
-	support_rq_sw_compact_cqe = HINIC3_SUPPORT_RX_SW_COMPACT_CQE(rq->nic_dev);
-	rq->nic_dev->cmdq_ops->prepare_rq_ctxt_ceq_and_prefetch(
-		rq_ctxt, wqe_type, rq->msix_entry_idx, support_rq_sw_compact_cqe, intr_disable);
+
+	if (is_sp560_nic(rq->nic_dev)) {
+		support_rq_sw_compact_cqe = HINIC3_SUPPORT_RX_SW_COMPACT_CQE(rq->nic_dev);
+		hinic3_prepare_rq_ctxt_ceq_and_prefetch(rq_ctxt, wqe_type, rq->msix_entry_idx, support_rq_sw_compact_cqe, intr_disable);
+	} else {
+		rq_ctxt->ceq_attr = RQ_CTXT_CEQ_ATTR_SET(intr_disable, EN) |
+			RQ_CTXT_CEQ_ATTR_SET(0, INTR_ARM) |
+			RQ_CTXT_CEQ_ATTR_SET(rq->msix_entry_idx, INTR);
+		
+		rq_ctxt->pref_cache = RQ_CTXT_PREF_SET(WQ_PREFETCH_MIN, CACHE_MIN) |
+		RQ_CTXT_PREF_SET(WQ_PREFETCH_MAX, CACHE_MAX) |
+		RQ_CTXT_PREF_SET(WQ_PREFETCH_THRESHOLD, CACHE_THRESHOLD);
+	}
 
 	/* Use 32Byte WQE with SGE for CQE in default */
 	rq_ctxt->wq_pfn_hi_type_owner = RQ_CTXT_WQ_PAGE_SET(wq_page_pfn_hi, HI_PFN) |
