@@ -113,4 +113,8 @@ SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_mml_queue.c
 SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_hairpin.c
 SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_stn_cmdq.c
 
+ifeq ($(CONFIG_RTE_ARCH_ARM64),y)
+	SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_rxtx_vec_neon.c
+endif
+
 include $(RTE_SDK)/mk/rte.lib.mk

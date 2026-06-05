@@ -1244,8 +1244,10 @@ int hinic3_start_all_rqs(struct rte_eth_dev *eth_dev)
 {
 	struct hinic3_nic_dev *nic_dev = NULL;
 	struct hinic3_rxq *tmp = NULL, *rxq = NULL;
+	struct rte_mbuf *mbuf = NULL;
 	int err = 0;
-	int i;
+	int i = 0;
+	int j = 0;
 
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
 
@@ -1260,6 +1262,16 @@ int hinic3_start_all_rqs(struct rte_eth_dev *eth_dev)
 			PMD_DRV_LOG(ERR, "Fail to alloc mbuf for Rx queue %d, qid = %u, need_mbuf: %d\n",
 				i, rxq->q_id, rxq->q_depth);
 			goto out;
+		}
+
+		if (nic_dev->vec_allowed) {
+			for (j = 0; j < HINIC3_DEFAULT_RX_BURST; j++) {
+				mbuf = rte_mbuf_raw_alloc(rxq->mb_pool);
+				if (unlikely(mbuf == NULL))
+					return -ENOMEM;
+
+				rxq->rx_info[rxq->q_depth + j].mbuf = mbuf;
+			}
 		}
 		
 		if (!IS_QPOOL_MODE())

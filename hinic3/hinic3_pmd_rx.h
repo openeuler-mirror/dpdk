@@ -234,6 +234,9 @@ enum hinic3_compact_cqe_csum_err_type {
 #define HINIC3_L4_PYTPE_SHIFT	16
 #define HINIC3_COMPACT_CQE_PTYPE_SHIFT 16
 
+#define HINIC3_DEFAULT_DESCS_PER_LOOP 4
+#define HINIC3_DEFAULT_RX_BURST 64
+
 /* keep same with IPSU_METADATA_L3_TP_E */
 enum HINIC3_RX_CQE_PT_L3 {
     HINIC3_RX_CQE_L3_IPV4 = 0u,
@@ -492,6 +495,8 @@ int hinic3_start_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq);
 u16 hinic3_recv_pkts_compact_cqe(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts);
 
 u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts);
+
+u16 hinic3_recv_pkts_vec(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts);
 
 void hinic3_add_rq_to_rx_queue_list(struct hinic3_nic_dev *nic_dev,
 				    u16 queue_id);
