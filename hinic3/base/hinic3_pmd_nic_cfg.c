@@ -336,6 +336,11 @@ static int hinic3_config_vlan(void *hwdev, u8 opcode, u16 vlan_id, u16 func_id)
 	u16 out_size = sizeof(vlan_info);
 	int err;
 
+	if (IS_QPOOL_MODE()) {
+		PMD_DRV_LOG(WARNING, "Qpool mode not support config vlan.");
+		return 0;
+	}
+
 	memset(&vlan_info, 0, sizeof(vlan_info));
 	vlan_info.opcode = opcode;
 	vlan_info.func_id = func_id;
@@ -913,8 +918,10 @@ int hinic3_set_rx_mode(void *hwdev, u32 enable)
 	if (!hwdev)
 		return -EINVAL;
 
-	if (IS_QPOOL_MODE())
- 	  	return 0;
+	if (IS_QPOOL_MODE()) {
+ 	  	PMD_DRV_LOG(WARNING, "Qpool mode not support set rx mode.");
+		return 0;
+	}
 
 	memset(&rx_mode_cfg, 0, sizeof(rx_mode_cfg));
 	rx_mode_cfg.func_id = hinic3_global_func_id(hwdev);
@@ -940,6 +947,11 @@ int hinic3_set_rx_vlan_offload(void *hwdev, u8 en)
 	if (!hwdev)
 		return -EINVAL;
 
+	if (IS_QPOOL_MODE()) {
+		PMD_DRV_LOG(WARNING, "Qpool mode not support set rx vlan offload.");
+		return 0;
+	}
+
 	memset(&vlan_cfg, 0, sizeof(vlan_cfg));
 	vlan_cfg.func_id = hinic3_global_func_id(hwdev);
 	vlan_cfg.vlan_offload = en;
@@ -963,6 +975,11 @@ int hinic3_set_vlan_fliter(void *hwdev, u32 vlan_filter_ctrl)
 
 	if (!hwdev)
 		return -EINVAL;
+
+	if (IS_QPOOL_MODE()) {
+		PMD_DRV_LOG(WARNING, "Qpool mode support set vlan filter.");
+		return 0;
+	}
 
 	memset(&vlan_filter, 0, sizeof(vlan_filter));
 	vlan_filter.func_id = hinic3_global_func_id(hwdev);
@@ -988,6 +1005,11 @@ static int hinic3_set_rx_lro(void *hwdev, u8 ipv4_en, u8 ipv6_en,
 
 	if (!hwdev)
 		return -EINVAL;
+
+	if (IS_QPOOL_MODE()) {
+		PMD_DRV_LOG(WARNING, "Qpool mode not support set rx lro.");
+		return 0;
+	}
 
 	memset(&lro_cfg, 0, sizeof(lro_cfg));
 	lro_cfg.func_id = hinic3_global_func_id(hwdev);
@@ -1016,6 +1038,11 @@ static int hinic3_set_rx_lro_timer(void *hwdev, u32 timer_value)
 
 	if (!hwdev)
 		return -EINVAL;
+
+	if (IS_QPOOL_MODE()) {
+		PMD_DRV_LOG(WARNING, "Qpool not support set lro timer.");
+		return 0;
+	}
 
 	memset(&lro_timer, 0, sizeof(lro_timer));
 	lro_timer.opcode = HINIC3_CMD_OP_SET;

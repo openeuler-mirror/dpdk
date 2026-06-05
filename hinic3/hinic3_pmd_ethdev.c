@@ -848,7 +848,7 @@ static int hinic3_link_update(struct rte_eth_dev *dev, int wait_to_complete)
 	} while (rep_cnt--);
 
 out:
-	if(HINIC3_IS_VF(nic_dev->hwdev)) {
+	if(HINIC3_IS_VF(nic_dev->hwdev) && !IS_QPOOL_MODE()) {
 		nic_dev->hwdev->link_status = link.link_status;
 		link.link_status = nic_dev->hwdev->link_status & nic_dev->hwdev->vf_valid_status;
 	}
@@ -3855,6 +3855,11 @@ static int hinic3_set_mac_addr(struct rte_eth_dev *dev,
 	char mac_addr[RTE_ETHER_ADDR_FMT_SIZE];
 	u16 func_id;
 	int err;
+
+	if (IS_QPOOL_MODE()) {
+		PMD_DRV_LOG(WARNING, "Qpool mode not support set mac addr.");
+		return 0;
+	}
 
 	if (IS_BIFUR_MODE()) {
 		if (hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev)) {
