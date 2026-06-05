@@ -902,6 +902,7 @@ static int hinic3_alloc_template(struct hinic3_nic_dev *nic_dev)
 	struct msg_module msg_to_kernel;
 	int in_size, out_size, err;
 
+	(void)memset(&cfg_rss_temp, 0, sizeof(cfg_rss_temp));
 	cfg_rss_temp.opcode = NIC_RSS_CMD_TEMP_ALLOC;
 
 	(void)memset(&msg_to_kernel, 0, sizeof(msg_to_kernel));
@@ -925,6 +926,7 @@ static int hinic3_release_template(struct hinic3_nic_dev *nic_dev)
 	struct msg_module msg_to_kernel;
 	struct drv_cmd_cfg_rss_temp cfg_rss_temp;
 
+	(void)memset(&cfg_rss_temp, 0, sizeof(cfg_rss_temp));
 	cfg_rss_temp.opcode = NIC_RSS_CMD_TEMP_QPOOL_FREE;
 
 	(void)memset(&msg_to_kernel, 0, sizeof(msg_to_kernel));
@@ -1536,21 +1538,21 @@ static void hinic3_rx_queue_release(struct rte_eth_dev *dev, uint16_t queue_id)
 	if (IS_QPOOL_MODE()) {
 		if (nic_dev->fd < 0) {
 			PMD_DRV_LOG(WARNING, "NIC device queue release fd < 0. fd = %d", nic_dev->fd);
-			return;
+			goto release_resources;
 		}
 
 		if (rxq->q_id == 0) {
 			err = hinic3_release_template(nic_dev);
 			if (err < 0) {
 				PMD_DRV_LOG(WARNING, "NIC device queue release template err, err = %d", err);
-				return;
+				goto release_resources;
 			}
 		}
 
 		err = hinic3_release_user_queue(nic_dev, rxq->q_id);
 		if (err < 0) {
 			PMD_DRV_LOG(WARNING, "NIC device queue release user queue err, err = %d", err);
-			return;
+			goto release_resources;
 		}
 
 		u32 rqcqe_buf_size = RQCQE_BUF_SIZE(rxq->q_depth);
@@ -1563,6 +1565,7 @@ static void hinic3_rx_queue_release(struct rte_eth_dev *dev, uint16_t queue_id)
 		munmap(rxq->queue_buf_vaddr, queue_buf_size);
 	}
 
+release_resources:
 	if (!rxq->is_hairpin) {
 		hinic3_memzone_free(rxq->cqe_mz);
 		hinic3_memzone_free(rxq->rq_mz);
@@ -5006,9 +5009,13 @@ static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev)
 
 #ifdef DPDK_21_11
 	err = rte_intr_fd_set(pci_dev->intr_handle, nic_dev->fd);
-	err = rte_intr_type_set(pci_dev->intr_handle, RTE_INTR_HANDLE_EXT);
 	if (err) {
 		PMD_DRV_LOG(ERR, "intr fd set failed, err = %d", err);
+		goto set_default_feature_fail;
+	}
+	err = rte_intr_type_set(pci_dev->intr_handle, RTE_INTR_HANDLE_EXT);
+	if (err) {
+		PMD_DRV_LOG(ERR, "intr type set failed, err = %d", err);
 		goto set_default_feature_fail;
 	}
 #else
@@ -5080,6 +5087,7 @@ get_cap_fail:
 alloc_template_fail:
 init_hwdev_fail:
 link_state_err:
+	close(nic_dev->fd);
 get_nic_fd_fail:
 	rte_free(nic_dev->hwdev);
 	nic_dev->hwdev = NULL;
