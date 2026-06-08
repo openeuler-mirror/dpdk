@@ -3982,7 +3982,11 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 	TAILQ_INIT(&nic_dev->filter_fdir_rule_list);
 	TAILQ_INIT(&nic_dev->rss_template_list);
 
-	hinic3_mutex_init_shared(&nic_dev->rx_mode_mutex);
+	err = hinic3_mutex_init_shared(&nic_dev->rx_mode_mutex);
+	if (err) {
+		PMD_DRV_LOG(ERR, "Mutex init failed.");
+		goto mutex_init_fail;
+	}
 
 	hinic3_set_bit(HINIC3_DEV_INTR_EN, &nic_dev->dev_status);
 
@@ -3999,13 +4003,16 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 	err = hinic3_dcb_init(nic_dev);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Failed to init dcb: %d", err);
-		goto enable_intr_fail;
+		goto dcb_init_fail;
 	}
 
 	hinic3_tm_conf_init(eth_dev);
 
 	return 0;
 
+dcb_init_fail:
+	hinic3_mutex_destroy(&nic_dev->rx_mode_mutex);
+mutex_init_fail:
 enable_intr_fail:
 	(void)rte_intr_callback_unregister(PCI_DEV_TO_INTR_HANDLE(pci_dev),
 					   hinic3_dev_interrupt_handler,

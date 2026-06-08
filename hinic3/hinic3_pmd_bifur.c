@@ -708,27 +708,6 @@ hinic3_bifur_work_pci_pre_probe(struct rte_pci_driver *dr, struct rte_pci_device
 	return 0;
 }
 
-/* rte pci operation end */
-static int
-hinic3_bifur_probe_pair_func(struct rte_pci_driver *pci_drv, struct rte_pci_device *origin_pci_dev,
-			     struct rte_pci_device **work_pci_dev, struct rte_pci_addr *pair_pci_addr)
-{
-	int ret;
-	char path[MAX_PATH_LEN] = {0};
-	ret = hinic3_bifur_pci_addr_to_path(pair_pci_addr, path);
-	if (ret < 0) {
-		return -1;
-	}
-	*work_pci_dev = hinic3_bifur_alloc_pci_dev(path, pair_pci_addr, origin_pci_dev);
-	if (*work_pci_dev == NULL) {
-		return -1;
-	}
-	ret = hinic3_bifur_work_pci_pre_probe(pci_drv, *work_pci_dev);
-	if (ret != 0) {
-		return ret;
-	}
-	return 0;
-}
 
 enum MAPPED_DEV_OP_OODE {
 	DEV_ADD = 0x1,
@@ -776,6 +755,12 @@ hinic3_bifur_lock_pair(struct hinic3_bifur_dev_pair *dev_pair)
 	u32 dbdf;
 	char real_path[PATH_MAX] = {0};
 	char file_path[HINIC3_BIFUR_MAX_PATH_LEN] = {0};
+
+	if (dev_pair == NULL || dev_pair->work_pci_dev == NULL) {
+		PMD_DRV_LOG(ERR, "input param is null.");
+		return -1;
+	}
+
 	struct rte_pci_addr *addr = &dev_pair->work_pci_dev->addr;
 
 	dbdf = PCI_DBDF(addr->domain, addr->bus, addr->devid, addr->function);
@@ -839,6 +824,30 @@ hinic3_bifur_remove_pcidev_pairs(struct rte_pci_device *origin_pci_dev)
 	if (hinic3_bifur_mapped_dev_op(origin_pci_dev, DEV_DEL | DEV_QUERY) != 0) {
 		PMD_DRV_LOG(ERR, "Bifur remove pcidev pairs failed.");
 	}
+}
+
+/* rte pci operation end */
+static int
+hinic3_bifur_probe_pair_func(struct rte_pci_driver *pci_drv, struct rte_pci_device *origin_pci_dev,
+			     struct rte_pci_device **work_pci_dev, struct rte_pci_addr *pair_pci_addr)
+{
+	int ret;
+	char path[MAX_PATH_LEN] = {0};
+	ret = hinic3_bifur_pci_addr_to_path(pair_pci_addr, path);
+	if (ret < 0) {
+		return -1;
+	}
+	*work_pci_dev = hinic3_bifur_alloc_pci_dev(path, pair_pci_addr, origin_pci_dev);
+	if (*work_pci_dev == NULL) {
+		return -1;
+	}
+	ret = hinic3_bifur_work_pci_pre_probe(pci_drv, *work_pci_dev);
+	if (ret != 0) {
+		rte_free(*work_pci_dev);
+		*work_pci_dev = NULL;
+		return ret;
+	}
+	return 0;
 }
 
 static int
@@ -971,7 +980,7 @@ hinic3_bifur_is_shared_dev(struct rte_pci_device *work_pci_dev)
 }
 
 int
-hinic3_bifur_get_default_mac(struct rte_pci_device *pci_dev, u8 *mac_addr, int ether_len)
+hinic3_bifur_get_default_mac(struct rte_pci_device *pci_dev, u8 *mac_addr)
 {
 	int ret;
 	u32 dbdf;
@@ -982,7 +991,7 @@ hinic3_bifur_get_default_mac(struct rte_pci_device *pci_dev, u8 *mac_addr, int e
 
 	int g_func_fd = g_hinic3_bifur_mgr.func_mgr.global_func_fd;
 
-	if (pci_dev == NULL || mac_addr == NULL || ether_len > RTE_ETHER_ADDR_LEN) {
+	if (pci_dev == NULL || mac_addr == NULL) {
 		return -EINVAL;
 	}
 
