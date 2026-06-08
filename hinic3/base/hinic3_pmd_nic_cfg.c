@@ -1746,7 +1746,7 @@ int hinic3_add_tcam_rule(void *hwdev, struct hinic3_tcam_cfg_rule *tcam_rule, u8
 	/* Process of enabling group ext_info in the MPU */
 	if (hinic3_get_bifur_enable(hwdev, &bifur_en, 0, 0) != 0)
 		PMD_DRV_LOG(ERR, "hinic3 get port table bifur enable status failed.");
-	
+
 	if (bifur_en)
 		tcam_cmd.bifur_rss_en = 1;
 
@@ -2827,4 +2827,39 @@ u64 hinic3_get_driver_feature(void *dev)
 	nic_dev = (struct hinic3_nic_dev *)dev;
 
 	return nic_dev->feature_cap;
+}
+
+u8 hinic3_cmd_vf_lag(void *hwdev, u16 func_id,u8 opcode)
+{
+	struct hinic3_vf_lag_cmd vf_lag_info = {0};
+	u16 out_size = sizeof(struct hinic3_vf_lag_cmd);
+	u8 lag_en = 0;
+	int err;
+
+	if (!hwdev || func_id >= MAX_FUNCTION_NUM)
+		return 0;
+	vf_lag_info.func_id = func_id;
+	vf_lag_info.opcode = opcode;
+	vf_lag_info.en_flag = 0;
+
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_CFG_VF_LAG,
+				     &vf_lag_info, sizeof(vf_lag_info), &vf_lag_info,
+				     &out_size);
+	if (vf_lag_info.msg_head.status == HINIC3_MGMT_CMD_UNSUPPORTED) {
+		return 0;
+	} else {
+ 		if (err || vf_lag_info.msg_head.status || !out_size) {
+			PMD_DRV_LOG(ERR,
+				    "Get vf_lag failed, err: %d, status: 0x%x, out size: 0x%x",
+				    err, vf_lag_info.msg_head.status, out_size);
+			return 0;
+		}
+	}
+
+	if (opcode == HINIC3_CMD_OPCODE_GET) {
+		lag_en = (vf_lag_info.vf_lag_bitmap.vf_bit_map[func_id / VF_LAG_VF_NUM_PER_GROUP] &
+			 ((0x1ULL) << (func_id % VF_LAG_VF_NUM_PER_GROUP)));
+	}
+
+	return lag_en;
 }

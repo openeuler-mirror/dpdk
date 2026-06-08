@@ -19,6 +19,7 @@
 #define HINIC3_DCB_UP_MAX		0x8
 
 #define HINIC3_MAX_NUM_RQ		256
+#define MAX_FUNCTION_NUM		4096
 
 #define HINIC3_MAX_MTU_SIZE		9600
 #define HINIC3_MIN_MTU_SIZE		256
@@ -87,7 +88,7 @@
 #define HINIC3_SUPPORT_RX_HW_COMPACT_CQE(dev) \
 	HINIC3_SUPPORT_FEATURE(dev, NIC_F_RX_HW_COMPACT_CQE)
 #define HINIC3_SUPPORT_RX_SW_COMPACT_CQE(dev) \
-	HINIC3_SUPPORT_FEATURE(dev, NIC_F_RX_SW_COMPACT_CQE)	
+	HINIC3_SUPPORT_FEATURE(dev, NIC_F_RX_SW_COMPACT_CQE)
 #define HINIC3_SUPPORT_TX_WQE_COMPACT_TASK(dev) \
 	HINIC3_SUPPORT_FEATURE(dev, NIC_F_TX_WQE_COMPACT_TASK)
 #define HINIC3_SUPPORT_VXLAN_OFFLOAD(dev) \
@@ -387,7 +388,7 @@ struct hinic3_indir_tbl_qid_lqid {
 
 TAILQ_HEAD(hinic3_indir_qid_lqid_list, hinic3_indir_tbl_qid_lqid);
 
-static struct hinic3_indir_qid_lqid_list g_qid_lqid_list = 
+static struct hinic3_indir_qid_lqid_list g_qid_lqid_list =
 	TAILQ_HEAD_INITIALIZER(g_qid_lqid_list);
 
 
@@ -1307,6 +1308,27 @@ struct hinic3_fec_param_value_map {
 	u8 ethtool_fec_value;
 };
 
+#define VF_LAG_VF_NUM_GROUP_NUM 128
+#define VF_LAG_VF_NUM_PER_GROUP 32
+#define HINIC3_CMD_OPCODE_SET 0
+#define HINIC3_CMD_OPCODE_GET 1
+typedef struct hinic3_vf_lag_bitmap_s {
+	u32 vf_bit_map[VF_LAG_VF_NUM_GROUP_NUM];
+} hinic3_vf_lag_bitmap;
+
+struct hinic3_vf_lag_cmd {
+	struct mgmt_msg_head msg_head;
+
+	u16 func_id;
+	u8 opcode; /* 0 -> set, 1 -> get */
+	u8 en_flag; /* 0 -> disable, 1 -> enable  */
+	u8 bond_active_num;
+	u8 bond_active_bitmap;
+	u8 mac_sync_flag;
+	u8 rsvd;
+	hinic3_vf_lag_bitmap vf_lag_bitmap;
+};
+
 int l2nic_msg_to_mgmt_sync(void *hwdev, u16 cmd, void *buf_in, u16 in_size,
 			   void *buf_out, u16 *out_size);
 
@@ -1951,5 +1973,7 @@ int hinic3_get_fec_mode(struct hinic3_hwdev *hwdev, u8 *advertised_fec, u8 *supp
 * @retval non-zero: Failure
 */
 u64 hinic3_get_driver_feature(void *dev);
+
+u8 hinic3_cmd_vf_lag(void *hwdev, u16 func_id,u8 opcode);
 
 #endif /* _HINIC3_PMD_NIC_CFG_H_ */
