@@ -9,7 +9,10 @@ int
 tool_get_valid_target(char *name, struct tool_target *target)
 {
 	int ret = UDA_SUCCESS;
-
+	if (name == NULL) {
+		PMD_DRV_LOG(ERR, "Input parameter of device name is null.\n");
+		return -UDA_EINVAL;
+	}
 	if (strlen(name) >= MAX_DEV_LEN) {
 		PMD_DRV_LOG(ERR, "Input parameter of device name is too long.\n");
 		ret = -UDA_ELEN;

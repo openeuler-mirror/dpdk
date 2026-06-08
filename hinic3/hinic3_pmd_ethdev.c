@@ -1166,7 +1166,7 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 		err = hinic3_verify_queue_depth(nic_dev, &nb_desc, HINIC3_VERIFY_RX_DEPTH);
  		if (err) {
  			PMD_DRV_LOG(ERR, "Get queue depth failed");
- 			goto get_queue_depth_fail;
+ 			return -EINVAL;
  		}
 	}
 
@@ -1263,16 +1263,17 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	rxq->rx_buff_shift = ilog2(rxq->buf_len);
 
 	err = hinic3_rx_queue_dma_create(dev, rxq, qid, socket_id);
- 	if (err)
- 	 	return -ENOMEM;
+ 	if (err) {
+		goto rx_queue_dma_fail;
+	}
 
 	/* Record rxq pointer in rte_eth rx_queues */
 	dev->data->rx_queues[qid] = rxq;
 
 	return 0;
 
+rx_queue_dma_fail:
 adjust_bufsize_fail:
-get_queue_depth_fail:
 	rte_free(rxq);
 	nic_dev->rxqs[qid] = NULL;
 
@@ -1429,8 +1430,8 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 		err = hinic3_verify_queue_depth(nic_dev, &nb_desc, HINIC3_VERIFY_TX_DEPTH);
  		if (err) {
  			PMD_DRV_LOG(ERR, "Get queue depth failed");
- 			goto get_queue_depth_fail;
- 		}
+ 			return -EINVAL;
+ 		}	
 	}
 
 	/* Queue depth must be power of 2, otherwise will be aligned up */
@@ -1502,18 +1503,16 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	txq->tx_wqe_compact_task = HINIC3_SUPPORT_TX_WQE_COMPACT_TASK(nic_dev);
 
 	err = hinic3_tx_queue_dma_create(dev, txq, qid, socket_id);
-	if (err)
+	if (err) {
+		nic_dev->txqs[qid] = NULL;
+		rte_free(txq);
 		return -ENOMEM;
+	}
 
 	/* Record txq pointer in rte_eth tx_queues */
 	dev->data->tx_queues[qid] = txq;
 
 	return 0;
-
-get_queue_depth_fail:
-	nic_dev->txqs[qid] = NULL;
-	rte_free(txq);
-	return err;
 }
 
 #ifndef DPDK_21_11
@@ -4727,7 +4726,11 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 	TAILQ_INIT(&nic_dev->filter_fdir_rule_list);
 	TAILQ_INIT(&nic_dev->rss_template_list);
 
-	hinic3_mutex_init_shared(&nic_dev->rx_mode_mutex);
+	err = hinic3_mutex_init_shared(&nic_dev->rx_mode_mutex);
+	if (err) {
+		PMD_DRV_LOG(ERR, "Mutex init failed.");
+		goto mutex_init_fail;
+	}
 
 	hinic3_set_bit(HINIC3_DEV_INTR_EN, &nic_dev->dev_status);
 
@@ -4744,13 +4747,16 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 	err = hinic3_dcb_init(nic_dev);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Failed to init dcb: %d", err);
-		goto enable_intr_fail;
+		goto dcb_init_fail;
 	}
 
 	hinic3_tm_conf_init(eth_dev);
 
 	return 0;
 
+dcb_init_fail:
+	hinic3_mutex_destroy(&nic_dev->rx_mode_mutex);
+mutex_init_fail:
 enable_intr_fail:
 	(void)rte_intr_callback_unregister(PCI_DEV_TO_INTR_HANDLE(pci_dev),
 					   hinic3_dev_interrupt_handler,

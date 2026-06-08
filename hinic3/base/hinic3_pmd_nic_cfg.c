@@ -309,7 +309,7 @@ int hinic3_get_default_mac(void *hwdev, u8 *mac_addr, int ether_len)
  	if (IS_BIFUR_MODE()) {
 		if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
 			return hinic3_bifur_get_default_mac(((struct hinic3_hwdev *)hwdev)->pci_dev,
-				mac_addr, ether_len);
+				mac_addr);
 		}
 	}
 

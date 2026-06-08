@@ -614,6 +614,7 @@ static int init_sq_ctxts_qpool(struct hinic3_nic_dev *nic_dev)
 
 		err = hinic3_cmd_modify_tx_queue_ctx(nic_dev, sq_ctxt_block);
 		if (err < 0) {
+			hinic3_free_cmd_buf(cmd_buf);
 			return err;
 		}
 
@@ -686,6 +687,7 @@ static int init_rq_ctxts_qpool(struct hinic3_nic_dev *nic_dev)
 
 		err = hinic3_cmd_modify_rx_queue_ctx(rq_ctxt_block, fd);
 		if (err < 0) {
+			hinic3_free_cmd_buf(cmd_buf);
 			return err;
 		}
 
