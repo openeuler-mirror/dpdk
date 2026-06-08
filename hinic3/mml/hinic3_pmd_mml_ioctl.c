@@ -82,6 +82,8 @@ static int
 get_rx_cqe_info(struct rte_eth_dev *dev, void *buf_in, uint16_t in_size,
 		void *buf_out, uint16_t *out_size)
 {
+	if (buf_in == NULL || buf_out == NULL || out_size == NULL)
+		return -UDA_EINVAL;
 	struct hinic_wqe_info *wqe_info = (struct hinic_wqe_info *)buf_in;
 	uint16_t q_id = (uint16_t)wqe_info->q_id;
 	uint16_t idx = (uint16_t)wqe_info->wqe_id;
