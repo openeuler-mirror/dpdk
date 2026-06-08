@@ -1842,7 +1842,7 @@ u16 hinic3_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, u16 nb_pkts)
 
 	/* Update txq stats */
 	if (nb_tx) {
-		hinic3_write_db(txq->db_addr, txq->q_id, (int)(txq->cos),
+		hinic3_write_db(txq->db_addr, txq->local_qid, (int)(txq->cos),
 				SQ_CFLAG_DP,
 				MASKED_QUEUE_IDX(txq, txq->prod_idx));
 		txq->txq_stats.packets += total_segments;
