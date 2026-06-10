@@ -734,7 +734,11 @@ struct hinic3_tcam_info {
 
 /* 256-entry RSS indir table split into 8 groups; group0 for func RSS */
 #define HINIC3_RSS_INDIR_GROUP_NUM	8
-#define HINIC3_RSS_INDIR_GROUP_SIZE	(HINIC3_RSS_INDIR_SIZE / HINIC3_RSS_INDIR_GROUP_NUM)
+#define HINIC3_RSS_INDIR_GROUP_SIZE_PF	(HINIC3_RSS_INDIR_SIZE / HINIC3_RSS_INDIR_GROUP_NUM)
+/* The actual size of VF RSS indir is 128 which should be considered under grouping conditions */
+#define HINIC3_RSS_INDIR_SIZE_VF 128
+#define HINIC3_RSS_INDIR_GROUP_SIZE_VF	(HINIC3_RSS_INDIR_SIZE_VF / HINIC3_RSS_INDIR_GROUP_NUM)
+
 #define HINIC3_RSS_FUNC_GROUP_ID	0
 #define HINIC3_FLOW_RSS_GROUP_MAX	(HINIC3_RSS_INDIR_GROUP_NUM - 1)
 

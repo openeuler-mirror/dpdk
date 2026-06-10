@@ -2422,22 +2422,25 @@ hinic3_fillout_indir_tbl_by_rss_group(struct hinic3_nic_dev *nic_dev,
 					struct hinic3_rss_template_entry *template_entry,
 					u32 *indir)
 {
+	u16 rss_indir_group_size;
 	u32 start_idx, i;
 	u16 queue_idx;
 	u16 queue_num;
-
+	
 	if (template_entry == NULL || template_entry->queue_num == 0) {
 		for (i = 0; i < HINIC3_RSS_INDIR_SIZE; i++)
 			indir[i] = i % nic_dev->num_rqs;
 		return;
 	}
-
-	start_idx = template_entry->rss_group_id * HINIC3_RSS_INDIR_GROUP_SIZE;
+	rss_indir_group_size = HINIC3_IS_VF(nic_dev->hwdev) ? 
+			       HINIC3_RSS_INDIR_GROUP_SIZE_VF : 
+			       HINIC3_RSS_INDIR_GROUP_SIZE_PF;
+	start_idx = template_entry->rss_group_id * rss_indir_group_size;
 	queue_num = template_entry->queue_num;
 	queue_idx = 0;
 
 	/* fillout indir table used queue list */
-	for (i = 0; i < HINIC3_RSS_INDIR_GROUP_SIZE; i++) {
+	for (i = 0; i < rss_indir_group_size; i++) {
 		indir[start_idx + i] = template_entry->queues[queue_idx];
 		queue_idx = (queue_idx + 1) % queue_num;
 	}
@@ -2558,6 +2561,7 @@ static void hinic3_flow_release_rss_group(struct hinic3_nic_dev *nic_dev,
 						struct hinic3_rss_template_entry *template_entry)
 {
 	u32 indirtbl[HINIC3_RSS_INDIR_SIZE] = {0};
+	u16 rss_indir_group_size;
 	u32 start_idx, i;
 	int ret;
 
@@ -2571,8 +2575,11 @@ static void hinic3_flow_release_rss_group(struct hinic3_nic_dev *nic_dev,
 
 	ret = hinic3_rss_get_indir_tbl(nic_dev->hwdev, indirtbl);
 	if (ret == 0) {
-		start_idx = template_entry->rss_group_id * HINIC3_RSS_INDIR_GROUP_SIZE;
-		for (i = 0; i < HINIC3_RSS_INDIR_GROUP_SIZE; i++)
+		rss_indir_group_size = HINIC3_IS_VF(nic_dev->hwdev) ? 
+				       HINIC3_RSS_INDIR_GROUP_SIZE_VF : 
+			               HINIC3_RSS_INDIR_GROUP_SIZE_PF;
+		start_idx = template_entry->rss_group_id * rss_indir_group_size;
+		for (i = 0; i < rss_indir_group_size; i++)
 			indirtbl[start_idx + i] = (start_idx + i) % nic_dev->num_rqs;
 
 		ret = hinic3_rss_set_indir_tbl(nic_dev->hwdev, indirtbl);
