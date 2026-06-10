@@ -1229,7 +1229,13 @@ hinic3_flow_set_group_rss_action_config(struct rte_eth_dev *dev,
 	if (!queues_match) {
 		TAILQ_FOREACH(template_entry, &nic_dev->rss_template_list, node)
 			template_count++;
-
+		if (nic_dev->num_rqs > HINIC3_RSS_INDIR_GROUP_SIZE_PF || 
+		   (HINIC3_IS_VF(nic_dev->hwdev) && nic_dev->num_rqs > HINIC3_RSS_INDIR_GROUP_SIZE_VF)) {
+		    	rte_flow_error_set(error, EINVAL,
+					   HINIC3_FLOW_ERROR_TYPE_ACTION, act,
+					   "Flow RSS group is not supported with excessive queues");
+			return -rte_errno;
+		}
 		if (template_count >= HINIC3_FLOW_RSS_GROUP_MAX) {
 			rte_flow_error_set(error, EINVAL,
 					   HINIC3_FLOW_ERROR_TYPE_ACTION, act,
