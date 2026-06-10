@@ -664,6 +664,29 @@ static int hinic3_verify_queue_depth(struct hinic3_nic_dev *nic_dev, u16 *q_dept
  	return err;
 }
 
+static int hinic3_get_kernel_addr(struct rte_eth_dev *eth_dev)
+{
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
+ 	struct drv_cmd_kernel_nic_data cfg_kernel_data  = { 0 };
+ 	struct msg_module msg_to_kernel = { 0 };
+ 	int err = 0;
+
+ 	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NIC_DRIVER, GET_KERN_DEV_DATA,
+ 		       sizeof(cfg_kernel_data), sizeof(cfg_kernel_data),
+ 		       &cfg_kernel_data, &cfg_kernel_data);
+
+ 	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
+ 	if (err < 0) {
+ 		PMD_DRV_LOG(WARNING, "Get kernel mtu failed");
+ 		return err;
+ 	}
+
+	rte_ether_addr_copy((struct rte_ether_addr *)cfg_kernel_data.dev_addr,
+ 				&eth_dev->data->mac_addrs[0]);
+
+ 	return err;
+}
+
 /**
  * Get information about the device.
  *
@@ -2235,6 +2258,10 @@ static int hinic3_dev_start_qpool(struct rte_eth_dev *eth_dev)
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
 	hinic3_get_func_rx_buf_size(nic_dev);
 	err = hinic3_get_kernel_mtu(eth_dev);
+	if (err)
+		return err;
+
+	err = hinic3_get_kernel_addr(eth_dev);
 	if (err)
 		return err;
 
@@ -5020,13 +5047,6 @@ static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev)
 		PMD_DRV_LOG(ERR, "Init sw rxqs or txqs failed, dev_name: %s",
 			    eth_dev->data->name);
 		goto init_sw_rxtxqs_fail;
-	}
-
-	err = hinic3_init_mac_table(eth_dev);
-	if (err) {
-		PMD_DRV_LOG(ERR, "Init mac table failed, dev_name: %s",
-			    eth_dev->data->name);
-		goto init_mac_table_fail;
 	}
 
 #ifdef DPDK_21_11
