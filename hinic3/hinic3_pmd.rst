@@ -22,3 +22,7 @@ Set the threshold for the number of coalesced time in the Rx queue, unit is us.
 Note: The configured value must be a multiple of 5.
 - ``rx_cqe_compact_en`` parameter [int]
 Set to 0 to disable RX CQE and packet coalescing delivery. This feature is enabled by default.
+- ``tx_free_loop`` parameter [int]
+Set the maximum number of retry attempts for reclaiming TX descriptors. 
+If the required space is not available after this many attempts, the driver 
+will stop transmitting the current batch to avoid CPU starvation.

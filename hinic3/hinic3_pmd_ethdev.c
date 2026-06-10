@@ -4189,6 +4189,8 @@ static int hinic3_nic_common_args_check_handler(const char *key, const char *val
 		config->rx_cqe_coalesce_num = tmp / HINIC3_CI_PENDING_LIMIT_UNIT;
 	} else if (strcmp(key, "rx_cqe_timer_loop") == 0) {
 		config->rx_cqe_timer_loop = tmp / HINIC3_CI_COALESCING_TIME_UNIT;
+	} else if (strcmp(key, "tx_free_loop") == 0) {
+ 	 	config->tx_free_loop = tmp;
 	}
 	return 0;
 }
@@ -4202,9 +4204,11 @@ static int hinic3_nic_common_config_get(struct rte_pci_device *pci_dev, struct h
 	/* Set private param defaults. */
 	config->tx_pending_limit = HINIC3_DEFAULT_TX_CI_PENDING_LIMIT;
 	config->tx_coalescing_time = HINIC3_DEFAULT_TX_CI_COALESCING_TIME;
+	config->tx_free_loop = HINIC3_DEFAULT_TX_FREE_LOOP;
 	config->rx_cqe_compact_en = HINIC3_DEFAULT_CQE_COMPACT_EN;
 	config->rx_cqe_coalesce_num = HINIC3_RX_CQE_COALESCE_NUM;
 	config->rx_cqe_timer_loop = HINIC3_RX_CQE_TIMER_LOOP;
+
 	if (eal_dev->devargs == NULL)
 		return 0;
 	kvlist = rte_kvargs_parse(eal_dev->devargs->args, NULL);
