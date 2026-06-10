@@ -16,6 +16,7 @@
 #include "hinic3_pmd_nic_cfg.h"
 
 #define MAX_DEV_LEN	      16
+#define MAX_ADDR_LEN	      32
 #define TRGET_UNKNOWN_BUS_NUM (-1)
 #define HINIC3_PMD_MML_RET(ret)             \
 	do {                                \
@@ -261,7 +262,8 @@ struct drv_cmd_kernel_nic_data {
 	u32 tx_q_depth;
 	u16 mtu;
 	u16 netdev_state;
-	u32 rsvd1[13];
+	u8 dev_addr[MAX_ADDR_LEN];
+	u32 rsvd[5];
 };
 
 /*
