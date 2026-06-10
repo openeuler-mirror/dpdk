@@ -960,6 +960,8 @@ static int hinic3_release_template(struct hinic3_nic_dev *nic_dev)
 	if (err < 0)
 		PMD_DRV_LOG(ERR, "Release template error: %d.", errno);
 
+	nic_dev->hwdev->qpool_qgrp_id = 0;
+
 	return err;
 }
 
@@ -1021,6 +1023,13 @@ hinic3_rx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_rxq *rxq,
 	int ci_mz_size = sizeof(*rxq->rq_ci), ci_mz_align = RTE_CACHE_LINE_SIZE;
 
 	if (IS_QPOOL_MODE()) {
+		/* alloc template if not */
+		if (hwdev->qpool_qgrp_id == 0) { 
+			err = hinic3_alloc_template(nic_dev); 
+			if (err < 0) 
+				goto alloc_template_fail;
+		}
+
 		/* Get user queue */
 		err = hinic3_get_rx_user_queue(nic_dev, rxq);
 		if (err < 0)
@@ -1142,6 +1151,7 @@ get_rx_user_queue_fail:
 	if (IS_QPOOL_MODE())
 		hinic3_release_template(nic_dev);
 
+alloc_template_fail:
 	rte_free(rxq);
 	nic_dev->rxqs[qid] = NULL;
 
@@ -1342,6 +1352,13 @@ hinic3_tx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_txq *txq,
 	int err;
 
 	if(IS_QPOOL_MODE()){
+		/* alloc template if not */ 
+		if (hwdev->qpool_qgrp_id == 0) { 
+			err = hinic3_alloc_template(nic_dev); 
+			if (err < 0) 
+				goto alloc_template_fail;
+		}
+
 		err = hinic3_get_tx_user_queue(nic_dev, txq);
 		if (err < 0)
 			goto close_fd;
@@ -1412,6 +1429,7 @@ alloc_sq_mz_fail:
 alloc_ci_mz_fail:
 close_fd:
 	nic_dev->txqs[qid] = NULL;
+alloc_template_fail:
 	rte_free(txq);
 	return err;
 }
@@ -5013,12 +5031,6 @@ static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev)
 		goto init_hwdev_fail;
 	}
 
-	err = hinic3_alloc_template(nic_dev);
- 	if (err < 0) {
-		PMD_DRV_LOG(ERR, "Qpool mode alloc RSS template failed, err: %d", err);
- 		goto alloc_template_fail;
-	}
-
 	nic_dev->max_sqs = hinic3_func_max_sqs(nic_dev->hwdev);
 	nic_dev->max_rqs = hinic3_func_max_rqs(nic_dev->hwdev);
 
@@ -5119,14 +5131,12 @@ set_default_feature_fail:
 #endif
 	hinic3_deinit_mac_addr(eth_dev);
 
-init_mac_table_fail:
 	hinic3_deinit_sw_rxtxqs(nic_dev);
 
 init_sw_rxtxqs_fail:
 	hinic3_free_nic_hwdev(nic_dev->hwdev);
 
 get_cap_fail:
-alloc_template_fail:
 init_hwdev_fail:
 link_state_err:
 	close(nic_dev->fd);
