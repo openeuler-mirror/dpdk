@@ -741,6 +741,14 @@ int hinic3_update_rss_config(struct rte_eth_dev *dev,
 		goto init_rss_fail;
 	}
 
+	if (IS_QPOOL_MODE(nic_dev)) {
+		err = hinic3_get_group_num_qpool(nic_dev, &num_tc);
+		if (err) {
+			PMD_DRV_LOG(ERR, "Get group num failed, err: %d", err);
+			goto init_rss_fail;
+		}
+	}
+
 	err = hinic3_rss_cfg(nic_dev->hwdev, HINIC3_RSS_ENABLE, num_tc, prio_tc);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Enable rss failed, err: %d", err);
@@ -756,6 +764,7 @@ init_rss_fail:
 
 	return err;
 }
+
 /**
  * Initialize the receive packet type table
  * @param[in] dev
@@ -1027,7 +1036,11 @@ int hinic3_stop_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq)
 		goto rq_flush_failed;
 	}
 
-	err = nic_dev->tx_rx_ops.nic_rx_poll_rq_empty(rxq);
+	if (nic_dev->config.rx_cqe_compact_en)
+		err = hinic3_poll_integrated_cqe_rq_empty(rxq);
+	else 
+		err = hinic3_poll_rq_empty(rxq);
+	
 	if (err) {
 		hinic3_dump_cqe_status(rxq, &cqe_done_cnt, &cqe_hole_cnt,
 				       &head_ci, &head_done);
@@ -1246,29 +1259,8 @@ out:
 	return err;
 }
 
-void hinic3_rx_get_cqe_info(__rte_unused struct hinic3_rxq *rxq,
-		            volatile struct hinic3_rq_cqe *rx_cqe,
-		            struct hinic3_cqe_info *cqe_info)
-{
-	u32 dw0 = hinic3_hw_cpu32(rx_cqe->status);
-	u32 dw1 = hinic3_hw_cpu32(rx_cqe->vlan_len);
-	u32 dw2 = hinic3_hw_cpu32(rx_cqe->offload_type);
-	u32 dw3 = hinic3_hw_cpu32(rx_cqe->hash_val);
-
-	cqe_info->lro_num = RQ_CQE_STATUS_GET(dw0, NUM_LRO);
-	cqe_info->csum_err = RQ_CQE_STATUS_GET(dw0, CSUM_ERR);
-
-	cqe_info->pkt_len = RQ_CQE_SGE_GET(dw1, LEN);
-	cqe_info->vlan_tag = RQ_CQE_SGE_GET(dw1, VLAN);
-
-	cqe_info->ptype = HINIC3_GET_RX_PTYPE_OFFLOAD(dw0);
-	cqe_info->vlan_offload = RQ_CQE_OFFOLAD_TYPE_GET(dw2, VLAN_EN);
-	cqe_info->rss_type = RQ_CQE_OFFOLAD_TYPE_GET(dw2, RSS_TYPE);
-	cqe_info->rss_hash_value = dw3;
-}
-
-void
-hinic3_rx_get_compact_cqe_info(struct hinic3_rxq *rxq,
+static
+void hinic3_rx_get_cqe_info(struct hinic3_rxq *rxq,
 			       volatile struct hinic3_rq_cqe *rx_cqe,
 			       struct hinic3_cqe_info *cqe_info)
 {
@@ -1313,7 +1305,8 @@ hinic3_rx_get_compact_cqe_info(struct hinic3_rxq *rxq,
 				(cqe_info->cqe_len == HINIC3_RQ_COMPACT_CQE_16BYTE) ? 16 : 8;
 }
 
-bool rx_separate_cqe_done(struct hinic3_rxq *rxq, volatile struct hinic3_rq_cqe **rx_cqe)
+static
+bool hinic3_rx_separate_cqe_done(struct hinic3_rxq *rxq, volatile struct hinic3_rq_cqe **rx_cqe)
 {
 	volatile struct hinic3_rq_cqe *cqe = NULL;
 	uint16_t sw_ci;
@@ -1330,7 +1323,8 @@ bool rx_separate_cqe_done(struct hinic3_rxq *rxq, volatile struct hinic3_rq_cqe 
 	return true;
 }
 
-bool rx_integrated_cqe_done(struct hinic3_rxq *rxq, volatile struct hinic3_rq_cqe **rx_cqe)
+static
+bool hinic3_rx_integrated_cqe_done(struct hinic3_rxq *rxq, volatile struct hinic3_rq_cqe **rx_cqe)
 {
 	struct rte_mbuf *rxm = NULL;
 	uint16_t sw_ci;
@@ -1363,10 +1357,9 @@ bool rx_integrated_cqe_done(struct hinic3_rxq *rxq, volatile struct hinic3_rq_cq
 }
 
 #define HINIC3_RX_EMPTY_THRESHOLD 3
-u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
+u16 hinic3_recv_pkts_compact_cqe(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 {
 	struct hinic3_rxq *rxq = rx_queue;
-	struct rte_eth_dev *eth_dev = (struct rte_eth_dev *)rxq->nic_dev->hwdev->eth_dev;
 	struct hinic3_nic_dev *nic_dev = rxq->nic_dev;
 	const struct hinic3_ptype_table * const ptype_tbl = nic_dev->ptype_tbl;
 	struct hinic3_rx_info *rx_info = NULL;
@@ -1395,12 +1388,13 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 
 	rxq->prefetch_flag = false;
         while (pkts < nb_pkts) {
-		if (!nic_dev->tx_rx_ops.nic_rx_cqe_done(rxq, &rx_cqe)) {
+		
+		if (!hinic3_rx_integrated_cqe_done(rxq, &rx_cqe)) {
 			rxq->rxq_stats.empty++;
 			break;
 		}
 
-		nic_dev->tx_rx_ops.nic_rx_get_cqe_info(rxq, rx_cqe, &cqe_info);
+		hinic3_rx_get_cqe_info(rxq, rx_cqe, &cqe_info);
 
 		pkt_len = cqe_info.pkt_len;
 		/*
@@ -1433,7 +1427,153 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 
 		/* 3. Jumbo frame process */
 		if  (rte_eth_devices[rxq->port_id].data->scattered_rx) {
-			if (likely(!eth_dev->data->scattered_rx || pkt_len <= rx_buf_len)) {
+			if (likely(pkt_len <= rx_buf_len)) {
+				rxm->data_len = (u16)pkt_len;
+				rxm->pkt_len = pkt_len;
+				hinic3_update_rq_local_ci(rxq, 1);
+			} else {
+				rxm->data_len = rx_buf_len;
+				rxm->pkt_len = rx_buf_len;
+
+				/*
+				* If receive jumbo, updating ci will be done by
+				* hinic3_recv_jumbo_pkt function.
+				*/
+				hinic3_update_rq_local_ci(rxq, 1);
+				hinic3_recv_jumbo_pkt(rxq, rxm, pkt_len - rx_buf_len);
+				sw_ci = hinic3_get_rq_local_ci(rxq);
+			}
+		} else {
+			rxm->data_len = (u16)pkt_len;
+			rxm->pkt_len = pkt_len;
+			hinic3_update_rq_local_ci(rxq, 1);
+		}
+
+		rxm->data_off = RTE_PKTMBUF_HEADROOM + cqe_info.data_offset;
+		rxm->port = rxq->port_id;
+
+		/* 4. Rx checksum offload. */
+		rxm->ol_flags |= hinic3_rx_csum(cqe_info.csum_err, rxq);
+
+		/* 5. Vlan offload. */
+		rxm->ol_flags |= hinic3_rx_vlan(cqe_info.vlan_offload, cqe_info.vlan_tag,
+						&rxm->vlan_tci);
+		/* 6. Packet ptype */
+		rxm->packet_type = ptype_tbl->ptype[cqe_info.ptype];
+		/* 7. RSS. */
+		rxm->ol_flags |= hinic3_rx_rss_hash(cqe_info.rss_type, cqe_info.rss_hash_value,
+						    &rxm->hash.rss);
+		/* 8. LRO. */
+		if (unlikely(cqe_info.lro_num != 0)) {
+			rxm->ol_flags |= HINIC3_PKT_RX_LRO;
+			rxm->tso_segsz = pkt_len / cqe_info.lro_num;
+		}
+
+		rx_cqe->status = 0;
+
+		rx_bytes += pkt_len;
+		rx_pkts[pkts++] = rxm;
+
+                hinic3_rearm_rxq_mbuf(rxq);
+	}
+
+	if (pkts) {
+		/* Update packet stats. */
+		rxq->rxq_stats.packets += pkts;
+		rxq->rxq_stats.bytes += rx_bytes;
+		rxq->rxq_stats.empty = 0;
+#ifdef HINIC3_XSTAT_MBUF_USE
+		rxq->rxq_stats.free_mbuf += pkts;
+#endif
+	}
+	rxq->rxq_stats.burst_pkts = pkts;
+	rxq->rxq_stats.tsc = rte_get_timer_cycles();
+out:
+	/* 10. Rearm mbuf to rxq. */
+	hinic3_rearm_rxq_mbuf(rxq);
+
+#ifdef HINIC3_XSTAT_PROF_RX
+	/* Do profiling stats. */
+	t2 = rte_get_tsc_cycles();
+	rxq->rxq_stats.app_tsc = t1 - rxq->prof_rx_end_tsc;
+	rxq->prof_rx_end_tsc = t2;
+	rxq->rxq_stats.pmd_tsc = t2 - t1;
+#endif
+
+	return pkts;
+}
+
+u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
+{
+	struct hinic3_rxq *rxq = rx_queue;
+	struct hinic3_nic_dev *nic_dev = rxq->nic_dev;
+	const struct hinic3_ptype_table * const ptype_tbl = nic_dev->ptype_tbl;
+	struct hinic3_rx_info *rx_info = NULL;
+	volatile struct hinic3_rq_cqe *rx_cqe = NULL;
+	struct hinic3_cqe_info cqe_info = {0};
+	struct rte_mbuf *rxm = NULL;
+        struct rte_mbuf *prefetch_mbuf = NULL;
+	u16 sw_ci, rx_buf_len, pkts = 0;
+        u16 hw_ci;
+        u16 idx, pos;
+        u16 nb_prefetch = 0;
+	u32 pkt_len;
+	u64 rx_bytes = 0;
+
+#ifdef HINIC3_XSTAT_PROF_RX
+	uint64_t t1 = rte_get_tsc_cycles();
+	uint64_t t2;
+#endif
+
+	if (((rte_get_timer_cycles() - rxq->rxq_stats.tsc) < rxq->wait_time_cycle) &&
+	    rxq->rxq_stats.empty >= HINIC3_RX_EMPTY_THRESHOLD)
+		goto out;
+
+	sw_ci = hinic3_get_rq_local_ci(rxq);
+        rxq->hw_cons_idx = sw_ci;
+
+	rxq->prefetch_flag = false;
+        while (pkts < nb_pkts) {
+		
+		if (!hinic3_rx_separate_cqe_done(rxq, &rx_cqe)) {
+			rxq->rxq_stats.empty++;
+			break;
+		}
+
+		hinic3_rx_get_cqe_info(rxq, rx_cqe, &cqe_info);
+
+		pkt_len = cqe_info.pkt_len;
+		/*
+		 * Compact Rx CQE mode integrates cqe with packet,
+		 * so mbuf length needs to remove the length of cqe.
+		 */
+		rx_buf_len = rxq->buf_len - cqe_info.data_offset;
+
+		rx_info = &rxq->rx_info[sw_ci];
+		rxm = rx_info->mbuf;
+
+                /* 1. Prefetch next (hw_ci - sw_ci) cqe */
+                if (rxq->prefetch_flag == false) {
+                        hw_ci = rxq->hw_cons_idx;
+                        idx = sw_ci;
+                        while(idx != hw_ci && nb_prefetch++ < nb_pkts) {
+                                pos = idx & rxq->q_mask;
+                                prefetch_mbuf = rxq->rx_info[pos].mbuf;
+
+                                rte_prefetch0(prefetch_mbuf);
+                                rte_prefetch0(rte_mbuf_buf_addr((prefetch_mbuf), prefetch_mbuf->pool) + RTE_PKTMBUF_HEADROOM);
+                                idx++;
+                        }
+                        rxq->prefetch_flag = true;
+                }
+
+		/* 2. Next ci point */
+		sw_ci++;
+		sw_ci &= rxq->q_mask;
+
+		/* 3. Jumbo frame process */
+		if  (rte_eth_devices[rxq->port_id].data->scattered_rx) {
+			if (likely(pkt_len <= rx_buf_len)) {
 				rxm->data_len = (u16)pkt_len;
 				rxm->pkt_len = pkt_len;
 				hinic3_update_rq_local_ci(rxq, 1);

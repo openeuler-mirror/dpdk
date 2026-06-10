@@ -19,6 +19,7 @@
 #include "hinic3_pmd_hw_cfg.h"
 #include "hinic3_pmd_ethdev.h"
 #include "hinic3_pmd_nic_io.h"
+#include "htn_adapt/hinic3_htn_cmdq.h"
 #ifdef HINIC3_TRAFFIC_BIFUR
 #include "hinic3_pmd_bifur.h"
 #endif
@@ -1146,7 +1147,7 @@ int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table)
 		cmd_buf->buf = cmd_indir_tbl.rss_indir.entry;
 		nic_dev->indir_table_size = indir_table_size;
 	} else {
-		cmd = nic_dev->cmdq_ops->prepare_cmd_buf_get_rss_indir_table(nic_dev, cmd_buf);
+		cmd = hinic3_prepare_cmd_buf_get_rss_indir_table(nic_dev, cmd_buf);
 		err = hinic3_cmdq_detail_resp(hwdev, HINIC3_MOD_L2NIC, cmd, cmd_buf, cmd_buf, 0);
 	}
 
@@ -1156,9 +1157,9 @@ int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table)
 		return err;
 	}
 	if (((struct hinic3_hwdev *)hwdev)->bifur_mode == HINIC3_BIFUR_MODE_QPOOL)
-		nic_dev->cmdq_ops->cmd_buf_to_rss_indir_table_qpool(cmd_buf,indir_table, indir_table_size);
+		hinic3_cmd_buf_to_rss_indir_table_qpool(cmd_buf,indir_table, indir_table_size);
 	else
-		nic_dev->cmdq_ops->cmd_buf_to_rss_indir_table(cmd_buf,indir_table);
+		hinic3_cmd_buf_to_rss_indir_table(cmd_buf,indir_table);
 
 	hinic3_free_cmd_buf(cmd_buf);
 	return 0;
@@ -1183,7 +1184,7 @@ int hinic3_rss_set_indir_tbl(void *hwdev, const u32 *indir_table)
 	}
 
 	nic_dev = (struct hinic3_nic_dev *)(((struct hinic3_hwdev *)hwdev)->dev_handle);
-	cmd = nic_dev->cmdq_ops->prepare_cmd_buf_set_rss_indir_table(nic_dev, indir_table, cmd_buf);
+	cmd = hinic3_prepare_cmd_buf_set_rss_indir_table(nic_dev, indir_table, cmd_buf);
 
 	err = hinic3_cmdq_direct_resp(hwdev, HINIC3_MOD_L2NIC, cmd, cmd_buf, &out_param, 0);
 	if (err || out_param != 0) {

@@ -502,6 +502,8 @@ int hinic3_start_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq);
 
 u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts);
 
+u16 hinic3_recv_pkts_compact_cqe(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts);
+
 void hinic3_add_rq_to_rx_queue_list(struct hinic3_nic_dev *nic_dev,
 				    u16 queue_id);
 
@@ -516,60 +518,6 @@ int hinic3_start_all_rqs(struct rte_eth_dev *eth_dev);
 #ifdef HINIC3_XSTAT_RXBUF_INFO
 void hinic3_get_stats(struct hinic3_rxq *rxq);
 #endif
-
-/**
- * Get receive cqe information
- *
- * @param[in] rx_queue
- *   Receive queue
- * @param[in] rx_cqe
- *   Receive cqe
- * @param[in] cqe_info
- *   Packet information parsed from cqe
- */
-void hinic3_rx_get_cqe_info(struct hinic3_rxq *rxq,
-			    volatile struct hinic3_rq_cqe *rx_cqe,
-			    struct hinic3_cqe_info *cqe_info);
-
-/**
- * Get receive compact cqe information
- *
- * @param[in] rx_queue
- *   Receive queue
- * @param[in] rx_cqe
- *   Receive compact cqe
- * @param[in] cqe_info
- *   Packet information parsed from cqe
- */
-void hinic3_rx_get_compact_cqe_info(struct hinic3_rxq *rxq,
-				    volatile struct hinic3_rq_cqe *rx_cqe,
-				    struct hinic3_cqe_info *cqe_info);
-
-/**
- * Judge whether pkt is received when CQE is separated
- *
- * @param[in] rx_queue
- *   Receive queue
- * @param[in] rx_cqe
- *   The CQE written by hw
- * @return
- *   True: Packet is received
- *   False: Packet is not received
- */
-bool rx_separate_cqe_done(struct hinic3_rxq *rxq, volatile struct hinic3_rq_cqe **rx_cqe);
-
-/**
- * Judge whether pkt is received when CQE is integrated
- *
- * @param[in] rx_queue
- *   Receive queue
- * @param[in] rx_cqe
- *   The CQE written by hw
- * @return
- *   True: Packet is received
- *   False: Packet is not received
- */
-bool rx_integrated_cqe_done(struct hinic3_rxq *rxq, volatile struct hinic3_rq_cqe **rx_cqe);
 
 #endif /* _HINIC3_PMD_RX_H_ */
 

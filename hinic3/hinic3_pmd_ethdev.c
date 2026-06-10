@@ -40,7 +40,6 @@
 #include "hinic3_pmd_dcb.h"
 #include "hinic3_pmd_tm.h"
 #include "hinic3_pmd_hairpin.h"
-#include "hinic3_pmd_cmdq_adapt.h"
 #include "hinic3_pmd_flow.h"
 #ifdef HINIC3_TRAFFIC_BIFUR
 #include "hinic3_pmd_bifur.h"
@@ -598,6 +597,25 @@ static int hinic3_get_link_state_qpool(struct hinic3_nic_dev *nic_dev)
 	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
 	if (err < 0 || cfg_kernel_data.netdev_state == 0)
 		err = -EIO;
+	return err;
+}
+
+int hinic3_get_group_num_qpool(struct hinic3_nic_dev *nic_dev, u8 *num_tc)
+{
+	struct drv_cmd_kernel_nic_data cfg_kernel_data = { 0 };
+	struct msg_module msg_to_kernel = { 0 };
+	int err = 0;
+
+	fill_ioctl_msg(&msg_to_kernel, SEND_TO_BIFUR_DRIVER, GET_KERN_DEV_DATA,
+			sizeof(cfg_kernel_data), sizeof(cfg_kernel_data),
+			&cfg_kernel_data, &cfg_kernel_data);
+
+	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
+	if (err < 0)
+		err = -EIO;
+
+	*num_tc = cfg_kernel_data.group_num;
+
 	return err;
 }
 
@@ -1726,10 +1744,12 @@ static int hinic3_set_rxtx_configure(struct rte_eth_dev *dev)
 		}
 	}
 
-	err = hinic3_set_vlan(dev, dev_conf);
-	if (err) {
-		PMD_DRV_LOG(ERR, "Set vlan failed, err: %d", err);
-		return err;
+	if (!IS_QPOOL_MODE(nic_dev)) {
+		err = hinic3_set_vlan(dev, dev_conf);
+		if (err) {
+			PMD_DRV_LOG(ERR, "Set vlan failed, err: %d", err);
+			return err;
+		}
 	}
 
 	hinic3_init_rx_queue_list(nic_dev);
@@ -2011,6 +2031,13 @@ static int hinic3_dev_start_qpool(struct rte_eth_dev *eth_dev)
 	if (err) {
 		PMD_DRV_LOG(ERR, "Init qp context failed, dev_name: %s",
 			    eth_dev->data->name);
+		goto init_qp_fail;
+	}
+
+	err = hinic3_set_rxtx_configure(eth_dev);
+	if (err) {
+		PMD_DRV_LOG(ERR, "Set rx config failed, dev_name: %s",
+			eth_dev->data->name);
 		goto init_qp_fail;
 	}
 
@@ -4128,29 +4155,6 @@ static int hinic3_get_bifur_mode(const struct rte_pci_device *pci_dev)
 
 }
 
-static void hinic3_nic_tx_rx_ops_init(struct hinic3_nic_dev *nic_dev)
-{
-	if (HINIC3_SUPPORT_TX_WQE_COMPACT_TASK(nic_dev))
-		nic_dev->tx_rx_ops.nic_tx_set_wqe_offload = hinic3_tx_set_compact_task_offload;
-	else
-		nic_dev->tx_rx_ops.nic_tx_set_wqe_offload = hinic3_tx_set_normal_task_offload;
-
-	if (nic_dev->config.rx_cqe_compact_en) {
-		nic_dev->tx_rx_ops.nic_rx_cqe_done = rx_integrated_cqe_done;
-		nic_dev->tx_rx_ops.nic_rx_poll_rq_empty = hinic3_poll_integrated_cqe_rq_empty;
-	} else {
-		nic_dev->tx_rx_ops.nic_rx_cqe_done = rx_separate_cqe_done;
-		nic_dev->tx_rx_ops.nic_rx_poll_rq_empty = hinic3_poll_rq_empty;
-	}
-
-	/* The structure of the htn separation and integration CQE is consistent */
-	if (nic_dev->config.rx_cqe_compact_en || HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev)) {
-		nic_dev->tx_rx_ops.nic_rx_get_cqe_info = hinic3_rx_get_compact_cqe_info;
-	} else {
-		nic_dev->tx_rx_ops.nic_rx_get_cqe_info = hinic3_rx_get_cqe_info;
-	}
-}
-
 static void hinic3_nic_feature_init(struct hinic3_nic_dev *nic_dev)
 {
 	if ((HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev) || HINIC3_SUPPORT_RX_SW_COMPACT_CQE(nic_dev)) &&
@@ -4361,8 +4365,6 @@ static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev)
 	}
 
 	hinic3_nic_feature_init(nic_dev);
-	hinic3_nic_cmdq_adapt_init(nic_dev);
-	hinic3_nic_tx_rx_ops_init(nic_dev);
 
 	err = hinic3_init_sw_rxtxqs(nic_dev);
 	if (err) {
@@ -4607,8 +4609,6 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 	}
 
 	hinic3_nic_feature_init(nic_dev);
-	hinic3_nic_cmdq_adapt_init(nic_dev);
-	hinic3_nic_tx_rx_ops_init(nic_dev);
 
 	err = hinic3_init_sw_rxtxqs(nic_dev);
 	if (err) {
@@ -4728,6 +4728,8 @@ static int hinic3_dev_init(struct rte_eth_dev *eth_dev)
 {
 	struct rte_pci_device *pci_dev;
 	enum hinic3_bifur_mode mode;
+	struct hinic3_nic_dev *nic_dev = NULL;
+	int err = 0;
 	pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev); /*lint !e507*/
 
 	PMD_DRV_LOG(INFO, "Initializing %.4x:%.2x:%.2x.%x in %s process",
@@ -4738,13 +4740,28 @@ static int hinic3_dev_init(struct rte_eth_dev *eth_dev)
 
 	PMD_DRV_LOG(INFO, "Network Interface pmd driver version: %s", HINIC3_PMD_DRV_VERSION);
 
-	eth_dev->rx_pkt_burst = hinic3_recv_pkts;
-	eth_dev->tx_pkt_burst = hinic3_xmit_pkts;
 	mode = hinic3_get_bifur_mode(pci_dev);
 	if (mode == HINIC3_BIFUR_MODE_QPOOL)
-		return hinic3_func_init_qpool(eth_dev);
+		err = hinic3_func_init_qpool(eth_dev);
 	else
-		return hinic3_func_init(eth_dev);
+		err = hinic3_func_init(eth_dev);
+
+	if (err)
+		return err;
+
+	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
+
+	if ((HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev) || HINIC3_SUPPORT_RX_SW_COMPACT_CQE(nic_dev)) &&
+		(nic_dev->config.rx_cqe_compact_en == HINIC3_DEFAULT_CQE_COMPACT_EN)) {
+		eth_dev->rx_pkt_burst = hinic3_recv_pkts_compact_cqe;
+		eth_dev->tx_pkt_burst = hinic3_xmit_pkts;
+	} else {
+		eth_dev->rx_pkt_burst = hinic3_recv_pkts;
+		eth_dev->tx_pkt_burst = hinic3_xmit_pkts;
+	}
+
+	return err;
+	
 }
 
 static int hinic3_dev_uninit(struct rte_eth_dev *dev)

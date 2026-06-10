@@ -967,7 +967,11 @@ static int hinic3_set_tx_offload(struct hinic3_nic_dev *nic_dev,
 		offload_info->out_l4_en = 1;
 
 set_tx_wqe_offload:
-	nic_dev->tx_rx_ops.nic_tx_set_wqe_offload(wqe_info, wqe_combo);
+	if (HINIC3_SUPPORT_TX_WQE_COMPACT_TASK(nic_dev)) 
+ 		hinic3_tx_set_compact_task_offload(wqe_info, wqe_combo); 
+ 	else 
+ 		hinic3_tx_set_normal_task_offload(wqe_info, wqe_combo);
+	
 	return 0;
 }
 
