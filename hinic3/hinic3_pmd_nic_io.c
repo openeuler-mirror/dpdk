@@ -164,7 +164,7 @@ void hinic3_sq_prepare_ctxt(struct hinic3_txq *sq, u16 sq_id, struct hinic3_sq_c
 	u32 wq_block_pfn_hi, wq_block_pfn_lo;
 	u16 pi_start, ci_start;
 
-	sq->nic_dev->cmdq_ops->prepare_sq_ctxt_drop_and_prefetch(sq_ctxt);
+	hinic3_prepare_sq_ctxt_drop_and_prefetch(sq_ctxt);
 
 	ci_start = sq->cons_idx & sq->q_mask;
 	pi_start = sq->prod_idx & sq->q_mask;
@@ -248,7 +248,7 @@ void hinic3_rq_prepare_ctxt(struct hinic3_rxq *rq, struct hinic3_rq_ctxt *rq_ctx
 	rq_ctxt->ci_pi = RQ_CTXT_CI_PI_SET(ci_start, CI_IDX) | RQ_CTXT_CI_PI_SET(pi_start, PI_IDX);
 
 	/* RQ doesn't need ceq, msix_entry_idx set 1, but mask not enable */
-	rq->nic_dev->cmdq_ops->prepare_rq_ctxt_ceq_and_prefetch(rq, rq_ctxt);
+	hinic3_prepare_rq_ctxt_ceq_and_prefetch(rq, rq_ctxt);
 
 	/* Use 32Byte WQE with SGE for CQE in default */
 	rq_ctxt->wq_pfn_hi_type_owner = RQ_CTXT_WQ_PAGE_SET(wq_page_pfn_hi, HI_PFN) |
@@ -332,7 +332,7 @@ static int init_sq_ctxts(struct hinic3_nic_dev *nic_dev)
 		max_ctxts = (nic_dev->num_sqs - q_id) > HINIC3_Q_CTXT_MAX ?
 					HINIC3_Q_CTXT_MAX : (nic_dev->num_sqs - q_id);
 
-		cmd = nic_dev->cmdq_ops->prepare_cmd_buf_qp_context_multi_store(nic_dev, cmd_buf,
+		cmd = hinic3_prepare_cmd_buf_qp_context_multi_store(nic_dev, cmd_buf,
 					HINIC3_QP_CTXT_TYPE_SQ, q_id, max_ctxts);
 		rte_mb();
 		if (!IS_QPOOL_MODE(nic_dev))
@@ -371,7 +371,7 @@ static int init_rq_ctxts(struct hinic3_nic_dev *nic_dev)
 	while (q_id < nic_dev->num_rqs) {
 		max_ctxts = (nic_dev->num_rqs - q_id) > HINIC3_Q_CTXT_MAX ?
 			    HINIC3_Q_CTXT_MAX : (nic_dev->num_rqs - q_id);
-		cmd = nic_dev->cmdq_ops->prepare_cmd_buf_qp_context_multi_store(nic_dev, cmd_buf,
+		cmd = hinic3_prepare_cmd_buf_qp_context_multi_store(nic_dev, cmd_buf,
 					HINIC3_QP_CTXT_TYPE_RQ, q_id, max_ctxts);
 		rte_mb();
 		if (!IS_QPOOL_MODE(nic_dev))
@@ -404,7 +404,7 @@ static int clean_queue_offload_ctxt(struct hinic3_nic_dev *nic_dev,
 		return -ENOMEM;
 	}
 
-	cmd = nic_dev->cmdq_ops->prepare_cmd_buf_clean_tso_lro_space(nic_dev, cmd_buf, ctxt_type);
+	cmd = hinic3_prepare_cmd_buf_clean_tso_lro_space(nic_dev, cmd_buf, ctxt_type);
 
 	err = hinic3_cmdq_direct_resp(nic_dev->hwdev, HINIC3_MOD_L2NIC, cmd, cmd_buf, &out_param, 0);
 	if ((err) || (out_param)) {

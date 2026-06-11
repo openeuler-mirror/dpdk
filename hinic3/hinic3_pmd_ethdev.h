@@ -186,29 +186,6 @@ struct hinic3_ptype_table {
 extern const struct eth_dev_ops hinic3_pmd_ops;
 extern const struct eth_dev_ops hinic3_pmd_vf_ops;
 
-/* Tx WQE offload set callback function */
-typedef void  (*nic_tx_set_wqe_offload_t)(struct hinic3_wqe_info *wqe_info,
-					  struct hinic3_sq_wqe_combo *wqe_combo);
-
-/* Rx CQE info get callback function */
-typedef void  (*nic_rx_get_cqe_info_t)(struct hinic3_rxq *rx_queue, 
-				       volatile struct hinic3_rq_cqe *rx_cqe,
-				       struct hinic3_cqe_info *cqe_info);
-
-/* Rx CQE check status callback funcion */
-typedef bool  (*nic_rx_cqe_done_t)(struct hinic3_rxq *rxq,
-				   volatile struct hinic3_rq_cqe **rx_cqe);
-
-/* Rx CQE empty poll callback function */
-typedef int   (*nic_rx_poll_rq_empty_t)(struct hinic3_rxq *rxq);
-
-struct hinic3_nic_tx_rx_ops {
-	nic_tx_set_wqe_offload_t		nic_tx_set_wqe_offload;
-	nic_rx_get_cqe_info_t			nic_rx_get_cqe_info;
-	nic_rx_cqe_done_t			nic_rx_cqe_done;
-	nic_rx_poll_rq_empty_t			nic_rx_poll_rq_empty;
-};
-
 struct hinic3_nic_common_dev_config {
 	unsigned int tx_pending_limit; /* TX CI coalescing parameter pending_limit. */
 	unsigned int tx_free_loop; /* Counter to limit retries when waiting for free WQEBBs in tx path */
@@ -276,9 +253,6 @@ struct hinic3_nic_dev {
 	struct hinic3_fdir_rule_filter_list filter_fdir_rule_list;
 	struct hinic3_rss_template_list rss_template_list;
 
-	struct hinic3_nic_cmdq_ops *cmdq_ops;
-	struct hinic3_nic_tx_rx_ops tx_rx_ops;
-
 	struct hinic3_ptype_table* ptype_tbl;
 #ifdef HINIC3_TRAFFIC_BIFUR
 	u8 hinic3_function_mode;
@@ -295,5 +269,7 @@ int hinic3_dev_rx_queue_intr_disable(struct rte_eth_dev *dev,
 				     uint16_t queue_id);
 void hinic3_dev_info_get(struct rte_eth_dev_info *info,
 			 struct hinic3_nic_dev *nic_dev);
+
+int hinic3_get_group_num_qpool(struct hinic3_nic_dev *nic_dev, u8 *num_tc);
 
 #endif /* _HINIC3_PMD_ETHDEV_H_ */

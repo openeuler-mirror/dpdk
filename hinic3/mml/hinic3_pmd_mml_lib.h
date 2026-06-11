@@ -214,7 +214,7 @@ struct drv_cmd_kernel_nic_data {
 	u32 tx_q_depth;
 	u16 mtu;
 	u8 netdev_state;
-	u8 rsvd0;
+	u8 group_num;
 };
 
 struct drv_cmd_cqe_paddr_get {

@@ -1116,7 +1116,7 @@ hinic3_del_dynamic_tcam_filter(struct rte_eth_dev *dev,
 	nic_dev->tcam_rule_nums--;
 
 	/* If the number of rules is 0, the TCAM filter is disabled. */
-	if (!(nic_dev->ethertype_rule_nums + nic_dev->tcam_rule_nums))
+	if (!(nic_dev->ethertype_rule_nums + nic_dev->tcam_rule_nums) && !IS_QPOOL_MODE(nic_dev))
 		hinic3_set_fdir_tcam_rule_filter(nic_dev->hwdev, false);
 
 	return 0;
