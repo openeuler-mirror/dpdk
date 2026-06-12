@@ -188,7 +188,7 @@ hinic3_command_reply_error(struct unixctl_conn *conn, const char *error)
 static unixctl_cb_func *get_cmd_func(const char *command_str)
 {
     char key[HINIC3_COMMAND_STR_MAX_LEN] = {0};
-    strcpy(key, command_str);
+    strncpy(key, command_str, HINIC3_COMMAND_STR_MAX_LEN - 1);
 
     const struct hinic3_command *command = (const struct hinic3_command *)hinic3_shash_find_data(&g_command_mgr.command_map, key);
     if (command == NULL)
@@ -201,7 +201,7 @@ static const struct hinic3_command *
 get_cmd_command(const char *command_str)
 {
     char key[HINIC3_COMMAND_STR_MAX_LEN] = {0};
-    strcpy(key, command_str);
+    strncpy(key, command_str, HINIC3_COMMAND_STR_MAX_LEN - 1);
     const struct hinic3_command *command = (const struct hinic3_command *)hinic3_shash_find_data(&g_command_mgr.command_map, key);
     return command;
 }

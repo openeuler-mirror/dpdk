@@ -284,7 +284,7 @@ static int hinic3_split_cpu_mask(const char *cpu_mask_type, uint32_t *cpu_mask_n
         HINIC3_LOG(ERR, AGENT, "cpu_mask_type is too long.");
         return -1;
     }
-    strcpy(core_values, cpu_mask_type);
+    strncpy(core_values, cpu_mask_type, HINIC3F_MAX_CPU_MASK_LENGTH - 1);
 
     core_value = strtok_r(core_values, delim, &saveptr);
     while (core_value != NULL) {
