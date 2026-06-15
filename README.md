@@ -61,22 +61,17 @@ tar -xf dpdk-21.11.9.tar.xz
 > - 此处../dpdk-stable-21.11.9需替换为实际的DPDK版本及路径
 > - 安装脚本会自动检测目标DPDK目录是否为Git仓库，如果不是，会自动初始化Git。
 
-### SP200&SP600 网卡
-**普通场景**
+安装脚本不区分普通场景与bifur分流场景，均使用以下命令。
+
 ```bash
 sh install.sh ../dpdk-stable-21.11.9 install
 sh install.sh ../dpdk-stable-21.11.9 build
 ```
 
-**bifur分流场景**
-```bash
-sh install.sh ../dpdk-stable-21.11.9 install bifur
-sh install.sh ../dpdk-stable-21.11.9 build
-```
+若出现编译失败，可尝试在编译时使用通用平台配置。
 
-### SP900 DPU卡
 ```bash
-sh install.sh ../dpdk-stable-21.11.9 install bifur
+sh install.sh ../dpdk-stable-21.11.9 install
 sh install.sh ../dpdk-stable-21.11.9 build generic
 ```
 

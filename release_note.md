@@ -8,9 +8,28 @@
 * 新增DPDK固件兼容性判断逻辑，如果固件版本过低则报错退出。
 * hinic3驱动对标内核，支持rx_discard_phy丢包统计。
 * DPDK 22.11 patch在VF场景下适配流隔离特性。
+* 支持PMD私有参数rx_empty_threshold和tx_free_loop，可参考[hinic3_pmd.rst](./hinic3_pmd.rst)。
+  使用示例：
+  ```bash
+	dpdk-testpmd \
+    -a 0000:01:00.0,tx_free_loop=0 \
+    -a 0000:01:00.1,tx_free_loop=0 \
+    --iova-mode=pa -l 0-8 -- \
+    --rxq=8 --txq=8 --nb-cores=8 -i -a
+  ```
+* 新增队列池化模式全量功能，支持虚机和裸机场景。
+  - 支持通过hinic3工具配置的分流模式文件，读取文件区分使能VFIO模式/队列池化模式/VF分流模式/流分叉模式。
+  - 支持队列池化模式下基础控制面使能（start/stop设备，start/stop队列）。
+  - 支持队列池化模式下基础收发包并确认报文可以rss分流。
+  - 支持队列池化模式下tx_offload硬件卸载（各类已支持隧道报文内外层cksum，tso）。
+  - 支持队列池化模式下fdir，action包括rss/queue，报文类型包括已支持的普通报文和隧道报文。
+  - 约束：
+    - 开启队列池化功能后，不支持VFIO/流分叉/VF分流等模式。
+    - fdir支持为320bit流表，不包括640bit流表。
 
 ### 已解决问题
 * 修复DPDK 22.11版本patch分流场景不支持VXLAN流规则问题。
+* 解耦VF分流和流分叉功能，VF分流不再依赖bifur宏编译。
 
 ### 遗留问题
 无
