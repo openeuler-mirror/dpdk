@@ -96,7 +96,7 @@ static int hinic3_get_thread_core_from_env(enum hinic3_thread_type type, uint32_
         return -1;
     }
 
-    strcpy(core_values, env_value);
+    strncpy(core_values, env_value, HINIC3_MAX_CORE_LENGTH - 1);
 
     core_value = strtok_r(core_values, delim, &saveptr);
     while (core_value != NULL) {
