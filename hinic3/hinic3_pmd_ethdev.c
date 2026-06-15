@@ -3157,7 +3157,10 @@ static int hinic3_rss_reta_update(struct rte_eth_dev *dev,
 		}
 	}
 
-	err = hinic3_rss_set_indir_tbl(nic_dev->hwdev, indirtbl);
+	if (IS_QPOOL_MODE(nic_dev))
+		err = hinic3_rss_set_indir_tbl_qpool(nic_dev->hwdev, indirtbl);
+	else
+		err = hinic3_rss_set_indir_tbl(nic_dev->hwdev, indirtbl);
 	if (err)
 		PMD_DRV_LOG(ERR, "Set RSS reta table failed");
 
