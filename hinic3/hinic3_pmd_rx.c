@@ -1504,10 +1504,10 @@ out:
 	return pkts;
 }
 
-#define SPR6_RX_EMPTY_THRESHOLD 100
 u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 {
 	struct hinic3_rxq *rxq = rx_queue;
+	struct hinic3_nic_dev *nic_dev = rxq->nic_dev;
 	struct hinic3_rx_info *rx_info = NULL;
 	volatile struct hinic3_rq_cqe *rx_cqe = NULL;
 	struct rte_mbuf *rxm = NULL;
@@ -1522,7 +1522,7 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 	uint64_t t2;
 #endif
 	if (((rte_get_timer_cycles() - rxq->rxq_stats.tsc) < rxq->wait_time_cycle) &&
-	    (rxq->rxq_stats.empty >= SPR6_RX_EMPTY_THRESHOLD))
+	    (rxq->rxq_stats.empty >= nic_dev->config.rx_empty_threshold))
 		goto out;
 
 	sw_ci = hinic3_get_rq_local_ci(rxq);
