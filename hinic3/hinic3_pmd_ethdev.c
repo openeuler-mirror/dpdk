@@ -1544,11 +1544,8 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	txq->tx_wqe_compact_task = HINIC3_SUPPORT_TX_WQE_COMPACT_TASK(nic_dev);
 
 	err = hinic3_tx_queue_dma_create(dev, txq, qid, socket_id);
-	if (err) {
-		nic_dev->txqs[qid] = NULL;
-		rte_free(txq);
+	if (err) 
 		return -ENOMEM;
-	}
 
 	/* Record txq pointer in rte_eth tx_queues */
 	dev->data->tx_queues[qid] = txq;
