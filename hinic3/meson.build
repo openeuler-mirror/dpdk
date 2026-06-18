@@ -54,6 +54,7 @@ sources = files(
 	'hinic3_pmd_ethdev.c',
 	'hinic3_pmd_rx.c',
 	'hinic3_pmd_tx.c',
+	'hinic3_pmd_tx_compact.c',
  	'hinic3_pmd_flow.c',
 	'hinic3_pmd_nic_io.c',
 	'hinic3_pmd_fdir.c',

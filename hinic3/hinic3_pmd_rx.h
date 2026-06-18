@@ -414,34 +414,53 @@ struct hinic3_rq_ci_wb {
 
 	u32 rsvd[3];
 };
-
 struct hinic3_rxq {
+	/* Cache Line 0 : RX Fast Path Hot Data */
 	struct hinic3_nic_dev *nic_dev;
 
-	u16 q_id;
-	u16 local_qid;
-	u16 q_depth;
+	struct hinic3_rx_info *rx_info;
+	struct hinic3_rq_cqe *rx_cqe;
+	struct rte_mempool *mb_pool;
+
+	u64 wait_time_cycle;
+
+	u16 cons_idx;
+	u16 prod_idx;
+
 	u16 q_mask;
 	u16 buf_len;
 
-	u32 rx_buff_shift;
+	u16 next_to_update;
+	u16 delta;
 
+	u16 port_id;
+	u8  is_scattered_rx;
+	u8  dp_intr_en;
+
+	/* Cache Line 1 : Queue Configuration */
+	u16 q_id;
+	u16 local_qid;
+
+	u16 q_depth;
 	u16 rx_free_thresh;
+
 	u16 rxinfo_align_end;
+
 	u16 wqebb_shift;
 	u16 wqebb_size;
 
 	u16 wqe_type;
-	u16 cons_idx;
-	u16 prod_idx;
-	u16 delta;
 
-	u16 next_to_update;
-	u16 port_id;
+	u16 msix_entry_idx;
 
-	struct rte_eth_hairpin_conf hairpin_conf;
+	u32 rx_buff_shift;
+
+	unsigned long status;
+
 	bool is_hairpin;
+	struct rte_eth_hairpin_conf hairpin_conf;
 
+	/* Cache Line 2+ : DMA Resources / Setup Only */
 	const struct rte_memzone *rq_mz;
 	void *queue_buf_vaddr; /* Rq dma info */
 	rte_iova_t queue_buf_paddr;
@@ -451,24 +470,17 @@ struct hinic3_rxq {
 	void *db_addr;
 	rte_iova_t pi_dma_addr;
 
-	struct hinic3_rx_info *rx_info;
-	struct hinic3_rq_cqe *rx_cqe;
-	struct rte_mempool *mb_pool;
-
 	const struct rte_memzone *ci_mz;
 	struct hinic3_rq_ci_wb *rq_ci;
 	rte_iova_t rq_ci_paddr;
 
 	const struct rte_memzone *cqe_mz;
-	rte_iova_t cqe_start_paddr;
 	void *cqe_start_vaddr;
-	u8 dp_intr_en;
-	u16 msix_entry_idx;
+	rte_iova_t cqe_start_paddr;
 
-	unsigned long status;
-	u64 wait_time_cycle;
+	/* Statistics (cold write path) */
+	struct hinic3_rxq_stats rxq_stats;
 
-	struct hinic3_rxq_stats	rxq_stats;
 #ifdef HINIC3_XSTAT_PROF_RX
 	/* performance profiling */
 	uint64_t prof_rx_end_tsc;

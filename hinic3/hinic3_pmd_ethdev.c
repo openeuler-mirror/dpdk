@@ -1266,6 +1266,7 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	rxq->rxinfo_align_end = rxq->q_depth - rxq->rx_free_thresh;
 	rxq->port_id = dev->data->port_id;
 	rxq->wait_time_cycle = HINIC3_RX_WAIT_CYCLE_THRESH;
+	rxq->is_scattered_rx = dev->data->scattered_rx;
 
 	/* If buf_len used for function table, need to translated */
 	err = hinic3_convert_rx_buf_size(
@@ -1531,6 +1532,8 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	txq->wqebb_size = (u16)BIT(txq->wqebb_shift);
 	txq->tx_free_thresh = tx_free_thresh;
 	txq->owner = 1;
+	txq->is_sp620_nic = is_sp620_nic(nic_dev);
+	txq->tx_free_loop = nic_dev->config.tx_free_loop;
 	if (nic_dev->dcb->dcb_on)
 		txq->cos = nic_dev->dcb->txq_cos[qid];
 	else {
@@ -1539,7 +1542,7 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 			txq->cos = SELECT_OTHER_COS_ID(nic_dev->default_cos);
 		else
 			txq->cos = nic_dev->default_cos;
-		}
+	}
 
 	txq->tx_wqe_compact_task = HINIC3_SUPPORT_TX_WQE_COMPACT_TASK(nic_dev);
 
