@@ -575,7 +575,7 @@ static int hinic3_rearm_rxq_mbuf(struct hinic3_rxq *rxq)
 	rxq->delta -= rearm_wqebbs;
 
 #ifndef HINIC3_RQ_DB
-	hinic3_write_db(rxq->db_addr, !IS_QPOOL_MODE() ? rxq->q_id : rxq->local_qid , 0, RQ_CFLAG_DP,
+	hinic3_write_db(rxq->db_addr, rxq->local_qid, 0, RQ_CFLAG_DP,
 			((pi + rearm_wqebbs) & rxq->q_mask) << rxq->wqe_type);
 #else
 	/* Update rq hw_pi */
@@ -1551,7 +1551,7 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 		rte_prefetch0(rxq->rx_info[sw_ci].mbuf);
 
 		/* 3. Jumbo frame process */
-		if  (rte_eth_devices[rxq->port_id].data->scattered_rx) {
+		if (rxq->is_scattered_rx) {
 			if (likely(pkt_len <= (u32)rx_buf_len)) {
 				rxm->data_len = (u16)pkt_len;
 				rxm->pkt_len = pkt_len;
@@ -1578,12 +1578,13 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 		rxm->port = rxq->port_id;
 
 		/* 4. Rx checksum offload */
-		rxm->ol_flags |= hinic3_rx_csum(status, rxq);
+		rxm->ol_flags |= hinic3_rx_csum(HINIC3_GET_RX_CSUM_ERR(status), rxq);
 
 		/* 5. Vlan offload */
 		offload_type = hinic3_hw_cpu32(rx_cqe->offload_type);
 
-		rxm->ol_flags |= hinic3_rx_vlan(offload_type, vlan_len,
+		rxm->ol_flags |= hinic3_rx_vlan(HINIC3_GET_RX_VLAN_OFFLOAD_EN(offload_type),
+						HINIC3_GET_RX_VLAN_TAG(vlan_len),
 						&rxm->vlan_tci);
 
 		/* 6. Packet ptype */
@@ -1592,17 +1593,16 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 
 		/* 7. RSS */
 		hash_value = hinic3_hw_cpu32(rx_cqe->hash_val);
-		rxm->ol_flags |= hinic3_rx_rss_hash(offload_type, hash_value,
+		rxm->ol_flags |= hinic3_rx_rss_hash(HINIC3_GET_RSS_TYPES(offload_type),
+						    hash_value,
 						    &rxm->hash.rss);
+
 		/* 8. LRO */
 		lro_num = HINIC3_GET_RX_NUM_LRO(status);
 		if (unlikely(lro_num != 0)) {
 			rxm->ol_flags |= HINIC3_PKT_RX_LRO;
 			rxm->tso_segsz = pkt_len / lro_num;
 		}
-
-		if (IS_BIFUR_MODE())
-			rxm->packet_type |= hinic3_rx_packet_type(offload_type);
 
 		rx_cqe->status = 0;
 

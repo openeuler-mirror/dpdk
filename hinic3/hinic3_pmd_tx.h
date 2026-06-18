@@ -13,6 +13,35 @@
 #define HINIC3_TSO_PKT_MAX_SGE		127 /* tso max sge 127 */
 #define HINIC3_TSO_SEG_NUM_INVALID(num)	((num) > HINIC3_TSO_PKT_MAX_SGE)
 
+#define HINIC3_TX_TASK_WRAPPED		1
+#define HINIC3_TX_BD_DESC_WRAPPED	2
+
+#define TX_MSS_DEFAULT			0x3E00
+#define TX_MSS_MIN			0x50
+
+#define HINIC3_MAX_TX_FREE_BULK		64
+
+#define	MAX_PAYLOAD_OFFSET		221
+
+#define HINIC3_TX_OUTER_CHECKSUM_FLAG_SET       1
+#define HINIC3_TX_OUTER_CHECKSUM_FLAG_NO_SET    0
+#define MAX_TSO_NUM_FRAG 1024
+
+#define HINIC3_TX_OFFLOAD_MASK (	\
+		HINIC3_TX_CKSUM_OFFLOAD_MASK | \
+		HINIC3_PKT_TX_VLAN_PKT | \
+		HINIC3_PKT_TX_QINQ_PKT)
+
+#define HINIC3_TX_CKSUM_OFFLOAD_MASK ( \
+		HINIC3_PKT_TX_IP_CKSUM | \
+		HINIC3_PKT_TX_TCP_CKSUM | \
+		HINIC3_PKT_TX_UDP_CKSUM | \
+		HINIC3_PKT_TX_SCTP_CKSUM | \
+		HINIC3_PKT_TX_OUTER_IP_CKSUM | \
+		HINIC3_PKT_TX_OUTER_UDP_CKSUM | \
+		HINIC3_PKT_TX_TCP_SEG | \
+		HINIC3_PKT_TX_IPV6)
+
 /* Tx offload info */
 struct hinic3_tx_offload_info {
 	u8 outer_l2_len;
@@ -65,22 +94,18 @@ struct hinic3_offload_info {
 
 /* tx wqe ctx */
 struct hinic3_wqe_info {
-	u8 around;
-	u8 cpy_mbuf_cnt;
 	u16 sge_cnt;
-
-	u8 offload;
-	u8 rsvd0;
+	u16 wqebb_cnt;
+	u16 pi;
 	u16 payload_offset;
 
+	u32 queue_info_sp600;
+
+	u8 offload;
+	u8 around;
+	u8 cpy_mbuf_cnt;
 	u8 wrapped;
 	u8 owner;
-	u16 pi;
-
-	u16 wqebb_cnt;
-	u16 rsvd1;
-
-	u32 queue_info_sp600;
 
 	struct hinic3_queue_info queue_info;
 	struct hinic3_offload_info offload_info;
@@ -409,8 +434,8 @@ struct hinic3_txq {
 
 	u32 cos;
 	u8 tx_wqe_compact_task;
-	u8 rsvd[3];
-
+	u8 is_sp620_nic;
+	u16 tx_free_loop;
 
 	struct hinic3_txq_stats txq_stats;
 #ifdef HINIC3_XSTAT_PROF_TX
