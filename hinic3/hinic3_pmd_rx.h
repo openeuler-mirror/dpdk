@@ -342,11 +342,7 @@ struct hinic3_rq_cqe {
 	u32 mark_id_1;
 	u32 mark_id_2;
 	u32 pkt_info;
-#if defined(RTE_ARCH_ARM64)
 } __rte_cache_aligned;
-#else
-};
-#endif
 
 struct hinic3_cqe_info {
 	u8 data_offset;
