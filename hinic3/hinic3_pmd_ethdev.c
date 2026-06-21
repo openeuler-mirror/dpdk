@@ -1306,11 +1306,10 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 
 	return 0;
 
-rx_queue_dma_fail:
 adjust_bufsize_fail:
 	rte_free(rxq);
 	nic_dev->rxqs[qid] = NULL;
-
+rx_queue_dma_fail:
 	return err;
 }
 
@@ -1429,9 +1428,7 @@ alloc_sq_mz_fail:
 
 alloc_ci_mz_fail:
 close_fd:
-	nic_dev->txqs[qid] = NULL;
 alloc_template_fail:
-	rte_free(txq);
 	return err;
 }
 
@@ -1547,8 +1544,11 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	txq->tx_wqe_compact_task = HINIC3_SUPPORT_TX_WQE_COMPACT_TASK(nic_dev);
 
 	err = hinic3_tx_queue_dma_create(dev, txq, qid, socket_id);
-	if (err) 
+	if (err) {
+		nic_dev->txqs[qid] = NULL;
+		rte_free(txq);
 		return -ENOMEM;
+	}
 
 	/* Record txq pointer in rte_eth tx_queues */
 	dev->data->tx_queues[qid] = txq;
