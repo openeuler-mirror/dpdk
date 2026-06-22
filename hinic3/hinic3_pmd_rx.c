@@ -1256,6 +1256,7 @@ int hinic3_start_all_rqs(struct rte_eth_dev *eth_dev)
 		if (tmp == NULL || tmp->is_hairpin)
 			break;
 		rxq = tmp;
+		rxq->is_scattered_rx = eth_dev->data->scattered_rx;
 		hinic3_add_rq_to_rx_queue_list(nic_dev, rxq->q_id);
 		err = hinic3_rearm_rxq_mbuf(rxq);
 		if (err) {
