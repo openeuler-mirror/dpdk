@@ -1266,7 +1266,6 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	rxq->rxinfo_align_end = rxq->q_depth - rxq->rx_free_thresh;
 	rxq->port_id = dev->data->port_id;
 	rxq->wait_time_cycle = HINIC3_RX_WAIT_CYCLE_THRESH;
-	rxq->is_scattered_rx = dev->data->scattered_rx;
 
 	/* If buf_len used for function table, need to translated */
 	err = hinic3_convert_rx_buf_size(
