@@ -4414,6 +4414,7 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 	struct hinic3_tcam_info *tcam_info = NULL;
 	struct hinic3_nic_dev *nic_dev = NULL;
 	struct rte_pci_device *pci_dev = NULL;
+	unsigned long compact_cqe = 0;
 	int err;
 
 	pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
@@ -4536,6 +4537,14 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 		PMD_DRV_LOG(ERR, "Get nic feature from hardware failed, dev_name: %s",
 			    eth_dev->data->name);
 		goto get_cap_fail;
+	}
+
+	if (!is_sp620_nic(nic_dev)) {
+		if (hinic3_parse_sysfs_value(RQ_WQE_TYPE_PATH, &compact_cqe) != 0)
+			goto get_cap_fail;
+
+		if (compact_cqe == HINIC3_NORMAL_RQ_WQE)
+			nic_dev->feature_cap &= ~(NIC_F_RX_SW_COMPACT_CQE | NIC_F_RX_HW_COMPACT_CQE);
 	}
 
 	nic_dev->cmdq_ops = hinic3_nic_cmdq_get_stn_ops();
@@ -4797,7 +4806,7 @@ static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev, enum hinic3_qinfo
 		if (hinic3_parse_sysfs_value(RQ_WQE_TYPE_PATH, &compact_cqe) != 0)
 			goto get_cap_fail;
 
-		if (compact_cqe == 1)
+		if (compact_cqe == HINIC3_NORMAL_RQ_WQE)
 			nic_dev->feature_cap &= ~(NIC_F_RX_SW_COMPACT_CQE | NIC_F_RX_HW_COMPACT_CQE);
 	}
 
