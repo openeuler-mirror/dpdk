@@ -1,0 +1,3291 @@
+From 189c6d67f524fedda2ea4dcde0d8cdf30bb61081 Mon Sep 17 00:00:00 2001
+From: UPUPLiang <huangzhengliang4@huawei.com>
+Date: Wed, 1 Jul 2026 15:59:26 +0800
+Subject: [PATCH] 2026-0630 version
+
+---
+ drivers/net/hinic3/meson.build                |  26 +-
+ .../net/hinic3/scripts/dpak_ovs_completion.sh |  87 ++++++
+ .../hinic3/src/common/hinic3_log/hinic3_log.c |  38 ++-
+ .../src/common/hinic3_smap/hinic3_shash.c     |   2 +-
+ .../src/common/hinic3_smap/hinic3_smap.c      |   5 +-
+ .../hinic3_check_thread_health_state.c        |   2 +-
+ .../hinic3_check_thread_health_state.h        |   2 +
+ .../common/hinic3_utils/hinic3_file_util.c    |  35 +++
+ .../common/hinic3_utils/hinic3_message_sub.h  |  11 +-
+ .../common/hinic3_utils/hinic3_set_userdata.c |   2 +-
+ .../src/common/hinic3_utils/hinic3_tlv_key.h  |   1 +
+ .../common/hinic3_utils/hinic3_ui_string.h    |  69 ++++-
+ .../src/common/hinic3_utils/hinic3_util.c     |  12 +
+ .../src/common/hinic3_utils/hinic3_util.h     |   3 +
+ .../src/common/hinic3_uuid/hinic3_uuid.c      |  69 ++++-
+ .../src/common/hinic3_uuid/hinic3_uuid.h      |   2 +
+ .../hinic3_capture/hinic3_capture_command.c   | 280 +++++++++++++++++-
+ .../hinic3_capture/hinic3_capture_filter.c    |  14 +-
+ .../src/hinic3_capture/hinic3_capture_hooks.c |  11 +-
+ .../src/hinic3_capture/hinic3_capture_utils.c |  93 +++++-
+ .../src/hinic3_capture/hinic3_capture_utils.h |  32 +-
+ .../src/hinic3_cmds/comm/hinic3_agent_cmd.c   |  22 +-
+ .../comm/hinic3_agent_cmd_format.c            |  50 ++--
+ .../comm/hinic3_agent_cmd_format_flexda.c     |  39 ++-
+ .../comm/hinic3_agent_flow_cmd_dump.c         |   3 +-
+ .../comm/hinic3_agent_flow_cmd_dump_file.c    |   2 +-
+ .../src/hinic3_cmds/comm/hinic3_cmd_exec.c    |   3 +
+ .../src/hinic3_cmds/comm/hinic3_cmd_forward.c |  16 +-
+ .../src/hinic3_cmds/comm/hinic3_dfx_port.c    |   6 +-
+ .../src/hinic3_cmds/comm/hinic3_dfx_port.h    |  10 -
+ .../comm/hinic3_dfx_port_bond_slave.c         |   5 +-
+ .../comm/hinic3_dfx_port_flush_dump.c         |   4 +-
+ .../comm/hinic3_dfx_port_upcall_queue.c       |   4 +-
+ .../src/hinic3_cmds/server/hinic3_command.c   |  10 +-
+ .../hinic3_driver_public.h                    |   6 +-
+ .../hinic3_driver_adapter/hinic3_iface_flow.c |  40 +--
+ .../hinic3_iface_global.c                     |  15 +-
+ .../hinic3_iface_global.h                     |   1 +
+ .../hinic3_iface_port_util.c                  |  12 +-
+ .../hiovs/hiovs_acl_api.h                     |   2 +-
+ .../hiovs/hiovs_flexda_api.h                  |   6 +-
+ .../comm/hinic3_flow_dump_public.h            |  10 +
+ .../comm/hinic3_offload_action_public.c       |   2 +-
+ .../comm/hinic3_offload_flow_public.h         |   4 +-
+ .../hinic3_flexda/hinic3_flexda_flow_public.c |   6 +-
+ .../hinic3_flexda/hinic3_flexda_flow_public.h |   2 +-
+ .../hinic3_age_delete_flow.c                  |   2 +-
+ .../hinic3_rte_flow_format.c                  |  53 +---
+ .../hinic3_offload_action.c                   |  12 +-
+ .../hinic3_flow_offload/hinic3_offload_flow.c |  28 +-
+ .../hinic3_flow_query/hinic3_key_query.c      |   2 +-
+ .../src/hinic3_init/hinic3_flow_agent.c       |   2 +-
+ .../hinic3/src/hinic3_init/hinic3_init_arg.c  |   8 +-
+ .../hinic3_init/hinic3_parse_agent_config.c   |   7 +-
+ .../hinic3_init/hinic3_parse_agent_config.h   |   6 +
+ .../src/hinic3_ports/comm/hinic3_eth_util.c   |   1 +
+ .../src/hinic3_ports/comm/hinic3_port_util.h  |  14 +
+ .../hinic3_bond/hinic3_bond_controller.h      |  17 +-
+ .../hinic3_bond/hinic3_bond_detect.c          |   2 +-
+ .../hinic3_ports/hinic3_vdev/hinic3_vdev.c    |   4 +-
+ .../hinic3_vf/hinic3_vf_controller.c          |   6 -
+ .../hinic3_vf/hinic3_vf_controller.h          |   7 +-
+ .../comm/hinic3_vf_port_qos_public.c          |  42 ++-
+ .../comm/hinic3_vf_port_qos_public.h          |   1 +
+ .../src/hinic3_qos/flow_qos/hinic3_flow_qos.c |   3 +-
+ .../hinic3_qos/multilevel_qos/hinic3_mtr.c    |  19 +-
+ .../hinic3_ufid_map_rte_flow.c                |  11 +-
+ drivers/net/hinic3/version.map                |   2 +-
+ 68 files changed, 1022 insertions(+), 303 deletions(-)
+
+diff --git a/drivers/net/hinic3/meson.build b/drivers/net/hinic3/meson.build
+index 864b06bbfb..98542134e2 100644
+--- a/drivers/net/hinic3/meson.build
++++ b/drivers/net/hinic3/meson.build
+@@ -216,17 +216,24 @@ install_headers('src/common/hinic3_utils/hinic3_mutex.h')
+ install_headers('src/common/hinic3_log/hinic3_log.h')
+ install_headers('src/common/hinic3_utils/hinic3_flow_agent_enum.h')
+ install_headers('src/common/hinic3_utils/hinic3_check_thread_health_state.h')
++install_headers('src/common/hinic3_utils/hinic3_timeval.h')
+ 
+ 
+ install_headers('src/common/hinic3_utils/hinic3_meminfo.h')
+ install_headers('src/common/hinic3_utils/hinic3_hugepage_meminfo.h')
+ install_headers('src/common/hinic3_utils/hinic3_list.h')
+ install_headers('src/common/hinic3_utils/hinic3_util.h')
++install_headers('src/common/hinic3_uuid/hinic3_uuid.h')
+ install_headers('src/common/hinic3_string_util/hinic3_string_util.h')
++install_headers('src/common/hinic3_string_util/hinic3_string_format.h')
++install_headers('src/common/hinic3_packets/hinic3_packets.h')
++install_headers('src/common/hinic3_uuid/hinic3_uuid.h')
+ 
+ install_headers('src/common/hinic3_ds/hinic3_ds.h')
+ install_headers('src/common/hinic3_smap/hinic3_shash.h')
+ install_headers('src/common/hinic3_utils/hinic3_ui_string.h')
++install_headers('src/common/hinic3_utils/hinic3_file_util.h')
++install_headers('src/common/hinic3_utils/hinic3_unaligned.h')
+ 
+ # driver
+ install_headers('src/hinic3_driver_adapter/hinic3_iface_port.h')
+@@ -236,6 +243,7 @@ install_headers('src/hinic3_driver_adapter/hinic3_iface_global.h')
+ install_headers('src/hinic3_driver_adapter/hinic3_iface_flow_api_record.h')
+ install_headers('src/hinic3_driver_adapter/hinic3_iface_global_api_record.h')
+ install_headers('src/hinic3_driver_adapter/hinic3_iface_port_api_record.h')
++install_headers('src/hinic3_driver_adapter/hiovs/hiovs_acl_api.h')
+ 
+ # port
+ install_headers('src/hinic3_ports/hinic3_vf/hinic3_vf_mgmt.h')
+@@ -290,14 +298,10 @@ install_headers('src/hinic3_ports/hinic3_vf/hinic3_vf_statistics.h')
+ install_headers('src/hinic3_ports/hinic3_queue/hinic3_queue.h')
+ install_headers('src/hinic3_ports/hinic3_queue/hinic3_standard_queue.h')
+ install_headers('src/hinic3_ports/hinic3_queue/hinic3_virtual_queue.h')
+-install_headers('src/hinic3_qos/flow_qos/hinic3_flow_qos.h')
+-install_headers('src/hinic3_qos/multilevel_qos/hinic3_mtr.h')
+ install_headers('src/common/hinic3_hash/hinic3_hash.h')
+-install_headers('src/hinic3_qos/multilevel_qos/hinic3_mtr_policy.h')
+-install_headers('src/hinic3_qos/multilevel_qos/hinic3_mtr_profile.h')
+-install_headers('src/hinic3_qos/comm/hinic3_vf_port_qos_public.h')
+ install_headers('src/hinic3_flows/hinic3_flow_delete/hinic3_age_delete_flow.h')
+ install_headers('src/hinic3_flows/comm/hinic3_age_delete_flow_public.h')
++install_headers('src/hinic3_flows/comm/hinic3_flow_agent_sync_stats_public.h')
+ install_headers('src/hinic3_flows/hinic3_flow_query/hinic3_query_flow.h')
+ install_headers('src/hinic3_flows/hinic3_flow_offload/hinic3_dump_flow.h')
+ install_headers('src/hinic3_flows/hinic3_flow_offload/hinic3_offload_flow.h')
+@@ -319,9 +323,19 @@ install_headers('src/hinic3_driver_adapter/hiovs/hiovs_flexda_api_extra.h')
+ #ovs_flow
+ install_headers('src/hinic3_flows/hinic3_flow_format/hinic3_flow_format.h')
+ install_headers('src/hinic3_flows/hinic3_flow_format/hinic3_rte_flow_format.h')
++install_headers('src/hinic3_flows/hinic3_emc_dump/hinic3_flow_dump_action.h')
++install_headers('src/hinic3_flows/hinic3_emc_dump/hinic3_flow_dump_item.h')
++install_headers('src/hinic3_flows/hinic3_emc_dump/hinic3_flow_dump_item_key.h')
++
++#qos
++install_headers('src/hinic3_qos/meter/hinic3_qos.h')
++install_headers('src/hinic3_qos/multilevel_qos/hinic3_mtr.h')
++install_headers('src/hinic3_qos/multilevel_qos/hinic3_mtr_policy.h')
++install_headers('src/hinic3_qos/multilevel_qos/hinic3_mtr_profile.h')
++install_headers('src/hinic3_qos/comm/hinic3_vf_port_qos_public.h')
++install_headers('src/hinic3_qos/flow_qos/hinic3_flow_qos.h')
+ 
+ install_headers('src/hinic3_flows/hinic3_flexda/hinic3_flexda_flow_public.h')
+-install_headers('src/common/hinic3_utils/hinic3_unaligned.h')
+ 
+ hinic3_args = get_option('c_args')
+ if hinic3_args.contains('-DHINIC3_METAL')
+diff --git a/drivers/net/hinic3/scripts/dpak_ovs_completion.sh b/drivers/net/hinic3/scripts/dpak_ovs_completion.sh
+index c8bc14ad6a..18937118bc 100644
+--- a/drivers/net/hinic3/scripts/dpak_ovs_completion.sh
++++ b/drivers/net/hinic3/scripts/dpak_ovs_completion.sh
+@@ -643,6 +643,89 @@ _complete_capture_probe_start()
+     fi
+ }
+ 
++_complete_enable_capture_probe() {
++    local cur prev
++    cur="${COMP_WORDS[COMP_CWORD]}"
++    prev="${COMP_WORDS[COMP_CWORD-1]}"
++
++    # 可用选项列表（短选项和长选项）
++    local main_options="-c --cpu -p --pcap"
++    local alone_options="-q --query -h --help"
++    local cpu_options="high low"
++    local probe_modes="limited-capture fully-capture"
++
++    # 检查是否已经使用了独立选项(-q/--query或-h/--help)
++    local has_standalone_option=0
++    for word in "${COMP_WORDS[@]:1:COMP_CWORD}"; do
++        if [[ "$word" == "-q" || "$word" == "--query" ||
++              "$word" == "-h" || "$word" == "--help" ]]; then
++            has_standalone_option=1
++            break
++        fi
++    done
++
++    case ${COMP_CWORD} in
++        2)
++            COMPREPLY=( $(compgen -W "$main_options $alone_options" -- ${cur}) )
++            ;;
++        3)
++            case ${prev} in
++                -c|--cpu)
++                    COMPREPLY=( $(compgen -W "$cpu_options" -- ${cur}) )
++                    ;;
++                -p|--pcap)
++                    COMPREPLY=( $(compgen -W "$probe_modes" -- ${cur}) )
++                    ;;
++                -q|--query|-h|--help)
++                    # 独立选项不需要进一步补全
++                    COMPREPLY=()
++                    ;;
++                *)
++                    # 默认情况，显示所有选项
++                    COMPREPLY=( $(compgen -W "$main_options $alone_options" -- ${cur}) )
++                    ;;
++            esac
++            ;;
++        *)
++            if [[ $has_standalone_option -eq 1 ]]; then
++                # 如果已经使用了独立选项，不再补全
++                COMPREPLY=()
++            else
++                # 检查已使用的主选项
++                local used_main_options=""
++                for word in "${COMP_WORDS[@]:1:COMP_CWORD-1}"; do
++                    if [[ "$word" == "-c" || "$word" == "--cpu" ||
++                          "$word" == "-p" || "$word" == "--pcap" ]]; then
++                        used_main_options="$used_main_options $word"
++                    fi
++                done
++
++                # 根据前一个参数决定补全内容
++                case ${prev} in
++                    -c|--cpu)
++                        COMPREPLY=( $(compgen -W "$cpu_options" -- ${cur}) )
++                        ;;
++                    -p|--pcap)
++                        COMPREPLY=( $(compgen -W "$probe_modes" -- ${cur}) )
++                        ;;
++                    *)
++                        # 如果不是跟在选项后面，提供可用的主选项
++                        local available_options=""
++                        if [[ ! $used_main_options =~ "-c" && ! $used_main_options =~ "--cpu" ]]; then
++                            available_options="$available_options -c --cpu"
++                        fi
++                        if [[ ! $used_main_options =~ "-p" && ! $used_main_options =~ "--pcap" ]]; then
++                            available_options="$available_options -p --pcap"
++                        fi
++
++                        COMPREPLY=( $(compgen -W "$available_options" -- ${cur}) )
++                        ;;
++                esac
++            fi
++            ;;
++    esac
++}
++
+ _complete_capture_probe() {
+     local cur prev
+     cur="${COMP_WORDS[COMP_CWORD]}"
+@@ -828,6 +911,10 @@ _dpak_ovs_ctl() {
+            _complete_exec_cmd
+             return 0
+             ;;
++        hwoff/enable-capture-probe)
++           _complete_enable_capture_probe
++            return 0
++            ;;
+         hwoff/capture-probe)
+            _complete_capture_probe
+             return 0
+diff --git a/drivers/net/hinic3/src/common/hinic3_log/hinic3_log.c b/drivers/net/hinic3/src/common/hinic3_log/hinic3_log.c
+index 8699b9a444..0cf8626804 100644
+--- a/drivers/net/hinic3/src/common/hinic3_log/hinic3_log.c
++++ b/drivers/net/hinic3/src/common/hinic3_log/hinic3_log.c
+@@ -102,9 +102,10 @@ static struct hinic3_log_module g_hinic3_flexda_log_module_list[HINIC3_LOG_MAX]
+     {NULL, HINIC3_LOG_TYPE_UNUSED, HINIC3_LOG_MAX, RTE_LOG_INFO},
+ };
+ 
++static char g_hinic3_flexda_name_buffer[HINIC3_LOG_MAX][HINIC3_MODULE_NAME_MAX_LEN] = {0};
+ static int g_hinic3_flexda_log_module_dpdk_id[HINIC3_LOG_MAX];
+-static char *g_hinic3_log_index_map[HINIC3_LOG_MAX] = {
+-        "AGENT", "VPORT", "CAPTURE", "FLOW", "FILTER", "DRIVER", "QOS", "PACKET", "POLICY"
++static const char *g_hinic3_log_index_map[HINIC3_LOG_MAX] = {
++    "AGENT", "VPORT", "CAPTURE", "FLOW", "FILTER", "DRIVER", "QOS", "PACKET", "POLICY"
+ };
+ 
+ int hinic3_log_init(void)
+@@ -381,7 +382,7 @@ static int hinic3_key_module_name_parse(const char *value, struct ds *ds)
+     module = hinic3_get_log_module_name(value);
+     if (!module) {
+         hinic3_ds_put_format(ds, HINIC3_UI_LEADING_SIGN_ERROR HINIC3_UI_ERROR_WRONG_PARAMETER
+-                ", unknown module name: %s, please input -h or –help to get help info!\n", value);
++                ", unknown module name: %s, please input -h or –-help to get help info!\n", value);
+         return -1;
+     }
+     g_set_log_level_input_key.module = module;
+@@ -394,7 +395,7 @@ static int hinic3_key_log_level_parse(const char *value, struct ds *ds)
+     log_level = hinic3_get_log_level_from_name(value);
+     if (log_level == -1) {
+         hinic3_ds_put_format(ds, HINIC3_UI_LEADING_SIGN_ERROR HINIC3_UI_ERROR_WRONG_PARAMETER
+-                ", invalid log level: %s, please input -h or –help to get help info!\n", value);
++                ", invalid log level: %s, please input -h or –-help to get help info!\n", value);
+         return -1;
+     }
+     g_set_log_level_input_key.log_level = log_level;
+@@ -634,9 +635,11 @@ void unixctl_hinic3_cmd_log_register(void)
+     hinic3_command_register("hwoff/show-log-list", "", 0, 0, hinic3_show_log_list, NULL);
+     hinic3_command_register("hwoff/set-log-level", "{ -m <module-name> -l <level> -t <duration> | { -h | --help } }",
+         1, SET_LOG_MODULE_ARG_NUM, hinic3_set_log_level, NULL);
+-    hinic3_command_register("hwoff/log-limit-ctl",
+-        "{ --disable INTEGER<duration> | --enable | --show | { -h | --help } }",
+-        1, SET_LOG_HELP_ARG_NUM, hinic3_log_limit_ctl_cmd, NULL);    
++    if (hinic3_card_mod_get() != PROG_MODE) {
++        hinic3_command_register("hwoff/log-limit-ctl",
++            "{ --disable INTEGER<duration> | --enable | --show | { -h | --help } }",
++            1, SET_LOG_HELP_ARG_NUM, hinic3_log_limit_ctl_cmd, NULL); 
++    }   
+ }
+ 
+ static inline unsigned int hinic3_sat_mul(unsigned int x, unsigned int y)
+@@ -845,38 +848,33 @@ int hinic3_log_module_register(char *name)
+ 
+     if (name == NULL || strlen(name) == 0) {
+         HINIC3_LOG(ERR, AGENT, "register log module failed, it is NULL or empty!");
+-                return -1;
++        return -1;
+     }
+     for (i = 0; i < HINIC3_LOG_MAX; i++) {
+         module = &g_hinic3_flexda_log_module_list[i];
+         if (module->type != HINIC3_LOG_TYPE_UNUSED) {
+-                        continue;
++            continue;
+         }
+ 
+         log_id = rte_log_register(name);
+         if (log_id < 0) {
+             HINIC3_LOG(ERR, AGENT, "register log for module %s failed, err is %d.", name, log_id);
+-                        return -1;
+-        }
+-
+-        module->name = (char *)hinic3_malloc(HINIC3_MODULE_NAME_MAX_LEN, HINIC3_OVS_FLOW);
+-        if (module->name == NULL) {
+-            HINIC3_LOG(ERR, AGENT, "malloc for module name %s failed.", name);
+-                        return -1;
++            return -1;
+         }
+-        strcpy(module->name, name);
+ 
++        strncpy(g_hinic3_flexda_name_buffer[i], name, HINIC3_MODULE_NAME_MAX_LEN - 1);
++        g_hinic3_flexda_name_buffer[i][HINIC3_MODULE_NAME_MAX_LEN - 1] = '\0';
++        module->name = g_hinic3_flexda_name_buffer[i];
+         module->index = i + RTE_LOG_MAX;
+         module->type = HINIC3_LOG_TYPE_FLEXDA;
+-                
+         g_hinic3_flexda_log_module_dpdk_id[i] = log_id;
+ 
+         ret = rte_log_set_level(log_id, RTE_LOG_INFO);
+         if (ret < 0) {
+-            hinic3_free(module->name);
++            module->name = NULL;
+             module->type = HINIC3_LOG_TYPE_UNUSED;
+             HINIC3_LOG(ERR, AGENT, "set log level for module %s failed, err is %d", name, ret);
+-                return -1;
++            return -1;
+         }
+ 
+         return module->index;
+diff --git a/drivers/net/hinic3/src/common/hinic3_smap/hinic3_shash.c b/drivers/net/hinic3/src/common/hinic3_smap/hinic3_shash.c
+index 424eac8088..e001d72362 100644
+--- a/drivers/net/hinic3/src/common/hinic3_smap/hinic3_shash.c
++++ b/drivers/net/hinic3/src/common/hinic3_smap/hinic3_shash.c
+@@ -86,7 +86,7 @@ static struct shash_node* hinic3_shash_add_nocopy__(struct shash *sh, char *name
+ {
+     struct shash_node *node = NULL;
+ 
+-    node = hinic3_xmalloc(sizeof *node, module_id);
++    node = hinic3_xmalloc(sizeof (struct shash_node), module_id);
+     if (node == NULL) {
+         return NULL;
+     }
+diff --git a/drivers/net/hinic3/src/common/hinic3_smap/hinic3_smap.c b/drivers/net/hinic3/src/common/hinic3_smap/hinic3_smap.c
+index 28a082b8da..a1b70bb749 100644
+--- a/drivers/net/hinic3/src/common/hinic3_smap/hinic3_smap.c
++++ b/drivers/net/hinic3/src/common/hinic3_smap/hinic3_smap.c
+@@ -125,7 +125,7 @@ bool hinic3_smap_equal(const struct smap *smap1, const struct smap *smap2)
+ static struct smap_node *hinic3_smap_add__(struct smap *smap, char *key, void *value, size_t hash,
+     enum hinic3_module module_id)
+ {
+-    struct smap_node *node = hinic3_xmalloc(sizeof *node, module_id);
++    struct smap_node *node = hinic3_xmalloc(sizeof (struct smap_node), module_id);
+     if (node == NULL) {
+         HINIC3_LOG(ERR, AGENT, "Malloc failed when smap add node!");
+         return NULL;
+@@ -140,6 +140,9 @@ static struct smap_node *hinic3_smap_add__(struct smap *smap, char *key, void *v
+ static void hinic3_smap_add_format_varg(struct smap *smap, const char *key, const char *format, va_list args,
+     enum hinic3_module module_id)
+ {
++    if (key == NULL||format == NULL) {
++        return;
++    }
+     char *value;
+     size_t key_len;
+ 
+diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_check_thread_health_state.c b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_check_thread_health_state.c
+index 6f98d034c7..13224e2920 100644
+--- a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_check_thread_health_state.c
++++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_check_thread_health_state.c
+@@ -82,7 +82,7 @@ hinic3_check_thread_main(void *arg HINIC3_UNUSED)
+     return NULL;
+ }
+ 
+-static void
++void
+ hinic3_thread_stats_show(struct unixctl_conn *conn, int argc HINIC3_UNUSED,
+     const char *argv[] HINIC3_UNUSED, void *aux)
+ {
+diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_check_thread_health_state.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_check_thread_health_state.h
+index c366452007..139133c8f4 100644
+--- a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_check_thread_health_state.h
++++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_check_thread_health_state.h
+@@ -38,5 +38,7 @@ int hinic3_polling_thread_init(void);
+ void hinic3_polling_thread_uninit(void);
+ long long hinic3_thread_signal_increase(long long start, uint32_t index, uint32_t signal_increase_inter);
+ void unixctl_thread_status_dfx_init(void);
++void hinic3_thread_stats_show(struct unixctl_conn *conn, int argc HINIC3_UNUSED,
++    const char *argv[] HINIC3_UNUSED, void *aux);
+ 
+ #endif
+diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_file_util.c b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_file_util.c
+index 24694038d2..596b7ac89d 100644
+--- a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_file_util.c
++++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_file_util.c
+@@ -65,6 +65,8 @@ static bool hinic3_check_directory_existence(const char *path)
+ static int hinic3_mkdir(const char *path)
+ {
+     char dir_path[PATH_MAX];
++    struct passwd *user = NULL;
++    struct group *grp = NULL;
+     int ret;
+ 
+     ret = snprintf(dir_path, PATH_MAX, "%s", path);
+@@ -78,6 +80,33 @@ static int hinic3_mkdir(const char *path)
+         return -1;
+     }
+ 
++    if (hinic3_user_scenario_get() == COM_BD) {
++        return 0;
++    }
++    
++    user = getpwnam(HINIC3_FILE_USER);
++    if (user == NULL) {
++        HINIC3_LOG(ERR, AGENT, "Get file directory user failed, path: %s!", path);
++        return 0;
++    }
++    grp = getgrnam(HINIC3_FILE_GROUP);
++    if (grp == NULL) {
++        HINIC3_LOG(ERR, AGENT, "Get file directory group failed, path: %s!", path);
++        return 0;
++    }
++
++    if (hinic3_check_masked_to_exact_switch() == false) {
++        if (chown(path, -1, grp->gr_gid) == -1) {
++            HINIC3_LOG(ERR, AGENT, "Change file directory group failed, path: %s!", path);
++            return 0;
++        }
++    } else {
++        if (chown(path, user->pw_uid, grp->gr_gid) == -1) {
++            HINIC3_LOG(ERR, AGENT, "Change file directory user and group failed, path: %s!", path);
++            return 0;
++        }
++    }
++
+     return 0;
+ }
+ 
+@@ -248,6 +277,12 @@ int hinic3_check_file_realpath(const char *absolute_path, char *resolve_path, st
+         return -1;
+     }
+ 
++    if (result == NULL) {
++        hinic3_ds_put_format(ds, HINIC3_UI_FILE_PATH_CREATE_STRING, HINIC3_UI_LEADING_SIGN_INFO, resolve_path);
++    } else {
++        hinic3_ds_put_format(ds, HINIC3_UI_FILE_PATH_APPEND_STRING, HINIC3_UI_LEADING_SIGN_INFO, resolve_path);
++    }
++
+     return 0;
+ }
+ 
+diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_message_sub.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_message_sub.h
+index abe09587ea..88e253994a 100644
+--- a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_message_sub.h
++++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_message_sub.h
+@@ -36,6 +36,7 @@ enum hinic3_bond_arg_type {
+     HINIC3_BOND_ARG_SLAVE_LACP_INFO,
+     HINIC3_BOND_ARG_SLAVE_MAY_ENABLE,
+     HINIC3_BOND_ARG_LACP_RATE,
++    HINIC3_BOND_ARG_SLAVE_PCI,
+     HINIC3_BOND_ARG_TYPE_MAX,
+ };
+ 
+@@ -71,11 +72,11 @@ enum hinic3_global_cfg_arg_type {
+     HINIC3_GLOBAL_CFG_ARG_PCI_DEVICE_ID,
+     HINIC3_GLOBAL_CFG_ARG_PCI_SUB_VENDOR_ID,
+     HINIC3_GLOBAL_CFG_ARG_PCI_SUB_DEVICE_ID,
+-    HINIC3_GLOBAL_CFG_ARG_FM_CTL, /* default 0:limitless */
++    HINIC3_GLOBAL_CFG_ARG_FM_CTL,             /* default 0:limitless */
+     HINIC3_GLOBAL_CFG_ARG_INVALID_TCP_ACTION, /* default drop */
+-    HINIC3_GLOBAL_CFG_ARG_IP_FRAG_ACTION, /* default upcall */
+-    HINIC3_GLOBAL_CFG_ARG_THREAD_MODE, /* default GLOBAL_CFG_THREAD_MODE_ROUND_ROBIN */
+-    HINIC3_GLOBAL_CFG_ARG_FLOW_AGE_TIME, /* GLOBAL_CFG_FLOW_AGE_TIME */
++    HINIC3_GLOBAL_CFG_ARG_IP_FRAG_ACTION,     /* default upcall */
++    HINIC3_GLOBAL_CFG_ARG_THREAD_MODE,        /* default GLOBAL_CFG_THREAD_MODE_ROUND_ROBIN */
++    HINIC3_GLOBAL_CFG_ARG_FLOW_AGE_TIME,      /* GLOBAL_CFG_FLOW_AGE_TIME */
+     HINIC3_GLOBAL_CFG_ARG_PTHREAD_FDS,
+     HINIC3_GLOBAL_CFG_ARG_IPFRAG_UPCALL_RATELIMIT,
+     HINIC3_GLOBAL_CFG_ARG_VF_INFO,
+@@ -102,6 +103,7 @@ enum hinic3_global_cfg_arg_type {
+     HINIC3_GLOBAL_CFG_VXLAN_DPORT,
+     HINIC3_GLOBAL_CFG_ARG_LATENCY_MOD,
+     HINIC3_GLOBAL_CFG_ARG_BOND_HASH_POLICY_CFG,
++    HINIC3_GLOBAL_CFG_ARG_PCAP,
+     HINIC3_GLOBAL_CFG_ARG_TYPE_MAX,
+ };
+ 
+@@ -294,6 +296,7 @@ enum hinic3_flow_arg_type {
+     HINIC3_FLOW_ARG_FLOW_HASH,
+     HINIC3_FLOW_ARG_DP_HASH,
+     HINIC3_FLOW_ARG_MODIFY,
++    HINIC3_FLOW_ARG_POLICY_ID,
+     HINIC3_FLOW_ARG_TYPE_MAX,
+ };
+ 
+diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_set_userdata.c b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_set_userdata.c
+index 261cec9ff3..a6361e50ec 100644
+--- a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_set_userdata.c
++++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_set_userdata.c
+@@ -15,7 +15,7 @@
+ #include "hinic3_message.h"
+ #include "hinic3_util.h"
+ #include "hinic3_offload_flow.h"
+-#include "hinic3_bond_controller.h"
++#include "hinic3_port_util.h"
+ #include "hinic3_bond_detect.h"
+ #include "hinic3_iface_global.h"
+ #include "hinic3_flow_qos.h"
+diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_tlv_key.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_tlv_key.h
+index df7621fc8d..5264f3c97e 100644
+--- a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_tlv_key.h
++++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_tlv_key.h
+@@ -42,6 +42,7 @@ extern "C" {
+ #define HINIC3_PORT_XMIT_HASH                        "xmit_hash" /* for hinic3 port xmit_hash options */
+ #define HINIC3_PORT_VIRTIO_QUEUE_DEPTH               "virtio_queue_depth" /* set queue_depth */
+ #define HINIC3_PORT_FUNCTION_ID                      "function_id" /* for dynamic add port by function id */
++#define HINIC3_PORT_NO_DRIVER_CHECK                  "port_no_driver_check"
+ 
+ #define HINIC3_BOND_NAME                             "bond_name"
+ #define HINIC3_PORT_PCI_ID                           "pci" /* format same as below */
+diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_ui_string.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_ui_string.h
+index 095c2aabbd..68a562d2e8 100644
+--- a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_ui_string.h
++++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_ui_string.h
+@@ -27,10 +27,35 @@ enum hinic3_ui_indent
+ 
+ /* ufid map cmd ui string */
+ #define HINIC3_COMMAND_HELP_INFO ", please input -h or --help to get help info!\n"
++#define HINIC3_UI_UFID_MAP_ERROR_STRING "Info: %s in ufid table %d table_id %u: %u\n"
++#define HINIC3_UI_UFID_MAP_DUMP_START_ERROR_STRING "Dump hardware ufid start error.\n"
+ #define HINIC3_UI_UFID_MAP_HW_UFID_FORMART_ERROR_STRING "Wrong parameter, hardware ufid format is invalid, should: xxxxxxxx-xxxxxxxx.\n"
++#define HINIC3_UI_UFID_TABLE_ID_FORMART_ERROR_STRING "Table id is invalid, should: 0-12.\n"
++#define HINIC3_UI_UFID_MAP_SW_UFID_FORMART_ERROR_STRING \
++    "Wrong parameter, software ufid format is invalid, should: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.\n"
++#define HINIC3_UI_UFID_MAP_SW_DUMP_ERROR_STRING "Dump ufid map error, too many maps, total hw ufid: %zd\n"
++#define HINIC3_UI_UFID_MAP_HW_DUMP_ERROR_STRING "Dump ufid map error, too many maps, total hw ufid %zd in table %u\n"
++#define HINIC3_UI_UFID_MAP_RTE_FLOW_ITEMS_STRING "  All %zd software flows exist\n"
++#define HINIC3_UI_UFID_MAP_HARD_WARE_FLOW_ITEMS_STRING "  Subtable %u has %zd hardware flows exist\n"
++#define HINIC3_UI_UFID_MAP_NO_SOFT_WARE_FLOW_ITEMS_STRING "No software flows exist.\n"
++#define HINIC3_UI_UFID_MAP_HW_FLOW_NUM_PER_SUB_TABLE_STRING "  All %zd hardware flows exist in ufid table %u:\n"
++#define HINIC3_UI_UFID_MAP_HW_FLOW_ITEMS_STRING "  All %zd hardware flows exist\n"
++#define HINIC3_UI_UFID_MAP_SUBTABLE_SW_FLOW_ITEMS_STRING "  Subtable %u has %zd software flows:\n"
++#define HINIC3_UI_HW_UFID_STRING "Hardware Ufid"
++#define HINIC3_UI_SW_UFID_STRING "Mega Ufid"
++#define HINIC3_UI_UFID_MAP_HW_DUMP_HELP_TIPS_STRING \
++    "dpak-ovs-ctl hwoff/dump-ufid-map-hw { all | <hw-ufid> | -n | { -h | --help } }\n\n"
++#define HINIC3_UI_UFID_MAP_HW_DUMP_NUM_HELP_STRING "-n           Dump the number of hardware ufids in ufid tables\n"
++#define HINIC3_UI_UFID_MAP_HW_DUMP_SINGLE_HELP_STRING \
++    "<hw-ufid>    Dump all software ufids mapped to the given hardware ufids\n"
++#define HINIC3_UI_UFID_MAP_HW_DUMP_ALL_HELP_STRING "all          Dump all hardware ufids\n"
++#define HINIC3_UI_UFID_MAP_SW_DUMP_HELP_TIPS_STRING \
++    "dpak-ovs-ctl hwoff/dump-ufid-map-sw { all | <sw-ufid> | -n | { -h | --help } }\n\n"
++#define HINIC3_UI_UFID_MAP_SW_DUMP_NUM_HELP_STRING "-n           Dump the number of software ufids in ufid tables\n"
+ #define HINIC3_UI_UFID_MAP_SW_DUMP_SINGLE_HELP_STRING \
+     "<sw-ufid>    Dump all hardware ufids mapped to the given software ufids\n"
+ #define HINIC3_UI_UFID_MAP_SW_DUMP_ALL_HELP_STRING "all          Dump all software ufids\n"
++#define HINIC3_UI_UFID_MAP_DUMP_HELP_STRING "-h, --help   Display the help information\n"
+ /* flow show api info cmd ui string */
+ #define HINIC3_UI_FLOW_OPTION_LIST_STRING "Options list: "
+ #define HINIC3_UI_FLOW_INPUT_UNKOWN_OPTION_STRING "Unknown option %s.\n"
+@@ -129,6 +154,9 @@ enum hinic3_ui_indent
+ #define HINIC3_UI_FLOW_DUMP_GET_BLOCK_SIZE_FAILED_STRING "Failed to get block size."
+ #define HINIC3_UI_FLOW_DUMP_BLOCK_ID_ERROR_STRING "Invalid block id."
+ #define HINIC3_UI_FLOW_GET_BLOCK_ID_FROM_FLOW_FAILED_STRING "Failed to get block id."
++#define HINIC3_UI_ACL_DUMP_GROUP_ID_STRING "group-id: "
++#define HINIC3_UI_ACL_DUMP_GROUP_ID_ERROR_STRING "group id should be INTEGER<0-3>"
++#define HINIC3_UI_ACL_DUMP_FAILURE_STRING "Acl dump failed, please check snic.log."
+ #define HINIC3_UI_DUMP_CONTEXT_INDEX_STRING "context index:"
+ #define HINIC3_UI_DUMP_CONTEXT_STATUS_STRING "status:"
+ #define HINIC3_UI_DUMP_CONTEXT_IDLE_STRING "idle"
+@@ -145,6 +173,7 @@ enum hinic3_ui_indent
+ #define HINIC3_UI_FLOW_DUMP_FLOW_ERROR_STRING "Dump flow by hardware ufid failed."
+ #define HINIC3_UI_FLOW_DUMP_NO_AVALIBLE_FLOW_STRING "No flow available."
+ #define HINIC3_UI_FLOW_DUMP_NO_SESSION_STRING "No session available.\n"
++#define HINIC3_UI_FLOW_TABLE_ID_STRING " table_id: "
+ #define HINIC3_UI_FLOW_UFID_STRING "ufid: "
+ #define HINIC3_UI_FLOW_RELATED_UFID_STRING "r_ufid:"
+ #define HINIC3_UI_FLOW_KEY_FLAG_STRING "key_flags:"
+@@ -194,6 +223,8 @@ enum hinic3_ui_indent
+ #define HINIC3_UI_KEY_VXLAN_RSVD "rsvd0"
+ #define HINIC3_UI_KEY_DP_HASH_STR "dp_hash"
+ #define HINIC3_UI_KEY_RECIRC_ID_STR "recirc_id"
++#define HINIC3_UI_KEY_GRE_PROTOCOL "gre_pro"
++#define HINIC3_UI_KEY_GRE_RSVD  "gre_rsvd"
+ #define HINIC3_UI_KEY_VID_STR "vid"
+ #define HINIC3_UI_KEY_VLAN_TCI_STR "vlan_tci"
+ #define HINIC3_UI_KEY_DL_TYPE_STR "dl_type"
+@@ -217,6 +248,7 @@ enum hinic3_ui_indent
+ #define HINIC3_UI_KEY_DST_PORT_STR "dst_port"
+ #define HINIC3_UI_KEY_SRC_PORT_STR "src_port"
+ #define HINIC3_UI_KEY_ETH_TYPE_STR "eth_type"
++#define HINIC3_UI_KEY_INNER_ETH_TYPE_STR "inner_type"
+ #define HINIC3_UI_KEY_ICMP6_TYPE_STR "icmp6_type"
+ #define HINIC3_UI_KEY_ICMP_TYPE_STR "icmp_type"
+ #define HINIC3_UI_KEY_CT_STR "ct"
+@@ -227,6 +259,7 @@ enum hinic3_ui_indent
+ #define HINIC3_UI_KEY_CT_STATE_STR "state"
+ #define HINIC3_UI_KEY_VXLAN_PUSH_STR "tnl_push"
+ #define HINIC3_UI_KEY_VXLAN_POP_STR "tnl_pop"
++#define HINIC3_UI_KEY_GRE_ENCAP  "gre_encap"
+ #define HINIC3_UI_KEY_TURE_STR "true"
+ #define HINIC3_UI_KEY_FALSE_STR "false"
+ #define HINIC3_UI_KEY_VLAN_PUSH_STR "vlan_push"
+@@ -263,7 +296,10 @@ enum hinic3_ui_indent
+ #define HINIC3_UI_ACTION_BLOCK_VERSION_STR "block-version"
+ #define HINIC3_UI_FLOW_OFFLOAD_STRING "is_offload"
+ 
+-#define HINIC3_UI_PORT_NAME_INVALID_STR "port_name %s is invalid\n"
++#define HINIC3_UI_PORT_NAME_INVALID_STR "Wrong parameter, port_name %s is invalid\n"
++#define HINIC3_UI_PORT_ID_INVALID_STR "Wrong parameter, port %s get port id failed\n"
++#define HINIC3_UI_PORT_CONFIG_INVALID_STR "Wrong parameter, port %s get port config failed\n"
++#define HINIC3_UI_SECURITY_INFO_GET_ERR_STR "get global security filter config failed\n"
+ #define HINIC3_UI_SRC_MAC_STR "src-mac"
+ #define HINIC3_UI_ETH_TYPE_GROUP_ID_STR "eth-type-group-%d:\n"
+ #define HINIC3_UI_ETH_TYPE_STR "eth-type"
+@@ -289,13 +325,17 @@ enum hinic3_ui_indent
+ #define HINIC3_UI_KEY_AGE_STR "idle_time(%us) "
+ #define HINIC3_UI_KEY_QOS_STR "qos"
+ #define HINIC3_UI_KEY_METER_STR "meter_id"
++#define HINIC3_UI_QOS_PIR "PIR"
++#define HINIC3_UI_QOS_CIR "CIR"
++#define HINIC3_UI_QOS_PBS "PBS"
++#define HINIC3_UI_QOS_CBS "CBS"
+ #define HINIC3_QOS_UNIT_MAX_LEN 30
+ #define N_PKTS_DROPPED "    n-pkts-dropped:   %u\n"
+ #define N_BYTES_DROPPED "    n-byte-dropped:   %u\n"
+ #define QOS_LOSS "  qos-id[%u]\n"
+ #define METER_INFO "  meter-id[%u]:\n"
+ #define QOS_INFO "qos-id:"
+-#define GET_METER_FAILED "qos-id is not exist\n"
++#define GET_METER_FAILED "Wrong parameter, qos-id is not exist\n"
+ #define QOS_ACTION_OUTPUT "(qos-id:%u, qos-type:%u), "
+ #define MULTI_QOS_ACTION_OUTPUT "(qos-id:%u, qos-type:%s), "
+ #define UNKNOWN_METER_TYPE "The type of meter must be bandwith or pps.\n"
+@@ -325,13 +365,17 @@ enum hinic3_ui_indent
+ #define HINIC3_UI_TAG_DATA_STR "tag_data"
+ #define HINIC3_UI_TAG_INDEX_STR "tag_index"
+ #define HINIC3_UI_COUNT_ACTION "count"
++#define HINIC3_UI_UPCALL_ACTION "upcall"
++#define HINIC3_UI_INDIR_ACTION "indir_hand"
+ #define HINIC3_UI_REMARK_ACTION "remark"
++#define HINIC3_UI_DEC_TTL_ACTION "dec_ttl"
+ #define HINIC3_UI_END "END"
+ #define HINIC3_GET_STATS_IN_HOVS "Get stats is failed in hvos.\n"
+ 
+ #define HINIC3_EMC_ERROR_MSG_ITEM "Process flow emc item failed."
+ #define HINIC3_EMC_ERROR_MSG_ACTION "Process flow emc action failed."
+ #define HINIC3_EMC_ERROR_MSG_REPEATED "Repeatedly offload the flow table."
++#define HINIC3_EMC_ERROR_MSG_MEM_ALLOC_FAILED "Alloc memory failed when query flow ufid"
+ #define HINIC3_EMC_ERROR_MSG_FLOW "Process flow emc failed."
+ #define HINIC3_EMC_ERROR_MSG_OFFLOAD_HOVS "Offload flow to HOVS failed."
+ #define HINIC3_EMC_ERROR_MSG_MODIFY_HOVS "Modify flow to HOVS failed."
+@@ -341,7 +385,7 @@ enum hinic3_ui_indent
+ #define HINIC3_LOW_LATENCY_CMD_STR "low_latency"
+ #define HINIC3_HIGH_THROUGHPUT_CMD_STR "high_throughput"
+ #define HINIC3_SET_FORWARD_MODE_INPUT_ERROR_STRING \
+-    ", invalid forward mode input, please input low_latency or high_throughput\n"
++    ", please input -h or --help to get help info!\n"
+ #define HINIC3_SET_FORWARD_MODE_FAILED_STRING "Set forward mode failed.\n"
+ #define HINIC3_SET_FORWARD_MODE_SUCCESS_STRING "Set forward mode success.\n"
+ 
+@@ -372,6 +416,15 @@ enum hinic3_ui_indent
+ #define HINIC3_UI_SHOW_HMAP_FLOW_NUM_ID_FORMAT_STRING "-t <table-id>"
+ #define HINIC3_UI_SHOW_HMAP_FLOW_NUM_ID_TIPS_STRING "Table ID to query flow number in hmap"
+ 
++/* hwoff agent cmd ui string */
++#define HINIC3_UI_DUMP_FLOW_BLOCK_STRING "dpak-ovs-ctl hwoff/dump-flow-block { -a | -i <block-id> | { -h | --help } }"
++#define HINIC3_UI_DUMP_FLOW_BLOCK_HELP_FORMAT_STRING "-h, --help"
++#define HINIC3_UI_DUMP_FLOW_BLOCK_HELP_TIPS_STRING "Display the help information"
++#define HINIC3_UI_DUMP_FLOW_BLOCK_ID_FORMAT_STRING "-i <block-id>"
++#define HINIC3_UI_DUMP_FLOW_BLOCK_ID_TIPS_STRING "Dump a single block version"
++#define HINIC3_UI_DUMP_FLOW_BLOCK_ALL_FORMAT_STRING "-a"
++#define HINIC3_UI_DUMP_FLOW_BLOCK_ALL_TIPS_STRING "Dump all block versions"
++
+ /* hwoff log cmd ui string */
+ #define HINIC3_UI_LOG_LIMIT_CTL_USAGE_STR \
+     "Usage: dpak-ovs-ctl hwoff/log-limit-ctl { --disable INTEGER<duration> | --enable | --show | { -h | --help } }"
+@@ -397,6 +450,7 @@ enum hinic3_ui_indent
+ #define HINIC3_UI_LOG_LEVEL_LEVEL_TIP_STR "Log level"
+ #define HINIC3_UI_LOG_LEVEL_TIMEOUT_FORMAT_STR "-t <duration>"
+ #define HINIC3_UI_LOG_LEVEL_TIMEOUT_TIP_STR "Timeout duration: enter 1-10080 (minutes) or 'infinite' for no timeout"
++#define HINIC3_UI_LOG_LEVEL_SUPPORT_MODULES_STR "Support modules:"
+ #define HINIC3_UI_LOG_LEVEL_SUPPORT_LEVELS_STR "Support levels:"
+ 
+ #define HINIC3_UI_OPTION_LIST_STRING "Options list: "
+@@ -420,6 +474,7 @@ enum hinic3_ui_indent
+ #define HINIC3_UI_SHOW_PORT_QOS_HELP_NAME_STR "<port-name>"
+ #define HINIC3_UI_SHOW_PORT_QOS_HELP_STR "Port Interface Name"
+ 
++#define HINIC3_UI_DUMP_QOS_TIPS_STRING "hwoff/dump-qos [ INTEGER<1-1023> | { -h | --help } ]"
+ #define HINIC3_UI_DUMP_QOS_HELP_STR \
+     "Queries the corresponding rate limiting information based on the ID. Value range: 0-1023"
+ 
+@@ -459,6 +514,14 @@ enum hinic3_ui_indent
+ #define HINIC3_UI_DUMP_RTE_FLOW_HELP_STR "-r"
+ #define HINIC3_UI_DUMP_DP_HASH_HELP_STR "Print rte flow info"
+ #define HINIC3_UI_DUMP_FUZZY_TIPS_STRING "hwoff/dump-fuzzy-flows [ -r | { -h | --help } ]"
++#define HINIC3_UI_DUMP_DP_HASH_TIPS_STRING "hwoff/dump-dp-hash-flows [ -r | { -h | --help } ]"
++
++#define HINIC3_UI_DUMP_ACL_TIPS_STRING "hwoff/dump-acl-flow [ -m | -g <group_id> | -r [ -m ] | { -h | --help } ]"
++#define HINIC3_UI_DUMP_M_STR "-m"
++#define HINIC3_UI_DUMP_ACL_HELP_M_STR "Query ACLs and output the masks simultaneously"
++#define HINIC3_UI_DUMP_G_STR "-g <group_id>"
++#define HINIC3_UI_DUMP_ACL_HELP_G_STR "Specify the ACL group for the query, with the group_id ranging from 0 to 3"
++#define HINIC3_UI_DUMP_R_M_STR "-r [ -m ]"
+ 
+ #define HINIC3_UI_SHOW_METER_TIPS_STRING "hwoff/show-meter { <meter_id> | { -h | --help } }"
+ #define HINIC3_UI_SHOW_METER_STR "<meter_id>"
+diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_util.c b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_util.c
+index c0d6dcfdbd..501add480f 100644
+--- a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_util.c
++++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_util.c
+@@ -425,6 +425,18 @@ int parse_mac(const char *mac, struct eth_address *output_mac)
+     return 0;
+ }
+ 
++long long int hinic3_time_usec(clockid_t clk)
++{
++    struct timespec ts;
++    int ret;
++    ret = clock_gettime(clk, &ts);
++    if (ret != 0) {
++        HINIC3_LOG(ERR, AGENT, "Failed to get time by hinic3_time_uesc function, err is %d!", errno);
++        return -1;
++    }
++    return (long long int)ts.tv_sec * SEC_TO_USEC_BASE + ts.tv_nsec / USEC_TO_NSEC_BASE;
++}
++
+ long long int hinic3_time_msec(void)
+ {
+     struct timespec ts;
+diff --git a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_util.h b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_util.h
+index fe9985865b..622a27cc4c 100644
+--- a/drivers/net/hinic3/src/common/hinic3_utils/hinic3_util.h
++++ b/drivers/net/hinic3/src/common/hinic3_utils/hinic3_util.h
+@@ -41,7 +41,9 @@
+ 
+ #define PCI_ADDR_LEN                        12
+ #define SEC_TO_MSEC_BASE                    1000
++#define SEC_TO_USEC_BASE                    1000000
+ #define MSEC_TO_NSEC_BASE                   1000000
++#define USEC_TO_NSEC_BASE                   1000
+ 
+ #define MAC_FMT                             "%02x:%02x:%02x:%02x:%02x:%02x,"
+ #define MAC_ARGS(eth)                       (eth)[0], (eth)[1], (eth)[2], (eth)[3], (eth)[4], (eth)[5]
+@@ -210,6 +212,7 @@ int parse_mac(const char *mac, struct eth_address *output_mac);
+ int check_valid_mac(const char *mac, enum hinic3_mac_fmt fmt);
+ int check_valid_eth_type(const char *eth_type);
+ 
++long long int hinic3_time_usec(clockid_t clk);
+ long long int hinic3_time_msec(void);
+ long long int hinic3_time_sec(void);
+ void hinic3_set_ctrl_thread_cpu_affinity(pthread_t *thread);
+diff --git a/drivers/net/hinic3/src/common/hinic3_uuid/hinic3_uuid.c b/drivers/net/hinic3/src/common/hinic3_uuid/hinic3_uuid.c
+index ee5604ae2d..08d0c227f3 100644
+--- a/drivers/net/hinic3/src/common/hinic3_uuid/hinic3_uuid.c
++++ b/drivers/net/hinic3/src/common/hinic3_uuid/hinic3_uuid.c
+@@ -18,4 +18,71 @@
+ void hinic3_uuid_zero(struct uuid *uuid)
+ {
+     *uuid = UUID_ZERO;
+-}
+\ No newline at end of file
++}
++bool hinic3_uuid_from_string(struct uuid *uuid, const char *s)
++{
++    if (!hinic3_uuid_from_string_prefix(uuid, s)) {
++        return false;
++    } else if (s[UUID_LEN] != '\0') {
++        hinic3_uuid_zero(uuid);
++        return false;
++    } else {
++        return true;
++    }
++}
++
++bool hinic3_uuid_from_string_prefix(struct uuid *uuid, const char *s)
++{
++    bool ok;
++    int offset = 0;
++    int check_offset = HINIC3_STR_TO_HEX_HEAD_TAIL_SIZE;
++
++    if (strlen(s) != UUID_LEN) {
++        goto error;
++    }
++
++    uuid->parts[HINIC3_UUID_PART_ONE] = hinic3_hexits_value(s + offset, HINIC3_STR_TO_HEX_HEAD_TAIL_SIZE, &ok);
++    if (!ok || s[check_offset] != '-') {
++        goto error;
++    }
++
++    offset += (HINIC3_STR_TO_HEX_HEAD_TAIL_SIZE + 1);
++    check_offset += (HINIC3_STR_TO_HEX_MIDDLE_SIZE + 1);
++    uuid->parts[HINIC3_UUID_PART_TWO] =
++        hinic3_hexits_value(s + offset, HINIC3_STR_TO_HEX_MIDDLE_SIZE, &ok) << HINIC3_STR_TO_HEX_MIDDLE_LEFT_SHIFIT;
++    if (!ok || s[check_offset] != '-') {
++        goto error;
++    }
++
++    offset += (HINIC3_STR_TO_HEX_MIDDLE_SIZE + 1);
++    check_offset += (HINIC3_STR_TO_HEX_MIDDLE_SIZE + 1);
++    uuid->parts[HINIC3_UUID_PART_TWO] += hinic3_hexits_value(s + offset, HINIC3_STR_TO_HEX_MIDDLE_SIZE, &ok);
++    if (!ok || s[check_offset] != '-') {
++        goto error;
++    }
++
++    offset += (HINIC3_STR_TO_HEX_MIDDLE_SIZE + 1);
++    check_offset += (HINIC3_STR_TO_HEX_MIDDLE_SIZE + 1);
++    uuid->parts[HINIC3_UUID_PART_THREE] =
++        hinic3_hexits_value(s + offset, HINIC3_STR_TO_HEX_MIDDLE_SIZE, &ok) << HINIC3_STR_TO_HEX_MIDDLE_LEFT_SHIFIT;
++    if (!ok || s[check_offset] != '-') {
++        goto error;
++    }
++
++    offset += (HINIC3_STR_TO_HEX_MIDDLE_SIZE + 1);
++    uuid->parts[HINIC3_UUID_PART_THREE] += hinic3_hexits_value(s + offset, HINIC3_STR_TO_HEX_MIDDLE_SIZE, &ok);
++    if (!ok) {
++        goto error;
++    }
++
++    offset += (HINIC3_STR_TO_HEX_MIDDLE_SIZE);
++    uuid->parts[HINIC3_UUID_PART_FOUR] = hinic3_hexits_value(s + offset, HINIC3_STR_TO_HEX_HEAD_TAIL_SIZE, &ok);
++    if (!ok) {
++        goto error;
++    }
++    return true;
++
++    error:
++        hinic3_uuid_zero(uuid);
++        return false;
++}
+diff --git a/drivers/net/hinic3/src/common/hinic3_uuid/hinic3_uuid.h b/drivers/net/hinic3/src/common/hinic3_uuid/hinic3_uuid.h
+index 946e506684..4d4254f61a 100644
+--- a/drivers/net/hinic3/src/common/hinic3_uuid/hinic3_uuid.h
++++ b/drivers/net/hinic3/src/common/hinic3_uuid/hinic3_uuid.h
+@@ -23,5 +23,7 @@ struct uuid {
+     ((unsigned int) ((UUID)->parts[3]))
+ 
+ void hinic3_uuid_zero(struct uuid *uuid);
++bool hinic3_uuid_from_string(struct uuid *uuid, const char *s);
++bool hinic3_uuid_from_string_prefix(struct uuid *uuid, const char *s);
+ 
+ #endif
+diff --git a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_command.c b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_command.c
+index ddfa1b1d22..11e9c15988 100644
+--- a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_command.c
++++ b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_command.c
+@@ -11,6 +11,7 @@
+ #include "rte_cycles.h"
+ #include "rte_lcore.h"
+ #include "rte_spinlock.h"
++#include "rte_ethdev.h"
+ 
+ #include "hinic3_ds.h"
+ #include "hinic3_log.h"
+@@ -20,7 +21,7 @@
+ #include "hinic3_capture_filter.h"
+ #include "hinic3_nlattr.h"
+ #include "hinic3_util.h"
+-#include "rte_ethdev.h"
++#include "hinic3_option.h"
+ #include "hinic3_eth_util.h"
+ #include "hinic3_command.h"
+ #include "hinic3_cmd_exec.h"
+@@ -73,6 +74,22 @@
+ "The value is an integer with a range <1-4294967295>\n"                                                          \
+     "    -h, --help                                      Display the help information\n"
+ 
++#define PCAP_CMD_ENBLE_DESC                                                                                 \
++"  Usage: dpak-ovs-ctl hwoff/enable-capture-probe [ -c ENUM<high,low> | -q | { -h | --help } ]\n\n"         \
++"  Options list:                                                                                  \n"       \
++"    -c                            Set capture thread CPU usage level, ENUM<high,low>, the default value is high\n"                    \
++"    -q                            Query current capture enable status and CPU usage\n"                     \
++"    -h, --help                    Display the help information\n"
++
++#define PCAP_CMD_ENBLE_DESC_FULLY_CAP                                                                       \
++"  Usage: dpak-ovs-ctl hwoff/enable-capture-probe "                                                         \
++"[ [ -p ENUM#<limited-capture,fully-capture> | -c ENUM#<high,low> ] * | -q | { -h | --help } ]\n\n"         \
++"  Options list:                                                                                  \n"       \
++"    -p                            Set packet capture mode, the default value is limited-capture\n"         \
++"    -c                            Set capture thread CPU usage level, ENUM<high,low>, the default value is high\n"                    \
++"    -q                            Query current capture enable status and CPU usage\n"                     \
++"    -h, --help                    Display the help information\n"
++
+ static struct pcap_cmd_t g_cap_main_command = { "hwoff/capture-probe",
+                                                 "{ start <portname> -w <filename> -t INTEGER<1-1440>"
+                                                 "[ [ [ -sip ENUM<IP<X.X.X.X>,IPV6<X:X::X:X>> | "
+@@ -101,6 +118,18 @@ static struct pcap_cmd_t g_cap_sub_commands[] = {
+     {"--help",  "", pcap_cmd_help, 0, 0, NULL},
+ };
+ 
++static const struct hinic3_opt enable_pcap_cmd_opts[] = {
++    {"-h",        REQUIRED_ARGUMENT, 0, ENPCAP_HELP_OPT},
++    {"--help",    REQUIRED_ARGUMENT, 0, ENPCAP_HELP_OPT},
++    {"-c",        OPTIONAL_ARGUMENT, 0, ENPCAP_CPU_MODE_OPT},
++    {"--cpu",     OPTIONAL_ARGUMENT, 0, ENPCAP_CPU_MODE_OPT},
++    {"-p",        OPTIONAL_ARGUMENT, 0, ENPCAP_PCAP_MODE_OPT},
++    {"--pcap",    OPTIONAL_ARGUMENT, 0, ENPCAP_PCAP_MODE_OPT},
++    {"-q",        REQUIRED_ARGUMENT, 0, ENPCAP_QUERY_OPT},
++    {"--query",   REQUIRED_ARGUMENT, 0, ENPCAP_QUERY_OPT},
++    {NULL,        0,                 0, 0}
++};
++
+ static void
+ pcap_cmd_usage_print(struct ds *ds)
+ {
+@@ -109,18 +138,245 @@ pcap_cmd_usage_print(struct ds *ds)
+     hinic3_ds_put_cstr(ds, p_cmd->desc);
+ }
+ 
++static int
++pcap_cmd_option_check(const struct hinic3_opt *opts, const char *name)
++{
++    for (int i = 0; opts[i].name != NULL; i++) {
++        if (strcmp(name, opts[i].name) == 0)
++            return opts[i].val;
++    }
++    return PCAP_CMD_ERR_ARGS;
++}
++
++static void
++pcap_cmd_enable_capture_err(int pcap_err, struct ds *ds)
++{
++    if (pcap_err == PCAP_CMD_TOO_FEW_ARGS) {
++        hinic3_ds_put_format(ds, "%s", HINIC3_UI_LEADING_SIGN_ERROR
++            HINIC3_UI_ERROR_INCOMPLETE_COMMAND HINIC3_COMMAND_HELP_INFO);
++    }
++
++    if (pcap_err == PCAP_CMD_TOO_MANY_ARGS) {
++        hinic3_ds_put_format(ds, "%s", HINIC3_UI_LEADING_SIGN_ERROR
++            HINIC3_UI_ERROR_TOO_MANY_PARAMETER HINIC3_COMMAND_HELP_INFO);
++    }
++
++    if (pcap_err == PCAP_CMD_ERR_ARGS) {
++        hinic3_ds_put_format(ds, "%s", HINIC3_UI_LEADING_SIGN_ERROR
++            HINIC3_UI_ERROR_WRONG_PARAMETER HINIC3_COMMAND_HELP_INFO);
++    }
++}
++
+ static void
+-pcap_cmd_enable_capture(struct unixctl_conn *conn, int argc HINIC3_UNUSED, const char *argv[] HINIC3_UNUSED, void *aux)
++pcap_cmd_enable_help(struct ds *ds)
++{
++    if (hinic3_support_payload_capture_get() == false)
++        hinic3_ds_put_format(ds, PCAP_CMD_ENBLE_DESC);
++    else
++        hinic3_ds_put_format(ds, PCAP_CMD_ENBLE_DESC_FULLY_CAP);
++}
++
++static int
++pcap_cmd_enable_set_pcap_mode(const char *mode_str)
++{
++    if (strcmp(mode_str, "limited-capture") == 0)
++        pcap_mode_set(LIMITED_CAPTURE);
++    else if (strcmp(mode_str, "fully-capture") == 0)
++        pcap_mode_set(FULLY_CAPTURE);
++    else
++        return PCAP_CMD_ERR_ARGS;
++
++    return 0;
++}
++
++static int
++pcap_cmd_enable_set_cpu_level(const char *level)
++{
++    if (strcmp("low", level) == 0)
++        pcap_cpu_usage_set(PCAP_CPU_LOW);
++    else if (strcmp("high", level) == 0)
++        pcap_cpu_usage_set(PCAP_CPU_HIGH);
++    else
++        return PCAP_CMD_ERR_ARGS;
++
++    return 0;
++}
++
++static const char *
++pcap_cmd_pcap_mode_str(void)
++{
++    if (pcap_mode_get() == ONLY_HEADER)
++        return "pcap mode is only header";
++    if (pcap_mode_get() == LIMITED_CAPTURE)
++        return "pcap mode is limited capture";
++    if (pcap_mode_get() == FULLY_CAPTURE)
++        return "pcap mode is fully capture";
++    return "";
++}
++
++static const char *
++pcap_cmd_cpu_usage_str(void)
++{
++    if (pcap_cpu_usage_get() == PCAP_CPU_HIGH)
++        return "the CPU usage level is high";
++    if (pcap_cpu_usage_get() == PCAP_CPU_LOW)
++        return "the CPU usage level is low";
++    return "";
++}
++
++static void
++pcap_cmd_enable_query(struct ds *ds)
++{
++    enum { STR_BUF_SIZE = 1024 };
++    char buf[STR_BUF_SIZE];
++    if (pcap_switch_get() != 1) {
++        snprintf(buf, sizeof(buf), "Capture status is disabled.");
++    } else {
++        snprintf(buf, sizeof(buf), "Capture status is enabled, %s, %s.",
++            pcap_cmd_pcap_mode_str(), pcap_cmd_cpu_usage_str());
++    }
++
++    hinic3_ds_put_format_prefix(ds, 0, HINIC3_UI_LEADING_SIGN_INFO, "%s\n", buf);
++    HINIC3_LOG(INFO, CAPTURE, "%s", buf);
++}
++
++static int
++pcap_cmd_enable_parse_status_args(int argc, const char *argv[], struct ds *ds)
+ {
++    if (argc == 1)
++        return 1;
++
++    int option_val = pcap_cmd_option_check(enable_pcap_cmd_opts, argv[1]);
++    if (argc == PCAP_CMD_ENABLE_MAX_PARAM) {
++        switch (option_val) {
++            case ENPCAP_HELP_OPT:
++                pcap_cmd_enable_help(ds);
++                return 0;
++            case ENPCAP_QUERY_OPT:
++                pcap_cmd_enable_query(ds);
++                return 0;
++            default:
++                return PCAP_CMD_ERR_ARGS;
++        }
++    }
++
++    if (option_val == ENPCAP_HELP_OPT || option_val == ENPCAP_QUERY_OPT)
++        return PCAP_CMD_TOO_MANY_ARGS;
++
++    return 1;
++}
++
++static int
++pcap_cmd_enable_parse_setup_args(int argc, const char *argv[])
++{
++    int ret = 0;
++    int option_val = 0;
++
++    pcap_cpu_usage_set(PCAP_CPU_HIGH);
++    if (hinic3_support_payload_capture_get() == false)
++        pcap_mode_set(ONLY_HEADER);
++    else
++        pcap_mode_set(LIMITED_CAPTURE);
++
++    if (argc == 1)
++        return 0;
++
++    for (int i = 1; i < argc; ++i) {
++        option_val = pcap_cmd_option_check(enable_pcap_cmd_opts, argv[i]);
++        switch (option_val) {
++            case ENPCAP_CPU_MODE_OPT:
++                if (argc <= ++i)
++                    return PCAP_CMD_TOO_FEW_ARGS;
++                ret = pcap_cmd_enable_set_cpu_level(argv[i]);
++                break;
++            case ENPCAP_PCAP_MODE_OPT:
++                if (hinic3_support_payload_capture_get() == false)
++                    return PCAP_CMD_ERR_ARGS;
++                if (argc <= ++i)
++                    return PCAP_CMD_TOO_FEW_ARGS;
++                ret = pcap_cmd_enable_set_pcap_mode(argv[i]);
++                break;
++            default:
++                return PCAP_CMD_ERR_ARGS;
++        }
++        if (ret != 0)
++            return ret;
++    }
++
++    return 0;
++}
++
++static int
++hinic3_set_pcap_mode(struct ds *ds)
++{
++    int ret = 0;
++    enum { PCAP_BUF_SIZE = 64 };
++    uint8_t buf[PCAP_BUF_SIZE] = {0};
++    struct hinic3_nlattr set_nla = {0};
++    struct hinic3_drv_ops *ops = hinic3_get_drv_ops();
++
++    HINIC3_FUNC_PTR_OR_ERR_RET(ops->hovs_global_cfg_set, HINIC3_DRV_FUNC_NO_PTR);
++    hinic3_nlattr_init(&set_nla, buf, PCAP_BUF_SIZE * sizeof(uint8_t));
++    /* only-header与limited-capture由解析模块截断，组件不区分这两个模式 */
++    if (pcap_mode_get() == FULLY_CAPTURE)
++        hinic3_nlattr_put_u8(&set_nla, HINIC3_GLOBAL_CFG_ARG_PCAP, 1);
++    else
++        hinic3_nlattr_put_u8(&set_nla, HINIC3_GLOBAL_CFG_ARG_PCAP, 0);
++
++    ret = ops->hovs_global_cfg_set((struct nlattr *)set_nla.data, set_nla.used_len,
++        (struct nlattr *)set_nla.data, &set_nla.used_len);
++    if (ret != 0) {
++        hinic3_ds_put_format_prefix(ds, 0, HINIC3_UI_LEADING_SIGN_ERROR,
++            "hovs_global_cfg_set pcap mode failed, ret is %d!\n", ret);
++        HINIC3_LOG(ERR, CAPTURE, "hovs_global_cfg_set pcap mode failed, ret is %d!", ret);
++    }
++
++    return hinic3_convert_error_code(ret);
++}
++
++static void
++pcap_cmd_enable_capture(struct unixctl_conn *conn, int argc, const char *argv[], void *aux)
++{
++    int ret = 0;
+     struct ds ds = DS_EMPTY_INITIALIZER;
++
++    ret = pcap_cmd_enable_parse_status_args(argc, argv, &ds);
++    if (ret <= 0) {
++        pcap_cmd_enable_capture_err(ret, &ds);
++        goto end;
++    }
++
++    if (pcap_switch_get() != 0) {
++        hinic3_ds_put_format_prefix(&ds, 0, HINIC3_UI_LEADING_SIGN_WARNING,
++            "Capture is already enabled, please disable first and then re-enable!\n");
++        HINIC3_LOG(WARNING, CAPTURE, "Capture is already enabled, please disable first and then re-enable!");
++        goto end;
++    }
++
++    ret = pcap_cmd_enable_parse_setup_args(argc, argv);
++    if (ret != 0) {
++        pcap_cmd_enable_capture_err(ret, &ds);
++        goto end;
++    }
++
++    if (hinic3_card_mod_get() == STANDARD_MODE) {
++        ret = hinic3_set_pcap_mode(&ds);
++        if (ret != 0)
++            goto end;
++    }
++
+     pcap_switch_set(1);
+     pcap_task_set(0);
+     pcap_time_set(hinic3_time_sec());
+-    HINIC3_LOG(INFO, CAPTURE, "Capture is enabled.");
+-    hinic3_ds_put_format(&ds, "%sCapture is enabled.\n", HINIC3_UI_LEADING_SIGN_INFO);
+-    hinic3_command_reply(conn, hinic3_ds_cstr(&ds));
++    pcap_cmd_enable_query(&ds);
++
++end:
++    if (ret != 0)
++        hinic3_command_reply_error(conn, hinic3_ds_cstr(&ds));
++    else
++        hinic3_command_reply(conn, hinic3_ds_cstr(&ds));
+     hinic3_ds_destroy(&ds);
+-    *(int *)aux = 0;
++    *(int *)aux = ret;
+ }
+ 
+ static void
+@@ -244,7 +500,7 @@ pcap_cmd_start(struct unixctl_conn *conn, int argc, const char *argv[], void *au
+     struct pcap_task_mgr_t *task_mgr = pcap_get_task_mgr();
+ 
+     HINIC3_LOG(INFO, CAPTURE, "Going to start a capture task.");
+-    if (pcap_get_cap_switch() == 0) {
++    if (pcap_switch_get() == 0) {
+         hinic3_ds_put_format(&ds, "%sPlease enable capture first, use command hwoff/enable-capture-probe.\n",
+             HINIC3_UI_LEADING_SIGN_WARNING);
+         goto fail;
+@@ -434,9 +690,17 @@ pcap_cmd_help(struct unixctl_conn *conn, int argc HINIC3_UNUSED,
+ void
+ pcap_unix_cmd_register(void)
+ {
++    enum { ARGC = 4 };
+     struct pcap_cmd_t *p_cmd = &g_cap_main_command;
+ 
+     hinic3_command_register(p_cmd->cmd, p_cmd->usage, p_cmd->min_args, p_cmd->max_args, p_cmd->cb, NULL);
+-    hinic3_command_register("hwoff/enable-capture-probe", "", 0, 0, pcap_cmd_enable_capture, NULL);
++    if (hinic3_support_payload_capture_get() == false) {
++        hinic3_command_register("hwoff/enable-capture-probe", "[ -c ENUM<high,low> | -q | { -h | --help } ]",
++            0, PCAP_CMD_ENABLE_MAX_PARAM, pcap_cmd_enable_capture, NULL);
++    } else {
++        hinic3_command_register("hwoff/enable-capture-probe",
++            "[ [ -p ENUM<limited-capture,fully-capture> | -c ENUM<high,low> ] * | -q | { -h | --help } ]",
++            0, ARGC, pcap_cmd_enable_capture, NULL);
++    }
+     hinic3_command_register("hwoff/disable-capture-probe", "", 0, 0, pcap_cmd_disable_capture, NULL);
+ }
+diff --git a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_filter.c b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_filter.c
+index 55d46b8f77..5cc12499c3 100644
+--- a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_filter.c
++++ b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_filter.c
+@@ -247,7 +247,7 @@ pcap_key_file_parse(struct pcap_key_t *cap_key, const char *key_name, const char
+     if (ret != 0)
+         return -1;
+ 
+-    resolve_path = (char*)hinic3_calloc(1, PATH_MAX + 1, HINIC3_CAPTURE);
++    resolve_path = (char*)hinic3_calloc(1, PATH_MAX, HINIC3_CAPTURE);
+     if (!resolve_path) {
+         hinic3_ds_put_format(ds, HINIC3_UI_LEADING_SIGN_ERROR HINIC3_UI_FILE_PATH_MALLOC_TIPS_STRING);
+         return -1;
+@@ -605,7 +605,7 @@ static int
+ pcap_parse_ipv6_ext_hdr(struct pcap_pkt_parse_ctx *ctx, struct pcap_pkt_sub_hdr *sub_hdr,
+                                    uint8_t nexthdr_para, bool *has_l4)
+ {
+-    uint8_t hdr_len;
++    uint16_t hdr_len;
+     uint16_t hdr_cnt = 0;
+     uint8_t xdr_auth_offset = 2;
+     uint8_t xdr_bit_move = 3;
+@@ -631,8 +631,8 @@ pcap_parse_ipv6_ext_hdr(struct pcap_pkt_parse_ctx *ctx, struct pcap_pkt_sub_hdr
+         else
+             hdr_len = ((ext_hdr->hdrlen + 1) << xdr_bit_move);
+ 
+-        if (!pcap_check_pkt_boundary(ctx->pkt_itr, hdr_len, ctx->pkt_end)) {
+-            HINIC3_LOG(ERR, CAPTURE, "Length of packet is too small when extract ipv6 ext header!");
++        if (hdr_len >= UINT8_MAX || !pcap_check_pkt_boundary(ctx->pkt_itr, hdr_len, ctx->pkt_end)) {
++            HINIC3_LOG(ERR, CAPTURE, "Hdr len bigger than UINT8_MAX or ength of packet is too small when extract ipv6 ext header!");
+             return -1;
+         }
+ 
+@@ -1025,6 +1025,9 @@ pcap_pkt_nbits_cmp(uint8_t *src, uint8_t *dst, uint8_t bit_len)
+     uint8_t left_bit_len;
+     uint8_t last_byte_mask;
+ 
++    if (src == NULL || dst == NULL)
++        return false;
++
+     byte_cnt = bit_len >> PCAP_OFFSET_3;
+     left_bit_len = bit_len & PCAP_BIT_MASK;
+ 
+@@ -1047,6 +1050,9 @@ pcap_pkt_mem_cmp(struct pcap_mem_cmp_t *item)
+ {
+     int ret;
+ 
++    if (item->src == NULL || item->dst == NULL)
++        return false;
++
+     if (item->type == PCAP_CMP_MEM_BIT)
+         return pcap_pkt_nbits_cmp(item->src, item->dst, item->len);
+ 
+diff --git a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_hooks.c b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_hooks.c
+index c01ce646ae..352abbc3b4 100644
+--- a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_hooks.c
++++ b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_hooks.c
+@@ -64,7 +64,7 @@ pcap_hook_rx_pre(void)
+     struct pcap_task_batch task_batch;
+     struct pcap_task_t *pcap_task_record = NULL;
+ 
+-    if (pcap_get_cap_switch() == 0)
++    if (pcap_switch_get() == 0)
+         return;
+ 
+     pcap_task_batch_init(&task_batch);
+@@ -74,6 +74,9 @@ pcap_hook_rx_pre(void)
+             pcap_task_set(0);
+             pcap_time_set(hinic3_time_sec());
+         }
++        if (pcap_cpu_usage_get() == PCAP_CPU_LOW) {
++            usleep(PCAP_PERIOD_US);
++        }
+         return;
+     }
+ 
+@@ -81,7 +84,7 @@ pcap_hook_rx_pre(void)
+     for (i = 0; i < task_batch.count; i++) {
+         pcap_task_record = task_batch.task_array[i];
+         if (pcap_timeout_check_s(pcap_task_record->key.task_start_time, pcap_task_record->key.task_time)) {
+-            pcap_task_record->stop_flag = true;
++            pcap_task_record->remain_count = 0;
+             pcap_task_record->key.task_time = 0;
+         }
+ 
+@@ -91,7 +94,7 @@ pcap_hook_rx_pre(void)
+ 
+     for (i = 0; i < task_batch.count; i++) {
+         pcap_task_record = task_batch.task_array[i];
+-        if (pcap_task_record->stop_flag == true && pcap_task_record->key.task_time == 0) {
++        if (pcap_task_record->remain_count == 0 && pcap_task_record->key.task_time == 0) {
+             HINIC3_LOG(INFO, CAPTURE, "Going to stop capture task %d because timeout.", pcap_task_record->pcap_id);
+             int ret = pcap_stop_timeout_task(pcap_task_record->pcap_id);
+             if (ret != 0)
+@@ -101,4 +104,4 @@ pcap_hook_rx_pre(void)
+     }
+ 
+     return;
+-}
++}
+\ No newline at end of file
+diff --git a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_utils.c b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_utils.c
+index 8358977b33..8d8b46786b 100644
+--- a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_utils.c
++++ b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_utils.c
+@@ -38,21 +38,23 @@ struct rte_mempool *g_pcap_shared_mp = NULL;
+ 
+ static int g_cap_switch = 0;
+ static int g_pcap_task = 0;
++static enum PCAP_CPU_USAGE_TYPE g_cap_cpu_usage = PCAP_CPU_HIGH;
++static enum hinic3_pcap_mode g_current_pcap_mode = ONLY_HEADER;
+ static long long g_no_pcap_task_time = 0;
+ struct pcap_task_mgr_t g_cap_task_mgr;
+ struct pcap_task_save_t g_cap_task_save = {0};
+ 
++static long long period_us = 0;
++static long long target_work_us = 0;
++static long long work_us = 0;
++static long long integral_err = 0;
++
+ struct pcap_task_mgr_t *
+ pcap_get_task_mgr(void)
+ {
+     return &g_cap_task_mgr;
+ }
+ 
+-int pcap_get_cap_switch(void)
+-{
+-    return g_cap_switch;
+-}
+-
+ void pcap_task_mgr_spin_lock(void)
+ {
+     rte_spinlock_lock(&g_cap_task_mgr.lock);
+@@ -821,7 +823,7 @@ void pcap_port_tasks_get(struct pcap_task_batch *task_batch, struct pcap_port_t
+         if (!cap_task)
+             continue;
+ 
+-        if (cap_task->stop_flag || (cap_task->remain_count == 0))
++        if (cap_task->stop_flag)
+             continue;
+ 
+         cap_task->ref_cnt++;
+@@ -1334,6 +1336,31 @@ void pcap_task_stop_as_eth_port_del(uint16_t vport_id)
+     return;
+ }
+ 
++void pcap_mode_set(enum hinic3_pcap_mode pcap_mode)
++{
++    g_current_pcap_mode = pcap_mode;
++}
++
++enum hinic3_pcap_mode pcap_mode_get(void)
++{
++    return g_current_pcap_mode;
++}
++
++void pcap_cpu_usage_set(enum PCAP_CPU_USAGE_TYPE value)
++{
++    g_cap_cpu_usage = value;
++}
++
++enum PCAP_CPU_USAGE_TYPE pcap_cpu_usage_get(void)
++{
++    return g_cap_cpu_usage;
++}
++
++int pcap_switch_get(void)
++{
++    return g_cap_switch;
++}
++
+ void pcap_switch_set(int value)
+ {
+     g_cap_switch = value;
+@@ -1359,15 +1386,58 @@ void pcap_time_set(long long value)
+     g_no_pcap_task_time = value;
+ }
+ 
++static void 
++pcap_rx_limit(void)
++{
++    long long wall_start = hinic3_time_usec(CLOCK_MONOTONIC);
++    long long cpu_start = hinic3_time_usec(CLOCK_THREAD_CPUTIME_ID);
++
++    /* 1. 运行阶段：精确控制运行时间*/
++    while (hinic3_time_usec(CLOCK_MONOTONIC) - wall_start <= work_us) {
++        pcap_hook_rx_pre();
++    }
++
++    long long wall_after_burn = hinic3_time_usec(CLOCK_MONOTONIC);
++    long long cpu_after_burn = hinic3_time_usec(CLOCK_THREAD_CPUTIME_ID);
++    
++    /* 2. 睡眠阶段：释放CPU */
++    long long to_sleep = period_us - (wall_after_burn - wall_start);
++    if (to_sleep > 0) {
++        usleep((useconds_t)to_sleep);
++    }
++    
++    /* 3. 测量与补PI控制器 */
++    long long actual_work_cpu = cpu_after_burn - cpu_start;
++    long long error = target_work_us - actual_work_cpu;  // 正=运行时间少了，负=运行时间多了
++    
++    integral_err += error;
++    /* 抗积分饱和 */
++    if (integral_err > period_us)
++        integral_err = period_us;
++    if (integral_err < -period_us)
++        integral_err = -period_us;
++    
++    /* PI公式：下次工作时长 = 目标 + 比例项 + 积分项 */
++    work_us = target_work_us + error + integral_err * PCAP_PID_KI;
++    if (work_us < 0)
++        work_us = 0;
++    if (work_us > period_us)
++        work_us = period_us;
++}
++
+ void *
+ pcap_thread_main(void *arg HINIC3_UNUSED)
+ {
+     enum check_thread_item_type check_thread = CAPTURE_THREAD;
+     long long start = hinic3_time_msec();
++    period_us = PCAP_PERIOD_US;
++    target_work_us = PCAP_PERIOD_US * PCAP_CPU_TARGET_RATE;
++    work_us = target_work_us;
++    integral_err = 0;
+ 
+     for (;;)
+     {
+-        if (pcap_get_cap_switch() == 1 && pcap_task_get() == 0 && pcap_timeout_check_s(pcap_time_get(), PCAP_DISABLE_TIME_S))
++        if (pcap_switch_get() == 1 && pcap_task_get() == 0 && pcap_timeout_check_s(pcap_time_get(), PCAP_DISABLE_TIME_S))
+         {
+             HINIC3_LOG(INFO, CAPTURE, "Disable capture probe because timeout.");
+             pcap_switch_set(0);
+@@ -1377,13 +1447,18 @@ pcap_thread_main(void *arg HINIC3_UNUSED)
+         if (g_cap_task_save.thread_exit == PCAP_THREAD_EXIT_STATUS)
+             break;
+ 
+-        if (pcap_get_cap_switch() == 0)
++        if (pcap_switch_get() == 0)
+         {
+             usleep(PCAP_SIEEP_TIME);
+             continue;
+         }
+ 
+-        pcap_hook_rx_pre();
++        if (pcap_cpu_usage_get() == PCAP_CPU_LOW) {
++            pcap_rx_limit();
++        } else {
++            pcap_hook_rx_pre();
++        }
++
+     }
+ 
+     return 0;
+diff --git a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_utils.h b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_utils.h
+index 681ffca988..39112c1317 100644
+--- a/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_utils.h
++++ b/drivers/net/hinic3/src/hinic3_capture/hinic3_capture_utils.h
+@@ -33,6 +33,10 @@
+ #define PCAP_TIME_S_TO_MS           1000
+ #define PCAP_SIEEP_TIME             1000
+ 
++#define PCAP_PERIOD_US              1000
++#define PCAP_CPU_TARGET_RATE        0.3
++#define PCAP_PID_KI                 0.1
++
+ #define PCAP_CMD_MIN_PARAM          1
+ #define PCAP_CMD_MAX_PARAM          32
+ #define PCAP_CMD_START_MIN_PARAM    3
+@@ -41,6 +45,10 @@
+ #define PCAP_CMD_STOP_MAX_PARAM     2
+ #define PCAP_CMD_SHOW_MIN_PARAM     1
+ #define PCAP_CMD_SHOW_MAX_PARAM     2
++#define PCAP_CMD_ENABLE_MAX_PARAM   2
++#define PCAP_CMD_TOO_MANY_ARGS      (-1)
++#define PCAP_CMD_TOO_FEW_ARGS       (-2)
++#define PCAP_CMD_ERR_ARGS           (-3)
+ 
+ #define PCAP_STOP_CHECK_PERIOD_MS   5
+ #define PCAP_STOP_TIME_OUT_MS      (10 * 1000)
+@@ -64,6 +72,24 @@
+ #define PCAP_SAVE_THREAD_NAME       "pcap-save-thread"
+ #define PCAP_RING_NAME_PREFIX       "hinic3-pcap-ring"
+ 
++enum {
++    ENPCAP_HELP_OPT,
++    ENPCAP_CPU_MODE_OPT,
++    ENPCAP_PCAP_MODE_OPT,
++    ENPCAP_QUERY_OPT,
++};
++
++enum hinic3_pcap_mode {
++    FULLY_CAPTURE = 0,
++    LIMITED_CAPTURE = 1,
++    ONLY_HEADER = 2,
++};
++
++enum PCAP_CPU_USAGE_TYPE {
++    PCAP_CPU_HIGH,
++    PCAP_CPU_LOW
++};
++
+ enum pcap_write_way {
+     WRITE_BY_PMD = 0,
+     WRITE_BY_SEP_THREAD
+@@ -259,11 +285,15 @@ struct pcap_task_save_t *hinic3_get_cap_task_save(void);
+ struct rte_mempool **hinic3_get_pcap_shared_mp(void);
+ void hinic3_set_ticks_per_ms(uint64_t value);
+ bool pcap_check_file_used_no_lock(struct pcap_key_t *cap_key);
+-int pcap_get_cap_switch(void);
+ struct pcap_task_mgr_t* pcap_get_task_mgr(void);
+ void pcap_port_tasks_get(struct pcap_task_batch *task_batch, struct pcap_port_t *port_mirror);
+ int pcap_port_tasks_count_no_lock(uint32_t port_no);
+ int pcap_port_info_get_by_name(const char *port_name, struct pcap_port_t *port_info, struct ds *ds);
++void pcap_mode_set(enum hinic3_pcap_mode pcap_mode);
++enum hinic3_pcap_mode pcap_mode_get(void);
++void pcap_cpu_usage_set(enum PCAP_CPU_USAGE_TYPE value);
++enum PCAP_CPU_USAGE_TYPE pcap_cpu_usage_get(void);
++int pcap_switch_get(void);
+ void pcap_switch_set(int value);
+ int pcap_task_get(void);
+ void pcap_task_set(int value);
+diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_cmd.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_cmd.c
+index c705789023..7cb8b2dc9b 100644
+--- a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_cmd.c
++++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_cmd.c
+@@ -71,16 +71,20 @@ void hinic3_agent_cmd_init(void)
+ 
+     unixctl_hinic3_flow_cmd_init();
+     unixctl_hinic3_flow_dump_cmd_init();
+-    unixctl_hinic3_multi_qos_dfx_init();
++    if(hinic3_user_scenario_get() == COM_BD) {
++        unixctl_hinic3_multi_qos_dfx_init();
++        unixctl_meter_dfx_init();
++        unixctl_hinic3_agent_cmd_init();
++    }
+     unixctl_hinic3_port_cmd_init();
+-    unixctl_hinic3_agent_cmd_init();
+-    unixctl_hinic3_trace_flow_init();
+     unixctl_thread_status_dfx_init();
+     unixctl_common_cmd_register();
+-    unixctl_hinic3_query_cmd_init();
+-    unixctl_hinic3_delete_cmd_init();
+-    unixctl_meter_dfx_init();
+-
+-    if (hinic3_check_fuzzy_flow_switch() == true)
+-        unixctl_hinic3_mega_flow_dump_cmd_init();
++    if (hinic3_card_mod_get() != PROG_MODE) {
++        unixctl_hinic3_trace_flow_init();
++        unixctl_hinic3_query_cmd_init();
++        unixctl_hinic3_delete_cmd_init();
++        if (hinic3_check_fuzzy_flow_switch() == true) {
++            unixctl_hinic3_mega_flow_dump_cmd_init();
++        }
++    }   
+ }
+diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_cmd_format.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_cmd_format.c
+index 6d0736fb1a..1815772dd0 100644
+--- a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_cmd_format.c
++++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_cmd_format.c
+@@ -19,6 +19,7 @@
+ #include "hinic3_agent_flow_cmd_dump.h"
+ #include "hinic3_flow_agent.h"
+ #include "hinic3_flexda_flow_public.h"
++#include "hinic3_agent_cmd_format_flexda.h"
+ 
+ #define HINIC3_FLOW_QOS_BW 0b01
+ #define HINIC3_FLOW_QOS_PPS 0b10
+@@ -227,7 +228,7 @@ hinic3_flow_process_ct_action(const hinic3_nlattr_itr nla, struct ds *ds)
+     hinic3_ds_destroy(&ds_state);
+ }
+ 
+-static void hinic3_flow_process_count_action(const hinic3_nlattr_itr nla, struct ds *ds)
++static void hinic3_flow_process_count_action(const hinic3_nlattr_itr nla HINIC3_UNUSED, struct ds *ds)
+ {
+    hinic3_ds_put_format(ds, "%s, ", HINIC3_UI_COUNT_ACTION);
+ }
+@@ -325,7 +326,7 @@ static void
+ hinic3_flow_process_set_u16_action(const hinic3_nlattr_itr nla, struct ds *ds)
+ {
+     enum hinic3_flow_action_type type = (enum hinic3_flow_action_type)hinic3_nlattr_get_itr_type(nla);
+-    const char *print_string = NULL;
++    const char * print_string = NULL;
+     uint16_t u16_val = hinic3_nlattr_get_itr_u16(nla);
+     switch (type) {
+         case HINIC3_FLOW_ACT_SET_SPORT:
+@@ -348,7 +349,7 @@ static void hinic3_flexda_flow_process_set_mac_action(const hinic3_nlattr_itr nl
+     enum hinic3_flow_action_type type = (enum hinic3_flow_action_type)hinic3_nlattr_get_itr_type(nla);
+     const char *mac_string =
+     (type == HINIC3_FLOW_ACT_DPDK_SET_MAC_SRC) ? HINIC3_UI_KEY_VLAN_SET_SMAC_STR : HINIC3_UI_KEY_VLAN_SET_DMAC_STR;
+-    uint8_t *sd_mac = (uint8_t *)hinic3_nlattr_get_itr_unspec(nla, ETH_ALEN);
++    const uint8_t *sd_mac = (const uint8_t *)hinic3_nlattr_get_itr_unspec(nla, ETH_ALEN);
+     hinic3_ds_put_format(ds, "%s(" HINIC3_MAC_FMT "), ", mac_string, HINIC3_OUTPUT_MAC(sd_mac));
+ }
+     
+@@ -367,7 +368,7 @@ static void hinic3_flexda_flow_process_set_ipv6_action(const hinic3_nlattr_itr n
+     enum hinic3_flow_action_type type = (enum hinic3_flow_action_type)hinic3_nlattr_get_itr_type(nla);
+     const char *ip_string =
+     (type == HINIC3_FLOW_ACT_DPDK_SET_IPV6_SRC) ? HINIC3_UI_KEY_VLAN_SET_SIP_STR : HINIC3_UI_KEY_VLAN_SET_DIP_STR;
+-    struct in6_addr *ipv6_addr = (struct in6_addr *)hinic3_nlattr_get_itr_data(nla);
++    const struct in6_addr *ipv6_addr = (const struct in6_addr *)hinic3_nlattr_get_itr_data(nla);
+     hinic3_ds_put_format(ds, "%s(", ip_string);
+     hinic3_ipv6_format_addr(ipv6_addr, ds);
+     hinic3_ds_put_format(ds, "), ");
+@@ -376,20 +377,20 @@ static void hinic3_flexda_flow_process_set_ipv6_action(const hinic3_nlattr_itr n
+ static void hinic3_flexda_flow_process_set_u16_action(const hinic3_nlattr_itr nla, struct ds *ds)
+ {
+     enum hinic3_flow_action_type type = (enum hinic3_flow_action_type)hinic3_nlattr_get_itr_type(nla);
+-    char *print_string = NULL;
++    const char *print_string = NULL;
+     uint16_t u16_val = hinic3_nlattr_get_itr_u16(nla);
+     switch (type) {
+         case HINIC3_FLOW_ACT_DPDK_SET_TP_SRC:
+-        print_string = HINIC3_UI_KEY_VLAN_SET_SPORT_STR;
+-        break;
++            print_string = HINIC3_UI_KEY_VLAN_SET_SPORT_STR;
++            break;
+         case HINIC3_FLOW_ACT_DPDK_SET_TP_DST:
+-        print_string = HINIC3_UI_KEY_VLAN_SET_DPORT_STR;
+-        break;
++            print_string = HINIC3_UI_KEY_VLAN_SET_DPORT_STR;
++            break;
+         case HINIC3_FLOW_ACT_DPDK_PORT_ID:
+-        print_string = HINIC3_UI_KEY_VLAN_OUTPUT_STR;
+-        break;
++            print_string = HINIC3_UI_KEY_VLAN_OUTPUT_STR;
++            break;
+         default:
+-        return;
++            return;
+     }
+     hinic3_ds_put_format(ds, "%s(%hu), ", print_string, ntohs(u16_val));
+ }
+@@ -588,26 +589,27 @@ hinic3_flow_stats_format_output(const struct hinic3_flow_stats *stats, struct ds
+     hinic3_ds_put_format(ds, " %s(%" PRIu64 ")", HINIC3_UI_FLOW_CT_INFO_STRING, stats->ct_loss_pkts);
+ }
+ 
+-void hinic3_flexda_flow_stats_format_output(const struct hinic3_flow_stats *stats, struct ds *ds)
++static void
++hinic3_flexda_flow_stats_format_output(const struct hinic3_flow_stats *stats, struct ds *ds)
+ {
+-        hinic3_ds_put_format(ds, "%s(%" PRIu64 "), %s(%" PRIu64 "), ", HINIC3_UI_FLOW_PACKET_STRING, stats->packet_count,
+-        HINIC3_UI_FLOW_BYTES_STRING, stats->byte_count);
++    hinic3_ds_put_format(ds, "%s(%" PRIu64 "), %s(%" PRIu64 "), ", HINIC3_UI_FLOW_PACKET_STRING, stats->packet_count,
++    HINIC3_UI_FLOW_BYTES_STRING, stats->byte_count);
+ 
+     /* 黑卡模式下通过hardware_flow_age来表示是否支持硬件流表老化
+     灰卡模式下通过流表stats中的age_time是否为0表示是否支持硬件流表老化 */
+-        bool show_age_time = (hinic3_card_mod_get() == STANDARD_MODE && hinic3_check_hardware_flow_age_switch());
+-        show_age_time |= (hinic3_card_mod_get() == PROG_MODE && stats->age_time != 0);
+-        if (show_age_time) {
++    bool show_age_time = (hinic3_card_mod_get() == STANDARD_MODE && hinic3_check_hardware_flow_age_switch());
++    show_age_time |= (hinic3_card_mod_get() == PROG_MODE && stats->age_time != 0);
++    if (show_age_time) {
+         hinic3_ds_put_format(ds, "%s(%" PRIu32 "ms), %s(%" PRIu32 "ms), ", HINIC3_UI_FLOW_AGE_TIME_STRING,
+-                stats->age_time, HINIC3_UI_FLOW_LIVE_TIME_STRING, stats->live_time);
+-        } else {
++            stats->age_time, HINIC3_UI_FLOW_LIVE_TIME_STRING, stats->live_time);
++    } else {
+         hinic3_ds_put_format(ds, "%s(%" PRIu32 "ms), ", HINIC3_UI_FLOW_LIVE_TIME_STRING, stats->live_time);
+-        }
+-        hinic3_ds_put_cstr(ds, HINIC3_UI_FLOW_FLAG_STRING);
+-        hinic3_ds_put_format(ds, " %s(%" PRIu64 ")", HINIC3_UI_FLOW_CT_INFO_STRING, stats->ct_loss_pkts);
++    }
++    hinic3_ds_put_cstr(ds, HINIC3_UI_FLOW_FLAG_STRING);
++    hinic3_ds_put_format(ds, " %s(%" PRIu64 ")", HINIC3_UI_FLOW_CT_INFO_STRING, stats->ct_loss_pkts);
+ }
+ 
+-void
++static void
+ hinic3_flexda_actions_format_output(struct ds *ds, const struct hinic3_nlattr *actions)
+ {
+     hinic3_nlattr_itr nla = NULL;
+diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_cmd_format_flexda.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_cmd_format_flexda.c
+index 06a464837e..4832f83a2d 100644
+--- a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_cmd_format_flexda.c
++++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_cmd_format_flexda.c
+@@ -28,7 +28,7 @@
+ #define HINIC3_FLOW_QOS_BW_PPS 0b11
+ 
+ static void
+-hinic3_flexda_flow_key_format_output_src_port(const hinic3_nlattr_itr nla, uint8_t nw_protocol, struct ds *ds, int type)
++hinic3_flexda_flow_key_format_output_src_port(const hinic3_nlattr_itr nla, struct ds *ds, int type)
+ {
+     uint8_t u8_val = hinic3_nlattr_get_itr_u8(nla);
+     uint16_t u16_val = hinic3_nlattr_get_itr_u16(nla);
+@@ -47,8 +47,8 @@ hinic3_flexda_flow_key_format_output_src_port(const hinic3_nlattr_itr nla, uint8
+     }
+ }
+ 
+-static void hinic3_flexda_flow_key_format_output_dst_port(const hinic3_nlattr_itr nla, uint8_t nw_protocol,
+-    struct ds *ds, int type)
++static void
++hinic3_flexda_flow_key_format_output_dst_port(const hinic3_nlattr_itr nla, struct ds *ds, int type)
+ {
+     uint16_t u16_val = hinic3_nlattr_get_itr_u16(nla);
+     if (type == HINIC3_FLOW_KEY_DEF_ICMP_IDENT) {
+@@ -143,7 +143,7 @@ hinic3_flexda_flow_process_mac(const hinic3_nlattr_itr nla, int type, struct ds
+ }
+ 
+ static uint8_t
+-hinic3_flexda_flow_process_nw_protocol(const hinic3_nlattr_itr nla, struct ds *ds, int type)
++hinic3_flexda_flow_process_nw_protocol(const hinic3_nlattr_itr nla, struct ds *ds)
+ {
+     uint8_t nw_protocol = hinic3_nlattr_get_itr_u8(nla);
+     hinic3_ds_put_format(ds, "%s(%hhu), ", HINIC3_UI_KEY_NW_PROTO_STR, nw_protocol);
+@@ -152,19 +152,18 @@ hinic3_flexda_flow_process_nw_protocol(const hinic3_nlattr_itr nla, struct ds *d
+ 
+ 
+ // 计算对齐后的字节长度
+-uint16_t hinic3_cal_hydra_ket_member_align_len(uint16_t bit_width)
++static uint16_t hinic3_cal_hydra_ket_member_align_len(uint16_t bit_width)
+ {
+     return DIV_8_UNIT(bit_width + BYTE_ALIGN_MASK);
+ }
+ 
+ // 检查偏移量和宽度是否都是8字节对齐
+-bool hinic3_hydra_key_member_byte_align_flag(uint16_t offset, uint16_t width)
++static bool hinic3_hydra_key_member_byte_align_flag(uint16_t offset, uint16_t width)
+ {
+     return (offset % BITS_PER_BYTE == 0) && (width % BITS_PER_BYTE == 0);
+ }
+ 
+-static void hinic3_flow_hydra_unit_format_output(const uint8_t* data, uint16_t size,
+-    uint16_t dump_format, struct ds *ds)
++static void hinic3_flow_hydra_unit_format_output(const uint8_t* data, uint16_t size, struct ds *ds)
+ {
+     uint64_t value = 0;
+     for (size_t i = 0; i < size && i < sizeof(uint64_t); i++) {
+@@ -173,7 +172,7 @@ static void hinic3_flow_hydra_unit_format_output(const uint8_t* data, uint16_t s
+     hinic3_ds_put_format(ds, "%u", value);
+ }
+ 
+-void hinic3_flow_hydra_info_format_output(const uint8_t* dump_data,
++static void hinic3_flow_hydra_info_format_output(const uint8_t* dump_data,
+     uint16_t size, uint16_t dump_format, struct ds *ds)
+ {
+     switch (dump_format) {
+@@ -181,13 +180,13 @@ void hinic3_flow_hydra_info_format_output(const uint8_t* dump_data,
+         hinic3_ds_put_format(ds, HINIC3_MAC_FMT, HINIC3_OUTPUT_MAC(dump_data));
+         break;
+         case HOVS_FLEXDA_DUMP_FORMAT_IPV4:
+-        hinic3_ds_put_format(ds, IP_FMT, IP_ARGS(*(uint32_t *)dump_data));
++        hinic3_ds_put_format(ds, IP_FMT, IP_ARGS(*(const uint32_t *)dump_data));
+         break;
+         case HOVS_FLEXDA_DUMP_FORMAT_IPV6:
+-        hinic3_ipv6_format_addr((struct in6_addr *)dump_data, ds);
++        hinic3_ipv6_format_addr((const struct in6_addr *)dump_data, ds);
+         break;
+         case HOVS_FLEXDA_DUMP_FORMAT_UNIT:
+-        hinic3_flow_hydra_unit_format_output(dump_data, size, dump_format, ds);
++        hinic3_flow_hydra_unit_format_output(dump_data, size, ds);
+         break;
+         case HOVS_FLEXDA_DUMP_FORMAT_HEXBYTE:
+         hinic3_ds_put_format(ds, "0X");
+@@ -200,7 +199,7 @@ void hinic3_flow_hydra_info_format_output(const uint8_t* dump_data,
+     }
+ }
+ 
+-void hinic3_flow_process_hydra_struct_member_data(uint8_t* input_data, uint8_t* output_data,
++static void hinic3_flow_process_hydra_struct_member_data(const uint8_t* input_data, uint8_t* output_data,
+ uint16_t bit_offset, uint16_t bit_width)
+ {
+     size_t num_bytes = hinic3_cal_hydra_ket_member_align_len(bit_width);
+@@ -228,11 +227,11 @@ uint16_t bit_offset, uint16_t bit_width)
+     }
+ }
+ 
+-int hinic3_flow_process_hydra_struct_member(hinic3_hydra_type hydra_type,
++static int hinic3_flow_process_hydra_struct_member(hinic3_hydra_type hydra_type,
+ const hovs_flexda_config_dump_member_info_t *member_info, const hinic3_nlattr_itr nla, struct ds *ds)
+ {
+     uint16_t nla_type = hinic3_nlattr_get_itr_type(nla);
+-    uint8_t* nla_data = (void *)hinic3_nlattr_get_itr_data(nla);
++    const uint8_t* nla_data = (const void *)hinic3_nlattr_get_itr_data(nla);
+     uint16_t nla_size = hinic3_nlattr_get_itr_size(nla);
+     uint16_t member_width_size = DIV_8_UNIT(member_info->bit_width);
+     uint16_t member_offset_size = DIV_8_UNIT(member_info->bit_offset);
+@@ -281,12 +280,12 @@ const hovs_flexda_config_dump_member_info_t *member_info, const hinic3_nlattr_it
+     return 0;
+ }
+ 
+-void hinic3_flow_process_hydra_info_format(hinic3_hydra_type hydra_type, const hinic3_nlattr_itr nla,
++static void hinic3_flow_process_hydra_info_format(hinic3_hydra_type hydra_type, const hinic3_nlattr_itr nla,
+ struct ds *ds)
+ {
+     uint16_t type = hinic3_nlattr_get_itr_type(nla);
+     uint16_t size = hinic3_nlattr_get_itr_size(nla);
+-    uint8_t *data = (void *)hinic3_nlattr_get_itr_data(nla);
++    const uint8_t *data = (const void *)hinic3_nlattr_get_itr_data(nla);
+ 
+     const hovs_flexda_config_dump_info_t* hydra_dump_info = hinic3_flexda_flow_get_hydra_config_dump_info(hydra_type,
+     type);
+@@ -344,7 +343,7 @@ static int hinic3_flexda_flow_key_format_output_sub(const hinic3_nlattr_itr nla,
+         break;
+     case HINIC3_FLOW_KEY_DEF_IPV4_PROTOCOL:
+     case HINIC3_FLOW_KEY_DEF_IPV6_PROTOCOL:
+-        *nw_protocol = hinic3_flexda_flow_process_nw_protocol(nla, ds, type);
++        *nw_protocol = hinic3_flexda_flow_process_nw_protocol(nla, ds);
+         break;
+     case HINIC3_FLOW_KEY_DEF_IPV4_SIP:
+     case HINIC3_FLOW_KEY_DEF_IPV4_DIP:
+@@ -360,12 +359,12 @@ static int hinic3_flexda_flow_key_format_output_sub(const hinic3_nlattr_itr nla,
+     case HINIC3_FLOW_KEY_DEF_ICMP6_CODE:
+     case HINIC3_FLOW_KEY_DEF_TCP_SPORT:
+     case HINIC3_FLOW_KEY_DEF_UDP_SPORT:
+-        hinic3_flexda_flow_key_format_output_src_port(nla, *nw_protocol, ds, type);
++        hinic3_flexda_flow_key_format_output_src_port(nla, ds, type);
+         break;
+     case HINIC3_FLOW_KEY_DEF_ICMP_IDENT:
+     case HINIC3_FLOW_KEY_DEF_TCP_DPORT:
+     case HINIC3_FLOW_KEY_DEF_UDP_DPORT:
+-        hinic3_flexda_flow_key_format_output_dst_port(nla, *nw_protocol, ds, type);
++        hinic3_flexda_flow_key_format_output_dst_port(nla, ds, type);
+         break;
+     case HINIC3_FLOW_KEY_DEF_VLAN_TCI:
+         hinic3_flexda_flow_process_vlan_vid(nla, type, ds);
+diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_dump.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_dump.c
+index 61dddf12a7..bc101e14d6 100644
+--- a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_dump.c
++++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_dump.c
+@@ -564,7 +564,7 @@ hinic3_agent_dump_flows_by_block_id(int argc, const char *argv[], struct ds *ds)
+     }
+ 
+     uint32_t block_num = 0;
+-    uint16_t block_id_input = 0;
++    uint32_t block_id_input = 0;
+     char *endPtr = NULL;
+     int ret = hinic3_flow_get_block_table_size(&block_num);
+     if (ret != 0)
+@@ -667,7 +667,6 @@ static int
+ hinic3_agent_dump_rte_flow_to_screen(struct ds *ds, uint32_t table_id)
+ {
+     size_t total = 0;
+-    int ret = 0;
+     const struct hinic3_ufid_map_table *table = hinic3_get_rte_flow_map_table();
+     total = hinic3_flexda_dump_hmap_get_flow_num(table_id);
+     if (total > HINIC3_DUMP_FLOWS_MAX_ONCE) {
+diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_dump_file.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_dump_file.c
+index a0bf28ba1a..459212317d 100644
+--- a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_dump_file.c
++++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_agent_flow_cmd_dump_file.c
+@@ -99,7 +99,7 @@ hinic3_agent_parse_output_file_path(struct hinic3_dump_all_flows_mgmt_t *m, cons
+         return -1;
+     }
+ 
+-    char *resolve_path = (char *)hinic3_calloc(1, PATH_MAX + 1, HINIC3_COMMAND);
++    char *resolve_path = (char *)hinic3_calloc(1, PATH_MAX, HINIC3_COMMAND);
+     if (resolve_path == NULL) {
+         m->file = NULL;
+         hinic3_ds_put_format(ds, "%s%s\n", HINIC3_UI_LEADING_SIGN_FAILURE, HINIC3_UI_FILE_PATH_MALLOC_TIPS_STRING);
+diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_exec.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_exec.c
+index 3230476a6b..4f16c369bf 100644
+--- a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_exec.c
++++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_exec.c
+@@ -17,6 +17,9 @@
+ #include "hinic3_ds.h"
+ #include "hinic3_cmd_exec.h"
+ 
++#define HINIC3_DFX_GLOABL_ALLOC_MEM_MAX_SIZE  (0x20000)
++#define HINIC3_CMD_MAX_LENGTH                 2048
++
+ void
+ unixctl_hinic3_lib_cmd_exec(struct unixctl_conn *conn, int argc HINIC3_UNUSED, const char *argv[],
+     void *aux)
+diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_forward.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_forward.c
+index 8cc99890f8..db9f5eef66 100644
+--- a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_forward.c
++++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_cmd_forward.c
+@@ -313,13 +313,17 @@ hinic3_packet_detect_mode_cmd(struct unixctl_conn *conn, int argc __rte_unused,
+ void
+ unixctl_hinic3_cmd_forward_register(void)
+ {
+-    hinic3_command_register("hwoff/set-forward-mode", "{ low_latency | high_throughput | { -h | --help } }",
+-        1, 1, hinic3_forward_mode_set_cmd, NULL);
+-    hinic3_command_register("hwoff/show-forward-mode", "", 0, 0, hinic3_forward_mode_get_cmd, NULL);
++    if (hinic3_card_mod_get() != PROG_MODE) {
++        hinic3_command_register("hwoff/set-forward-mode", "{ low_latency | high_throughput | { -h | --help } }",
++            1, 1, hinic3_forward_mode_set_cmd, NULL);
++        hinic3_command_register("hwoff/show-forward-mode", "", 0, 0, hinic3_forward_mode_get_cmd, NULL);
++    }
+     hinic3_command_register("hwoff/flow-escape-mode",
+         "{ enable | disable | show | { -h | --help } }",
+         1, 1, hinic3_flow_escape_mode_cmd, NULL);
+-    hinic3_command_register("hwoff/packet-detect-mode",
+-        "{ --enable | --disable | --show | { -h | --help } }",
+-        1, 1, hinic3_packet_detect_mode_cmd, NULL);
++    if (hinic3_user_scenario_get() == COM_BD) {  
++        hinic3_command_register("hwoff/packet-detect-mode",
++            "{ --enable | --disable | --show | { -h | --help } }",
++            1, 1, hinic3_packet_detect_mode_cmd, NULL);
++    }
+ }
+diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port.c
+index 52c6887665..e1489cd224 100644
+--- a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port.c
++++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port.c
+@@ -56,7 +56,7 @@ hinic3_port_virtio_queue_show(struct ds *ds, struct port_stats *vf_stats, struct
+ }
+ 
+ static const char*
+-hinic3_get_port_name_by_vport_id(int vport_id)
++hinic3_get_port_name_by_vport_id(uint16_t vport_id)
+ {
+     int ret;
+     uint16_t port_id;
+@@ -82,7 +82,7 @@ hinic3_put_format_dev_flavor(struct ds *ds, struct hinic3_dev_node *iter, const
+     int id;
+     const char* status = NULL;
+     char pci_addr_buf[HWPT_PCI_ADDR_LEN_MAX] = {0};
+-    int vport_id;
++    uint16_t vport_id;
+     const char* port_name = NULL;
+     const char* pci_header = NULL;
+     bool real_pci = false;
+@@ -97,7 +97,7 @@ hinic3_put_format_dev_flavor(struct ds *ds, struct hinic3_dev_node *iter, const
+         hinic3_ds_put_format(ds, HINIC3_UI_LEADING_SIGN_FAILURE "Pci addr buf parse failed.\n");
+         return;
+     }
+-    vport_id = id + FUNCTION_ID_TO_VPORT_ID;
++    vport_id = hinic3_function_id_to_vport_id(id);;
+     status = g_port_status[iter->phy_dev.refcnt].str;
+     port_name = hinic3_get_port_name_by_vport_id(vport_id);
+ 
+diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port.h b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port.h
+index 25e18ffcbc..9275e9ff14 100644
+--- a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port.h
++++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port.h
+@@ -15,16 +15,6 @@
+ #include "hinic3_provider.h"
+ #include "hinic3_ds.h"
+ 
+-#define HINIC3_DFX_GLOABL_ALLOC_MEM_MAX_SIZE  (0x20000)
+-#define HINIC3_CMD_MAX_LENGTH                 2048
+-#define HINIC3_BOND_SLAVE_NUM                 4
+-#define HINIC3_VPORT_TYPE_SHIFT               12
+-#define HINIC3_BOND_TYPE                      3
+-#define HINIC3_BOND_ARG_SLAVE_NAME_LEN        64
+-#define HINIC3_BOND_ARG_SLAVE_PCI_LEN         14
+-#define HINIC3_BOND_SLAVE_NAME_LEN            256
+-#define FUNCTION_ID_TO_VPORT_ID               4096
+-
+ struct port_status {
+     uint8_t refcnt;
+     const char *str;
+diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_bond_slave.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_bond_slave.c
+index 8ff82d3056..f0d3949639 100644
+--- a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_bond_slave.c
++++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_bond_slave.c
+@@ -12,7 +12,7 @@
+ #include "hinic3_ui_string.h"
+ #include "hinic3_log.h"
+ #include "hinic3_vf_port_qos_public.h"
+-#include "hinic3_bond_controller.h"
++#include "hinic3_port_util.h"
+ #include <rte_atomic.h>
+ #include "hinic3_tlv_key.h"
+ #include "hinic3_offload_flow_port.h"
+@@ -20,6 +20,7 @@
+ #include "hinic3_smap.h"
+ #include "hinic3_command.h"
+ #include "hinic3_vf_controller.h"
++#include "hinic3_bond_controller.h"
+ #include "hinic3_dfx_port.h"
+ 
+ static void
+@@ -223,7 +224,7 @@ hinic3_dump_bond_slave_info(struct ds *ds, char *netdev_name, uint32_t netdev_na
+         return -1;
+     }
+ 
+-    if ((port_id >> HINIC3_VPORT_TYPE_SHIFT) != HINIC3_BOND_TYPE) {
++    if (!hinic3_is_bond_by_prefix(port_id)) {
+         hinic3_ds_put_format(ds, "%s%s, please input -h or --help to get help info.\n",
+             HINIC3_UI_LEADING_SIGN_ERROR, HINIC3_UI_BOND_TYPE_ERROR_STRING);
+         return -1;
+diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_flush_dump.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_flush_dump.c
+index cf1b22b197..e6324cb4a0 100644
+--- a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_flush_dump.c
++++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_flush_dump.c
+@@ -3,7 +3,7 @@
+  * Copyright(c) 2024 Huawei Technologies Co., Ltd
+  */
+ 
+-#include "hinic3_dfx_port.h"
++#include "rte_ethdev.h"
+ #include "hinic3_ui_string.h"
+ #include "hinic3_meminfo.h"
+ #include "hinic3_command.h"
+@@ -13,7 +13,7 @@
+ #include "hinic3_vf_port_qos_public.h"
+ #include "hinic3_bond_controller.h"
+ #include "hinic3_agent_cmd_format.h"
+-#include "rte_ethdev.h"
++#include "hinic3_dfx_port.h"
+ 
+ #define HINIC3_LINK_STATUS_STR_LEN     10
+ #define HINIC3_LINK_STATUS_NUM         2
+diff --git a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_upcall_queue.c b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_upcall_queue.c
+index 1b17344a50..0d0291f3e4 100644
+--- a/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_upcall_queue.c
++++ b/drivers/net/hinic3/src/hinic3_cmds/comm/hinic3_dfx_port_upcall_queue.c
+@@ -3,12 +3,12 @@
+  * Copyright(c) 2024 Huawei Technologies Co., Ltd
+  */
+ 
+-#include "hinic3_dfx_port.h"
+ #include "hinic3_ui_string.h"
+ #include "hinic3_ds.h"
+ #include "hinic3_vf_port_qos_public.h"
+ #include "hinic3_vf_controller.h"
+ #include "hinic3_bond_controller.h"
++#include "hinic3_dfx_port.h"
+ 
+ static int
+ hinic3_dump_virtual_upcall_queues_info(struct ds *ds)
+@@ -272,7 +272,7 @@ static const struct hinic3_opt upcall_queue_cmd_opts[] = {
+     {"-h",        REQUIRED_ARGUMENT, 0, HINIC3_HELP_QUEUE_OPT},
+     {"--help",    REQUIRED_ARGUMENT, 0, HINIC3_HELP_QUEUE_OPT},
+     {"-a",        REQUIRED_ARGUMENT, 0, HINIC3_ALL_QUEUE_OPT},
+-    {"-all",     REQUIRED_ARGUMENT, 0, HINIC3_ALL_QUEUE_OPT},
++    {"-all",      REQUIRED_ARGUMENT, 0, HINIC3_ALL_QUEUE_OPT},
+     {"-p",        OPTIONAL_ARGUMENT, 0, HINIC3_PORT_QUEUE_OPT},
+     {"-port",     OPTIONAL_ARGUMENT, 0, HINIC3_PORT_QUEUE_OPT},
+     {"-v",        OPTIONAL_ARGUMENT, 0, HINIC3_VIRTUAL_QUEUE_OPT},
+diff --git a/drivers/net/hinic3/src/hinic3_cmds/server/hinic3_command.c b/drivers/net/hinic3/src/hinic3_cmds/server/hinic3_command.c
+index 336915a993..7f57ddbe7d 100644
+--- a/drivers/net/hinic3/src/hinic3_cmds/server/hinic3_command.c
++++ b/drivers/net/hinic3/src/hinic3_cmds/server/hinic3_command.c
+@@ -47,6 +47,7 @@ struct hinic3_command_mgr {
+ };
+ 
+ struct hinic3_command_mgr g_command_mgr = {0};
++static bool hinic3_command_mgr_init_flag = false;
+ 
+ static void
+ hinic3_list_commands(struct unixctl_conn *conn, int argc HINIC3_UNUSED, const char *argv[] HINIC3_UNUSED, void *aux)
+@@ -187,7 +188,7 @@ hinic3_command_reply_error(struct unixctl_conn *conn, const char *error)
+ static unixctl_cb_func *get_cmd_func(const char *command_str)
+ {
+     char key[HINIC3_COMMAND_STR_MAX_LEN] = {0};
+-    strcpy(key, command_str);
++    strncpy(key, command_str, HINIC3_COMMAND_STR_MAX_LEN - 1);
+ 
+     const struct hinic3_command *command = (const struct hinic3_command *)hinic3_shash_find_data(&g_command_mgr.command_map, key);
+     if (command == NULL)
+@@ -200,7 +201,7 @@ static const struct hinic3_command *
+ get_cmd_command(const char *command_str)
+ {
+     char key[HINIC3_COMMAND_STR_MAX_LEN] = {0};
+-    strcpy(key, command_str);
++    strncpy(key, command_str, HINIC3_COMMAND_STR_MAX_LEN - 1);
+     const struct hinic3_command *command = (const struct hinic3_command *)hinic3_shash_find_data(&g_command_mgr.command_map, key);
+     return command;
+ }
+@@ -635,6 +636,7 @@ void
+ hinic3_command_hmap_init(void)
+ {
+     hinic3_shash_init(&g_command_mgr.command_map);
++    hinic3_command_mgr_init_flag = true;
+ }
+ 
+ static int
+@@ -694,6 +696,8 @@ hinic3_command_mgr_init(void)
+ void
+ hinic3_command_mgr_uninit(void)
+ {
+-    hinic3_shash_destroy_free_data(&g_command_mgr.command_map);
++    if (hinic3_command_mgr_init_flag) {
++        hinic3_shash_destroy_free_data(&g_command_mgr.command_map);
++    }
+     g_command_mgr.thread_exit = HINIC3_THREAD_EXIT_STATUS;
+ }
+diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_driver_public.h b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_driver_public.h
+index 94199476a0..ebb6d586c9 100644
+--- a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_driver_public.h
++++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_driver_public.h
+@@ -107,6 +107,7 @@ struct hw_element {
+     struct hw_flow_smac_element *smac_ele;
+     /* New variable should add here, cannot be added after p_extra */
+     /* private info of hardware flow. */
++    hinic3_u128 policy_id;
+     char p_extra[0];
+ };
+ 
+@@ -148,10 +149,7 @@ typedef int (*hinic3_flow_put_cb_t)(uint64_t ufid, const struct hinic3_nlattr_ob
+ typedef int (*hinic3_flow_age_cb_t)(uint64_t ufid, const struct hinic3_dpif_flow_for_get *flow,
+     const struct hinic3_nlattr_obj *args, size_t args_len);
+ typedef int (*hinic3_flush_done_cb_t)(void);
+-struct hinic3_flow_del_context *hinic3_del_batch_context_alloc(void);
+-void hinic3_del_batch_context_free(struct hinic3_flow_del_context *batch);
+-void hinic3_del_hw_flows_batch(struct hinic3_flow_del_context *batch, struct hw_element *hw_ele);
+-const struct rte_vdev_driver* vpmd_vdev_driver_get(void);
++
+ void hinic3_convert_error_code_init(void);
+ 
+ #ifdef __cplusplus
+diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_flow.c b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_flow.c
+index dd58114921..12d64e07bd 100644
+--- a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_flow.c
++++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_flow.c
+@@ -131,7 +131,7 @@ int hinic3_flow_get_capability(struct hinic3_flow_capability *cap)
+ 
+     if (cap == NULL)
+     {
+-        HINIC3_LOG(WARNING, DRIVER, "hinic3 get capability parameter is NULL!");
++        HINIC3_LOG(WARNING, DRIVER, "The hinic3 get capability parameter is NULL!");
+         return -EINVAL;
+     }
+     ops = hinic3_get_drv_ops();
+@@ -144,7 +144,7 @@ int hinic3_flow_get_capability(struct hinic3_flow_capability *cap)
+ 
+     if (ret != 0)
+     {
+-        HINIC3_LOG(WARNING, DRIVER, "hinic3 get capability parameter failed, error is %d!", ret);
++        HINIC3_LOG(WARNING, DRIVER, "The hinic3 get capability parameter failed, error is %d!", ret);
+         return hinic3_convert_error_code(ret);
+     }
+ 
+@@ -166,7 +166,7 @@ int hinic3_flow_put(const struct hinic3_dpif_flow *put, const struct hinic3_nlat
+     int ret;
+     if (put == NULL || args == NULL)
+     {
+-        HINIC3_LOG(WARNING, DRIVER, "hinic3_flow_put pointer parameter is NULL!");
++        HINIC3_LOG(WARNING, DRIVER, "The hinic3_flow_put pointer parameter is NULL!");
+         return -EINVAL;
+     }
+     ops = hinic3_get_drv_ops();
+@@ -241,7 +241,7 @@ int hinic3_flow_get_by_ufid(uint64_t ufid, struct hinic3_dpif_flow_for_get *get,
+ 
+     if (get == NULL)
+     {
+-        HINIC3_LOG(WARNING, DRIVER, "hinic3_flow_get_by_ufid pointer parameter is NULL!");
++        HINIC3_LOG(WARNING, DRIVER, "The hinic3_flow_get_by_ufid pointer parameter is NULL!");
+         return -EINVAL;
+     }
+     ops = hinic3_get_drv_ops();
+@@ -257,7 +257,7 @@ int hinic3_flow_get_by_ufid(uint64_t ufid, struct hinic3_dpif_flow_for_get *get,
+                                              ops->hovs_flow_mgmt_get_by_ufid(ufid, &hovs_get));
+         if (ret != 0)
+         {
+-            HINIC3_LOG(WARNING, DRIVER, "hinic3 flow get by ufid failed, error is %d!", ret);
++            HINIC3_LOG(WARNING, DRIVER, "The hinic3 flow get by ufid failed, error is %d!", ret);
+             return hinic3_convert_error_code(ret);
+         }
+         get->key_len = hovs_get.key_len;
+@@ -321,7 +321,7 @@ int hinic3_flow_del_batch(const uint32_t table_id, const uint64_t *ufids, struct
+     struct hinic3_drv_ops *ops = NULL;
+     if (ufids == NULL || flows == NULL || *flows == NULL)
+     {
+-        HINIC3_LOG(WARNING, DRIVER, "hinic3_flow_del_batch pointer parameter is NULL!");
++        HINIC3_LOG(WARNING, DRIVER, "The hinic3_flow_del_batch pointer parameter is NULL!");
+         return -EINVAL;
+     }
+ 
+@@ -404,7 +404,7 @@ int hinic3_flow_dump_next(void *state, struct hinic3_dpif_flow_for_get *dump)
+ {
+     if (state == NULL || dump == NULL)
+     {
+-        HINIC3_LOG(WARNING, DRIVER, "hinic3_flow_dump_next pointer parameter is NULL!");
++        HINIC3_LOG(WARNING, DRIVER, "The hinic3_flow_dump_next pointer parameter is NULL!");
+         return -EINVAL;
+     }
+     struct hinic3_drv_ops *ops = NULL;
+@@ -467,7 +467,7 @@ int hinic3_flow_get_maxflows(uint32_t table_id, uint32_t *max_flows)
+     struct hinic3_drv_ops *ops = NULL;
+     if (max_flows == NULL)
+     {
+-        HINIC3_LOG(WARNING, DRIVER, "hinic3_flow_get_maxflows pointer parameter is NULL!");
++        HINIC3_LOG(WARNING, DRIVER, "The hinic3_flow_get_maxflows pointer parameter is NULL!");
+         return -EINVAL;
+     }
+     ops = hinic3_get_drv_ops();
+@@ -522,7 +522,7 @@ int hinic3_flow_get_forward_mode(uint8_t *forward_mode)
+     struct hinic3_drv_ops *ops = NULL;
+     if (forward_mode == NULL)
+     {
+-        HINIC3_LOG(WARNING, DRIVER, "hinic3_flow_get_forward_mode pointer parameter is NULL!");
++        HINIC3_LOG(WARNING, DRIVER, "The hinic3_flow_get_forward_mode pointer parameter is NULL!");
+         return -EINVAL;
+     }
+ 
+@@ -676,7 +676,7 @@ int hinic3_iface_high_priority_upcall_set(const uint16_t port_id, struct hinic3_
+     ret = ops->hovs_port_mgmt_set_upcall_priority(port_id, cfgs->hovs_cfgs, cfgs->cfgs_len, 1);
+     if (ret != 0)
+     {
+-        HINIC3_LOG(ERR, DRIVER, "hinic3 high priority upcall set fail, ret is %d!", ret);
++        HINIC3_LOG(ERR, DRIVER, "The hinic3 high priority upcall set fail, ret is %d!", ret);
+     }
+     return hinic3_convert_error_code(ret);
+ }
+@@ -685,7 +685,7 @@ int hinic3_mega_flow_put(const struct hinic3_dpif_flow *put, uint32_t index, uin
+ {
+     if ((put == NULL) || (ufid == NULL))
+     {
+-        HINIC3_LOG(WARNING, DRIVER, "hinic3_mega_flow_put pointer parameter is NULL!");
++        HINIC3_LOG(WARNING, DRIVER, "The hinic3_mega_flow_put pointer parameter is NULL!");
+         return -EINVAL;
+     }
+ 
+@@ -730,7 +730,7 @@ int hinic3_mega_flow_dump_start(void **state)
+ {
+     if (state == NULL)
+     {
+-        HINIC3_LOG(WARNING, DRIVER, "hinic3_mega_flow_dump_start pointer parameter is NULL!");
++        HINIC3_LOG(WARNING, DRIVER, "The hinic3_mega_flow_dump_start pointer parameter is NULL!");
+         return -EINVAL;
+     }
+ 
+@@ -747,7 +747,7 @@ int hinic3_mega_flow_dump_next(void *state, struct hinic3_dpif_flow_for_get *dum
+ {
+     if (state == NULL || dump == NULL)
+     {
+-        HINIC3_LOG(WARNING, DRIVER, "hinic3_mega_flow_dump_next pointer parameter is NULL!");
++        HINIC3_LOG(WARNING, DRIVER, "The hinic3_mega_flow_dump_next pointer parameter is NULL!");
+         return -EINVAL;
+     }
+ 
+@@ -779,6 +779,10 @@ int hinic3_mega_flow_dump_done(void *state)
+     HINIC3_FUNC_PTR_OR_ERR_RET(ops->hovs_mega_flow_mgmt_dump_done, HINIC3_DRV_FUNC_NO_PTR);
+     HINIC3_LOG_HINIC_FLOW_API_LOG_NO_LOG(ret, HINIC3_FLOW_AGENT_MEGA_DUMP_DONE,
+                                          ops->hovs_mega_flow_mgmt_dump_done(state));
++    if (ret != 0)
++    {
++        HINIC3_LOG(ERR, DRIVER, "The hinic3_mega_flow_dump_done fail, ret is %d!", ret);
++    }
+     return hinic3_convert_error_code(ret);
+ }
+ 
+@@ -786,7 +790,7 @@ int hinic3_statistics_mega_flow_get_by_ufid(const uint64_t ufid, struct hinic3_f
+ {
+     if (stats == NULL)
+     {
+-        HINIC3_LOG(WARNING, DRIVER, "hinic3_statistics_mega_flow_get_by_ufid pointer parameter is NULL!");
++        HINIC3_LOG(WARNING, DRIVER, "The hinic3_statistics_mega_flow_get_by_ufid pointer parameter is NULL!");
+         return -EINVAL;
+     }
+ 
+@@ -817,7 +821,7 @@ int hinic3_flow_modify(const struct hinic3_dpif_flow *put, const struct hinic3_n
+ 
+     if (put == NULL || args == NULL)
+     {
+-        HINIC3_LOG(WARNING, DRIVER, "hinic3_flow_put pointer parameter is NULL!");
++        HINIC3_LOG(WARNING, DRIVER, "The hinic3 flow modify pointer parameter is NULL!");
+         return -EINVAL;
+     }
+ 
+@@ -844,7 +848,7 @@ int hinic3_flow_get_block_table_size(uint32_t *block_num)
+ 
+     if (block_num == NULL)
+     {
+-        HINIC3_LOG(WARNING, DRIVER, "hinic3_flow_get_block_table_size block_num pointer parameter is NULL!");
++        HINIC3_LOG(WARNING, DRIVER, "The hinic3_flow_get_block_table_size block_num pointer parameter is NULL!");
+         return -EINVAL;
+     }
+ 
+@@ -861,7 +865,7 @@ void hinic3_flow_set_block_version(uint32_t block_num, uint16_t block_id[], uint
+ 
+     if (block_id == NULL || block_version == NULL || result == NULL)
+     {
+-        HINIC3_LOG(WARNING, DRIVER, "hinic3_flow_set_block_version pointer parameter is NULL!");
++        HINIC3_LOG(WARNING, DRIVER, "The hinic3_flow_set_block_version pointer parameter is NULL!");
+         return;
+     }
+ 
+@@ -886,7 +890,7 @@ int hinic3_flow_get_block_version(uint32_t block_num, uint16_t block_id[], uint1
+ 
+     if (block_id == NULL || block_version == NULL)
+     {
+-        HINIC3_LOG(WARNING, DRIVER, "hinic3_flow_get_block_version input pointer parameter is NULL!");
++        HINIC3_LOG(WARNING, DRIVER, "The hinic3_flow_get_block_version input pointer parameter is NULL!");
+         return -EINVAL;
+     }
+ 
+diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global.c b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global.c
+index 625329feef..8b0433c62a 100644
+--- a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global.c
++++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global.c
+@@ -890,7 +890,7 @@ int hinic3_global_cfg_set(const struct smap *args, struct smap *unset_args)
+ 
+     if (args == NULL || unset_args == NULL)
+     {
+-        HINIC3_LOG(WARNING, DRIVER, "Pointer parameter is NULL!");
++        HINIC3_LOG(WARNING, DRIVER, "global cfg set, Pointer parameter is NULL!");
+         return -1;
+     }
+ 
+@@ -916,7 +916,7 @@ int hinic3_global_cfg_set(const struct smap *args, struct smap *unset_args)
+     ret = global_cfg_smap_to_nlattr(args, &set_args_nla);
+     if (ret != 0)
+     {
+-        HINIC3_LOG(ERR, DRIVER, "Call global_cfg_smap_to_nlattr error!");
++        HINIC3_LOG(ERR, DRIVER, "global cfg set, Call global_cfg_smap_to_nlattr error!");
+         goto err;
+     }
+ 
+@@ -961,7 +961,7 @@ int hinic3_global_cfg_get(struct smap *args)
+     buff = (void *)hinic3_calloc(1, HOVS_MAX_TLV_BUF_LEN, HINIC3_DRIVER_ADAPTER);
+     if (buff == NULL)
+     {
+-        HINIC3_LOG(ERR, DRIVER, "Alloc memory error!");
++        HINIC3_LOG(ERR, DRIVER, "global cfg get, Alloc memory error!");
+         return -1;
+     }
+ 
+@@ -971,7 +971,7 @@ int hinic3_global_cfg_get(struct smap *args)
+     ret = global_cfg_smap_to_nlattr(args, &args_nla);
+     if (ret != 0)
+     {
+-        HINIC3_LOG(ERR, DRIVER, "Call global_cfg_smap_to_nlattr error!");
++        HINIC3_LOG(ERR, DRIVER, "global cfg get, Call global_cfg_smap_to_nlattr error!");
+         goto err;
+     }
+ 
+@@ -1001,7 +1001,7 @@ int hinic3_global_statistics_get(struct hinic3_global_stats *stats)
+ 
+     if (stats == NULL)
+     {
+-        HINIC3_LOG(WARNING, DRIVER, "Pointer parameter is NULL!");
++        HINIC3_LOG(WARNING, DRIVER, "global statistics get, Pointer parameter is NULL!");
+         return -1;
+     }
+ 
+@@ -1641,6 +1641,11 @@ int hinic3_adapt_memzone_free(void *addr)
+     return hinic3_rte_memzone_free((struct rte_memzone *)addr);
+ }
+ 
++const struct rte_memzone *hinic3_memzone_lookup(const char *name)
++{
++    return rte_memzone_lookup(name);
++}
++
+ struct hovs_mbuf *hinic3_adapt_mbuf_alloc(void *mp)
+ {
+     struct rte_mbuf *mbuf = NULL;
+diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global.h b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global.h
+index c0238f7986..28507c47ec 100644
+--- a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global.h
++++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_global.h
+@@ -140,6 +140,7 @@ const void *hinic3_adapt_memzone_reserve(const char *name, size_t len, int socke
+ const void *hinic3_adapt_memzone_reserve_aligned(const char *name, size_t len, int socket_id, unsigned flags,
+     unsigned align);
+ int hinic3_adapt_memzone_free(void *addr);
++const struct rte_memzone *hinic3_memzone_lookup(const char *name);
+ int hinic3_adapt_mbuf_alloc_bulk(void *mp, struct hovs_mbuf **mbufs, uint32_t count);
+ int hinic3_global_set_vxlan_vtep(const struct hinic3_vtep_ip_set_args *ops);
+ hinic3_global_api hinic3_global_get_api_index(const char *api_name);
+diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_port_util.c b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_port_util.c
+index 70fb887c21..58cda60a8a 100644
+--- a/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_port_util.c
++++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hinic3_iface_port_util.c
+@@ -44,14 +44,14 @@ static const char *g_port_smap_key[HINIC3_PORT_ARG_TYPE_MAX] = {
+     HINIC3_PORT_BLOCK_START,
+     HINIC3_PORT_BLOCK_SIZE,
+     HINIC3_PORT_UPCALL_QUEUE_NUM,
+-    NULL,
++    HINIC3_PORT_UPCALL_REUSE,
+     NULL,
+     NULL,
+     NULL,
+     NULL,
+     NULL,
+     HINIC3_PORT_VIRTIO_QUEUE_DEPTH,
+-    NULL,
++    HINIC3_PORT_NO_DRIVER_CHECK,
+     HINIC3_PORT_FUNCTION_ID,
+ };
+ 
+@@ -76,6 +76,7 @@ static const char *g_bond_smap_key[HINIC3_BOND_ARG_TYPE_MAX] = {
+     NULL,
+     NULL, /* slave cfg str end */
+     HINIC3_BOND_LACP_RATE,
++    HINIC3_BOND_ARG_SLAVE_PCI_STR,
+ };
+ 
+ static inline int port_smap_key_to_nla_type(char *smap_key)
+@@ -136,7 +137,7 @@ static int smap_to_nlattr_u32(struct hinic3_nlattr *nla, char *value, int type)
+ static int smap_to_nlattr_unspec(struct hinic3_nlattr *nla, char *value, int type)
+ {
+     uint64_t val;
+-    int rc = sscanf(value, "%"PRIu64, &val);
++    int rc = sscanf(value, "%" PRIu64 "", &val);
+     if (rc != 1) {
+         HINIC3_LOG(ERR, DRIVER, "Failed to sscanf %d, err is %d!", type, rc);
+         return -1;
+@@ -158,6 +159,9 @@ static int smap_to_nlattr_unspec(struct hinic3_nlattr *nla, char *value, int typ
+ 
+ static int port_smap_to_nlattr(struct hinic3_nlattr *nla, char *key, char *value)
+ {
++    if (value == NULL) {
++        return -1;
++    }
+     enum hinic3_port_arg_type nla_type = (enum hinic3_port_arg_type)port_smap_key_to_nla_type(key);
+     if (nla_type == HINIC3_PORT_ARG_TYPE_MAX) {
+         return 0;
+@@ -240,7 +244,7 @@ static inline int nla_to_smap_u64(struct smap *unset_args, const hinic3_nlattr_i
+ {
+     char *value = NULL;
+     char args_buf[MAX_ARGS_SIZE] = { 0 };
+-    snprintf(args_buf, sizeof(args_buf) - 1, "%"PRIu64, hinic3_nlattr_get_itr_u64(nla));
++    snprintf(args_buf, sizeof(args_buf) - 1, "%" PRIu64 "", hinic3_nlattr_get_itr_u64(nla));
+     value = args_buf;
+     hinic3_smap_add(unset_args, key, value, HINIC3_DRIVER_ADAPTER);
+     return 0;
+diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hiovs/hiovs_acl_api.h b/drivers/net/hinic3/src/hinic3_driver_adapter/hiovs/hiovs_acl_api.h
+index a50792fabf..ad81a66ad8 100644
+--- a/drivers/net/hinic3/src/hinic3_driver_adapter/hiovs/hiovs_acl_api.h
++++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hiovs/hiovs_acl_api.h
+@@ -8,7 +8,7 @@ enum hinic3_acl_act_type {
+     HINIC3_ACL_ACT_UPCALL,
+     HINIC3_ACL_ACT_UPCALL_TAG_DATA,
+     HINIC3_ACL_ACT_UPCALL_TAG_INDEX,
+-    HINIC3_ACL_ACT_INDIRECT_HANDLE,
++    HINIC3_ACL_ACT_INDIRECT_COUNTER,
+     HINIC3_ACL_ACT_SET_VXLAN_RSVD0,
+     HINIC3_ACL_ACT_COUNT,
+     HINIC3_ACL_ACT_MIRROR_TX,
+diff --git a/drivers/net/hinic3/src/hinic3_driver_adapter/hiovs/hiovs_flexda_api.h b/drivers/net/hinic3/src/hinic3_driver_adapter/hiovs/hiovs_flexda_api.h
+index 4be4cf67b3..d2f614fb6d 100644
+--- a/drivers/net/hinic3/src/hinic3_driver_adapter/hiovs/hiovs_flexda_api.h
++++ b/drivers/net/hinic3/src/hinic3_driver_adapter/hiovs/hiovs_flexda_api.h
+@@ -9,11 +9,9 @@
+ 
+ #include <stdint.h>
+ #include <stddef.h>
+-#include "securec.h"
+ #include "rte_flow.h"
+-#include "hwoff_agent.h"
+-#include "hwoff_flow.h"
+-#include "hwoff_flow_agent_enum.h"
++#include "hinic3_agent.h"
++#include "hinic3_flow_agent_enum.h"
+ #include "hiovs_api.h"
+ 
+ #ifdef __cplusplus
+diff --git a/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_flow_dump_public.h b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_flow_dump_public.h
+index e54f3e0155..8dc2f6d460 100644
+--- a/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_flow_dump_public.h
++++ b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_flow_dump_public.h
+@@ -15,6 +15,14 @@
+ 
+ typedef struct hinic3_flow_act_vxlan_gpe_header hinic3_act_vxlan_header;
+ 
++enum acl_group_e {
++    ACL_INGRESS_GROUP_0,
++    ACL_INGRESS_GROUP_1,
++    ACL_EGRESS_GROUP_0,
++    ACL_EGRESS_GROUP_1,
++    ACL_GROUP_NUM
++};
++
+ struct hinic3_dump_flow_info {
+     struct rte_flow_item items[HINIC3_FLOW_DUMP_MAX_PATTERN];
+     unsigned int useful_item_index;
+@@ -39,7 +47,9 @@ enum hinic3_dump_context_status {
+ struct hinic3_flow_dump_context {
+     union {
+         void *hiovs_state;
++        void *acl_states[ACL_GROUP_NUM];
+     };
++    int acl_start_ret[ACL_GROUP_NUM];
+     uint32_t type;
+     struct hinic3_dump_flow_mem context_mem;
+     pthread_t thread_id;
+diff --git a/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_offload_action_public.c b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_offload_action_public.c
+index 88ddda82b3..a674fb41a6 100644
+--- a/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_offload_action_public.c
++++ b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_offload_action_public.c
+@@ -218,7 +218,7 @@ static int hinic3_offload_set_tag_act(struct hinic3_nlattr *hinic3_actions, cons
+     }
+ 
+     struct hinic3_dp_extend_info *extend_info = hinic3_get_offload_extend_info();
+-    if (extend_info == NULL) {
++    if (extend_info == NULL || extend_info->hw_offload == NULL) {
+         return -1;
+     }
+ 
+diff --git a/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_offload_flow_public.h b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_offload_flow_public.h
+index d47c9f64d6..dbab0958e5 100644
+--- a/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_offload_flow_public.h
++++ b/drivers/net/hinic3/src/hinic3_flows/comm/hinic3_offload_flow_public.h
+@@ -24,7 +24,8 @@
+ #define HINIC3_MIRROR_IP_LEN 16
+ #define HINIC3_FLOW_PORT_ID 0
+ /** dpdk 23.11 */
+-#define HINIC3_FLOW_ITEM_TYPE_SW_UFID (68 + 3)
++#define HINIC3_FLOW_ITEM_TYPE_SW_UFID (300)
++#define HINIC3_FLOW_ITEM_TYPE_POLICY_ID 199
+ #define HINIC3_FLOW_ITEMS_NUM 15
+ 
+ #define HINIC3_MAC_LEN 3
+@@ -178,6 +179,7 @@ struct hinic3_flow_callback_info {
+     clock_t start_t;
+     hinic3_u128 *mega_ufid_list;
+     hinic3_u128 mega_ufid;
++    hinic3_u128 policy_id;
+     struct hinic3_conntrack_full_key ct_key;
+     struct hinic3_conntrack_full_key no_ct_key;
+     struct conn_key ovs_key;
+diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flexda/hinic3_flexda_flow_public.c b/drivers/net/hinic3/src/hinic3_flows/hinic3_flexda/hinic3_flexda_flow_public.c
+index 65c7373b0d..858e10c89b 100644
+--- a/drivers/net/hinic3/src/hinic3_flows/hinic3_flexda/hinic3_flexda_flow_public.c
++++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flexda/hinic3_flexda_flow_public.c
+@@ -421,7 +421,7 @@ bool hinic3_flexda_flow_is_in_main_table(uint32_t table_id)
+     return false;
+ }
+ 
+-uint32_t hinic3_flexda_flow_get_table_flow_num(uint32_t table_id)
++int hinic3_flexda_flow_get_table_flow_num(uint32_t table_id, uint32_t *table_flow_num)
+ {
+     uint32_t index = 0;
+     if (hinic3_flexda_flow_check_table_id_valid(table_id) != 0) {
+@@ -435,7 +435,9 @@ uint32_t hinic3_flexda_flow_get_table_flow_num(uint32_t table_id)
+         return -1;
+     }
+ 
+-    return g_flexda_flow_table_arr[index].flow_num;
++    *table_flow_num = g_flexda_flow_table_arr[index].flow_num;
++    
++    return 0;
+ }
+ 
+ uint32_t hinic3_flexda_flow_get_total_flow_num(void)
+diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flexda/hinic3_flexda_flow_public.h b/drivers/net/hinic3/src/hinic3_flows/hinic3_flexda/hinic3_flexda_flow_public.h
+index 85d0f8a70c..b6e7afe57b 100644
+--- a/drivers/net/hinic3/src/hinic3_flows/hinic3_flexda/hinic3_flexda_flow_public.h
++++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flexda/hinic3_flexda_flow_public.h
+@@ -119,7 +119,7 @@ static inline int hinic3_flexda_flow_check_dump_format_type_valid(uint16_t dump_
+ int hinic3_flexda_flow_parse_config_info(hovs_flexda_config_info_t *hovs_flexda_config);
+ const char *hinic3_flexda_flow_get_hydra_name(hinic3_hydra_type hydra_type, uint32_t value);
+ bool hinic3_flexda_flow_is_in_main_table(uint32_t table_id);
+-uint32_t hinic3_flexda_flow_get_table_flow_num(uint32_t table_id);
++int hinic3_flexda_flow_get_table_flow_num(uint32_t table_id, uint32_t *table_flow_num);
+ int hinic3_flexda_flow_get_table_type(uint32_t table_id);
+ uint32_t hinic3_flexda_flow_get_total_flow_num(void);
+ int hinic3_flexda_flow_get_table_num(void);
+diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_delete/hinic3_age_delete_flow.c b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_delete/hinic3_age_delete_flow.c
+index e2ca1ab513..64b6fb0566 100644
+--- a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_delete/hinic3_age_delete_flow.c
++++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_delete/hinic3_age_delete_flow.c
+@@ -17,7 +17,7 @@
+ #include "hinic3_bond_controller.h"
+ #include "hinic3_vf_controller.h"
+ #include "hinic3_offload_flow_port.h"
+-#include "hinic3_bond_controller.h"
++#include "hinic3_port_util.h"
+ #include "hinic3_mtr.h"
+ #include "hinic3_flow_qos.h"
+ #include "hinic3_offload_flow.h"
+diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_format/hinic3_rte_flow_format.c b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_format/hinic3_rte_flow_format.c
+index 872cd32b8b..17409d0b09 100644
+--- a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_format/hinic3_rte_flow_format.c
++++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_format/hinic3_rte_flow_format.c
+@@ -8,6 +8,7 @@
+ #include "hinic3_log.h"
+ #include "hinic3_parse_agent_config.h"
+ #include "hinic3_agent_cmd_format.h"
++#include "hinic3_agent_cmd_format_flexda.h"
+ #include "hinic3_flow_format.h"
+ #include "hinic3_mega_dump_format.h"
+ #include "hinic3_offload_flow.h"
+@@ -57,26 +58,6 @@ hinic3_process_fullkey_vlan(const struct hinic3_conntrack_key *key, struct hinic
+     }
+ }
+ 
+-static void
+-hinic3_process_fullkey_outer_ipv4(const struct hinic3_conntrack_key *key, struct hinic3_nlattr *values)
+-{
+-    if (hinic3_card_mod_get() == PROG_MODE) {
+-
+-    } else {
+-
+-    }
+-}
+-
+-static void
+-hinic3_process_fullkey_outer_ipv6(const struct hinic3_conntrack_key *key, struct hinic3_nlattr *values)
+-{
+-    if (hinic3_card_mod_get() == PROG_MODE) {
+-        
+-    } else {
+-       
+-    }
+-}
+-
+ static void
+ hinic3_process_fullkey_ipv4(const struct hinic3_conntrack_key *key, struct hinic3_nlattr *values)
+ {
+@@ -110,23 +91,15 @@ hinic3_process_fullkey_ipv6(const struct hinic3_conntrack_key *key, struct hinic
+ }
+ 
+ static void
+-hinic3_process_fullkey_gre(const struct hinic3_conntrack_key *key, struct hinic3_nlattr *values)
++hinic3_process_fullkey_gre(const struct hinic3_conntrack_key *key HINIC3_UNUSED, struct hinic3_nlattr *values HINIC3_UNUSED)
+ {
+-    if (hinic3_card_mod_get() == PROG_MODE) {
+-        
+-    } else {
+-
+-    }
++    return;
+ }
+ 
+ static void
+-hinic3_process_fullkey_gre_key(const struct hinic3_conntrack_key *key, struct hinic3_nlattr *values)
++hinic3_process_fullkey_gre_key(const struct hinic3_conntrack_key *key HINIC3_UNUSED, struct hinic3_nlattr *values HINIC3_UNUSED)
+ {
+-    if (hinic3_card_mod_get() == PROG_MODE) {
+-    
+-    } else {
+-
+-    }
++    return;
+ }
+ 
+ static void
+@@ -179,13 +152,9 @@ hinic3_process_fullkey_port(const struct hinic3_conntrack_key *key, struct hinic
+ }
+ 
+ static void
+-hinic3_process_fullkey_raw_protocol(const struct hinic3_conntrack_key *key, struct hinic3_nlattr *values)
++hinic3_process_fullkey_raw_protocol(const struct hinic3_conntrack_key *key HINIC3_UNUSED, struct hinic3_nlattr *values HINIC3_UNUSED)
+ {
+-    if (hinic3_card_mod_get() == PROG_MODE) {
+-
+-    } else {
+-
+-    }
++    return;
+ }
+ 
+ static void
+@@ -222,6 +191,7 @@ hinic3_process_fullkey_icmp6(const struct hinic3_conntrack_key *key, struct hini
+         uint16_t icmp_id = tuple->port_dst;
+         hinic3_nlattr_put_u8(values, HINIC3_FLOW_KEY_DEF_ICMP6_TYPE, icmp_type);
+         hinic3_nlattr_put_u8(values, HINIC3_FLOW_KEY_DEF_ICMP6_CODE, icmp_code);
++        hinic3_nlattr_put_u16(values, HINIC3_FLOW_KEY_DEF_ICMP_IDENT, icmp_id);
+     } else {
+         if (key->meta.tcp_udp_flag == HINIC3_CT_DEFAULT_FLAG) {
+             hinic3_nlattr_put_u8(values, HINIC3_FLOW_KEY_PROTOCOL, raw_ip->protocol);
+@@ -243,8 +213,8 @@ static struct hinic3_format_fullkey_callback_info callback_infos[] = {
+     [HINIC3_KEY_FLAG_TYPE_ETH] = {hinic3_process_fullkey_eth, "eth"},
+     [HINIC3_KEY_FLAG_TYPE_VXLAN] = {hinic3_process_fullkey_vxlan, "vxlan"},
+     [HINIC3_KEY_FLAG_TYPE_VLAN] = {hinic3_process_fullkey_vlan, "vlan"},
+-    [HINIC3_KEY_FLAG_TYPE_OUTER_IPV4] = {hinic3_process_fullkey_outer_ipv4, "outer ipv4"},
+-    [HINIC3_KEY_FLAG_TYPE_OUTER_IPV6] = {hinic3_process_fullkey_outer_ipv6, "outer ipv6"},
++    [HINIC3_KEY_FLAG_TYPE_OUTER_IPV4] = {hinic3_process_fullkey_ipv4, "outer ipv4"},
++    [HINIC3_KEY_FLAG_TYPE_OUTER_IPV6] = {hinic3_process_fullkey_ipv6, "outer ipv6"},
+     [HINIC3_KEY_FLAG_TYPE_IPV4] = {hinic3_process_fullkey_ipv4, "ipv4"},
+     [HINIC3_KEY_FLAG_TYPE_IPV6] = {hinic3_process_fullkey_ipv6, "ipv6"},
+     [HINIC3_KEY_FLAG_TYPE_GRE] = {hinic3_process_fullkey_gre, "gre"},
+@@ -321,7 +291,6 @@ hinic3_format_conntrack_fullkey(const struct hinic3_conntrack_full_key *fullkey,
+     else
+         hinic3_flow_key_format_output(&key, ds);
+     hinic3_ds_put_format(ds, " END ");
+-    return 0;
+ }
+ 
+ void
+@@ -336,7 +305,7 @@ hinic3_format_rte_flow(const struct rte_flow *flow, struct ds *ds)
+     hinic3_ds_put_format(ds, "%s", HINIC3_UI_FLOW_KEY_STRING);
+     hinic3_format_conntrack_fullkey(key, ds);
+     if (IS_FLEXDA_FUZZY_TABLE(table_id)) {
+-        struct fuzzy_flow* fuzzy_flow = (struct fuzzy_flow*)flow;
++        const struct fuzzy_flow* fuzzy_flow = (const struct fuzzy_flow*)flow;
+         const struct hinic3_conntrack_full_key *mask = &fuzzy_flow->mask;
+         const struct hinic3_conntrack_full_key *raw = &fuzzy_flow->raw_key;
+         hinic3_ds_put_format(ds, "%s", HINIC3_UI_FLOW_MASK_STRING);
+diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_offload/hinic3_offload_action.c b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_offload/hinic3_offload_action.c
+index 3411807cd6..bd19112d80 100644
+--- a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_offload/hinic3_offload_action.c
++++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_offload/hinic3_offload_action.c
+@@ -30,6 +30,9 @@ static inline int hinic3_offload_parse_vlan_act(struct hinic3_offload_action *of
+     const struct rte_flow_action_of_set_vlan_pcp *rte_vlan_pcp,
+     const struct rte_flow_action_of_set_vlan_vid *rte_vlan_vid)
+ {  
++    if (rte_vlan_pcp == NULL || rte_vlan_vid == NULL) {
++        return -1;
++    }
+     uint16_t vlan_tci = 0;
+     uint16_t vlan_id = 0;
+     uint16_t vlan_pcp = 0;
+@@ -191,14 +194,17 @@ static int hinic3_add_represented_port_id_action(const struct rte_flow_action *a
+ 
+     const struct rte_flow_action_ethdev *output_port = NULL;
+     uint32_t output_port_id;
+-    output_port = (struct rte_flow_action_ethdev *)act->conf;
++    output_port = (const struct rte_flow_action_ethdev *)act->conf;
+     output_port_id = hinic3_process_represent_port_id(output_port->port_id);
+     if (output_port_id > UINT16_MAX) {
+         HINIC3_LOG(ERR, FLOW, "port_id exceeds the maximum range of driver.");
+         return -1;
+     }
+-    hinic3_nlattr_put_u16(&offload_action->act_nla, HINIC3_FLOW_ACT_DPDK_PORT_ID, htons((uint16_t)output_port_id));
+-        offload_action->has_output = true;
++    if (hinic3_card_mod_get() == PROG_MODE)
++        hinic3_nlattr_put_u16(&offload_action->act_nla, HINIC3_FLOW_ACT_DPDK_PORT_ID, htons((uint16_t)output_port_id));
++    else
++        hinic3_nlattr_put_u16(&offload_action->act_nla, HINIC3_FLOW_ACT_OUTPUT, htons((uint16_t)output_port_id));
++    offload_action->has_output = true;
+     return 0;
+ }
+ 
+diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_offload/hinic3_offload_flow.c b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_offload/hinic3_offload_flow.c
+index dc1ebc93f1..e49703217e 100644
+--- a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_offload/hinic3_offload_flow.c
++++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_offload/hinic3_offload_flow.c
+@@ -607,17 +607,14 @@ static void hinic3_parse_eth_mask(const struct rte_flow_item *item, struct hinic
+ 
+ static int hinic3_parse_hydra_mask(const struct rte_flow_item *item, struct hinic3_conntrack_full_key *mask)
+ {
+-    struct hydra_flow_item *hydra_key_new = NULL;
+-    struct hydra_flow_item *hydra_mask_new = NULL;
+-    struct hydra_flow_item *hydra_masked_key = NULL;
++    const struct hydra_flow_item *hydra_mask_new = NULL;
+     int ret = 0;
+     /* mask为空指针则报错返回 */
+     if (item->mask == NULL) {
+         HINIC3_LOG(ERR, FLOW, "hwoffload fuzzy flow error, hydra mask is null");
+         return -1;
+     }
+-    hydra_mask_new = (struct hydra_flow_item *)item->mask;
+-    hydra_key_new = (struct hydra_flow_item *)item->spec;  
++    hydra_mask_new = (const struct hydra_flow_item *)item->mask; 
+ 
+     /* 如果item_type非法，则不做处理 */
+     if (!hinic3_flexda_flow_key_is_in_table(hydra_mask_new->item_type)) {
+@@ -625,24 +622,6 @@ static int hinic3_parse_hydra_mask(const struct rte_flow_item *item, struct hini
+         return -1;
+     }
+ 
+-    hydra_masked_key = (struct hydra_flow_item *)hinic3_malloc(sizeof(struct hydra_flow_item), HIOVS_MEM);
+-    if (hydra_masked_key == NULL) {
+-        HINIC3_LOG(ERR, FLOW, "hwoffload flow error, hydra masked key malloc failed");
+-        return -1;
+-    }
+-    hydra_masked_key->item_data_size = hydra_key_new->item_data_size;
+-    hydra_masked_key->item_type = hydra_key_new->item_type;
+-    hydra_masked_key->item_data = (void *)hinic3_malloc(hydra_key_new->item_data_size, HIOVS_MEM);
+-    if (hydra_masked_key->item_data == NULL) {
+-        hinic3_free(hydra_masked_key);
+-        HINIC3_LOG(ERR, FLOW, "hwoffload flow error, hydra masked key data malloc failed");
+-        return -1;
+-    }
+-
+-    for (int32_t i = 0; i < hydra_key_new->item_data_size; i++) { 
+-        ((uint8_t *)hydra_masked_key->item_data)[i] = ((uint8_t *)hydra_mask_new->item_data)[i] & ((uint8_t *)hydra_key_new->item_data)[i]; 
+-    } 
+-
+     ret = hinic3_insert_hydra_key(hydra_mask_new, &(mask->key));
+     return ret;
+ }
+@@ -1144,6 +1123,9 @@ static void hinic3_ovs_offload_args_put(const struct rte_flow_item *item, struct
+         if (item[i].type == HINIC3_FLOW_ITEM_TYPE_SW_UFID) {
+             hinic3_nlattr_put_unspec(nla, HINIC3_FLOW_ARG_SW_UFID, item[i].spec, sizeof(hinic3_u128));
+         }
++        if (item[i].type == HINIC3_FLOW_ITEM_TYPE_POLICY_ID) {
++            hinic3_nlattr_put_unspec(nla, HINIC3_FLOW_ARG_POLICY_ID, item[i].spec, sizeof(hinic3_u128));
++        }
+     }
+ }
+ 
+diff --git a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_query/hinic3_key_query.c b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_query/hinic3_key_query.c
+index e1c2d81ccb..97ecf708bc 100644
+--- a/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_query/hinic3_key_query.c
++++ b/drivers/net/hinic3/src/hinic3_flows/hinic3_flow_query/hinic3_key_query.c
+@@ -741,7 +741,7 @@ static void hinic3_query_pattern_free(struct rte_flow_item *pattern)
+ {
+     int i = 0;
+     for (i = 0; i < HINIC3_INPUT_ITEM_MAX_NUM; i++) {
+-        if (pattern[i].type != RTE_FLOW_ITEM_TYPE_END && pattern[i].spec == NULL) {
++        if (pattern[i].type != RTE_FLOW_ITEM_TYPE_END && pattern[i].spec != NULL) {
+                 hinic3_free((void*)(uintptr_t)pattern[i].spec);
+                 pattern[i].spec = NULL;
+         }
+diff --git a/drivers/net/hinic3/src/hinic3_init/hinic3_flow_agent.c b/drivers/net/hinic3/src/hinic3_init/hinic3_flow_agent.c
+index bec37e549e..90cd784de3 100644
+--- a/drivers/net/hinic3/src/hinic3_init/hinic3_flow_agent.c
++++ b/drivers/net/hinic3/src/hinic3_init/hinic3_flow_agent.c
+@@ -96,7 +96,7 @@ static int hinic3_get_thread_core_from_env(enum hinic3_thread_type type, uint32_
+         return -1;
+     }
+ 
+-    strcpy(core_values, env_value);
++    strncpy(core_values, env_value, HINIC3_MAX_CORE_LENGTH - 1);
+ 
+     core_value = strtok_r(core_values, delim, &saveptr);
+     while (core_value != NULL) {
+diff --git a/drivers/net/hinic3/src/hinic3_init/hinic3_init_arg.c b/drivers/net/hinic3/src/hinic3_init/hinic3_init_arg.c
+index d4e400a7ad..2942a92c14 100644
+--- a/drivers/net/hinic3/src/hinic3_init/hinic3_init_arg.c
++++ b/drivers/net/hinic3/src/hinic3_init/hinic3_init_arg.c
+@@ -329,7 +329,7 @@ struct hinic3_init_arg init_arg_combd_standard_dpu_virt = {
+     .support_hardware_flow_age = true,
+     .virtio_queue_depth = 1024,
+     .support_vlan_tci = true,
+-    .support_payload_capture = false,
++    .support_payload_capture = true,
+ };
+ 
+ struct hinic3_init_arg init_arg_combd_standard_dpu_metal = {
+@@ -370,7 +370,7 @@ struct hinic3_init_arg init_arg_combd_standard_dpu_metal = {
+     .support_hardware_flow_age = true,
+     .virtio_queue_depth = 1024,
+     .support_vlan_tci = true,
+-    .support_payload_capture = false,
++    .support_payload_capture = true,
+ };
+ 
+  
+@@ -396,7 +396,7 @@ struct hinic3_init_arg init_arg_openovs_prog_dpu_virt = {
+     .status_packet_upcall = DEFAULT_NOT_PUT,
+     .support_virtio_queue = 2061,
+     .max_flow_num_limit = 32,
+-    .max_queue_num_limit = 64,
++    .max_queue_num_limit = 32,
+     .support_flow_qos = false,
+     .support_multi_qos = false,
+     .query_bdf_type = QUERY_BDF_TYPE_REAL,
+@@ -431,7 +431,7 @@ struct hinic3_init_arg init_arg_openovs_prog_dpu_metal = {
+     .status_packet_upcall = SELECT_PUT,
+     .support_virtio_queue = 4096,
+     .max_flow_num_limit = 4,
+-    .max_queue_num_limit = 64,
++    .max_queue_num_limit = 32,
+     .query_bdf_type = QUERY_BDF_TYPE_FAKE,
+     .support_port_hot_plug = false,
+     .support_vf_port = false,
+diff --git a/drivers/net/hinic3/src/hinic3_init/hinic3_parse_agent_config.c b/drivers/net/hinic3/src/hinic3_init/hinic3_parse_agent_config.c
+index 9a0923b15f..10acfe8bf9 100644
+--- a/drivers/net/hinic3/src/hinic3_init/hinic3_parse_agent_config.c
++++ b/drivers/net/hinic3/src/hinic3_init/hinic3_parse_agent_config.c
+@@ -12,8 +12,9 @@
+ #include "hinic3_file_util.h"
+ #include "hinic3_iface_global.h"
+ #include "hinic3_capture_utils.h"
+-#include "hinic3_parse_agent_config.h"
+ #include "hinic3_init_arg.h"
++#include "hinic3_queue.h"
++#include "hinic3_parse_agent_config.h"
+ 
+ #define QOS_SECTION "hwoff_QoS"
+ #define AGENT_SECTION "hwoff_agent"
+@@ -279,11 +280,11 @@ static int hinic3_split_cpu_mask(const char *cpu_mask_type, uint32_t *cpu_mask_n
+     int index = 0;
+     uint32_t config_num;
+ 
+-    if (strlen(cpu_mask_type) > sizeof(core_values)) {
++    if (strlen(cpu_mask_type) >= sizeof(core_values)) {
+         HINIC3_LOG(ERR, AGENT, "cpu_mask_type is too long.");
+         return -1;
+     }
+-    strcpy(core_values, cpu_mask_type);
++    strncpy(core_values, cpu_mask_type, HINIC3F_MAX_CPU_MASK_LENGTH - 1);
+ 
+     core_value = strtok_r(core_values, delim, &saveptr);
+     while (core_value != NULL) {
+diff --git a/drivers/net/hinic3/src/hinic3_init/hinic3_parse_agent_config.h b/drivers/net/hinic3/src/hinic3_init/hinic3_parse_agent_config.h
+index 84ba417850..c0481fcdf7 100644
+--- a/drivers/net/hinic3/src/hinic3_init/hinic3_parse_agent_config.h
++++ b/drivers/net/hinic3/src/hinic3_init/hinic3_parse_agent_config.h
+@@ -391,4 +391,10 @@ static inline bool hinic3_support_payload_capture_get(void)
+     return conf->support_payload_capture;
+ }
+ 
++static inline bool hinic3_is_metal_container(void)
++{
++    struct hinic3_init_arg *conf = hinic3_get_init_arg();
++    return conf->bare_metal_type == HINIC3_SCENE_BARE_METAL_CONTAINER;
++}
++
+ #endif
+diff --git a/drivers/net/hinic3/src/hinic3_ports/comm/hinic3_eth_util.c b/drivers/net/hinic3/src/hinic3_ports/comm/hinic3_eth_util.c
+index 3827764c15..f0790c82ac 100644
+--- a/drivers/net/hinic3/src/hinic3_ports/comm/hinic3_eth_util.c
++++ b/drivers/net/hinic3/src/hinic3_ports/comm/hinic3_eth_util.c
+@@ -4,6 +4,7 @@
+ 
+ #include "hinic3_mtr.h"
+ #include "hinic3_bond_controller.h"
++#include "hinic3_port_util.h"
+ #include "hinic3_vf_controller.h"
+ #include "hinic3_iface_flow_api_record.h"
+ #include "hinic3_mega_offload.h"
+diff --git a/drivers/net/hinic3/src/hinic3_ports/comm/hinic3_port_util.h b/drivers/net/hinic3/src/hinic3_ports/comm/hinic3_port_util.h
+index 93a6d89d32..58071a5362 100644
+--- a/drivers/net/hinic3/src/hinic3_ports/comm/hinic3_port_util.h
++++ b/drivers/net/hinic3/src/hinic3_ports/comm/hinic3_port_util.h
+@@ -29,6 +29,20 @@
+ #define XSTATS_REINJECT_PKT_INDEX  1
+ #define XSTATS_UPCALL_DROP_INDEX   2
+ 
++#define HINIC3_PORT_TYPE_MASK      0xF000
++#define HINIC3_BOND_TYPE_PREFIX    0x3000
++#define HINIC3_VF_TYPE_PREFIX      0x1000
++
++/* u16前4bit位表示端口类型 */
++static inline bool hinic3_is_bond_by_prefix(uint16_t vport_id)
++{
++    return (vport_id & HINIC3_PORT_TYPE_MASK) == HINIC3_BOND_TYPE_PREFIX;
++}
++
++static inline uint16_t hinic3_function_id_to_vport_id(int function_id){
++    return function_id | HINIC3_VF_TYPE_PREFIX;
++}
++
+ /* 端口有效性校验 */
+ bool hinic3_is_ethdev_valid(struct rte_eth_dev *dev);
+ 
+diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_controller.h b/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_controller.h
+index 95486ca158..1d11d74fd7 100644
+--- a/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_controller.h
++++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_controller.h
+@@ -9,20 +9,23 @@
+ #include "hinic3_queue.h"
+ #include "hinic3_age_delete_flow.h"
+ 
+-
+ #define HINIC3_BOND_DEFAULT_NB_QUEUES  1
+ #define HINIC3_BOND_MTU_MAX            9058
+ #define HINIC3_BOND_MTU_MIN            1500
+ #define HINIC3_BOND_DEFAULT_MTU        HINIC3_BOND_MTU_MAX
+ #define HINIC3_BOND_SIZE_OFFSET        96   /* vxlan头(74) + 内层eth头(14) + 内层vlan(4) + FCS(4) */
+ 
++#define HINIC3_BOND_SLAVE_NUM                 4
++#define HINIC3_BOND_ARG_SLAVE_NAME_LEN        64
++#define HINIC3_BOND_ARG_SLAVE_PCI_LEN         14
++#define HINIC3_BOND_SLAVE_NAME_LEN            256
++
+ #define MAX_NAME                    32
+ #define HW_PTR_ADD(ptr, x) ((void *)((uintptr_t)(ptr) + (x)))
+ 
+ #define HINIC3_PORTS_MEM_NAME       "hinic3_ports"
+ 
+-#define HINIC3_PORT_TYPE_PREFIX     0xF000
+-#define HINIC3_BOND_TYPE_PREFIX     0x3000
++
+ 
+ /* 此处将bond口及VF端口私有数据的首个uint16数据作为端口的vport_id，注意不要更换vport_id的位置 */
+ struct hinic3_bond_dev {
+@@ -45,16 +48,12 @@ struct hinic3_bond_dev {
+     struct rte_aged_flow_list aged_flow_list;
+ };
+ 
+-static inline struct hinic3_bond_dev *hinic3_ethdev_get_bond_private(struct rte_eth_dev *dev)
++static inline struct hinic3_bond_dev *
++hinic3_ethdev_get_bond_private(struct rte_eth_dev *dev)
+ {
+     return (struct hinic3_bond_dev *)dev->data->dev_private;
+ }
+ 
+-static inline bool hinic3_is_bond_by_prefix(uint16_t vport_id)
+-{
+-    return (vport_id & HINIC3_PORT_TYPE_PREFIX) == HINIC3_BOND_TYPE_PREFIX;
+-}
+-
+ typedef struct hinic3_port_stats_ hinic3_port_stats;
+ 
+ /* bond控制器类初始化 */
+diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_detect.c b/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_detect.c
+index 9efa2bb749..3b019ca982 100644
+--- a/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_detect.c
++++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_bond/hinic3_bond_detect.c
+@@ -5,9 +5,9 @@
+ #include <netinet/in.h>
+ #include "rte_mbuf.h"
+ #include "hinic3_tlv_key.h"
+-#include "hinic3_dfx_port.h"
+ #include "hinic3_smap.h"
+ #include "hinic3_error_stats.h"
++#include "hinic3_bond_controller.h"
+ #include "hinic3_bond_detect.h"
+ 
+ #define HINIC3_SLAVE_INVALID_PREFIX      0x0000
+diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_vdev/hinic3_vdev.c b/drivers/net/hinic3/src/hinic3_ports/hinic3_vdev/hinic3_vdev.c
+index 90e88e9fc8..663018aa04 100644
+--- a/drivers/net/hinic3/src/hinic3_ports/hinic3_vdev/hinic3_vdev.c
++++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_vdev/hinic3_vdev.c
+@@ -485,8 +485,10 @@ hinic3_mbuf_set_common_port(uint16_t upcall_num, struct hinic3_queue *rxq, struc
+     int64_t upcall_byt = 0;
+ 
+     vf_dev = (struct hinic3_vf_dev *)hinic3_get_private_data(rxq->dpdk_index_id);
+-    if (vf_dev == NULL)
++    if (vf_dev == NULL) {
+         hinic3_add_error_stats(HINIC3_VPORT_DEV_COMMOM_PORT_PRIVATE_DATA_NULL, 1);
++        return;
++    }
+ 
+     for (uint16_t i = 0; i < upcall_num; i++) {
+         mbuf = rx_pkts[i];
+diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_controller.c b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_controller.c
+index 361a289517..345b5a367e 100644
+--- a/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_controller.c
++++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_controller.c
+@@ -1020,12 +1020,6 @@ hinic3_vf_dev_mac_addr_set(struct rte_eth_dev *dev, struct rte_ether_addr *mac_a
+     return 0;
+ }
+ 
+-struct hinic3_vf_dev *
+-hinic3_ethdev_get_vf_private(struct rte_eth_dev *dev)
+-{
+-    return (struct hinic3_vf_dev *)dev->data->dev_private;
+-}
+-
+ static int
+ hinic3_virtual_queue_setup(struct hinic3_queue *rxq, uint16_t upcall_queue_id, uint16_t desc,
+     unsigned int socket_id, struct rte_mempool *mp)
+diff --git a/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_controller.h b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_controller.h
+index 50ddcec745..b96775d0d4 100644
+--- a/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_controller.h
++++ b/drivers/net/hinic3/src/hinic3_ports/hinic3_vf/hinic3_vf_controller.h
+@@ -153,6 +153,12 @@ hinic3_is_preload_dev(struct hinic3_vf_dev *vf_dev)
+            (hinic3_is_preload_vf_port() && vf_dev->dev_type == HINIC3_PHY_DEV_TYPE_VF);
+ }
+ 
++static inline struct hinic3_vf_dev *
++hinic3_ethdev_get_vf_private(struct rte_eth_dev *dev)
++{
++    return (struct hinic3_vf_dev *)dev->data->dev_private;
++}
++
+ void hinic3_vf_flow_ops_construct(void);
+ void hinic3_vf_flow_ops_destroy(void);
+ 
+@@ -200,5 +206,4 @@ void hinic3_share_upcall_decress(void);
+ uint8_t hinic3_get_vf_share_upcall_num(void);
+ uint16_t hinic3_get_vf_share_upcall_ref_cnt(void);
+ int hinic3_vf_dynamic_port_add(struct hinic3_vf_dev *vf_dev);
+-struct hinic3_vf_dev *hinic3_ethdev_get_vf_private(struct rte_eth_dev *dev);
+ #endif
+diff --git a/drivers/net/hinic3/src/hinic3_qos/comm/hinic3_vf_port_qos_public.c b/drivers/net/hinic3/src/hinic3_qos/comm/hinic3_vf_port_qos_public.c
+index 8c6b545bbb..492f7bbb7c 100644
+--- a/drivers/net/hinic3/src/hinic3_qos/comm/hinic3_vf_port_qos_public.c
++++ b/drivers/net/hinic3/src/hinic3_qos/comm/hinic3_vf_port_qos_public.c
+@@ -59,32 +59,36 @@ int check_vf_bw_args(struct qos_single_value vm_qos)
+ 
+     if (vm_qos.is_RFC2697 == true) {
+         if ((min_rate < MIN_BW_RATE_QOS) || (min_rate >= MAX_BW_RATE_QOS)) {
+-            HINIC3_LOG(ERR, QOS, "cir range is incorrect.");
++            HINIC3_LOG(ERR, QOS, "cir range is incorrect min_rate is %llu.", min_rate);
+             return -1;
+         }
+ 
+         if ((min_burst < MIN_BW_RATE_QOS) || (min_burst > MAX_BW_BURST_QOS)) {
+-            HINIC3_LOG(ERR, QOS, "cbs range is incorrect.");
++            HINIC3_LOG(ERR, QOS, "cbs range is incorrect min_burst is %llu.", min_burst);
+             return -1;
+         }
+ 
+         if ((max_burst + min_burst) > MAX_BW_BURST_QOS) {
+-            HINIC3_LOG(ERR, QOS, "cbs and ebs range is incorrect.");
++            HINIC3_LOG(ERR, QOS,
++                "cbs and ebs range is incorrect max_burst is %llu min_burst is %llu.", max_burst, min_burst);
+             return -1;
+         }
+     } else {
+         if ((min_rate < MIN_BW_RATE_QOS) || (min_burst < MIN_BW_RATE_QOS)) {
+-            HINIC3_LOG(ERR, QOS, "cir or cbs range is incorrect.");
++            HINIC3_LOG(ERR, QOS,
++                "cir or cbs range is incorrect min_rate is %llu min_burst is %llu.", min_rate, min_burst);
+             return -1;
+         }
+ 
+         if ((max_rate < min_rate) || (max_rate >= MAX_BW_RATE_QOS)) {
+-            HINIC3_LOG(ERR, QOS, "cir or pir range is incorrect.");
++            HINIC3_LOG(ERR, QOS,
++                "vf bw args, cir or pir range is incorrect max_rate is %llu min_rate is %llu.", max_rate, min_rate);
+             return -1;
+         }
+ 
+         if ((max_burst < min_burst) || (max_burst > MAX_BW_BURST_QOS)) {
+-            HINIC3_LOG(ERR, QOS, "cbs or pbs range is incorrect.");
++            HINIC3_LOG(ERR, QOS,
++                "cbs or pbs range is incorrect max_burst is %llu min_burst is %llu.", max_burst, min_burst);
+             return -1;
+         }
+     }
+@@ -100,17 +104,19 @@ int check_vf_pps_args(struct qos_single_value vm_qos)
+     uint64_t min_burst = vm_qos.min_burst;
+ 
+     if ((min_rate < MIN_PPS_RATE_QOS) || (min_burst < MIN_PPS_RATE_QOS)) {
+-        HINIC3_LOG(ERR, QOS, "cir or cbs range is incorrect.");
++        HINIC3_LOG(ERR, QOS, "cir or cbs range is incorrect min_rate is %llu min_burst is %llu.", min_rate, min_burst);
+         return -1;
+     }
+ 
+     if ((max_rate < min_rate) || (max_rate >= MAX_PPS_RATE_QOS)) {
+-        HINIC3_LOG(ERR, QOS, "cir or pir range is incorrect.");
++        HINIC3_LOG(ERR, QOS,
++                    "vf pps args cir or pir range is incorrect max_rate is %llu min_rate is %llu.", max_rate, min_rate);
+         return -1;
+     }
+ 
+     if ((max_burst < min_burst) || (max_burst > MAX_PPS_BURST_QOS)) {
+-        HINIC3_LOG(ERR, QOS, "cbs or pbs range is incorrect.");
++        HINIC3_LOG(ERR, QOS,
++                    "cbs or pbs range is incorrect max_burst is %llu min_burst is %llu.", max_burst, min_burst);
+         return -1;
+     }
+ 
+@@ -135,7 +141,8 @@ int hinic3_port_mgmt_set_qos_id(uint16_t vport_id, uint16_t bucket_id)
+     hinic3_smap_add_format(HINIC3_QOS, &args, HINIC3_PORT_BUCKET_ID, "%u", bucket_id);
+     ret = hinic3_port_mgmt_set(vport_id, &args, &unset_args);
+     if (ret != 0) {
+-        HINIC3_LOG(ERR, QOS, "failed to set qos id for vport_id (%u)", vport_id);
++        HINIC3_LOG(ERR, QOS,
++            "failed to set qos id for vport_id (%u) bucket_id is (%u) ret is %d", vport_id, bucket_id, ret);
+     }
+ 
+     hinic3_smap_destroy(&args);
+@@ -311,6 +318,21 @@ int hinic3_flow_qos_limit_set(uint16_t qos_id, uint16_t type, uint64_t max_rate,
+     return ret;
+ }
+ 
++int hinic3_vf_qos_statistics_get(uint16_t *qos_array, struct hovs_qos_stats_batch *stats, size_t cnt)
++{
++    int ret;
++    struct hinic3_drv_ops *ops = NULL;
++
++    if ((qos_array == NULL) || (stats == NULL)) {
++        return -1;
++    }
++
++    ops = hinic3_get_drv_ops();
++    HINIC3_FUNC_PTR_OR_ERR_RET(ops->hovs_qos_statistics_get_batch, HINIC3_DRV_FUNC_NO_PTR);
++    ret = ops->hovs_qos_statistics_get_batch(VM_LEVEL, qos_array, stats, cnt);
++    return ret;
++}
++
+ int hinic3_vf_qos_statistics_get_all_batch(uint16_t *qos_array, struct hovs_qos_stats_batch_all *stats, size_t cnt)
+ {
+     int ret;
+diff --git a/drivers/net/hinic3/src/hinic3_qos/comm/hinic3_vf_port_qos_public.h b/drivers/net/hinic3/src/hinic3_qos/comm/hinic3_vf_port_qos_public.h
+index 18c9330c27..7da04dfe15 100644
+--- a/drivers/net/hinic3/src/hinic3_qos/comm/hinic3_vf_port_qos_public.h
++++ b/drivers/net/hinic3/src/hinic3_qos/comm/hinic3_vf_port_qos_public.h
+@@ -72,6 +72,7 @@ int hinic3_flow_qos_limit_set(uint16_t qos_id, uint16_t type, uint64_t max_rate,
+                              uint64_t min_rate, uint64_t min_burst);
+ int hinic3_flow_qos_limit_get(uint16_t qos_id, uint16_t type, uint64_t *max_rate, uint64_t *max_burst,
+                              uint64_t *min_rate, uint64_t *min_burst);
++int hinic3_vf_qos_statistics_get(uint16_t *qos_array, struct hovs_qos_stats_batch *stats, size_t cnt);                         
+ int hinic3_vf_qos_statistics_get_all_batch(uint16_t *qos_array, struct hovs_qos_stats_batch_all *stats, size_t cnt);
+ int hinic3_vf_qos_statistics_clear_batch(uint16_t *qos_array, size_t cnt);
+ int hinic3_hqos_statistics_clear(enum qos_type_limit type, uint16_t dir, uint16_t *ids, size_t cnt);
+diff --git a/drivers/net/hinic3/src/hinic3_qos/flow_qos/hinic3_flow_qos.c b/drivers/net/hinic3/src/hinic3_qos/flow_qos/hinic3_flow_qos.c
+index f2a77079e3..c7ec2cc0da 100644
+--- a/drivers/net/hinic3/src/hinic3_qos/flow_qos/hinic3_flow_qos.c
++++ b/drivers/net/hinic3/src/hinic3_qos/flow_qos/hinic3_flow_qos.c
+@@ -115,6 +115,7 @@ hinic3_set_flow_qos_to_hovs_sub(struct hinic3_meter_node *meter, bool is_clear,
+     struct qos_single_value *profile = NULL;
+     // 如果meter已经被非流表级QoS占用，则返回失败
+     if (meter->type != QOS_TYPE_MAX && meter->type != QOS_TYPE_FLOW_LIMIT) {
++        HINIC3_LOG(ERR, FLOW, "set flow qos to hovs failed type is %d.", meter->type);
+         hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_METER_TYPE, 1);
+         return -1;
+     }
+@@ -128,7 +129,7 @@ hinic3_set_flow_qos_to_hovs_sub(struct hinic3_meter_node *meter, bool is_clear,
+             g_qos_ids.qos_ids[meter->qos_id].flags = false;
+             ret = hinic3_flow_qos_limit_set(meter->qos_id, profile->packet_mode, 0, 0, 0, 0);
+             if (ret != 0) {
+-                HINIC3_LOG(ERR, FLOW, "hinic3 flow qos clear failed!");
++                HINIC3_LOG(ERR, FLOW, "flow qos clear failed id %u mode is %d.", meter->qos_id, profile->packet_mode);
+                 return -1;
+             }
+         }
+diff --git a/drivers/net/hinic3/src/hinic3_qos/multilevel_qos/hinic3_mtr.c b/drivers/net/hinic3/src/hinic3_qos/multilevel_qos/hinic3_mtr.c
+index 7b8476625d..fbd8ff30d7 100644
+--- a/drivers/net/hinic3/src/hinic3_qos/multilevel_qos/hinic3_mtr.c
++++ b/drivers/net/hinic3/src/hinic3_qos/multilevel_qos/hinic3_mtr.c
+@@ -7,7 +7,7 @@
+ #include "hinic3_meminfo.h"
+ #include "rte_ethdev.h"
+ #include "rte_mtr_driver.h"
+-#include "hinic3_bond_controller.h"
++#include "hinic3_port_util.h"
+ #include "hinic3_vf_port_qos_public.h"
+ #include "hinic3_flow_agent_public.h"
+ #include "hinic3_offload_action.h"
+@@ -520,6 +520,11 @@ static int hinic3_get_meter_stats(struct hinic3_meter_node *meter, struct rte_mt
+         ret = hinic3_get_qos_stats(stats_context, stats);
+         break;
+     case QOS_TYPE_FUNC_LIMIT:
++        if (meter->flow == NULL)
++        {
++            HINIC3_LOG(ERR, QOS, "Meter is not bind flow!");
++            return -1;
++        }
+         RTE_ETH_VALID_PORTID_OR_ERR_RET(meter->flow->port_id, -1);
+         dev = &rte_eth_devices[meter->flow->port_id];
+         vf_dev = dev->data->dev_private;
+@@ -1238,6 +1243,10 @@ static int hinic3_qos_net_set(uint16_t port_id HINIC3_UNUSED, uint32_t meter_id,
+     struct hinic3_mtr_profile_node *profile_node = NULL;
+ 
+     meter = hinic3_meter_find(meter_id);
++    if (meter == NULL) {
++        HINIC3_LOG(ERR, QOS, "Multi qos net set: meter not find. meter id is %u.", meter_id);
++        return -1;
++    }
+     profile_node = meter->profile;
+ 
+     index = hinic3_get_multi_qos_show_tablehead(dir, profile_node->profile.packet_mode);
+@@ -1366,12 +1375,14 @@ static int hinic3_set_qos_to_hovs(char *qos_level, uint16_t port_id, uint32_t me
+     return -1;
+ }
+ 
+-static int hinic3_set_meter_conf(struct hinic3_meter_node *meter, struct rte_flow *flow,
++static int hinic3_set_meter_conf(uint32_t meter_id, struct rte_flow *flow,
+     enum hinic3_meter_qos_direction dir, uint16_t port_id)
+ {
+     enum hinic3_qos_tablehead index;
++    struct hinic3_meter_node *meter = NULL;
++    meter = hinic3_meter_find(meter_id);
+     if (meter == NULL) {
+-        HINIC3_LOG(ERR, QOS, "Multi qos: meter is NULL.");
++        HINIC3_LOG(ERR, QOS, "Multi qos: meter id is not find, meter id is %u.", meter_id);
+         return -1;
+     }
+ 
+@@ -1428,7 +1439,7 @@ struct rte_flow *hinic3_set_multi_qos(const struct rte_flow_item *pattern, const
+         goto end;
+     }
+ 
+-    ret = hinic3_set_meter_conf(hinic3_meter_find(meter_id), flow, dir, port_id);
++    ret = hinic3_set_meter_conf(meter_id, flow, dir, port_id);
+     if (ret != 0) {
+         hinic3_free(flow);
+         flow = NULL;
+diff --git a/drivers/net/hinic3/src/hinic3_ufid_map/hinic3_ufid_map_rte_flow.c b/drivers/net/hinic3/src/hinic3_ufid_map/hinic3_ufid_map_rte_flow.c
+index 7df76af8cd..5b85a1a7c9 100644
+--- a/drivers/net/hinic3/src/hinic3_ufid_map/hinic3_ufid_map_rte_flow.c
++++ b/drivers/net/hinic3/src/hinic3_ufid_map/hinic3_ufid_map_rte_flow.c
+@@ -21,6 +21,7 @@
+ #include "hinic3_ufid_hmap.h"
+ #include "hinic3_ufid_del_flow.h"
+ #include "hinic3_age_delete_flow.h"
++#include "hinic3_port_util.h"
+ #include "hinic3_bond_controller.h"
+ #include "hinic3_vf_controller.h"
+ #include "hinic3_string_util.h"
+@@ -420,6 +421,7 @@ size_t hinic3_get_rte_flow_map_table_count(void)
+ static int hinic3_flexda_ufid_map_segment(void)
+ {
+     int table_num = hinic3_flexda_flow_get_table_num();
++    uint32_t table_flow_num = 0;
+     uint64_t flow_num = 0;
+     uint64_t flow_num_all = hinic3_flexda_flow_get_total_flow_num();
+     uint32_t remain_buckets = OFFLOAD_FLOW_BUCKETS;
+@@ -429,7 +431,7 @@ static int hinic3_flexda_ufid_map_segment(void)
+     for (int i = 0; i < table_num; i++) {
+         /* 判断是否还剩余hash buckets */
+         if (remain_buckets <= 0) {
+-            HINIC3_LOG(INFO, AGENT, "hinic3_flexda_ufid_map_segment failed, no enough buckets for table segment.\n");
++            HINIC3_LOG(ERR, AGENT, "hinic3_flexda_ufid_map_segment failed, no enough buckets for table segment.\n");
+             return -1;
+         }
+ 
+@@ -442,7 +444,12 @@ static int hinic3_flexda_ufid_map_segment(void)
+         }
+ 
+         /* 设置table id为i+1的表的hash buckets的数量 */
+-        flow_num = (uint64_t)hinic3_flexda_flow_get_table_flow_num(i + 1);
++        if (hinic3_flexda_flow_get_table_flow_num(i + 1, &table_flow_num) != 0)
++        {
++            HINIC3_LOG(ERR, AGENT, "hinic3_flexda_flow_get_table_flow_num failed!");
++            return -1;
++        }
++        flow_num = (uint64_t)table_flow_num;
+         hinic3_mpool_mgmt.table_segment_array[i].length = (uint32_t)((flow_num * cal_total_buckets) / flow_num_all);
+         if (hinic3_mpool_mgmt.table_segment_array[i].length == 0) {
+             hinic3_mpool_mgmt.table_segment_array[i].length = 1;
+diff --git a/drivers/net/hinic3/version.map b/drivers/net/hinic3/version.map
+index 72e6441141..c5ce64a0ea 100644
+--- a/drivers/net/hinic3/version.map
++++ b/drivers/net/hinic3/version.map
+@@ -1,4 +1,4 @@
+-DPDK_22 {
++DPDK_24 {
+ 	global:
+ 	hinic3_agent_construct;
+ 	hinic3_agent_destruct;
+-- 
+2.45.1.windows.1
+
