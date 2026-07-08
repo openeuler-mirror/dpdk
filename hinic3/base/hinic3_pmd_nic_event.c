@@ -278,9 +278,12 @@ static void port_info_event_printf(void *hwdev, void *buf_in,
 	struct mag_cmd_event_port_info *port_info = buf_in;
 	((struct mag_cmd_event_port_info *)buf_out)->head.status = 0;
 	enum hinic3_nic_event_type type = port_info->event_type;
-	if (type < ETH_LINK_DOWN || type > ETH_LINK_UP) {
-		PMD_DRV_LOG(ERR, "Invalid hilink info report, type: %d\n", type);
-		return;
+
+	if (is_sp620_nic(nic_dev)) {
+		if (type < ETH_LINK_DOWN || type > ETH_LINK_UP) { 
+			PMD_DRV_LOG(ERR, "Invalid hilink info report, type: %d\n", type); 
+			return;
+		}
 	}
 
 	print_port_info(hwdev, port_info, type);
