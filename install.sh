@@ -548,6 +548,70 @@ install_dpdk_test() {
 	echo "hinic3 单元测试安装完成!"
 }
 
+# 安装 test-pmd csumonly.c（根据 DPDK 版本自动选择对应文件）
+install_test_pmd() {
+	echo "安装 test-pmd csumonly.c ..."
+
+	check_git
+	stash_changes
+
+	local test_pmd_src_dir="$SCRIPT_DIR/app/test-pmd"
+	local test_pmd_dst="app/test-pmd/csumonly.c"
+
+	if [ ! -d "app/test-pmd" ]; then
+		echo "警告: DPDK test-pmd 目录不存在: app/test-pmd"
+		restore_changes
+		return 1
+	fi
+
+	if [ ! -d "$test_pmd_src_dir" ]; then
+		echo "警告: 测试源目录不存在: $test_pmd_src_dir"
+		restore_changes
+		return 1
+	fi
+
+	# 根据 DPDK_MAJOR 选择对应的 csumonly.c
+	local csumonly_src=""
+	case "$DPDK_MAJOR" in
+		20) csumonly_src="hinic3_2011_csumonly.c" ;;
+		21) csumonly_src="hinic3_2111_csumonly.c" ;;
+		22) csumonly_src="hinic3_2211_csumonly.c" ;;
+		23) csumonly_src="hinic3_2311_csumonly.c" ;;
+		*)
+			# 未匹配的版本，使用最新可用的
+			csumonly_src=$(ls -1 "$test_pmd_src_dir"/hinic3_*_csumonly.c 2>/dev/null | sort | tail -1)
+			if [ -z "$csumonly_src" ]; then
+				echo "错误: 未找到任何 csumonly.c 文件"
+				restore_changes
+				return 1
+			fi
+			csumonly_src=$(basename "$csumonly_src")
+			echo "提示: 未找到 DPDK $DPDK_MAJOR 专用版本, 使用 $csumonly_src"
+			;;
+	esac
+
+	local src_file="$test_pmd_src_dir/$csumonly_src"
+	if [ ! -f "$src_file" ]; then
+		echo "错误: 源文件不存在: $src_file"
+		restore_changes
+		return 1
+	fi
+
+	echo "选择 $csumonly_src 替换 $test_pmd_dst"
+	cp "$src_file" "$test_pmd_dst"
+	echo "test-pmd csumonly.c 安装完成!"
+
+	# 提交更改到 git
+	git add .
+	if ! git diff --cached --quiet || ! git diff --quiet; then
+		git commit -m "app/test-pmd: update csumonly.c"
+	else
+		echo "No changes to commit"
+	fi
+
+	restore_changes
+}
+
 # 运行单元测试
 run_test() {
 	local build_type="$1" # release 或 debug
@@ -782,6 +846,9 @@ help() {
    强制重新安装并启用 bifur:
    $0 <dpdk路径> install bifur -f/--force
 
+   安装 test-pmd csumonly.c :
+   $0 <dpdk路径> install test
+
    BP卡适配安装
    $0 <dpdk路径> replace xxnic
 
@@ -873,6 +940,8 @@ DPDK_MAJOR=${DPDK_VER%%.*}
 
 if [ "$ACTION" == "install" ] && [ "$3" == "bifur" ]; then
 	install bifur
+elif [ "$ACTION" == "install" ] && [ "$3" == "test" ]; then
+	install_test_pmd
 elif [ "$ACTION" == "install" ] && { [ "$3" == "--force" ] || [ "$3" == "-f" ]; }; then
 	install "" "--force"
 elif [ "$ACTION" == "install" ] && [ "$4" == "bifur" ] && { [ "$3" == "--force" ] || [ "$3" == "-f" ]; }; then
