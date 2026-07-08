@@ -3599,18 +3599,20 @@ get_port_cir_drop(struct hinic3_nic_dev *nic_dev,
 {
 	struct hinic3_cir_drop port_stats;
 	u16 i;
-	int err;
+	int err = 0;
 
 	memset(&port_stats, 0, sizeof(port_stats));
+	
+	if (is_sp620_nic(nic_dev)) {
+		err = hinic3_get_cir_drop(nic_dev->hwdev, &port_stats);
+		if (err) {
+			PMD_DRV_LOG(ERR, "Failed to get CPB cir drops from fw.");
 
-	err = hinic3_get_cir_drop(nic_dev->hwdev, &port_stats);
-	if (err) {
-		PMD_DRV_LOG(ERR, "Failed to get CPB cir drops from fw.");
+			for (i = 0; i < ARRAY_LEN(hinic3_cir_drop_stats_strings); i++)
+				xstats[i].value = 0;
 
-		for (i = 0; i < ARRAY_LEN(hinic3_cir_drop_stats_strings); i++)
-			xstats[i].value = 0;
-
-		return ARRAY_LEN(hinic3_cir_drop_stats_strings);
+			return ARRAY_LEN(hinic3_cir_drop_stats_strings);
+		}
 	}
 
 	for (i = 0; i < ARRAY_LEN(hinic3_cir_drop_stats_strings); i++) {
