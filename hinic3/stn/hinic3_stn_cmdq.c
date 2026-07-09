@@ -7,6 +7,7 @@
 #include "hinic3_pmd_nic_cfg.h"
 #include "hinic3_pmd_hwif.h"
 #include "hinic3_stn_cmdq.h"
+#include "hinic3_pmd_rx.h"
 
 void hinic3_prepare_sq_ctxt_drop_and_prefetch(struct hinic3_sq_ctxt *sq_ctxt)
 {
@@ -19,20 +20,24 @@ void hinic3_prepare_sq_ctxt_drop_and_prefetch(struct hinic3_sq_ctxt *sq_ctxt)
 }
 
 void
-hinic3_prepare_rq_ctxt_ceq_and_prefetch(struct hinic3_rq_ctxt *rq_ctxt, u16 wqe_type,
-				 u16 msix_entry_idx,
-				 bool support_rq_sw_compact_cqe,
-				 u8 intr_disable)
+hinic3_prepare_rq_ctxt_ceq_and_prefetch(struct hinic3_rxq *rq,
+					struct hinic3_rq_ctxt *rq_ctxt,
+					bool support_rq_sw_compact_cqe,
+					u8 intr_disable)
 {
-	msix_entry_idx = (intr_disable == 0) ? msix_entry_idx : RQ_CTXT_INVALID_INTR_NUM;
+	u16 msix_entry_idx = rq->dp_intr_en ? rq->msix_entry_idx : RQ_CTXT_INVALID_INTR_NUM;
+
 	rq_ctxt->ceq_attr = RQ_CTXT_CEQ_ATTR_SET(intr_disable, EN) |
 			    RQ_CTXT_CEQ_ATTR_SET(0, INTR_ARM) |
 			    RQ_CTXT_CEQ_ATTR_SET(msix_entry_idx, INTR);
 
-	if (wqe_type == HINIC3_COMPACT_RQ_WQE && support_rq_sw_compact_cqe) {
+	if (rq->wqe_type == HINIC3_COMPACT_RQ_WQE && support_rq_sw_compact_cqe) {
 		rq_ctxt->ceq_attr |= RQ_CTXT_CEQ_ATTR_SET(1, EN);
 		rq_ctxt->ceq_attr |= RQ_CTXT_CEQ_ATTR_SET(1, CI_WR);
 		rq_ctxt->ceq_attr |= RQ_CTXT_CEQ_ATTR_SET(1, INTR_ARM);
+		rq_ctxt->cqe_sge_len |= RQ_CTXT_CQE_LEN_SET(RQ_CQE_AGGREGATE_NUM, MAX_COUNT);
+		rq_ctxt->pi_paddr_hi = upper_32_bits(rq->rq_ci_paddr >> RQ_CI_ADDR_SHIFT);
+		rq_ctxt->pi_paddr_lo = lower_32_bits(rq->rq_ci_paddr >> RQ_CI_ADDR_SHIFT);
 	}
 
 	rq_ctxt->pref_cache = RQ_CTXT_PREF_SET(WQ_PREFETCH_MIN, CACHE_MIN) |

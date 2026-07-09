@@ -13,6 +13,20 @@ Set the threshold for consecutive empty receive polls. When the number of
 empty polls reaches this value within a short interval, the driver will 
 skip the current receive cycle to reduce CPU overhead.
 - ``tx_free_loop`` parameter [int]
-Set the maximum number of retry attempts for reclaiming TX descriptors. 
-If the required space is not available after this many attempts, the driver 
+Set the maximum number of retry attempts for reclaiming TX descriptors.
+If the required space is not available after this many attempts, the driver
 will stop transmitting the current batch to avoid CPU starvation.
+- ``tx_pending_limit`` parameter [int]
+Set the threshold for the number of coalesced packets in the Tx queue, unit is packets.
+Note: The configured value must be a multiple of 8.
+- ``tx_coalescing_time`` parameter [int]
+Set the threshold for the number of coalesced time in the Tx queue, unit is us.
+Note: The configured value must be a multiple of 5.
+- ``rx_cqe_coalesce_num`` parameter [int]
+Set the threshold for the number of coalesced packets in the Rx queue, unit is packets.
+Note: The configured value must be a multiple of 8.
+- ``rx_cqe_timer_loop`` parameter [int]
+Set the threshold for the number of coalesced time in the Rx queue, unit is us.
+Note: The configured value must be a multiple of 5.
+- ``rx_cqe_compact_en`` parameter [int]
+Set to 0 to disable RX CQE and packet coalescing delivery. This feature is enabled by default.

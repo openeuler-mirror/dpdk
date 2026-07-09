@@ -11,6 +11,7 @@
 #include <rte_pci.h>
 #include <rte_bus_pci.h>
 #include <rte_kvargs.h>
+#include <rte_dev.h>
 #include <rte_mbuf.h>
 #include <rte_malloc.h>
 #include <rte_mempool.h>
@@ -1086,8 +1087,7 @@ hinic3_rx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_rxq *rxq,
 		goto alloc_rx_info_fail;
 	}
 
-	if (HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev) ||
-	    HINIC3_SUPPORT_RX_SW_COMPACT_CQE(nic_dev)) {
+	if (nic_dev->config.rx_cqe_compact_en) {
 		ci_mz = hinic3_dma_zone_reserve(dev, "hinic3_ci_mz", qid,
 						ci_mz_size, ci_mz_align, (int)socket_id);
 
@@ -1098,6 +1098,7 @@ hinic3_rx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_rxq *rxq,
 		}
 
 		memset(ci_mz->addr, 0, sizeof(*rxq->rq_ci));
+		rxq->ci_mz = ci_mz;
 		rxq->rq_ci = (struct hinic3_rq_ci_wb *)ci_mz->addr;
 		rxq->rq_ci_paddr = ci_mz->iova;
 	} else {
@@ -1277,8 +1278,7 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	}
 
 
-	if (HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev) ||
-	    HINIC3_SUPPORT_RX_SW_COMPACT_CQE(nic_dev)) {
+	if (nic_dev->config.rx_cqe_compact_en) {
 		/* Default rx wqe type set to compact wqe if NIC supports compact rx CQE */
 		rxq->wqe_type = HINIC3_COMPACT_RQ_WQE;
 	} else {
@@ -1616,7 +1616,10 @@ static void hinic3_rx_queue_release(struct rte_eth_dev *dev, uint16_t queue_id)
 
 release_resources:
 	if (!rxq->is_hairpin) {
-		hinic3_memzone_free(rxq->cqe_mz);
+		if (nic_dev->config.rx_cqe_compact_en)
+			hinic3_memzone_free(rxq->ci_mz);
+		else
+			hinic3_memzone_free(rxq->cqe_mz);
 		hinic3_memzone_free(rxq->rq_mz);
 		hinic3_memzone_free(rxq->pi_mz);
 
@@ -4908,6 +4911,16 @@ hinic3_nic_common_args_check_handler(const char *key, const char *val,
 		config->rx_empty_threshold = tmp;
 	else if (strcmp(key, "tx_free_loop") == 0)
 		config->tx_free_loop = tmp;
+	else if (strcmp(key, "tx_pending_limit") == 0)
+		config->tx_pending_limit = tmp / HINIC3_CI_PENDING_LIMIT_UNIT;
+	else if (strcmp(key, "tx_coalescing_time") == 0)
+		config->tx_coalescing_time = tmp / HINIC3_CI_COALESCING_TIME_UNIT;
+	else if (strcmp(key, "rx_cqe_compact_en") == 0)
+		config->rx_cqe_compact_en = !!tmp;
+	else if (strcmp(key, "rx_cqe_coalesce_num") == 0)
+		config->rx_cqe_coalesce_num = tmp / HINIC3_CI_PENDING_LIMIT_UNIT;
+	else if (strcmp(key, "rx_cqe_timer_loop") == 0)
+		config->rx_cqe_timer_loop = tmp / HINIC3_CI_COALESCING_TIME_UNIT;
 
 	return 0;
 }
@@ -4923,6 +4936,11 @@ hinic3_nic_common_config_get(struct rte_pci_device *pci_dev,
 	/* Set private param defaults. */
 	config->rx_empty_threshold = HINIC3_RX_EMPTY_THRESHOLD;
 	config->tx_free_loop = HINIC3_MAX_TX_FREE_LOOP;
+	config->tx_pending_limit = HINIC3_DEFAULT_TX_CI_PENDING_LIMIT;
+	config->tx_coalescing_time = HINIC3_DEFAULT_TX_CI_COALESCING_TIME;
+	config->rx_cqe_compact_en = HINIC3_DEFAULT_CQE_COMPACT_EN;
+	config->rx_cqe_coalesce_num = HINIC3_RX_CQE_COALESCE_NUM;
+	config->rx_cqe_timer_loop = HINIC3_RX_CQE_TIMER_LOOP;
 
 	if (eal_dev->devargs == NULL)
 		return 0;
@@ -4939,7 +4957,23 @@ hinic3_nic_common_config_get(struct rte_pci_device *pci_dev,
 
 	rte_kvargs_free(kvlist);
 
+	PMD_DRV_LOG(
+		INFO, "tx_pending_limit:%upkt, tx_coalescing_time:%uus, rx_cqe_coalesce_num:%upkt, rx_cqe_timer_loop:%uus.",
+		config->tx_pending_limit * HINIC3_CI_PENDING_LIMIT_UNIT, config->tx_coalescing_time * HINIC3_CI_COALESCING_TIME_UNIT,
+		config->rx_cqe_coalesce_num * HINIC3_CI_PENDING_LIMIT_UNIT, config->rx_cqe_timer_loop * HINIC3_CI_COALESCING_TIME_UNIT);
 	return ret;
+}
+
+static void hinic3_nic_feature_init(struct hinic3_nic_dev *nic_dev)
+{
+	if ((HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev) || HINIC3_SUPPORT_RX_SW_COMPACT_CQE(nic_dev)) &&
+		(nic_dev->config.rx_cqe_compact_en == HINIC3_DEFAULT_CQE_COMPACT_EN)) {
+		nic_dev->config.rx_cqe_compact_en = 1;
+		PMD_DRV_LOG(INFO, "nic compact_cqe is on.");
+	} else {
+		nic_dev->config.rx_cqe_compact_en = 0;
+		PMD_DRV_LOG(INFO, "nic compact_cqe is off.");
+	}
 }
 
 static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev)
@@ -5212,6 +5246,8 @@ static int hinic3_dev_init(struct rte_eth_dev *eth_dev)
 			strerror(rte_errno));
 		return err;
 	}
+
+	hinic3_nic_feature_init(nic_dev);
 
 	if (is_sp620_nic(nic_dev) || !HINIC3_SUPPORT_RX_SW_COMPACT_CQE(nic_dev)) {
 #ifdef RTE_ARCH_ARM
