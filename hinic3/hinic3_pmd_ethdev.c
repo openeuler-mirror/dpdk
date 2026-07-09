@@ -4588,6 +4588,7 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 	struct hinic3_tcam_info *tcam_info = NULL;
 	struct hinic3_nic_dev *nic_dev = NULL;
 	struct rte_pci_device *pci_dev = NULL;
+	unsigned long compact_cqe = 0;
 	int err;
 
 	pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
@@ -4718,6 +4719,16 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 		PMD_DRV_LOG(ERR, "Get nic feature from hardware failed, dev_name: %s",
 			    eth_dev->data->name);
 		goto get_cap_fail;
+	}
+
+	if (!is_sp620_nic(nic_dev)) {
+		if (hinic3_parse_sysfs_value(RQ_WQE_TYPE_PATH, &compact_cqe) != 0) {
+			err = -EINVAL;
+			goto get_cap_fail;
+		}
+
+		if (compact_cqe == 1)
+			nic_dev->feature_cap &= ~(NIC_F_RX_SW_COMPACT_CQE | NIC_F_RX_HW_COMPACT_CQE);
 	}
 
 	err = hinic3_init_sw_rxtxqs(nic_dev);
@@ -5189,7 +5200,7 @@ static int hinic3_dev_init(struct rte_eth_dev *eth_dev)
 		return err;
 	}
 
-	if (is_sp620_nic(nic_dev)) {
+	if (is_sp620_nic(nic_dev) || !HINIC3_SUPPORT_RX_SW_COMPACT_CQE(nic_dev)) {
 #ifdef RTE_ARCH_ARM
 		if (nic_dev->vec_allowed == 1)
 			eth_dev->rx_pkt_burst = hinic3_recv_pkts_vec;
