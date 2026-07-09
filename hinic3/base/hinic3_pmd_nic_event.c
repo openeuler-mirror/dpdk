@@ -278,6 +278,7 @@ static void port_info_event_printf(void *hwdev, void *buf_in,
 	struct mag_cmd_event_port_info *port_info = buf_in;
 	((struct mag_cmd_event_port_info *)buf_out)->head.status = 0;
 	enum hinic3_nic_event_type type = port_info->event_type;
+	struct hinic3_nic_dev *nic_dev = ((struct hinic3_hwdev *)hwdev)->dev_handle;
 
 	if (is_sp620_nic(nic_dev)) {
 		if (type < ETH_LINK_DOWN || type > ETH_LINK_UP) { 
