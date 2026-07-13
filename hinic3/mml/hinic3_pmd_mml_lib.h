@@ -293,12 +293,18 @@ hinic3_pmd_mml_log(char *show_str, int *show_len, const char *fmt, ...)
 {
 	va_list args;
 	int ret = 0;
+	int remaining_len;
+
+	if (*show_len >= MAX_SHOW_STR_LEN)
+		return;
+
+	remaining_len = MAX_SHOW_STR_LEN - *show_len;
 
 	va_start(args, fmt);
-	ret = vsprintf(show_str + *show_len, fmt, args);
+	ret = vsnprintf(show_str + *show_len, remaining_len, fmt, args);
 	va_end(args);
 
-	if (ret > 0) {
+	if (ret > 0 && ret < remaining_len) {
 		*show_len += ret;
 	} else {
 		PMD_DRV_LOG(ERR, "MML show string snprintf failed, err: %d\n", ret);

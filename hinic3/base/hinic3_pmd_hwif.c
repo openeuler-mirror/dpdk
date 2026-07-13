@@ -169,6 +169,11 @@ u32 hinic3_hwif_read_reg(struct hinic3_hwif *hwif, u32 reg)
 
 void hinic3_hwif_write_reg(struct hinic3_hwif *hwif, u32 reg, u32 val)
 {
+	if (!hwif) {
+		PMD_DRV_LOG(ERR, "hwif is NULL");
+		return;
+	}
+
 	if (HINIC3_GET_REG_FLAG(reg) == HINIC3_MGMT_REGS_FLAG)
 		rte_write32(cpu_to_be32(val),
 		       hwif->mgmt_regs_base + HINIC3_GET_REG_ADDR(reg));

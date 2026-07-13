@@ -39,6 +39,11 @@ hinic3_tc_queue_mapping_cfg(struct hinic3_nic_dev *nic_dev, uint16_t nb_tx_q)
 	uint16_t tx_qnum_per_tc;
 	uint8_t i;
 
+	if (ets->num_tc == 0) {
+		PMD_DRV_LOG(ERR, "num_tc is zero");
+		return -EINVAL;
+	}
+
 	tx_qnum_per_tc = nb_tx_q / ets->num_tc;
 	used_tx_queues = ets->num_tc * tx_qnum_per_tc;
 	if (used_tx_queues != nb_tx_q) {
@@ -592,6 +597,12 @@ hinic3_get_dcb_info(struct rte_eth_dev *dev, struct rte_eth_dcb_info *dcb_info)
 
 	while (cos_num & (cos_num - 1))
 		cos_num++;
+
+	if (dcb_info->nb_tcs > NIC_DCB_TC_MAX) {
+		PMD_DRV_LOG(ERR, "Invalid nb_tcs %u, exceeds max %u",
+			    dcb_info->nb_tcs, NIC_DCB_TC_MAX);
+		return -EINVAL;
+	}
 
 	for (i = 0; i < dcb_info->nb_tcs; i++) {
 		/* RX */

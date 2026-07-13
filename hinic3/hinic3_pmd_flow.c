@@ -1127,6 +1127,12 @@ hinic3_flow_set_rss_action_config(struct rte_eth_dev	       *dev,
 	int ret;
 	u8 hash[HINIC3_RSS_KEY_SIZE] = {0};
 
+	if (actions == NULL || actions->conf == NULL) {
+		rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_HANDLE,
+				   NULL, "Invalid RSS action config");
+		return -EINVAL;
+	}
+
 	act_r = (struct rte_flow_action_rss *)actions->conf;
 	rss_conf.rss_hf = act_r->types;
 	if (act_r->key_len > HINIC3_RSS_KEY_SIZE) {
@@ -1392,6 +1398,12 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 
 	switch (act->type) {
 	case RTE_FLOW_ACTION_TYPE_QUEUE:
+		if (act->conf == NULL) {
+			rte_flow_error_set(error, EINVAL,
+					   HINIC3_FLOW_ERROR_TYPE_ACTION,
+					   act, "Invalid action queue config.");
+			return -rte_errno;
+		}
 		act_q =
 		(const struct rte_flow_action_queue *)act->conf;
 		filter->fdir_filter.rq_index = act_q->index;
@@ -1411,6 +1423,12 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 		break;
 /* RSS process */
 	case RTE_FLOW_ACTION_TYPE_RSS:
+		if (act->conf == NULL) {
+			rte_flow_error_set(error, EINVAL,
+					   HINIC3_FLOW_ERROR_TYPE_ACTION,
+					   act, "Invalid action RSS config.");
+			return -rte_errno;
+		}
 		act_r = (const struct rte_flow_action_rss *)act->conf;
 		if (IS_BIFUR_MODE() || (IS_NORMAL_MODE() && bifur_en)) {
 			for (i = 0; i < HINIC3_QUEUE_MAX; i++) {

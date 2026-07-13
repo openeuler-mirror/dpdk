@@ -81,8 +81,9 @@ static void *hinic3_sq_get_wqebbs(struct hinic3_txq *sq, u16 num_wqebbs, u16 *pr
 static inline u16 hinic3_get_and_update_sq_owner(struct hinic3_txq *sq, u16 curr_pi, u16 wqebb_cnt)
 {
 	u16 owner = sq->owner;
+	u32 sum = (u32)curr_pi + (u32)wqebb_cnt;
 
-	if (unlikely(curr_pi + wqebb_cnt >= sq->q_depth))
+	if (unlikely(sum >= sq->q_depth || sum < curr_pi))
 		sq->owner = !sq->owner;
 
 	return owner;
@@ -260,8 +261,15 @@ hinic3_ipv6_phdr_cksum(const struct rte_ipv6_hdr *ipv6_hdr, uint64_t ol_flags)
 	l4_proto = rte_cpu_to_be_16(proto);
 	if (ol_flags & HINIC3_PKT_TX_TCP_SEG)
 		l4_len = 0;
-	else
-		l4_len = rte_cpu_to_be_16(rte_be_to_cpu_16(ipv6_hdr->payload_len) - l3_len + sizeof(*ipv6_hdr));
+	else {
+		u16 payload_len = rte_be_to_cpu_16(ipv6_hdr->payload_len);
+		if (payload_len < l3_len) {
+			PMD_DRV_LOG(ERR, "Invalid IPv6 payload length %u < l3_len %u",
+				    payload_len, l3_len);
+			return 0;
+		}
+		l4_len = rte_cpu_to_be_16(payload_len - l3_len + sizeof(*ipv6_hdr));
+	}
 
 #ifdef DPDK_24_11
 	sum = __rte_raw_cksum(ipv6_hdr->src_addr.a, sizeof(ipv6_hdr->src_addr.a) + sizeof(ipv6_hdr->dst_addr.a), 0);

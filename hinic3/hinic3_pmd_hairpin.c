@@ -242,7 +242,14 @@ hinic3_tx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 			    (int)dev->data->port_id, (int)qid);
 		return -EINVAL;
 	}
-    if (conf->peer_count > 1) {
+	if (conf->peer_count > 1) {
+		rte_errno = EINVAL;
+		PMD_DRV_LOG(ERR, "port %u unable to setup Tx hairpin queue index %u"
+			" peer count is %u", dev->data->port_id,
+			qid, conf->peer_count);
+		return -rte_errno;
+	}
+	if (conf->peer_count < 1) {
 		rte_errno = EINVAL;
 		PMD_DRV_LOG(ERR, "port %u unable to setup Tx hairpin queue index %u"
 			" peer count is %u", dev->data->port_id,

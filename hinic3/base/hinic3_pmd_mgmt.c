@@ -217,10 +217,17 @@ static int recv_mgmt_msg_handler(struct hinic3_msg_pf_to_mgmt *pf_to_mgmt,
  */
 int hinic3_mgmt_msg_aeqe_handler(void *hwdev, u8 *header, u8 size, void *param)
 {
-	struct hinic3_hwdev *dev = (struct hinic3_hwdev *)hwdev;
+	struct hinic3_hwdev *dev;
 	struct hinic3_msg_pf_to_mgmt *pf_to_mgmt = NULL;
 	struct hinic3_recv_msg *recv_msg = NULL;
 	bool is_send_dir = false;
+
+	if (!hwdev) {
+		PMD_DRV_LOG(ERR, "hwdev is NULL");
+		return -EINVAL;
+	}
+
+	dev = (struct hinic3_hwdev *)hwdev;
 
 	if ((HINIC3_MSG_HEADER_GET(*(u64 *)header, SOURCE) ==
 	     HINIC3_MSG_FROM_MBOX)) {
@@ -378,7 +385,14 @@ mutex_init_err:
  */
 void hinic3_pf_to_mgmt_free(struct hinic3_hwdev *hwdev)
 {
-	struct hinic3_msg_pf_to_mgmt *pf_to_mgmt = hwdev->pf_to_mgmt;
+	struct hinic3_msg_pf_to_mgmt *pf_to_mgmt;
+
+	if (hwdev == NULL || hwdev->pf_to_mgmt == NULL) {
+		PMD_DRV_LOG(WARNING, "hwdev or pf_to_mgmt is NULL, skip free");
+		return;
+	}
+
+	pf_to_mgmt = hwdev->pf_to_mgmt;
 
 	free_msg_buf(pf_to_mgmt);
 	hinic3_mutex_destroy(&pf_to_mgmt->sync_msg_mutex);

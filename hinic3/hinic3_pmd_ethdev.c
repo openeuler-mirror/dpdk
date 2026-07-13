@@ -309,18 +309,34 @@ static const struct hinic3_xstats_name_off hinic3_txq_stats_strings[] = {
 
 static int hinic3_xstats_calc_num(struct hinic3_nic_dev *nic_dev)
 {
+	u64 rxqs_xstats, txqs_xstats, total;
+
+	if (nic_dev->num_rqs > UINT32_MAX / HINIC3_RXQ_XSTATS_NUM ||
+	    nic_dev->num_sqs > UINT32_MAX / HINIC3_TXQ_XSTATS_NUM) {
+		PMD_DRV_LOG(ERR, "num_rqs or num_sqs is too large");
+		return -EINVAL;
+	}
+
+	rxqs_xstats = (u64)HINIC3_RXQ_XSTATS_NUM * nic_dev->num_rqs;
+	txqs_xstats = (u64)HINIC3_TXQ_XSTATS_NUM * nic_dev->num_sqs;
+
 	if (HINIC3_IS_VF(nic_dev->hwdev)) {
-		return (HINIC3_VPORT_XSTATS_NUM +
+		total = HINIC3_VPORT_XSTATS_NUM +
 			HINIC3_CIR_DROP_XSTATS_NUM +
-			HINIC3_RXQ_XSTATS_NUM * nic_dev->num_rqs +
-			HINIC3_TXQ_XSTATS_NUM * nic_dev->num_sqs);
+			rxqs_xstats + txqs_xstats;
 	} else {
-		return (HINIC3_VPORT_XSTATS_NUM +
+		total = HINIC3_VPORT_XSTATS_NUM +
 			HINIC3_CIR_DROP_XSTATS_NUM +
 			HINIC3_PHYPORT_XSTATS_NUM +
-			HINIC3_RXQ_XSTATS_NUM * nic_dev->num_rqs +
-			HINIC3_TXQ_XSTATS_NUM * nic_dev->num_sqs);
+			rxqs_xstats + txqs_xstats;
 	}
+
+	if (total > INT32_MAX) {
+		PMD_DRV_LOG(ERR, "xstats number overflow");
+		return -EINVAL;
+	}
+
+	return (int)total;
 }
 
 #define HINIC3_TXD_ALIGN		1
@@ -410,33 +426,34 @@ static void hinic3_dev_interrupt_handler_qpool(void *param)
  		return;
  	}
 
- 	while (processed < MAX_PROCESS &&
- 		(bytes_read = read(intr_handle->fd, &event, sizeof(event))) == sizeof(event)) {
- 		if (event.type == NETDEV_UP) {
- 			link_state = 1;
- 			get_port_info(nic_dev->hwdev, link_state, &link);
- 			rte_eth_linkstatus_set(dev, &link);
- 		} else if (event.type == NETDEV_DOWN) {
- 			link_state = 0;
- 			get_port_info(nic_dev->hwdev, link_state, &link);
- 			rte_eth_linkstatus_set(dev, &link);
- 		} else if (event.type == NETDEV_CHANGEADDR) {
- 			u8 addr_bytes[RTE_ETHER_ADDR_LEN];
- 			memmove(addr_bytes, event.data, RTE_ETHER_ADDR_LEN);
- 			rte_ether_addr_copy((struct rte_ether_addr *)addr_bytes,
- 				&dev->data->mac_addrs[0]);
- 			if (rte_is_zero_ether_addr(&dev->data->mac_addrs[0]))
- 				PMD_DRV_LOG(INFO, "mac addr is zero");
- 		} else if (event.type == NETDEV_CHANGEMTU) {
- 			PMD_DRV_LOG(INFO, "Set new mtu address");
- 			nic_dev->mtu_size = event.data_mtu;
- 			dev->data->mtu = event.data_mtu;
- 		} else {
- 			PMD_DRV_LOG(INFO, "event type not support");
- 		}
- 	}
+	while (processed < MAX_PROCESS &&
+		(bytes_read = read(intr_handle->fd, &event, sizeof(event))) == sizeof(event)) {
+		if (event.type == NETDEV_UP) {
+			link_state = 1;
+			get_port_info(nic_dev->hwdev, link_state, &link);
+			rte_eth_linkstatus_set(dev, &link);
+		} else if (event.type == NETDEV_DOWN) {
+			link_state = 0;
+			get_port_info(nic_dev->hwdev, link_state, &link);
+			rte_eth_linkstatus_set(dev, &link);
+		} else if (event.type == NETDEV_CHANGEADDR) {
+			u8 addr_bytes[RTE_ETHER_ADDR_LEN];
+			memmove(addr_bytes, event.data, RTE_ETHER_ADDR_LEN);
+			rte_ether_addr_copy((struct rte_ether_addr *)addr_bytes,
+				&dev->data->mac_addrs[0]);
+			if (rte_is_zero_ether_addr(&dev->data->mac_addrs[0]))
+				PMD_DRV_LOG(INFO, "mac addr is zero");
+		} else if (event.type == NETDEV_CHANGEMTU) {
+			PMD_DRV_LOG(INFO, "Set new mtu address");
+			nic_dev->mtu_size = event.data_mtu;
+			dev->data->mtu = event.data_mtu;
+		} else {
+			PMD_DRV_LOG(INFO, "event type not support");
+		}
+		processed++;
+	}
 
- 	if (bytes_read < 0 && errno != EAGAIN) {
+  	if (bytes_read < 0 && errno != EAGAIN) {
  		PMD_DRV_LOG(ERR, "interrupt handler fd read error: %d.", errno);
  	}
 }
@@ -1140,6 +1157,7 @@ alloc_rx_info_fail:
 	hinic3_memzone_free(rxq->rq_mz);
 
 alloc_rq_mz_fail:
+	rxq->db_addr = NULL;
 alloc_db_err_fail:
 	hinic3_memzone_free(rxq->pi_mz);
 

@@ -1167,6 +1167,10 @@ static void *hinic3_copy_tx_mbuf(struct hinic3_nic_dev *nic_dev,
 	dst_mbuf->data_off = 0;
 	dst_mbuf->data_len = 0;
 	for (i = 0; i < sge_cnt; i++) {
+		if (offset + mbuf->data_len > dst_mbuf->buf_len) {
+			rte_pktmbuf_free(dst_mbuf);
+			return NULL;
+		}
 		rte_memcpy((u8 *)dst_mbuf->buf_addr + offset,
 			   (u8 *)mbuf->buf_addr + mbuf->data_off,
 			   mbuf->data_len);
@@ -1251,6 +1255,8 @@ static int hinic3_mbuf_dma_map_sge(struct hinic3_txq *txq,
 		dma_addr = rte_mbuf_data_iova(mbuf);
 		if (unlikely(mbuf->data_len == 0)) {
 			txq->txq_stats.sge_len0++;
+			rte_pktmbuf_free(mbuf);
+			txq->tx_info[wqe_info->pi].cpy_mbuf = NULL;
 			return -EINVAL;
 		}
 		/*
