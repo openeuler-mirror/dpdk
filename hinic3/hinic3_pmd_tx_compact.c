@@ -261,15 +261,8 @@ hinic3_ipv6_phdr_cksum(const struct rte_ipv6_hdr *ipv6_hdr, uint64_t ol_flags)
 	l4_proto = rte_cpu_to_be_16(proto);
 	if (ol_flags & HINIC3_PKT_TX_TCP_SEG)
 		l4_len = 0;
-	else {
-		u16 payload_len = rte_be_to_cpu_16(ipv6_hdr->payload_len);
-		if (payload_len < l3_len) {
-			PMD_DRV_LOG(ERR, "Invalid IPv6 payload length %u < l3_len %u",
-				    payload_len, l3_len);
-			return 0;
-		}
-		l4_len = rte_cpu_to_be_16(payload_len - l3_len + sizeof(*ipv6_hdr));
-	}
+	else
+		l4_len = rte_cpu_to_be_16(rte_be_to_cpu_16(ipv6_hdr->payload_len) - l3_len + sizeof(*ipv6_hdr));
 
 #ifdef DPDK_24_11
 	sum = __rte_raw_cksum(ipv6_hdr->src_addr.a, sizeof(ipv6_hdr->src_addr.a) + sizeof(ipv6_hdr->dst_addr.a), 0);

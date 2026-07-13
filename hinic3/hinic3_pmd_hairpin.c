@@ -155,29 +155,31 @@ hinic3_rx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 			qid, conf->peer_count);
 		return -rte_errno;
 	}
-	if (conf->peers[0].port == dev->data->port_id) {
-		if (conf->peers[0].queue >= dev->data->nb_tx_queues) {
-			rte_errno = EINVAL;
-			PMD_DRV_LOG(ERR, "port %u unable to setup Rx hairpin queue"
-				" index %u, Tx %u is larger than %u",
-				dev->data->port_id, qid,
-				conf->peers[0].queue, dev->data->nb_tx_queues);
-			return -rte_errno;
-		}
+	if (conf->peer_count != 0) {
+		if (conf->peers[0].port == dev->data->port_id) {
+			if (conf->peers[0].queue >= dev->data->nb_tx_queues) {
+				rte_errno = EINVAL;
+				PMD_DRV_LOG(ERR, "port %u unable to setup Rx hairpin queue"
+					" index %u, Tx %u is larger than %u",
+					dev->data->port_id, qid,
+					conf->peers[0].queue, dev->data->nb_tx_queues);
+				return -rte_errno;
+			}
 #ifdef DPDK_20_11
-	} else {
-		if (conf->manual_bind == 0 ||
-		    conf->tx_explicit == 0) {
-			rte_errno = EINVAL;
-			PMD_DRV_LOG(ERR, "port %u unable to setup Rx hairpin queue"
-				" index %u peer port %u with attributes %u %u",
-				dev->data->port_id, qid,
-				conf->peers[0].port,
-				conf->manual_bind,
-				conf->tx_explicit);
-			return -rte_errno;
-		}
+		} else {
+			if (conf->manual_bind == 0 ||
+				conf->tx_explicit == 0) {
+				rte_errno = EINVAL;
+				PMD_DRV_LOG(ERR, "port %u unable to setup Rx hairpin queue"
+					" index %u peer port %u with attributes %u %u",
+					dev->data->port_id, qid,
+					conf->peers[0].port,
+					conf->manual_bind,
+					conf->tx_explicit);
+				return -rte_errno;
+			}
 #endif
+		}
 	}
     rxq = rte_zmalloc_socket("hinic3_rq", sizeof(struct hinic3_rxq),
 				 RTE_CACHE_LINE_SIZE, SOCKET_ID_ANY);
@@ -249,36 +251,31 @@ hinic3_tx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 			qid, conf->peer_count);
 		return -rte_errno;
 	}
-	if (conf->peer_count < 1) {
-		rte_errno = EINVAL;
-		PMD_DRV_LOG(ERR, "port %u unable to setup Tx hairpin queue index %u"
-			" peer count is %u", dev->data->port_id,
-			qid, conf->peer_count);
-		return -rte_errno;
-	}
-	if (conf->peers[0].port == dev->data->port_id) {
-		if (conf->peers[0].queue >= dev->data->nb_rx_queues) {
-			rte_errno = EINVAL;
-			PMD_DRV_LOG(ERR, "port %u unable to setup Tx hairpin queue"
-				" index %u, Rx %u is larger than %u",
-				dev->data->port_id, qid,
-				conf->peers[0].queue, dev->data->nb_rx_queues);
-			return -rte_errno;
-		}
+	if (conf->peer_count != 0) {
+		if (conf->peers[0].port == dev->data->port_id) {
+			if (conf->peers[0].queue >= dev->data->nb_rx_queues) {
+				rte_errno = EINVAL;
+				PMD_DRV_LOG(ERR, "port %u unable to setup Tx hairpin queue"
+					" index %u, Rx %u is larger than %u",
+					dev->data->port_id, qid,
+					conf->peers[0].queue, dev->data->nb_rx_queues);
+				return -rte_errno;
+			}
 #ifdef DPDK_20_11
-	} else {
-		if (conf->manual_bind == 0 ||
-		    conf->tx_explicit == 0) {
-			rte_errno = EINVAL;
-			PMD_DRV_LOG(ERR, "port %u unable to setup Tx hairpin queue"
-				" index %u peer port %u with attributes %u %u",
-				dev->data->port_id, qid,
-				conf->peers[0].port,
-				conf->manual_bind,
-				conf->tx_explicit);
-			return -rte_errno;
-		}
+		} else {
+			if (conf->manual_bind == 0 ||
+				conf->tx_explicit == 0) {
+				rte_errno = EINVAL;
+				PMD_DRV_LOG(ERR, "port %u unable to setup Tx hairpin queue"
+					" index %u peer port %u with attributes %u %u",
+					dev->data->port_id, qid,
+					conf->peers[0].port,
+					conf->manual_bind,
+					conf->tx_explicit);
+				return -rte_errno;
+			}
 #endif
+		}
 	}
     txq = rte_zmalloc_socket("hinic3_tq", sizeof(struct hinic3_txq),
                 RTE_CACHE_LINE_SIZE, SOCKET_ID_ANY);

@@ -1130,7 +1130,7 @@ hinic3_flow_set_rss_action_config(struct rte_eth_dev	       *dev,
 	if (actions == NULL || actions->conf == NULL) {
 		rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_HANDLE,
 				   NULL, "Invalid RSS action config");
-		return -EINVAL;
+		return -rte_errno;
 	}
 
 	act_r = (struct rte_flow_action_rss *)actions->conf;
