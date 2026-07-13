@@ -400,27 +400,40 @@ install() {
 	fi
 }
 
-# 添加测试源文件到构建系统
+# 添加测试源文件到构建系统（自动扫描 test 目录下的 test_hinic3_*.c 文件）
 add_test_sources() {
 	local build_file="$1"
 	local build_type="$2" # meson 或 makefile
+	local test_src_dir="$SCRIPT_DIR/test"
+	
+	# 自动扫描测试源文件
+	local test_files=()
+	for f in "$test_src_dir"/test_hinic3_*.c; do
+		if [ -f "$f" ]; then
+			local basename=$(basename "$f")
+			test_files+=("$basename")
+		fi
+	done
+	
+	if [ ${#test_files[@]} -eq 0 ]; then
+		echo "警告: 未找到测试源文件"
+		return
+	fi
 	
 	if [ "$build_type" == "makefile" ]; then
-		# Makefile: 添加测试文件到 SRCS-y
-		add_to_file "$build_file" \
-			"SRCS-\$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += test_hinic3/test_hinic3_basic.c" \
-			"^SRCS-y += virtual_pmd.c"
-		add_to_file "$build_file" \
-			"SRCS-\$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += test_hinic3/test_hinic3_hairpin.c" \
-			"^SRCS-y += virtual_pmd.c"
+		# Makefile: 批量添加测试文件到 SRCS-y
+		for f in "${test_files[@]}"; do
+			add_to_file "$build_file" \
+				"SRCS-\$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += test_hinic3/$f" \
+				"^SRCS-y += virtual_pmd.c"
+		done
 	else
-		# meson.build: 添加测试文件到 sources
-		add_to_file "$build_file" \
-			"'test_hinic3_basic.c'," \
-			"sources +="
-		add_to_file "$build_file" \
-			"'test_hinic3_hairpin.c'," \
-			"sources +="
+		# meson.build: 批量添加测试文件到 sources
+		for f in "${test_files[@]}"; do
+			add_to_file "$build_file" \
+				"'$f'," \
+				"sources +="
+		done
 	fi
 }
 
@@ -571,7 +584,7 @@ run_test() {
 		fi
 		test_bin="$build_dir/app/test"
 		export LD_LIBRARY_PATH="$PWD/$build_dir/lib:$LD_LIBRARY_PATH"
-		tests=("hinic3_basic_autotest" "hinic3_hairpin_autotest")
+		tests=("hinic3_basic_autotest" "hinic3_hairpin_autotest" "hinic3_rx_autotest")
 	else
 		# dpdk>=20 使用 meson 构建
 		if [ -f "$build_dir/app/dpdk-test" ]; then
@@ -582,7 +595,7 @@ run_test() {
 			echo "错误: dpdk-test 不存在，请先执行 build"
 			exit 1
 		fi
-		tests=("hinic3_basic_autotest" "hinic3_hairpin_autotest")
+		tests=("hinic3_basic_autotest" "hinic3_hairpin_autotest" "hinic3_rx_autotest")
 	fi
 
 	echo ""

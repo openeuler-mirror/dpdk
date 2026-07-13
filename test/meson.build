@@ -9,6 +9,7 @@ endif
 sources += files(
     'test_hinic3_basic.c',
     'test_hinic3_hairpin.c',
+    'test_hinic3_rx.c',
 )
 
 deps += ['ethdev', 'net_hinic3']
