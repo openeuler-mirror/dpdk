@@ -99,6 +99,7 @@ SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_nic_event.c
 SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_ethdev.c
 SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_rx.c
 SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_tx.c
+SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_tx_compact.c
 SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_flow.c
 SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_flow_sec.c
 SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_fdir.c
