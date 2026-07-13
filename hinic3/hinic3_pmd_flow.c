@@ -1343,6 +1343,11 @@ static int hinic3_flow_set_normal_rss_action_config(struct rte_eth_dev *dev,
 		template_entry->queue_num = act_r->queue_num;
 		template_entry->ref_count = 1;
 		template_entry->types = act_r->types;
+		if (act_r->queue_num > HINIC3_QUEUE_MAX) {
+			rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION, act,
+					"queue_num exceeds max");
+			goto free_rss_template;
+		}
 		rte_memcpy(template_entry->queues, act_r->queue, act_r->queue_num * sizeof(uint16_t));
 
 		TAILQ_INSERT_TAIL(&nic_dev->rss_template_list, template_entry, node);
@@ -2294,6 +2299,12 @@ hinic3_flow_parse_fdir_vxlan_geneve_pattern(
 	enum hinic3_fdir_tunnel_mode tunnel_mode = HINIC3_FDIR_TUNNEL_MODE_NORMAL;
 	enum rte_flow_item_type type;
 	int err;
+
+	if (pattern == NULL) {
+		rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ITEM, NULL,
+				   "Invalid pattern");
+		return -rte_errno;
+	}
 
 	/* inner and outer ip type, set it to any by default */
 	filter->fdir_filter.ip_type = HINIC3_FDIR_IP_TYPE_ANY;

@@ -17,7 +17,7 @@ hinic3_pmd_mml_log_ret(char *show_str, int *show_len, const char *fmt, ...)
 	int remaining_len;
 
 	if (*show_len >= MAX_SHOW_STR_LEN)
-		return -UDA_ENOSPEC;
+		return -UDA_ELEN;
 
 	remaining_len = MAX_SHOW_STR_LEN - *show_len;
 

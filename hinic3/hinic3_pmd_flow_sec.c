@@ -737,6 +737,11 @@ hinic3_flow_parse_sec_fdir_pattern(__rte_unused struct rte_eth_dev *dev,
     enum rte_flow_item_type type;
     int err;
 
+	if (pattern == NULL) {
+		rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ITEM,
+							NULL, "Invalid pattern");
+		return -rte_errno;
+	}
     enum hinic3_fdir_tunnel_mode tunnel_mode = HINIC3_FDIR_TUNNEL_MODE_NORMAL;
     bool is_tunnel = false;
     bool vlan_precessed = false;

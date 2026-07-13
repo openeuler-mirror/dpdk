@@ -234,6 +234,11 @@ static inline void hinic3_write_db(void *db_addr, u16 q_id, int cos, u8 cflag,
 {
 	u64 db;
 
+	if (db_addr == NULL) {
+		PMD_DRV_LOG(ERR, "db_addr is NULL");
+		return;
+	}
+
 	/* Hardware will do endianness coverting */
 	db = DB_PI_HIGH(pi);
 	db = DB_INFO_UPPER_32(db) | DB_INFO_SET(SRC_TYPE, TYPE) |

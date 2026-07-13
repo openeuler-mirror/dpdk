@@ -306,7 +306,14 @@ void hinic3_set_pf_status(struct hinic3_hwif *hwif,
 
 enum hinic3_pf_status hinic3_get_pf_status(struct hinic3_hwif *hwif)
 {
-	u32 attr6 = hinic3_hwif_read_reg(hwif, HINIC3_CSR_FUNC_ATTR6_ADDR);
+	u32 attr6;
+
+	if (hwif == NULL) {
+		PMD_DRV_LOG(ERR, "hwif is NULL");
+		return 0;
+	}
+
+	attr6 = hinic3_hwif_read_reg(hwif, HINIC3_CSR_FUNC_ATTR6_ADDR);
 
 	return HINIC3_AF6_GET(attr6, PF_STATUS);
 }

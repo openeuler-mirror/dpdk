@@ -628,6 +628,10 @@ static void hinic3_process_inner_cksums(void *l3_hdr, struct rte_mbuf *mbuf)
 
 	version = (*(uint8_t *)l3_hdr) >> 4;
 	ver_index = hinic3_check_ip_version(version);
+	if (ver_index == IP_INDEX_INVALID) {
+		PMD_DRV_LOG(ERR, "Invalid IP version %u", version);
+		return;
+	}
 	ip_handler = &g_ip_cs_handlers[ver_index];
 	if (version == IPV4_VERSION) {
 		ip_handler->get_len_proto(l3_hdr, &(ip_handler->hdr_len), &l4_proto);
@@ -1233,7 +1237,12 @@ static void hinic3_prepare_sq_ctrl_compact_cqe(struct hinic3_sq_wqe_combo *wqe_c
 u16 hinic3_xmit_pkts_compact_cqe(void *tx_queue, struct rte_mbuf **tx_pkts, u16 nb_pkts)
 {
 	struct hinic3_txq *txq = tx_queue;
-	struct hinic3_nic_dev *nic_dev = txq->nic_dev;
+	struct hinic3_nic_dev *nic_dev;
+
+	if (unlikely(txq == NULL))
+		return 0;
+
+	nic_dev = txq->nic_dev;
 	struct hinic3_tx_info *tx_info = NULL;
 	struct rte_mbuf *mbuf_pkt = NULL;
 	struct hinic3_sq_wqe_combo wqe_combo = {0};

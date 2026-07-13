@@ -409,7 +409,7 @@ static void hinic3_dev_interrupt_handler_qpool(void *param)
  		return;
  	}
 
-	while (bytes_read = read(intr_handle->fd, &event, sizeof(event))) == sizeof(event) {
+	while ((bytes_read = read(intr_handle->fd, &event, sizeof(event))) == sizeof(event)) {
 		if (event.type == NETDEV_UP) {
 			link_state = 1;
 			get_port_info(nic_dev->hwdev, link_state, &link);
@@ -1742,7 +1742,17 @@ static int hinic3_dev_tx_queue_start(__rte_unused struct rte_eth_dev *dev,
 	PMD_DRV_LOG(INFO, "Start tx queue, eth_dev:%s, queue_idx:%d",
 		   dev->data->name, sq_id);
 
+	if (sq_id >= dev->data->nb_tx_queues) {
+		PMD_DRV_LOG(ERR, "sq_id %u exceeds nb_tx_queues %u",
+			    sq_id, dev->data->nb_tx_queues);
+		return -EINVAL;
+	}
+
 	txq = dev->data->tx_queues[sq_id];
+	if (txq == NULL) {
+		PMD_DRV_LOG(ERR, "txq[%u] is NULL", sq_id);
+		return -EINVAL;
+	}
 	HINIC3_SET_TXQ_STARTED(txq);
 	dev->data->tx_queue_state[sq_id] = RTE_ETH_QUEUE_STATE_STARTED;
 	return 0;
@@ -2183,6 +2193,7 @@ static void hinic3_disable_queue_intr(struct rte_eth_dev *dev)
 	struct rte_intr_handle *intr_handle = dev->intr_handle;
 	int msix_intr;
 	int i;
+	u16 nb_rx_queues = dev->data->nb_rx_queues;
 
 	if (intr_handle->intr_vec == NULL) {
 		return;
@@ -3514,6 +3525,8 @@ hinic3_dev_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 
 		for (i = 0; i < q_num; i++) {
 			rxq = nic_dev->rxqs[i];
+			if (rxq == NULL)
+				continue;
 			stats->ipackets += rxq->rxq_stats.packets;
 			stats->ibytes += rxq->rxq_stats.bytes;
 			stats->imissed += rxq->rxq_stats.dropped;
@@ -3523,6 +3536,8 @@ hinic3_dev_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 			nic_dev->num_sqs :  HINIC3_QUEUE_STAT_CNTRS;
 		for (i = 0; i < q_num; i++) {
 			txq = nic_dev->txqs[i];
+			if (txq == NULL)
+				continue;
 			stats->opackets += txq->txq_stats.packets;
 			stats->obytes += txq->txq_stats.bytes;
 		}
