@@ -663,7 +663,7 @@ static int hinic3_vxlan_tso_ip_phdr_cksum(struct rte_mbuf *mbuf)
 	if (mbuf->ol_flags & HINIC3_PKT_TX_TUNNEL_MASK) {
 		offset += ip_handler->hdr_len + sizeof(struct rte_udp_hdr) + sizeof(struct rte_vxlan_hdr) +
 			sizeof(struct rte_ether_hdr);
-		if (offset >= rte_pktmbuf_data_len(mbuf)) {
+		if (unlikely(offset >= rte_pktmbuf_data_len(mbuf))) {
 			PMD_DRV_LOG(ERR, "offset %u exceeds mbuf data len %u",
 				    offset, rte_pktmbuf_data_len(mbuf));
 			return -EINVAL;
@@ -737,11 +737,11 @@ static void hinic3_process_inner_cksums(void *l3_hdr, struct rte_mbuf *mbuf)
 
 	version = (*(uint8_t *)l3_hdr) >> 4;
 	ver_index = hinic3_check_ip_version(version);
-	if (ver_index == IP_INDEX_INVALID)
+	if (unlikely(ver_index == IP_INDEX_INVALID))
 		PMD_DRV_LOG(ERR, "Invalid IP version %u", version);
 
 	ip_handler = &g_ip_cs_handlers[ver_index];
-	if (version == IPV4_VERSION) {
+	if (unlikely(version == IPV4_VERSION)) {
 		ip_handler->get_len_proto(l3_hdr, &(ip_handler->hdr_len), &l4_proto);
 		ipv4_hdr = l3_hdr;
 

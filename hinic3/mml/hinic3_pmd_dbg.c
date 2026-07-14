@@ -144,7 +144,7 @@ hinic3_dbg_get_rq_wqe_info(void *dev, u16 q_id, u16 idx, u16 wqebb_cnt, u8 *wqe,
 	}
 
 	rxq = nic_dev->rxqs[q_id];
-	if ((u32)idx + (u32)wqebb_cnt > rxq->q_depth) {
+	if (idx + wqebb_cnt > rxq->q_depth) {
 		return -EFAULT;
 	}
 

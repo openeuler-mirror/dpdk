@@ -2193,7 +2193,6 @@ static void hinic3_disable_queue_intr(struct rte_eth_dev *dev)
 	struct rte_intr_handle *intr_handle = dev->intr_handle;
 	int msix_intr;
 	int i;
-	u16 nb_rx_queues = dev->data->nb_rx_queues;
 
 	if (intr_handle->intr_vec == NULL) {
 		return;

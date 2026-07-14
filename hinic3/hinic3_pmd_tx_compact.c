@@ -81,9 +81,8 @@ static void *hinic3_sq_get_wqebbs(struct hinic3_txq *sq, u16 num_wqebbs, u16 *pr
 static inline u16 hinic3_get_and_update_sq_owner(struct hinic3_txq *sq, u16 curr_pi, u16 wqebb_cnt)
 {
 	u16 owner = sq->owner;
-	u32 sum = (u32)curr_pi + (u32)wqebb_cnt;
 
-	if (unlikely(sum >= sq->q_depth || sum < curr_pi))
+	if (unlikely(curr_pi + wqebb_cnt >= sq->q_depth))
 		sq->owner = !sq->owner;
 
 	return owner;
@@ -628,7 +627,7 @@ static void hinic3_process_inner_cksums(void *l3_hdr, struct rte_mbuf *mbuf)
 
 	version = (*(uint8_t *)l3_hdr) >> 4;
 	ver_index = hinic3_check_ip_version(version);
-	if (ver_index == IP_INDEX_INVALID) {
+	if (unlikely(ver_index == IP_INDEX_INVALID)) {
 		PMD_DRV_LOG(ERR, "Invalid IP version %u", version);
 		return;
 	}
