@@ -1822,6 +1822,11 @@ static int hinic3_cfg_tcam_block(void *hwdev, u8 alloc_en, u16 *index)
 	if (!hwdev)
 		return -EINVAL;
 
+	if (!index) {
+		PMD_DRV_LOG(ERR, "Index pointer is NULL");
+		return -EINVAL;
+	}
+
 	memset(&tcam_block_info, 0, sizeof(struct hinic3_tcam_block));
 	if (IS_QPOOL_MODE())
  		tcam_block_info.func_id = ((struct hinic3_hwdev *)hwdev)->qpool_qgrp_id;
@@ -2322,6 +2327,11 @@ hinic3_cmdq_set_rss_queue_type(void *hwdev, struct hinic3_rss_type rss_type, u16
 
 	if (IS_QPOOL_MODE()) {
 		nic_dev = ((struct hinic3_hwdev *)hwdev)->dev_handle;
+		if (!nic_dev) {
+			PMD_DRV_LOG(ERR, "Qpool dev_handle is NULL");
+			hinic3_free_cmd_buf(cmd_buf);
+			return -EINVAL;
+		}
 		ctx_tbl->q_grp_id = nic_dev->hwdev->qpool_qgrp_id;
 		ctx_tbl->cmd_type = NIC_RSS_CONTEXT_CMD_RSS_QUEUE;
 		err = hinic3_cmdq_qpool(ctx_tbl, nic_dev->fd);
@@ -2839,6 +2849,11 @@ int hinic3_qinfo_type_init(const char *dev_file)
 u64 hinic3_get_driver_feature(void *dev)
 {
 	struct hinic3_nic_dev *nic_dev = NULL;
+
+	if (!dev) {
+		PMD_DRV_LOG(ERR, "Device pointer is NULL");
+		return 0;
+	}
 
 	nic_dev = (struct hinic3_nic_dev *)dev;
 

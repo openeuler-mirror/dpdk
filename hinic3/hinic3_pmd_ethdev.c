@@ -2201,7 +2201,7 @@ static void hinic3_disable_queue_intr(struct rte_eth_dev *dev)
 		return;
 	}
 
-	for (i = 0; i < nic_dev->num_rqs; i++) {
+	for (i = 0; i < dev->data->nb_rx_queues; i++) {
 		msix_intr = intr_handle->intr_vec[i];
 		hinic3_set_msix_state(nic_dev->hwdev, (u16)msix_intr, HINIC3_MSIX_DISABLE);
 		hinic3_misx_intr_clear_resend_bit(nic_dev->hwdev, (u16)msix_intr, MSIX_RESEND_TIMER_CLEAR);
@@ -5193,10 +5193,13 @@ set_default_feature_fail:
 	hinic3_deinit_sw_rxtxqs(nic_dev);
 
 init_sw_rxtxqs_fail:
+get_cap_fail:
 	hinic3_free_nic_hwdev(nic_dev->hwdev);
 
-get_cap_fail:
-init_hwdev_fail:
+init_nic_hwdev_fail:
+	hinic3_free_hwdev(nic_dev->hwdev);
+	eth_dev->dev_ops = NULL;
+
 link_state_err:
 	close(nic_dev->fd);
 get_nic_fd_fail:

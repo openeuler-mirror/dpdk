@@ -75,7 +75,7 @@ static void send_mgmt_ack(struct hinic3_msg_pf_to_mgmt *pf_to_mgmt,
 static bool check_mgmt_seq_id_and_seg_len(struct hinic3_recv_msg *recv_msg,
 					  u8 seq_id, u8 seg_len, u16 msg_id)
 {
-	if (seq_id > MGMT_MSG_MAX_SEQ_ID || seg_len > SEGMENT_LEN)
+	if (seq_id >= MGMT_MSG_MAX_SEQ_ID || seg_len > SEGMENT_LEN)
 		return false;
 
 	if (seq_id == 0) {

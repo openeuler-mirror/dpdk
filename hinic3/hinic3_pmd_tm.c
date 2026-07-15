@@ -1330,6 +1330,11 @@ hinic3_tm_mark_vlan_dei(struct rte_eth_dev *dev, int mark_green, int mark_yellow
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_hwdev *hwdev = nic_dev->hwdev;
 
+	if (error == NULL) {
+		PMD_DRV_LOG(ERR, "Error pointer is NULL");
+		return -EINVAL;
+	}
+
 	if (mark_green != 0 || mark_yellow != 0 || mark_red != 0) {
 		error->type = RTE_TM_ERROR_TYPE_WRED_PROFILE;
 		error->message =
@@ -1348,6 +1353,11 @@ hinic3_tm_mark_ip_dscp(struct rte_eth_dev *dev, int mark_green, int mark_yellow,
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_hwdev *hwdev = nic_dev->hwdev;
+
+	if (error == NULL) {
+		PMD_DRV_LOG(ERR, "Error pointer is NULL");
+		return -EINVAL;
+	}
 
 	if (mark_green != 0 || mark_yellow != 0 || mark_red != 0) {
 		error->type = RTE_TM_ERROR_TYPE_WRED_PROFILE;

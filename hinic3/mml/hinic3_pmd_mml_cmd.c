@@ -293,6 +293,14 @@ command_parse(cmd_adapter_t *adapter, int argc, char **argv, void *buf_out, uint
 {
 	int i;
 	major_cmd_t *major_cmd = NULL;
+
+	if (argc < 2) {
+		if (adapter->show_len > 0) {
+			*out_len = (u32)copy_reslut_to_buffer(buf_out, adapter->show_str, MAX_SHOW_STR_LEN);
+		}
+		return;
+	}
+
 	char *arg = argv[1];
 
 	if (is_help_version(adapter, argc, arg) == UDA_TRUE) {

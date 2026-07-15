@@ -2665,6 +2665,14 @@ hinic3_flow_create(struct rte_eth_dev          *dev,
 			if (ret) {
 				PMD_DRV_LOG(ERR, "Set rss queue indir tbl failed");
 				TAILQ_REMOVE(&nic_dev->filter_fdir_rule_list, flow, node);
+				if (filter_rules->is_sec_fdir) {
+					(void)hinic3_flow_add_del_sec_fdir_filter(dev,
+							&filter_rules->sec_fdir_filter,
+							&filter_rules->fdir_filter, false);
+				} else {
+					(void)hinic3_flow_add_del_fdir_filter(dev,
+							&filter_rules->fdir_filter, false);
+				}
 				goto free_flow;
 			}
 		}

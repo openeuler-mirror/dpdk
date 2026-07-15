@@ -512,7 +512,7 @@ int hinic3_init_hwdev(struct hinic3_hwdev *hwdev)
 		err = hinic3_init_qpool_cmdqs(hwdev);
 		if (err) {
 			PMD_DRV_LOG(ERR, "Qpool Init cmdq failed");
-			return err;
+			goto init_comm_ch_err;
 		}
 	} else {
 		err = hinic3_init_comm_ch(hwdev);

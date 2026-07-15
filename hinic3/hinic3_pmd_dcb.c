@@ -298,8 +298,14 @@ hinic3_set_txq_cos(struct hinic3_nic_dev *nic_dev, u16 start_qid, u16 q_num, u8 
 {
 	u16 idx;
 
-	for (idx = 0; idx < q_num; idx++)
+	for (idx = 0; idx < q_num; idx++) {
+		if (idx + start_qid >= nic_dev->num_sqs) {
+			PMD_DRV_LOG(ERR, "TXQ COS index %u exceeds max %u",
+				    idx + start_qid, nic_dev->num_sqs);
+			break;
+		}
 		nic_dev->dcb->txq_cos[idx + start_qid] = cos;
+	}
 }
 
 /**
