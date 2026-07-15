@@ -1175,7 +1175,7 @@ static void *hinic3_copy_tx_mbuf(struct hinic3_nic_dev *nic_dev,
 	dst_mbuf->data_off = 0;
 	dst_mbuf->data_len = 0;
 	for (i = 0; i < sge_cnt; i++) {
-		if (offset + mbuf->data_len > dst_mbuf->buf_len) {
+		if (unlikely(offset + mbuf->data_len > dst_mbuf->buf_len)) {
 			rte_pktmbuf_free(dst_mbuf);
 			return NULL;
 		}
