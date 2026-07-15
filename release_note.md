@@ -1,5 +1,5 @@
 # Release Notes
-## tag-tbd
+## hinic3-26.1.rc1-0630.r1
 ### 更新说明
 * 新增命令支持查询全量FEC模式。
   ```bash
