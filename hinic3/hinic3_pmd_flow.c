@@ -1127,6 +1127,12 @@ hinic3_flow_set_rss_action_config(struct rte_eth_dev	       *dev,
 	int ret;
 	u8 hash[HINIC3_RSS_KEY_SIZE] = {0};
 
+	if (actions == NULL || actions->conf == NULL) {
+		rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_HANDLE,
+				   NULL, "Invalid RSS action config");
+		return -rte_errno;
+	}
+
 	act_r = (struct rte_flow_action_rss *)actions->conf;
 	rss_conf.rss_hf = act_r->types;
 	if (act_r->key_len > HINIC3_RSS_KEY_SIZE) {
@@ -1337,6 +1343,11 @@ static int hinic3_flow_set_normal_rss_action_config(struct rte_eth_dev *dev,
 		template_entry->queue_num = act_r->queue_num;
 		template_entry->ref_count = 1;
 		template_entry->types = act_r->types;
+		if (act_r->queue_num > HINIC3_QUEUE_MAX) {
+			rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION, act,
+					"queue_num exceeds max");
+			goto free_rss_template;
+		}
 		rte_memcpy(template_entry->queues, act_r->queue, act_r->queue_num * sizeof(uint16_t));
 
 		TAILQ_INSERT_TAIL(&nic_dev->rss_template_list, template_entry, node);
@@ -1392,6 +1403,12 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 
 	switch (act->type) {
 	case RTE_FLOW_ACTION_TYPE_QUEUE:
+		if (act->conf == NULL) {
+			rte_flow_error_set(error, EINVAL,
+					   HINIC3_FLOW_ERROR_TYPE_ACTION,
+					   act, "Invalid action queue config.");
+			return -rte_errno;
+		}
 		act_q =
 		(const struct rte_flow_action_queue *)act->conf;
 		filter->fdir_filter.rq_index = act_q->index;
@@ -1411,6 +1428,12 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 		break;
 /* RSS process */
 	case RTE_FLOW_ACTION_TYPE_RSS:
+		if (act->conf == NULL) {
+			rte_flow_error_set(error, EINVAL,
+					   HINIC3_FLOW_ERROR_TYPE_ACTION,
+					   act, "Invalid action RSS config.");
+			return -rte_errno;
+		}
 		act_r = (const struct rte_flow_action_rss *)act->conf;
 		if (IS_BIFUR_MODE() || (IS_NORMAL_MODE() && bifur_en)) {
 			for (i = 0; i < HINIC3_QUEUE_MAX; i++) {
@@ -2276,6 +2299,12 @@ hinic3_flow_parse_fdir_vxlan_geneve_pattern(
 	enum hinic3_fdir_tunnel_mode tunnel_mode = HINIC3_FDIR_TUNNEL_MODE_NORMAL;
 	enum rte_flow_item_type type;
 	int err;
+
+	if (pattern == NULL) {
+		rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ITEM, NULL,
+				   "Invalid pattern");
+		return -rte_errno;
+	}
 
 	/* inner and outer ip type, set it to any by default */
 	filter->fdir_filter.ip_type = HINIC3_FDIR_IP_TYPE_ANY;

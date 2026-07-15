@@ -67,6 +67,11 @@ lib_tx_wqe_info_get(struct tool_target target,
 	struct msg_module msg_to_kernel;
 	struct hinic_wqe_info wqe = {0};
 
+	if (sq_info->sq_wqebb_size == 0) {
+		PMD_DRV_LOG(ERR, "sq_wqebb_size is zero");
+		return -UDA_EINVAL;
+	}
+
 	wqe.wqe_id = wqe_id;
 	wqe.q_id = sq_id;
 	wqe.wqebb_cnt = nwqe_size / sq_info->sq_wqebb_size;
@@ -100,6 +105,11 @@ lib_rx_wqe_info_get(struct tool_target target,
 {
 	struct msg_module msg_to_kernel;
 	struct hinic_wqe_info wqe = {0};
+
+	if (rq_info->rq_wqebb_size == 0) {
+		PMD_DRV_LOG(ERR, "rq_wqebb_size is zero");
+		return -UDA_EINVAL;
+	}
 
 	wqe.wqe_id = wqe_id;
 	wqe.q_id = rq_id;

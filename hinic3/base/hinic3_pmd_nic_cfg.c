@@ -1337,6 +1337,10 @@ int hinic3_rss_set_indir_tbl_qpool(void *hwdev, const u32 *indir_table, u32 indi
 		return -EINVAL;
 
 	struct rte_eth_dev * eth_dev = (struct rte_eth_dev *)(((struct hinic3_hwdev *)hwdev)->eth_dev);
+	if (eth_dev == NULL) {
+		PMD_DRV_LOG(ERR, "eth_dev is NULL");
+		return -EINVAL;
+	}
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
 
 	indir_tbl->dw0.bs.qgrp_id = hinic3_global_func_id(nic_dev->hwdev);
@@ -1379,6 +1383,12 @@ int hinic3_rss_set_indir_tbl(void *hwdev, const u32 *indir_table, u32 indir_tabl
 	cmd_buf->size = sizeof(struct nic_rss_indirect_tbl);
 	indir_tbl = (struct nic_rss_indirect_tbl *)cmd_buf->buf;
 	memset(indir_tbl, 0, sizeof(*indir_tbl));
+
+	if (indir_table_size > HINIC3_RSS_INDIR_SIZE) {
+		PMD_DRV_LOG(ERR, "indir_table_size %u exceeds max %u",
+			    indir_table_size, HINIC3_RSS_INDIR_SIZE);
+		return -EINVAL;
+	}
 
 	for (i = 0; i < indir_table_size; i++)
 		indir_tbl->entry[i] = (u16)(*(indir_table + i));
@@ -2159,6 +2169,12 @@ hinic3_set_tm_config_tc_rate(void *hwdev, u8 tc_no, u8 rate)
 			    "out size: 0x%x",
 			    err, ets.head.status, out_size);
 		return err;
+	}
+
+	if (tc_no >= NIC_DCB_TC_MAX) {
+		PMD_DRV_LOG(ERR, "Invalid tc_no %u, exceeds max %u",
+			    tc_no, NIC_DCB_TC_MAX);
+		return -EINVAL;
 	}
 
 	ets.op_code = CMD_QOS_OP_SET;

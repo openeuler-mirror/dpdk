@@ -169,6 +169,11 @@ u32 hinic3_hwif_read_reg(struct hinic3_hwif *hwif, u32 reg)
 
 void hinic3_hwif_write_reg(struct hinic3_hwif *hwif, u32 reg, u32 val)
 {
+	if (!hwif) {
+		PMD_DRV_LOG(ERR, "hwif is NULL");
+		return;
+	}
+
 	if (HINIC3_GET_REG_FLAG(reg) == HINIC3_MGMT_REGS_FLAG)
 		rte_write32(cpu_to_be32(val),
 		       hwif->mgmt_regs_base + HINIC3_GET_REG_ADDR(reg));
@@ -301,7 +306,14 @@ void hinic3_set_pf_status(struct hinic3_hwif *hwif,
 
 enum hinic3_pf_status hinic3_get_pf_status(struct hinic3_hwif *hwif)
 {
-	u32 attr6 = hinic3_hwif_read_reg(hwif, HINIC3_CSR_FUNC_ATTR6_ADDR);
+	u32 attr6;
+
+	if (hwif == NULL) {
+		PMD_DRV_LOG(ERR, "hwif is NULL");
+		return 0;
+	}
+
+	attr6 = hinic3_hwif_read_reg(hwif, HINIC3_CSR_FUNC_ATTR6_ADDR);
 
 	return HINIC3_AF6_GET(attr6, PF_STATUS);
 }

@@ -160,9 +160,16 @@ int hinic3_set_wq_page_size(void *hwdev, u16 func_idx, u32 page_size)
 int hinic3_func_reset(void *hwdev, u64 reset_flag)
 {
 	struct hinic3_reset func_reset;
-	struct hinic3_hwif *hwif = ((struct hinic3_hwdev *)hwdev)->hwif;
+	struct hinic3_hwif *hwif;
 	u16 out_size = sizeof(func_reset);
 	int err = 0;
+
+	if (!hwdev) {
+		PMD_DRV_LOG(ERR, "hwdev is NULL");
+		return -EINVAL;
+	}
+
+	hwif = ((struct hinic3_hwdev *)hwdev)->hwif;
 
 	PMD_DRV_LOG(INFO, "Function is reset");
 

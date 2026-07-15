@@ -156,7 +156,12 @@ static int hinic3_cmdq_poll_msg(struct hinic3_cmdq *cmdq, u32 timeout);
 
 bool hinic3_cmdq_idle(struct hinic3_cmdq *cmdq)
 {
-	struct hinic3_wq *wq = cmdq->wq;
+	struct hinic3_wq *wq;
+
+	if (cmdq == NULL)
+		return true;
+
+	wq = cmdq->wq;
 
 	return (rte_atomic32_read(&wq->delta) == wq->q_depth ? true : false);
 }
@@ -465,8 +470,15 @@ int hinic3_cmdq_direct_resp(void *hwdev, enum hinic3_mod_type mod, u8 cmd,
 			   struct hinic3_cmd_buf *buf_in,
 			   u64 *out_param, u32 timeout)
 {
-	struct hinic3_cmdqs *cmdqs = ((struct hinic3_hwdev *)hwdev)->cmdqs;
+	struct hinic3_cmdqs *cmdqs;
 	int err;
+
+	if (!hwdev) {
+		PMD_DRV_LOG(ERR, "hwdev is NULL");
+		return -EINVAL;
+	}
+
+	cmdqs = ((struct hinic3_hwdev *)hwdev)->cmdqs;
 
 	err = cmdq_params_valid(hwdev, buf_in);
 	if (err) {
