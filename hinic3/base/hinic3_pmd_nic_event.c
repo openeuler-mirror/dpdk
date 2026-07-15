@@ -73,10 +73,6 @@ static void hinic3_set_vport_state(struct hinic3_hwdev *hwdev, struct hinic3_cmd
 	struct hinic3_nic_dev *nic_dev = NULL;
 	int err = 0;
 
-	if (hwdev->eth_dev == NULL) {
-		PMD_DRV_LOG(ERR, "Eth dev is NULL");
-		return;
-	}
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV((struct rte_eth_dev *)(hwdev->eth_dev));
 
 	if (link_state->state) {

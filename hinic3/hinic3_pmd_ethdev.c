@@ -5194,12 +5194,10 @@ set_default_feature_fail:
 
 init_sw_rxtxqs_fail:
 get_cap_fail:
-	hinic3_free_nic_hwdev(nic_dev->hwdev);
-
-init_nic_hwdev_fail:
 	hinic3_free_hwdev(nic_dev->hwdev);
 	eth_dev->dev_ops = NULL;
 
+init_hwdev_fail:
 link_state_err:
 	close(nic_dev->fd);
 get_nic_fd_fail:
