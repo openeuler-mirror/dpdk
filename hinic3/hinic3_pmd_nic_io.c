@@ -30,8 +30,6 @@
 #include "hinic3_pmd_rx.h"
 #include "hinic3_pmd_ethdev.h"
 
-#define HINIC3_DEAULT_TX_CI_PENDING_LIMIT	3
-#define HINIC3_DEAULT_TX_CI_COALESCING_TIME	16
 #define HINIC3_DEAULT_DROP_THD_ON		0xFFFF
 #define HINIC3_DEAULT_DROP_THD_OFF		0
 
@@ -154,24 +152,6 @@ struct hinic3_rq_ctxt_block {
 					RQ_CTXT_WQ_PAGE_##member##_MASK) << \
 					RQ_CTXT_WQ_PAGE_##member##_SHIFT)
 
-#define RQ_CTXT_CQE_LEN_SHIFT				28
-
-#define RQ_CTXT_CQE_LEN_MASK				0x3U
-
-#define RQ_CTXT_CQE_LEN_SET(val, member)		(((val) & \
-					RQ_CTXT_##member##_MASK) << \
-					RQ_CTXT_##member##_SHIFT)
-
-#define RQ_CTXT_CQE_LEN_SHIFT				28
-#define RQ_CTXT_MAX_COUNT_SHIFT				18
-
-#define RQ_CTXT_CQE_LEN_MASK				0x3U
-#define RQ_CTXT_MAX_COUNT_MASK				0x3FFU
-
-#define RQ_CTXT_CQE_LEN_SET(val, member)		(((val) & \
-					RQ_CTXT_##member##_MASK) << \
-					RQ_CTXT_##member##_SHIFT)
-
 #define RQ_CTXT_WQ_BLOCK_PFN_HI_SHIFT			0
 
 #define RQ_CTXT_WQ_BLOCK_PFN_HI_MASK			0x7FFFFFU
@@ -187,10 +167,6 @@ struct hinic3_rq_ctxt_block {
 
 #define WQ_PAGE_PFN(page_addr)		((page_addr) >> WQ_PAGE_PFN_SHIFT)
 #define WQ_BLOCK_PFN(page_addr)		((page_addr) >> WQ_BLOCK_PFN_SHIFT)
-
-#define SQ_CI_ADDR_SHIFT     2
-#define RQ_CI_ADDR_SHIFT     4
-#define RQ_CQE_AGGREGATE_NUM 768
 
 static void hinic3_qp_prepare_cmdq_header(
 	struct hinic3_qp_ctxt_header *qp_ctxt_hdr,
@@ -314,8 +290,8 @@ void hinic3_rq_prepare_ctxt(struct hinic3_rxq *rq, struct hinic3_rq_ctxt *rq_ctx
 	intr_disable = rq->dp_intr_en ? 0 : 1;
 
 	if (is_sp560_nic(rq->nic_dev)) {
-		support_rq_sw_compact_cqe = HINIC3_SUPPORT_RX_SW_COMPACT_CQE(rq->nic_dev);
-		hinic3_prepare_rq_ctxt_ceq_and_prefetch(rq_ctxt, wqe_type, rq->msix_entry_idx, support_rq_sw_compact_cqe, intr_disable);
+		support_rq_sw_compact_cqe = rq->nic_dev->config.rx_cqe_compact_en;
+		hinic3_prepare_rq_ctxt_ceq_and_prefetch(rq, rq_ctxt, support_rq_sw_compact_cqe, intr_disable);
 	} else {
 		rq_ctxt->ceq_attr = RQ_CTXT_CEQ_ATTR_SET(intr_disable, EN) |
 			RQ_CTXT_CEQ_ATTR_SET(0, INTR_ARM) |
@@ -329,7 +305,7 @@ void hinic3_rq_prepare_ctxt(struct hinic3_rxq *rq, struct hinic3_rq_ctxt *rq_ctx
 	/* Use 32Byte WQE with SGE for CQE in default */
 	rq_ctxt->wq_pfn_hi_type_owner = RQ_CTXT_WQ_PAGE_SET(wq_page_pfn_hi, HI_PFN) |
 		RQ_CTXT_WQ_PAGE_SET(1, OWNER);
-	
+
 	rq_ctxt->pi_paddr_hi = upper_32_bits(rq->pi_dma_addr);
 	rq_ctxt->pi_paddr_lo = lower_32_bits(rq->pi_dma_addr);
 
@@ -698,9 +674,6 @@ static int init_rq_ctxts_qpool(struct hinic3_nic_dev *nic_dev)
 	return err;
 }
 
-#define HINIC3_RX_CQE_TIMER_LOOP 		15
-#define HINIC3_RX_CQE_COALESCE_NUM		63
-
 int hinic3_init_rq_cqe_ctxts(struct hinic3_nic_dev *nic_dev)
 {
 	struct hinic3_hwdev *hwdev = NULL;
@@ -728,8 +701,8 @@ int hinic3_init_rq_cqe_ctxts(struct hinic3_nic_dev *nic_dev)
 			rq_ci_paddr = rxq->rq_ci_paddr >> RQ_CI_ADDR_SHIFT;
 			cqe_ctx.ci_addr_hi = upper_32_bits(rq_ci_paddr);
 			cqe_ctx.ci_addr_lo = lower_32_bits(rq_ci_paddr);
-			cqe_ctx.threshold_cqe_num = HINIC3_RX_CQE_COALESCE_NUM;
-			cqe_ctx.timer_loop = HINIC3_RX_CQE_TIMER_LOOP;
+			cqe_ctx.threshold_cqe_num = nic_dev->config.rx_cqe_coalesce_num;
+			cqe_ctx.timer_loop = nic_dev->config.rx_cqe_timer_loop;
 		} else {
 			cqe_ctx.threshold_cqe_num = 0;
 			cqe_ctx.timer_loop = 0;
@@ -823,8 +796,8 @@ int hinic3_init_qp_ctxts(void *dev)
 		if (txq == NULL || txq->is_hairpin)
 			continue;
 		sq_attr.ci_dma_base = txq->ci_dma_base >> 0x2;
-		sq_attr.pending_limit = HINIC3_DEAULT_TX_CI_PENDING_LIMIT;
-		sq_attr.coalescing_time = HINIC3_DEAULT_TX_CI_COALESCING_TIME;
+		sq_attr.pending_limit = nic_dev->config.tx_pending_limit;
+		sq_attr.coalescing_time = nic_dev->config.tx_coalescing_time;
 		sq_attr.intr_en = 0;
 		sq_attr.intr_idx = 0; /* Tx doesn't need intr */
 		sq_attr.l2nic_sqn = nic_dev->txqs[q_id]->local_qid;

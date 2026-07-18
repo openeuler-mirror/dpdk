@@ -56,6 +56,19 @@
 					RQ_CTXT_CEQ_ATTR_##member##_MASK) \
 					<< RQ_CTXT_CEQ_ATTR_##member##_SHIFT)
 
+#define RQ_CTXT_CQE_LEN_SHIFT				28
+#define RQ_CTXT_MAX_COUNT_SHIFT				18
+
+#define RQ_CTXT_CQE_LEN_MASK				0x3U
+#define RQ_CTXT_MAX_COUNT_MASK				0x3FFU
+#define RQ_CTXT_CQE_LEN_SET(val, member)		(((val) & \
+					RQ_CTXT_##member##_MASK) << \
+					RQ_CTXT_##member##_SHIFT)
+
+#define SQ_CI_ADDR_SHIFT	2
+#define RQ_CI_ADDR_SHIFT	4
+#define RQ_CQE_AGGREGATE_NUM 		768
+
 #define SQ_CTXT_PREF_CACHE_THRESHOLD_SHIFT		0
 #define SQ_CTXT_PREF_CACHE_MAX_SHIFT			14
 #define SQ_CTXT_PREF_CACHE_MIN_SHIFT			25

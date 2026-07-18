@@ -449,7 +449,7 @@ int hinic3_set_vport_enable(void *hwdev, bool enable)
 	en_state.func_id = hinic3_global_func_id(hwdev);
 	en_state.state = enable ? 1 : 0;
 	en_state.num_qps = (u8)nic_dev->num_rqs;
-	en_state.rx_compact_wqe_en = HINIC3_SUPPORT_RX_SW_COMPACT_CQE(nic_dev);
+	en_state.rx_compact_wqe_en = nic_dev->config.rx_cqe_compact_en;
 
 	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_SET_VPORT_ENABLE,
 				     &en_state, sizeof(en_state),
