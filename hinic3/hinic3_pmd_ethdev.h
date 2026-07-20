@@ -232,6 +232,9 @@ struct hinic3_nic_dev {
 	u16 max_sqs;
 	u16 max_rqs;
 
+ 	u16 rxq_depth;
+	u16 txq_depth;
+
 	u16 rx_buff_len;
 	u16 mtu_size;
 
