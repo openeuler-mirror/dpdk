@@ -512,7 +512,7 @@ int hinic3_init_hwdev(struct hinic3_hwdev *hwdev)
 		err = hinic3_init_qpool_cmdqs(hwdev);
 		if (err) {
 			PMD_DRV_LOG(ERR, "Qpool Init cmdq failed");
-			goto init_comm_ch_err;
+			goto init_qpool_err;
 		}
 	} else {
 		err = hinic3_init_comm_ch(hwdev);
@@ -539,8 +539,10 @@ int hinic3_init_hwdev(struct hinic3_hwdev *hwdev)
 init_cap_err:
 	hinic3_deinit_cfg_mgmt(hwdev);
 init_cfg_err:
-	hinic3_uninit_comm_ch(hwdev);
+	if (!IS_QPOOL_MODE())
+		hinic3_uninit_comm_ch(hwdev);
 
+init_qpool_err:
 init_comm_ch_err:
 	hinic3_free_hwif(hwdev);
 

@@ -264,15 +264,8 @@ get_queue_type(major_cmd_t *self, char *argc)
 static int
 get_queue_id(major_cmd_t *self, char *argc)
 {
-	struct cmd_show_q_st *show_q = NULL;
+	struct cmd_show_q_st *show_q = self->cmd_st;
 	unsigned int num = 0;
-
-	if (self == NULL) {
-		PMD_DRV_LOG(ERR, "Queue self pointer is NULL");
-		return -UDA_EINVAL;
-	}
-
-	show_q = self->cmd_st;
 
 	if (string_toui(argc, BASE_10, &num) != UDA_SUCCESS) {
 		self->err_no = -UDA_EINVAL;
@@ -319,14 +312,7 @@ get_direction(major_cmd_t *self, char *argc)
 static int
 rx_param_check(major_cmd_t *self, struct cmd_show_q_st *rx_param)
 {
-	struct cmd_show_q_st *show_q = NULL;
-
-	if (self == NULL) {
-		PMD_DRV_LOG(ERR, "Queue self pointer is NULL");
-		return -UDA_EINVAL;
-	}
-
-	show_q = self->cmd_st;
+	struct cmd_show_q_st *show_q = self->cmd_st;
 
 	if (rx_param->target.bus_num == TRGET_UNKNOWN_BUS_NUM) {
 		self->err_no = -UDA_EINVAL;

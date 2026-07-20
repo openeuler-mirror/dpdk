@@ -298,14 +298,13 @@ hinic3_set_txq_cos(struct hinic3_nic_dev *nic_dev, u16 start_qid, u16 q_num, u8 
 {
 	u16 idx;
 
-	for (idx = 0; idx < q_num; idx++) {
-		if (idx + start_qid >= nic_dev->num_sqs) {
-			PMD_DRV_LOG(ERR, "TXQ COS index %u exceeds max %u",
-				    idx + start_qid, nic_dev->num_sqs);
-			break;
-		}
-		nic_dev->dcb->txq_cos[idx + start_qid] = cos;
+ 	if (start_qid + q_num > HINIC3_MAX_QUEUE_NUM) {
+		PMD_DRV_LOG(ERR, "txq_cos out of bounds: start_qid=%u, q_num=%u, max=%u",
+					start_qid, q_num, HINIC3_MAX_QUEUE_NUM);
+		return;
 	}
+	for (idx = 0; idx < q_num; idx++)
+		nic_dev->dcb->txq_cos[idx + start_qid] = cos;
 }
 
 /**
@@ -366,6 +365,10 @@ hinic3_vf_fillout_indir_tbl(struct hinic3_nic_dev *nic_dev, u8 num_cos, u32 *ind
 	u8 vf_indir_num = NIC_RSS_INDIR_SIZE / 2;
 	u8 j, cur_cos = 0, default_cos;
 	u8 valid_cos_map = hinic3_get_dev_valid_cos_map(nic_dev);
+	if (valid_cos_map == 0) {
+		PMD_DRV_LOG(ERR, "No valid cos map available.");
+		return;
+	}
 	if (num_cos == 0) {
 		for (i = 0; i < NIC_RSS_INDIR_SIZE; i++)
 			indir[i] = i % nic_dev->num_rqs;
@@ -409,6 +412,11 @@ hinic3_fillout_indir_tbl(struct hinic3_nic_dev *nic_dev, u8 num_cos, u32 *indir)
 	u32 i = 0;
 	u8 j, cur_cos = 0, default_cos;
 	u8 valid_cos_map = hinic3_get_dev_valid_cos_map(nic_dev);
+	if (valid_cos_map == 0) {
+		PMD_DRV_LOG(ERR, "No valid cos map available.");
+		return;
+	}
+
 	if (num_cos == 0) {
 		for (i = 0; i < NIC_RSS_INDIR_SIZE; i++)
 			indir[i] = i % nic_dev->num_rqs;
