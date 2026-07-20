@@ -4878,7 +4878,7 @@ static int hinic3_get_nic_fd(struct rte_eth_dev *eth_dev)
 	snprintf(dev_file, sizeof(dev_file), "/dev/nic_cdev/" PCI_PRI_FMT, pci_dev->addr.domain,
 			pci_dev->addr.bus, pci_dev->addr.devid, pci_dev->addr.function);
 
-	fd = open(dev_file, O_RDWR | O_TRUNC, 777);
+	fd = open(dev_file, O_RDWR | O_TRUNC);
 	if (fd < 0) {
 		PMD_DRV_LOG(ERR, "Open nic_cdev file failed.\n");
 		return -1;
