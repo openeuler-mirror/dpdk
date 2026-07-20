@@ -1,17 +1,17 @@
-From ebbac2452f52677d6aa4291d7d1cdf822b332cf8 Mon Sep 17 00:00:00 2001
+From 1628d9ccdeba66478623f3dfb48f5bc1a60092cf Mon Sep 17 00:00:00 2001
 From: bcopton <bcopton@noreply.gitcode.com>
 Date: Thu, 16 Jul 2026 14:40:11 +0800
 Subject: [PATCH] Support special vxlan-gpe inner l3 l4 csum hw offload
 
 ---
- drivers/net/hinic3/hinic3_pmd_tx.c | 173 +++++++++++++++++++++++++----
- 1 file changed, 152 insertions(+), 21 deletions(-)
+ drivers/net/hinic3/hinic3_pmd_tx.c | 172 +++++++++++++++++++++++++----
+ 1 file changed, 151 insertions(+), 21 deletions(-)
 
 diff --git a/drivers/net/hinic3/hinic3_pmd_tx.c b/drivers/net/hinic3/hinic3_pmd_tx.c
-index 0078912..8d2e80c 100644
+index 0078912..d0cd8e7 100644
 --- a/drivers/net/hinic3/hinic3_pmd_tx.c
 +++ b/drivers/net/hinic3/hinic3_pmd_tx.c
-@@ -325,6 +325,143 @@ int hinic3_tx_done_cleanup(void *txq, u32 free_cnt)
+@@ -325,6 +325,142 @@ int hinic3_tx_done_cleanup(void *txq, u32 free_cnt)
  	return hinic3_xmit_mbuf_cleanup(tx_queue, try_free_cnt);
  }
  
@@ -40,13 +40,12 @@ index 0078912..8d2e80c 100644
 +hinic3_ipv6_phdr_cksum(const struct rte_ipv6_hdr *ipv6_hdr, uint64_t ol_flags)
 +{
 +	uint32_t	sum;
-+	uint8_t		proto, version;
++	uint8_t		proto;
 +	uint16_t	l3_len;
 +	rte_be32_t	l4_len;
 +	rte_be32_t	l4_proto;
 +	/* Parse ipv6_hdr, not support pseudo-header for now. */
-+	version = (*(uint8_t *)ipv6_hdr >> 4) & 0x0F;
-+	hinic3_ip_cs_handler_t *ip_handler = &g_ip_cs_handlers[version];
++	hinic3_ip_cs_handler_t *ip_handler = &g_ip_cs_handlers[IPV6_VERSION];
 +	l3_len = ip_handler->hdr_size;
 +	l4_proto = rte_cpu_to_be_16(ip_handler->get_proto((uint8_t *)ipv6_hdr));
 +
@@ -155,7 +154,7 @@ index 0078912..8d2e80c 100644
  /*lint -e40*/
  static int hinic3_tx_offload_pkt_prepare(struct rte_mbuf *mbuf,
  					 u16 *inner_l3_offset)
-@@ -362,6 +499,8 @@ static int hinic3_tx_offload_pkt_prepare(struct rte_mbuf *mbuf,
+@@ -362,6 +498,8 @@ static int hinic3_tx_offload_pkt_prepare(struct rte_mbuf *mbuf,
  		*inner_l3_offset = mbuf->l2_len;
  	}
  
@@ -164,7 +163,7 @@ index 0078912..8d2e80c 100644
  	return 0;
  }
  /*lint +e40*/
-@@ -384,27 +523,6 @@ static inline void hinic3_set_vlan_tx_offload(struct hinic3_sq_task *task,
+@@ -384,27 +522,6 @@ static inline void hinic3_set_vlan_tx_offload(struct hinic3_sq_task *task,
  			     SQ_TASK_INFO3_SET(1U, VLAN_TAG_VALID);
  }
  
@@ -192,7 +191,7 @@ index 0078912..8d2e80c 100644
  static uint8_t hinic3_ip_phdr_cksum(hinic3_ip_cs_handler_t *ip_handler, uint8_t *pkt_data, struct rte_mbuf *mbuf)
  {
  	struct rte_tcp_hdr *tcp_hdr = NULL;
-@@ -524,6 +642,12 @@ static int hinic3_set_tx_offload(struct rte_mbuf *mbuf,
+@@ -524,6 +641,12 @@ static int hinic3_set_tx_offload(struct rte_mbuf *mbuf,
  		if (ol_flags & HINIC3_PKT_TX_IP_CKSUM)
  			task->pkt_info0 |= SQ_TASK_INFO0_SET(1U, INNER_L3_EN);
  
@@ -205,9 +204,9 @@ index 0078912..8d2e80c 100644
  		switch (ol_flags & HINIC3_PKT_TX_L4_MASK) {
  		case HINIC3_PKT_TX_TCP_CKSUM:
  		case HINIC3_PKT_TX_UDP_CKSUM:
-@@ -666,6 +790,13 @@ static int hinic3_get_tx_offload(struct rte_mbuf *mbuf,
- 			/* valid non-tso mbuf */
- 			return 0;
+@@ -662,6 +785,13 @@ static int hinic3_get_tx_offload(struct rte_mbuf *mbuf,
+ 			/* non tso packet len must less than 64KB */
+ 			return -EINVAL;
  
 +		/* For udp, pl_ofs should point to l4_hdr to calculate phdr csum right. */
 +		if ((mbuf->ol_flags & HINIC3_PKT_TX_L4_MASK) == HINIC3_PKT_TX_TCP_CKSUM)
@@ -216,9 +215,9 @@ index 0078912..8d2e80c 100644
 +		else
 +			wqe_info->payload_offset = inner_l3_offset + mbuf->l3_len;
 +
- 		/* non-tso packet buffer number must less than 38
- 		 * the mbuf segs more than 38 must copy to one buffer
- 		 */
+ 		if (likely(HINIC3_NONTSO_SEG_NUM_VALID(mbuf->nb_segs)))
+ 			/* valid non-tso mbuf */
+ 			return 0;
 -- 
 2.50.1.windows.1
 
