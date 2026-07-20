@@ -855,6 +855,11 @@ static int hinic3_cmdq_poll_msg(struct hinic3_cmdq *cmdq, u32 timeout)
 		return -EINVAL;
 	}
 
+	if (ci >= HINIC3_CMDQ_DEPTH) {
+		PMD_DRV_LOG(ERR, "Invalid cmdq ci: %u, must be < %u", ci, HINIC3_CMDQ_DEPTH);
+		return -EINVAL;
+	}
+
 	cmd_info = &cmdq->cmd_infos[ci];
 	if (cmd_info->cmd_type == HINIC3_CMD_TYPE_NONE) {
 		PMD_DRV_LOG(ERR,

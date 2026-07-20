@@ -263,6 +263,12 @@ static int resp_mbox_handler(struct hinic3_mbox *func_to_func,
 			      struct hinic3_recv_mbox *recv_mbox)
 {
 	int ret;
+
+	if (func_to_func == NULL || recv_mbox == NULL) {
+		PMD_DRV_LOG(ERR, "func_to_func or recv_mbox is NULL");
+		return -EINVAL;
+	}
+
 	rte_spinlock_lock(&func_to_func->mbox_lock);
 	if (recv_mbox->msg_info.msg_id == func_to_func->send_msg_id &&
 	    func_to_func->event_flag == EVENT_START) {
@@ -284,6 +290,11 @@ static bool check_mbox_segment(struct hinic3_recv_mbox *recv_mbox, u64 mbox_head
 {
 	u8 seq_id, seg_len, msg_id, mod;
 	u16 src_func_idx, cmd;
+
+	if (recv_mbox == NULL) {
+		PMD_DRV_LOG(ERR, "recv_mbox is NULL");
+		return false;
+	}
 
 	seq_id = HINIC3_MSG_HEADER_GET(mbox_header, SEQID);
 	seg_len = HINIC3_MSG_HEADER_GET(mbox_header, SEG_LEN);

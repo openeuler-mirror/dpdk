@@ -124,7 +124,7 @@ static inline void hinic3_hw_be32_len(void *data, int len)
 	}
 }
 
-static inline int hinic3_get_bit(int nr, volatile unsigned long *addr)
+static inline int hinic3_get_bit(unsigned int nr, volatile unsigned long *addr)
 {
 	RTE_ASSERT(nr < 0x20);
 
@@ -137,12 +137,12 @@ static inline void hinic3_set_bit(unsigned int nr, volatile unsigned long *addr)
 	__sync_fetch_and_or(addr, (1UL << nr));
 }
 
-static inline void hinic3_clear_bit(int nr, volatile unsigned long *addr)
+static inline void hinic3_clear_bit(unsigned int nr, volatile unsigned long *addr)
 {
 	__sync_fetch_and_and(addr, ~(1UL << nr));
 }
 
-static inline int hinic3_test_and_clear_bit(int nr,
+static inline int hinic3_test_and_clear_bit(unsigned int nr,
 					    volatile unsigned long *addr)
 {
 	unsigned long mask = (1UL << nr);
@@ -150,7 +150,7 @@ static inline int hinic3_test_and_clear_bit(int nr,
 	return (int)(__sync_fetch_and_and(addr, ~mask) & mask);
 }
 
-static inline int hinic3_test_and_set_bit(int nr, volatile unsigned long *addr)
+static inline int hinic3_test_and_set_bit(unsigned int nr, volatile unsigned long *addr)
 {
 	unsigned long mask = (1UL << nr);
 

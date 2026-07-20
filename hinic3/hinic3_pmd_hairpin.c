@@ -79,6 +79,11 @@ hinic3_hairpin_get_peer_ports(struct rte_eth_dev *dev, uint16_t *peer_ports,
 	uint16_t txq_num = data->nb_tx_queues;
 	uint16_t i, peer_cnt = 0;
 
+	if (!peer_ports) {
+		PMD_DRV_LOG(ERR, "peer_ports is NULL");
+		return -EINVAL;
+	}
+
 	if (direction) {
 		for (i = 0; i < txq_num; i++) {
 			if (txq[i] == NULL || !txq[i]->is_hairpin || txq[i]->hairpin_conf.peer_count == 0)

@@ -2349,8 +2349,10 @@ handle_err:
 	/* Flush tx && rx chip resources in case of setting vport fake fail */
 	(void)hinic3_flush_qps_res(nic_dev->hwdev);
 	rte_delay_ms(DEV_START_DELAY_MS);
-	for (i = 0; i < nic_dev->num_rqs; i++) {
+	for (i = 0; i < eth_dev->data->nb_rx_queues; i++) {
 		rxq = nic_dev->rxqs[i];
+		if (!rxq)
+			continue;
 		hinic3_remove_rq_from_rx_queue_list(nic_dev, rxq->q_id);
 		hinic3_free_rxq_mbufs(rxq);
 		hinic3_dev_rx_queue_intr_disable(eth_dev, rxq->q_id);
@@ -3403,6 +3405,11 @@ static int hinic3_rss_reta_update(struct rte_eth_dev *dev,
 
 	if (reta_size != HINIC3_RSS_INDIR_SIZE) {
 		PMD_DRV_LOG(ERR, "Invalid reta size, reta_size: %d", reta_size);
+		return -EINVAL;
+	}
+
+	if (!reta_conf) {
+		PMD_DRV_LOG(ERR, "reta_conf is NULL");
 		return -EINVAL;
 	}
 

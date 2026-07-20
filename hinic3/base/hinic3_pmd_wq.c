@@ -120,6 +120,12 @@ void *hinic3_get_wqe(struct hinic3_wq *wq, int num_wqebbs, u16 *prod_idx)
 {
 	u16 curr_prod_idx;
 
+	if (rte_atomic32_read(&wq->delta) < num_wqebbs) {
+		PMD_DRV_LOG(ERR, "Not enough wqe space, delta: %d, num_wqebbs: %d",
+			    rte_atomic32_read(&wq->delta), num_wqebbs);
+		return NULL;
+	}
+
 	rte_atomic32_sub(&wq->delta, num_wqebbs);
 	curr_prod_idx = (u16)(wq->prod_idx);
 	wq->prod_idx += num_wqebbs;
