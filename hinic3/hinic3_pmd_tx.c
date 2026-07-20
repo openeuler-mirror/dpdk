@@ -981,9 +981,15 @@ static bool hinic3_is_tso_sge_valid(struct rte_mbuf *mbuf,
 	u8 copy_mbuf_num;
 	struct rte_mbuf *mbuf_pkt;
 
+	if (unlikely(mbuf->pkt_len < wqe_info->payload_offset)) {
+		PMD_DRV_LOG(WARNING, "illegal pkt, pkt len (%u) < payload offset (%u).\n",
+			    mbuf->pkt_len, wqe_info->payload_offset);
+		return false;
+	}
 	/* 计算报文负载分片数，超过 10bit 的硬件限制就进行丢包处理 */
 	payload_len = mbuf->pkt_len - wqe_info->payload_offset;
 	frag_num = (payload_len + mbuf->tso_segsz - 1) / mbuf->tso_segsz;
+	
 	if (frag_num > MAX_TSO_NUM_FRAG) {
 		PMD_DRV_LOG(WARNING, "tso frag num over hw limit, frag_num:0x%x.\n", frag_num);
 		return false;
