@@ -293,6 +293,10 @@ command_parse(cmd_adapter_t *adapter, int argc, char **argv, void *buf_out, uint
 {
 	int i;
 	major_cmd_t *major_cmd = NULL;
+
+	if (argc < 2)
+		return;
+
 	char *arg = argv[1];
 
 	if (is_help_version(adapter, argc, arg) == UDA_TRUE) {

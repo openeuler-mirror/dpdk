@@ -2201,7 +2201,7 @@ static void hinic3_disable_queue_intr(struct rte_eth_dev *dev)
 		return;
 	}
 
-	for (i = 0; i < nic_dev->num_rqs; i++) {
+	for (i = 0; i < dev->data->nb_rx_queues; i++) {
 		msix_intr = intr_handle->intr_vec[i];
 		hinic3_set_msix_state(nic_dev->hwdev, (u16)msix_intr, HINIC3_MSIX_DISABLE);
 		hinic3_misx_intr_clear_resend_bit(nic_dev->hwdev, (u16)msix_intr, MSIX_RESEND_TIMER_CLEAR);
@@ -4878,7 +4878,7 @@ static int hinic3_get_nic_fd(struct rte_eth_dev *eth_dev)
 	snprintf(dev_file, sizeof(dev_file), "/dev/nic_cdev/" PCI_PRI_FMT, pci_dev->addr.domain,
 			pci_dev->addr.bus, pci_dev->addr.devid, pci_dev->addr.function);
 
-	fd = open(dev_file, O_RDWR | O_TRUNC, 777);
+	fd = open(dev_file, O_RDWR | O_TRUNC);
 	if (fd < 0) {
 		PMD_DRV_LOG(ERR, "Open nic_cdev file failed.\n");
 		return -1;
@@ -5193,9 +5193,10 @@ set_default_feature_fail:
 	hinic3_deinit_sw_rxtxqs(nic_dev);
 
 init_sw_rxtxqs_fail:
-	hinic3_free_nic_hwdev(nic_dev->hwdev);
-
 get_cap_fail:
+	hinic3_free_hwdev(nic_dev->hwdev);
+	eth_dev->dev_ops = NULL;
+
 init_hwdev_fail:
 link_state_err:
 	close(nic_dev->fd);

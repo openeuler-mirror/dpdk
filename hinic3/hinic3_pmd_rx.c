@@ -621,7 +621,7 @@ void hinic3_add_rq_to_rx_queue_list(struct hinic3_nic_dev *nic_dev,
 {
 	u16 rss_queue_count = nic_dev->num_rss;
 
-	RTE_ASSERT(rss_queue_count <= (RTE_DIM(nic_dev->rx_queue_list) - 1));
+	RTE_ASSERT(rss_queue_count < (RTE_DIM(nic_dev->rx_queue_list)));
 
 	nic_dev->rx_queue_list[rss_queue_count] = (u8)queue_id;
 	nic_dev->num_rss++;

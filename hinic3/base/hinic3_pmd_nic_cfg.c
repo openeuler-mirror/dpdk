@@ -1819,9 +1819,6 @@ static int hinic3_cfg_tcam_block(void *hwdev, u8 alloc_en, u16 *index)
 	u16 out_size = sizeof(tcam_block_info);
 	int err;
 
-	if (!hwdev)
-		return -EINVAL;
-
 	memset(&tcam_block_info, 0, sizeof(struct hinic3_tcam_block));
 	if (IS_QPOOL_MODE())
  		tcam_block_info.func_id = ((struct hinic3_hwdev *)hwdev)->qpool_qgrp_id;

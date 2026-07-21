@@ -1322,6 +1322,9 @@ alloc_mbox_for_resp_err:
 alloc_mbox_for_send_err:
 	(void)hinic3_mutex_destroy(&func_to_func->msg_send_mutex);
 	(void)hinic3_mutex_destroy(&func_to_func->mbox_send_mutex);
+	rte_free(save_mbox);
+	hwdev->func_to_func = NULL;
+
 alloc_save_mbox_err:
 	rte_free(func_to_func);
 	return err;

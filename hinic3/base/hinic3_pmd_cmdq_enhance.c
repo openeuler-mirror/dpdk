@@ -80,6 +80,11 @@ hinic3_enhance_cmdq_set_wqe(struct hinic3_cmdq_wqe *wqe,
 {
 	struct enhanced_cmdq_wqe *enhanced_wqe = &wqe->enhanced_cmdq_wqe;
 
+	if (buf_in == NULL) {
+		PMD_DRV_LOG(ERR, "Cmdq buffer input is NULL");
+		return;
+	}
+
 	enhanced_wqe->ctrl_sec.header =
 		ENHANCE_CMDQ_WQE_HEADER_SET(buf_in->size, SEND_SGE_LEN) |
 		ENHANCE_CMDQ_WQE_HEADER_SET(1, BDSL) |

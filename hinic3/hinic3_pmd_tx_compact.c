@@ -883,6 +883,10 @@ static bool hinic3_is_tso_sge_valid(struct rte_mbuf *mbuf,
 	 * perform packet discard processing.
 	 */
 	payload_len = mbuf_head->pkt_len - wqe_info->payload_offset;
+	if (unlikely(mbuf_head->tso_segsz == 0)) {
+		PMD_DRV_LOG(ERR, "TSO segment size is zero");
+		return false;
+	}
 	frag_num = (payload_len + mbuf_head->tso_segsz - 1) / mbuf_head->tso_segsz;
 	if (frag_num > MAX_TSO_NUM_FRAG) {
 		PMD_DRV_LOG(WARNING, "tso frag num over hw limit, frag_num: 0x%x", frag_num);
