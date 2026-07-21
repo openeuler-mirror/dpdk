@@ -272,10 +272,16 @@ static void print_port_info(void *hwdev, struct mag_cmd_event_port_info *port_in
 
 static void port_info_event_printf(void *hwdev, void *buf_in,
 				      __rte_unused u16 in_size,
-				      __rte_unused void *buf_out,
+				      void *buf_out,
 				      __rte_unused u16 *out_size)
 {
 	struct mag_cmd_event_port_info *port_info = buf_in;
+
+	if (!buf_out) {
+		PMD_DRV_LOG(ERR, "buf_out is NULL");
+		return;
+	}
+
 	((struct mag_cmd_event_port_info *)buf_out)->head.status = 0;
 	enum hinic3_nic_event_type type = port_info->event_type;
 	struct hinic3_nic_dev *nic_dev = ((struct hinic3_hwdev *)hwdev)->dev_handle;

@@ -1246,6 +1246,11 @@ int hinic3_flow_add_del_ethertype_filter(struct rte_eth_dev *dev,
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	int ret;
 
+	if (!ethertype_filter) {
+		PMD_DRV_LOG(ERR, "ethertype_filter is NULL");
+		return -EINVAL;
+	}
+
 	ret = hinic3_flow_add_del_ethertype_filter_rule(dev, ethertype_filter, add);
 
 	if (ret) {

@@ -1556,7 +1556,7 @@ int hinic3_set_rss_type(void *hwdev, struct hinic3_rss_type rss_type)
 	int err;
 
 	if (IS_QPOOL_MODE())
- 	  	return hinic3_cmdq_set_rss_type_ioctl(nic_dev, rss_type);
+		return hinic3_cmdq_set_rss_type_ioctl(nic_dev, rss_type);
 
 	err = hinic3_mgmt_set_rss_type(hwdev, rss_type);
 	if (err == HINIC3_MGMT_CMD_UNSUPPORTED)
