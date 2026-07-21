@@ -476,6 +476,7 @@ void hinic3_flexda_free_flow_action_dump_info(void)
     for (int i = 0; i < HINIC3_HYDRA_TYPE_ACTION_MAX; i++) {
         if (g_flexda_flow_action_dump_info_arr[i].struct_members != NULL) {
             hinic3_free(g_flexda_flow_action_dump_info_arr[i].struct_members);
+            g_flexda_flow_action_dump_info_arr[i].struct_members = NULL;
         }
     }
 }

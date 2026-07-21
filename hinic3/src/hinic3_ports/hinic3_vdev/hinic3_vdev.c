@@ -185,9 +185,6 @@ open_u16(const char *key __rte_unused, const char *value, void *extra_args)
     unsigned long val_tmp = strtoul(value, &end_ptr, 0);
     if (end_ptr == NULL || *end_ptr != '\0' || val_tmp > UINT16_MAX)
         return -1;
-
-    if (val_tmp == USHRT_MAX && errno == ERANGE)
-        return -1;
        
     *n = (uint16_t)val_tmp;
     return 0;
@@ -244,7 +241,7 @@ open_function_id(const char *key __rte_unused, const char *value, void *extra_ar
 
     unsigned long val_tmp = strtoul(value, &end_ptr, STR_TO_DEC_NUM);
     if (val_tmp > INT_MAX || end_ptr == NULL || *end_ptr != '\0') {
-        HINIC3_LOG(ERR, VPORT, "failed to parse function id str, id is %d!", *id);
+        HINIC3_LOG(ERR, VPORT, "failed to parse function id str, id is %lu!", val_tmp);
         return -1;
     }
 

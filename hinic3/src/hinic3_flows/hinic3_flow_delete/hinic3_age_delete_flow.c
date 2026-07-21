@@ -97,7 +97,6 @@ static int hinic3_flow_destroy_sub(struct rte_eth_dev *dev, struct rte_flow *flo
 
     rte_bucket = hinic3_get_offload_flow_bucket(flow->flow_hash, flow->table_id);
     if (rte_bucket == NULL) {
-        hinic3_spinlock_unlock(&rte_bucket->spinlock);
         return rte_flow_error_set(error, EINVAL, RTE_FLOW_ERROR_TYPE_STATE, NULL,
                                   "Flow destroy: rte bucket is NULL.");
     }

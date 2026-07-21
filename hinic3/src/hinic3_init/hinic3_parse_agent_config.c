@@ -444,7 +444,7 @@ static int hinic3_parse_disk_usage(struct rte_cfgfile *rte_file)
         (value > HINIC3_DISK_USAGE_MAX)) {
         g_agent_config_init_arg.disk_usage =
             available_size > HINIC3_DEFAULT_DISK_USAGE ? HINIC3_DEFAULT_DISK_USAGE : available_size;
-        HINIC3_LOG(INFO, AGENT, "disk_usage %u is invalid, use value %lu.", value,
+        HINIC3_LOG(INFO, AGENT, "disk_usage %lu is invalid, use value %u.", value,
             g_agent_config_init_arg.disk_usage);
         return 0;
     }

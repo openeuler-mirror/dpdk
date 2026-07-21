@@ -150,6 +150,8 @@ static void hinic3_smap_add_format_varg(struct smap *smap, const char *key, cons
     key_tmp = hinic3_xmemdup0(key, key_len, module_id);
     value = hinic3_xvasprintf(format, args, module_id);
     if (key_tmp == NULL || value == NULL) {
+        hinic3_free(key_tmp);
+        hinic3_free(value);
         return;
     }
     hinic3_smap_add__(smap, key_tmp, value, hinic3_hash_bytes(key, key_len, 0),

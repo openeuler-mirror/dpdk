@@ -832,7 +832,7 @@ hinic3_set_active_backup_speed(uint32_t *speed, const char *bond_name)
 
     unsigned long value = strtoul(active_slave_speed, &end_ptr, HWPT_DEC_BASE);
     if (end_ptr == NULL || *end_ptr != '\0' || value >= UINT32_MAX) {
-        HINIC3_LOG(ERR, VPORT, "Speed outof range. speed is %u!", *speed);
+        HINIC3_LOG(ERR, VPORT, "Speed outof range. speed is %lu!", value);
         *speed = 0;
         return -EPERM;
     }
