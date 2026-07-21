@@ -882,6 +882,12 @@ static bool hinic3_is_tso_sge_valid(struct rte_mbuf *mbuf,
 	/* calculate the number of message payload frag, if it exceeds the hardware limit of 10 bits,
 	 * perform packet discard processing.
 	 */
+	if (unlikely(mbuf_head->data_len < wqe_info->payload_offset &&
+		     mbuf->nb_segs > HINIC3_NONTSO_PKT_MAX_SGE)) {
+		PMD_DRV_LOG(WARNING, "illegal pkt, payload offset (%u) > data len (%u).\n", 
+ 	 		    wqe_info->payload_offset, mbuf->data_len);
+		return false;
+	}
 	payload_len = mbuf_head->pkt_len - wqe_info->payload_offset;
 	if (unlikely(mbuf_head->tso_segsz == 0)) {
 		PMD_DRV_LOG(ERR, "TSO segment size is zero");
