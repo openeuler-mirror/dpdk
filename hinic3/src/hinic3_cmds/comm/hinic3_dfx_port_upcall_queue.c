@@ -29,7 +29,7 @@ hinic3_dump_virtual_upcall_queues_info(struct ds *ds)
         "%-45s%u\n", HINIC3_UI_DFX_COMMAND_VIRTUAL_UPCALL_QUEUE_MAX_STRING, info.total_virtual_queue_num);
     hinic3_ds_put_format_prefix(ds, INDENT_4, HINIC3_UI_EMPTY_STRING,
         "%-45s%u\n", HINIC3_UI_DFX_COMMAND_VIRTUAL_UPCALL_QUEUE_AVAILIABLE_STRING, info.left_virtual_queue_num);
-    for (uint8_t group_index = 0; group_index < info.virtual_queue_group_num; ++group_index) {
+    for (uint8_t group_index = 0; group_index < info.virtual_queue_group_num && group_index < HINIC3_VIRTUAL_QUEUE_MULTIPLEX_MAX; ++group_index) {
         hinic3_ds_put_format_prefix(ds, INDENT_4, HINIC3_UI_EMPTY_STRING,
             "%s%-3u%-37s%u\n", HINIC3_UI_DFX_COMMAND_GROUP_STRING, group_index,
             HINIC3_UI_DFX_COMMAND_AVAILIBLE_QUEUE_EVERY_GROUP_STRING, info.left_group_queue_num[group_index]);

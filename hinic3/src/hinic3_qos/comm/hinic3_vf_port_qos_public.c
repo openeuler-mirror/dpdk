@@ -68,7 +68,7 @@ int check_vf_bw_args(struct qos_single_value vm_qos)
             return -1;
         }
 
-        if ((max_burst + min_burst) > MAX_BW_BURST_QOS) {
+        if (max_burst > MAX_BW_BURST_QOS || (max_burst + min_burst) > MAX_BW_BURST_QOS) {
             HINIC3_LOG(ERR, QOS,
                 "cbs and ebs range is incorrect max_burst is %llu min_burst is %llu.", max_burst, min_burst);
             return -1;

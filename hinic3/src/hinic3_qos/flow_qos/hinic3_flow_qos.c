@@ -188,7 +188,7 @@ hinic3_set_flow_qos_to_hovs(struct hinic3_nlattr *hinic3_actions, uint32_t meter
 
     hinic3_meter_list_lock();
     meter = hinic3_meter_find(meter_id);
-    if (meter == NULL) {
+    if (meter == NULL || meter->profile == NULL) {
         hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_METER_NOT_FOUND, 1);
         goto err;
     }

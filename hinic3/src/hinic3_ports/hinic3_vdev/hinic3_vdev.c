@@ -162,13 +162,14 @@ open_u32(const char *key __rte_unused, const char *value, void *extra_args)
     if (value == NULL || extra_args == NULL)
         return -EINVAL;
 
-    *n = (uint32_t)strtoul(value, &endPtr, 0);
-    if (endPtr == NULL || *endPtr != '\0')
+    unsigned long val_tmp = strtoul(value, &endPtr, 0);
+    if (endPtr == NULL || *endPtr != '\0' || val_tmp > UINT32_MAX)
         return -1;
 
-    if (*n == USHRT_MAX && errno == ERANGE)
+    if (val_tmp == ULONG_MAX && errno == ERANGE)
         return -1;
-
+       
+    *n = (uint32_t)val_tmp;
     return 0;
 }
 
@@ -181,13 +182,14 @@ open_u16(const char *key __rte_unused, const char *value, void *extra_args)
     if (value == NULL || extra_args == NULL)
         return -EINVAL;
 
-    *n = (uint16_t)strtoul(value, &end_ptr, 0);
-    if (end_ptr == NULL || *end_ptr != '\0')
+    unsigned long val_tmp = strtoul(value, &end_ptr, 0);
+    if (end_ptr == NULL || *end_ptr != '\0' || val_tmp > UINT16_MAX)
         return -1;
 
-    if (*n == USHRT_MAX && errno == ERANGE)
+    if (val_tmp == USHRT_MAX && errno == ERANGE)
         return -1;
-
+       
+    *n = (uint16_t)val_tmp;
     return 0;
 }
 
@@ -240,12 +242,13 @@ open_function_id(const char *key __rte_unused, const char *value, void *extra_ar
     if (value == NULL || id == NULL)
         return -1;
 
-    *id = strtoul(value, &end_ptr, STR_TO_DEC_NUM);
-    if (*id < HINIC3_VF_MIN_FUNCTION_ID || end_ptr == NULL || *end_ptr != '\0') {
+    unsigned long val_tmp = strtoul(value, &end_ptr, STR_TO_DEC_NUM);
+    if (val_tmp > INT_MAX || end_ptr == NULL || *end_ptr != '\0') {
         HINIC3_LOG(ERR, VPORT, "failed to parse function id str, id is %d!", *id);
         return -1;
     }
 
+    *id = (int)val_tmp;
     return 0;
 }
 
@@ -1370,6 +1373,10 @@ static const char *vdrvinit_net_vdev_alias;
 static void
 hinic3_rte_register_vdev(void)
 {
+    if (g_vdev_driver == NULL) {
+        HINIC3_LOG(ERR, VPORT, "construct vdev driver failed");
+        return;
+    }
     g_vdev_driver->driver.name = RTE_STR(net_hwsp);
     g_vdev_driver->driver.alias = vdrvinit_net_vdev_alias;
     if (hinic3_get_agent_construct_init() == false)

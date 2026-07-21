@@ -437,7 +437,7 @@ hinic3_show_multi_port_qos(struct ds *ds, enum hinic3_qos_tablehead index,
 
     hinic3_meter_list_lock();
     meter = hinic3_meter_find(meter_id);
-    if (meter == NULL) {
+    if (meter == NULL || meter->profile == NULL) {
         hinic3_meter_list_unlock();
         HINIC3_LOG(ERR, QOS, "Multi qos show: meter id is not find.");
         hinic3_ds_put_format(ds, HINIC3_UI_LEADING_SIGN_ERROR "Meter id is not find. meater id is %u\n", meter_id);
@@ -1197,7 +1197,7 @@ hinic3_multi_net_qos_show_one(uint32_t meter_id, enum hinic3_qos_tablehead index
 
     hinic3_meter_list_lock();
     meter = hinic3_meter_find(meter_id);
-    if (meter == NULL) {
+    if (meter == NULL || meter->profile == NULL) {
         hinic3_meter_list_unlock();
         HINIC3_LOG(ERR, QOS, "Multi net qos show: meter id is not find. meter id is %u.", meter_id);
         hinic3_ds_put_format(ds, HINIC3_UI_LEADING_SIGN_ERROR "Meter id is not find. meter id is %u.\n", meter_id);

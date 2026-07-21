@@ -502,30 +502,6 @@ int hinic3_rte_action_insert(struct rte_flow_action dst_actions[], int dst_size,
     return 0;
 }
 
-int hinic3_rte_item_insert(struct rte_flow_item dst_items[], int dst_size,
-    const struct rte_flow_item src_items[], int src_size)
-{
-    int location = -1;
-    for (int j = 0; j < src_size && src_items[j].type != RTE_FLOW_ITEM_TYPE_END; ++j) {
-        for (int i = 0; i < dst_size - 1 ; ++i) { // array is end with RTE_FLOW_ITEM_TYPE_END
-            if (dst_items[i].type == RTE_FLOW_ITEM_TYPE_END) {
-                location = i;
-                break;
-            }
-        }
-
-        if (location == -1) {
-            return -1;
-        }
-
-        dst_items[location].last = src_items[j].last;
-        dst_items[location].mask = src_items[j].mask;
-        dst_items[location].spec = src_items[j].spec;
-        dst_items[location].type = src_items[j].type;
-    }
-    return 0;
-}
-
 static void
 hinic3_free_flow_item(struct hinic3_flow *flow)
 {

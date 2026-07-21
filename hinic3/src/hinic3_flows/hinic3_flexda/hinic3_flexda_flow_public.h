@@ -125,6 +125,7 @@ uint32_t hinic3_flexda_flow_get_total_flow_num(void);
 int hinic3_flexda_flow_get_table_num(void);
 const struct hinic3_flexda_config_info_t* hinic3_flexda_get_flow_config(void);
 void hinic3_flexda_free_flow_config(void);
+void hinic3_flexda_free_flow_action_dump_info(void);
 bool hinic3_flexda_flow_action_is_in_table(uint32_t action_type);
 const hovs_flexda_config_dump_info_t* hinic3_flexda_flow_get_hydra_config_dump_info(hinic3_hydra_type hydra_type,
     uint32_t value);

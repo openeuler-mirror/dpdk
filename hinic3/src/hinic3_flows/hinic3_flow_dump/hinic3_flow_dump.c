@@ -243,6 +243,7 @@ static int hinic3_accurate_flow_dump_next_sub(void *context, uint32_t count, uin
     ret = dump_func(dump_context, count, error);
     if (ret != HIOVS_OK && ret != HIOVS_EEMPTY) {
         hinic3_free(dump_context->context_mem.flows);
+        dump_context->context_mem.flows = NULL;      
         return ret;
     }
 

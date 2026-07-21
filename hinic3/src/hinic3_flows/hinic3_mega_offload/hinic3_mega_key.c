@@ -17,7 +17,7 @@ struct hinic3_mega_key_info {
 static int
 hinic3_mega_eth_key(const struct rte_flow_item *pattern, struct hinic3_mega_flow_full_key *mega_full_key)
 {
-    if ((pattern->spec == NULL) || (pattern->mask == NULL))
+    if ((pattern->spec == NULL) || (pattern->mask == NULL) || (mega_full_key->item_num >= HINIC3_MEGA_ITEM_TYPE_MAX))
         return -EINVAL;
 
     mega_full_key->mega_key.eth.dst = ((const struct rte_flow_item_eth *)pattern->spec)->dst;
@@ -31,7 +31,7 @@ hinic3_mega_eth_key(const struct rte_flow_item *pattern, struct hinic3_mega_flow
 static int
 hinic3_mega_input_port_key(const struct rte_flow_item *pattern, struct hinic3_mega_flow_full_key *mega_full_key)
 {
-    if ((pattern->spec == NULL) || (pattern->mask == NULL))
+    if ((pattern->spec == NULL) || (pattern->mask == NULL) || (mega_full_key->item_num >= HINIC3_MEGA_ITEM_TYPE_MAX))
         return -EINVAL;
 
     mega_full_key->mega_key.in_port = *(const struct rte_flow_item_port_id *)pattern->spec;
