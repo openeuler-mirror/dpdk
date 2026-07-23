@@ -1189,11 +1189,13 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	int err;
 
 	if (!IS_QPOOL_MODE()) {
-		/* Queue depth must be equal to queue 0 */
-		if (qid != 0 && (nb_desc != nic_dev->rxqs[0]->q_depth)) {
-			PMD_DRV_LOG(WARNING, "rxq%u depth:%u is not equal to queue0 depth:%u.\n",
-				qid, nb_desc, nic_dev->rxqs[0]->q_depth);
-			nb_desc = nic_dev->rxqs[0]->q_depth;
+		/* Queue depth must be equal to first queue */
+ 	 	if (nic_dev->rxq_depth == 0)
+ 	 		nic_dev->rxq_depth = nb_desc;
+ 	 	else if (nb_desc != nic_dev->rxq_depth) {
+ 	 		PMD_DRV_LOG(WARNING, "rxq%u depth:%u is not equal to first queue depth:%u.\n",
+ 	 			qid, nb_desc, nic_dev->rxq_depth);
+ 	 		nb_desc = nic_dev->rxq_depth;
 		}
 	} else {
 		err = hinic3_verify_queue_depth(nic_dev, &nb_desc, HINIC3_VERIFY_RX_DEPTH);
@@ -1457,11 +1459,13 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	int err;
 
 	if (!IS_QPOOL_MODE()) {
-		/* Queue depth must be equal to queue 0 */
-		if (qid != 0 && (nb_desc != nic_dev->txqs[0]->q_depth)) {
-			PMD_DRV_LOG(WARNING, "txq%u depth:%u is not equal to queue0 depth:%u.\n",
-				qid, nb_desc, nic_dev->txqs[0]->q_depth);
-			nb_desc = nic_dev->txqs[0]->q_depth;
+		/* Queue depth must be equal to first queue */
+ 	 	if (nic_dev->txq_depth == 0)
+ 	 		nic_dev->txq_depth = nb_desc;
+ 	 	else if (nb_desc != nic_dev->txq_depth) {
+ 	 		PMD_DRV_LOG(WARNING, "txq%u depth:%u is not equal to first queue depth:%u.\n",
+ 	 			qid, nb_desc, nic_dev->txq_depth);
+ 	 		nb_desc = nic_dev->txq_depth;
 		}
 	} else {
 		err = hinic3_verify_queue_depth(nic_dev, &nb_desc, HINIC3_VERIFY_TX_DEPTH);
@@ -2650,6 +2654,9 @@ static void hinic3_dev_stop(struct rte_eth_dev *dev)
 		dev->data->rx_queue_state[i] = RTE_ETH_QUEUE_STATE_STOPPED;
 	for (i = 0; i < dev->data->nb_tx_queues; i++)
 		dev->data->tx_queue_state[i] = RTE_ETH_QUEUE_STATE_STOPPED;
+
+	nic_dev->rxq_depth = 0;
+	nic_dev->txq_depth = 0;
 
 	/* Clear scatter rx flag */
 	dev->data->scattered_rx = false;
