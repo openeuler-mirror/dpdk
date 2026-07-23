@@ -432,6 +432,7 @@ void hinic3_driver_class_uninit(void)
     hinic3_port_class_uninit();
     if (hinic3_card_mod_get() == PROG_MODE) {
        hinic3_flexda_free_flow_config();
+       hinic3_flexda_free_flow_action_dump_info();
     }
     /* hiovs lib deinit */
     hinic3_global_class_uninit();

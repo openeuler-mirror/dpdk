@@ -1388,6 +1388,7 @@ static int hinic3_global_show_all_api(struct unixctl_conn *conn, int argc)
         api_name = hinic3_global_get_api_name(i);
         if (api_name == NULL)
         {
+            hinic3_free(rec_list);
             goto err;
         }
         hinic3_global_format_api(api_name, &rec_list[i], &ds, true);

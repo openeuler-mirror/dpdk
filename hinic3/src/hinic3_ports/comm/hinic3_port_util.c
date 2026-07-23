@@ -280,6 +280,10 @@ int hinic3_port_get_tx_queue_count(uint16_t port_id, uint16_t queue_id)
     }
 
     txq = data->tx_queues[queue_id];
+    if (txq == NULL) {
+        HINIC3_LOG(ERR, VPORT, "port get tx queue count, queue index %u invalid.", queue_id);
+        return -EINVAL;
+    }
     backlog = (int)hinic3_get_tx_queue_count(txq->dpdk_port_id, txq->queue_id);
     if (backlog < 0) {
         HINIC3_LOG(ERR, VPORT, "txq%" PRIu16 " get reinject backlog failed ret: %d, hiovs queue id: %" PRIu16 ".",

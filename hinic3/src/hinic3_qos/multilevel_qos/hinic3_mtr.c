@@ -651,7 +651,8 @@ static int hinic3_add_port_to_list(uint16_t vport_id, struct hinic3_meter_node *
     int ret;
     struct hinic3_group_port_info *port_info = NULL;
 
-    if (g_hinic3_group_infos[meter->group_id].length > HINIC3_METER_PORT_NUM_MAX) {
+    if (meter->group_id >= HINIC3_METER_NUM_MAX || 
+        g_hinic3_group_infos[meter->group_id].length > HINIC3_METER_PORT_NUM_MAX) {
         HINIC3_LOG(ERR, QOS, "Multi qos: Group port number reached the upper limit. group id is %u.",
             meter->group_id);
         return -1;
@@ -828,6 +829,10 @@ int hinic3_group_meter_remove(uint16_t vport_id, uint16_t group_id)
     int ret = 0;
     struct hinic3_group_port_info *iter = NULL;
     struct hinic3_group_port_info *next_iter = NULL;
+    if (group_id >= HINIC3_METER_NUM_MAX) {
+        HINIC3_LOG(ERR, QOS, "hinic3_group_meter_remove: group_id %u is invalid.", group_id);
+        return -1;
+    }
     struct hinic3_group_info *group_info = &g_hinic3_group_infos[group_id];
 
     hinic3_group_info_lock(group_id);
@@ -1025,7 +1030,8 @@ static void hinic3_qos_vm_clear(struct hinic3_vf_dev *vf_dev, enum hinic3_meter_
         return;
     }
 
-    if (vf_dev->group_qos_id == 0 || g_hinic3_group_infos[vf_dev->group_qos_id].meter[index].is_used == false) {
+    if (vf_dev->group_qos_id == 0 || vf_dev->group_qos_id >= HINIC3_METER_NUM_MAX 
+        || g_hinic3_group_infos[vf_dev->group_qos_id].meter[index].is_used == false) {
         return;
     }
 

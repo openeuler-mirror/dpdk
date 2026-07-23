@@ -27,8 +27,6 @@ int hinic3_format_flow(const struct hinic3_flow *flow, bool need_mask, struct ds
 int hinic3_flow_construct_key(struct hinic3_flow *flow, enum rte_flow_item_type type, void *spec);
 int hinic3_rte_action_insert(struct rte_flow_action dst_actions[], int dst_size,
     const struct rte_flow_action src_actions[], int src_size);
-int hinic3_rte_item_insert(struct rte_flow_item dst_items[], int dst_size,
-    const struct rte_flow_item src_items[], int src_size);
 void hinic3_free_flow(struct hinic3_flow *flow);
 int hinic3_format_keys(const struct hinic3_flow *flow, enum hinic3_key_type type, struct ds *ds);
 int hinic3_flow_construct_hydra_key(struct hydra_flow_item *geneve,

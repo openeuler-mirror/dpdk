@@ -58,7 +58,7 @@ static inline uint32_t get_unaligned_u32(const uint32_t *p_)
 
 uint32_t hinic3_hash_bytes(const void *point, size_t n, uint32_t basis)
 {
-    if (point == NULL) {
+    if (point == NULL || n > UINT32_MAX) {
         return hinic3_hash_finish(basis, 0);
     }
     const uint32_t *p = point;

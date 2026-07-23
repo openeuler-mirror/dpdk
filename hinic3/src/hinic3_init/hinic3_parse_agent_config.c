@@ -439,15 +439,16 @@ static int hinic3_parse_disk_usage(struct rte_cfgfile *rte_file)
         return 0;
     }
 
-    disk_usage_config = (uint32_t)strtoul(disk_usage_str, &end_ptr, STR_TO_DEC_NUM);
-    if (end_ptr == NULL || *end_ptr != '\0' || (disk_usage_config < HINIC3_DISK_USAGE_MIN) ||
-        (disk_usage_config > HINIC3_DISK_USAGE_MAX)) {
+    unsigned long value = strtoul(disk_usage_str, &end_ptr, STR_TO_DEC_NUM);
+    if (end_ptr == NULL || *end_ptr != '\0' || (value < HINIC3_DISK_USAGE_MIN) ||
+        (value > HINIC3_DISK_USAGE_MAX)) {
         g_agent_config_init_arg.disk_usage =
             available_size > HINIC3_DEFAULT_DISK_USAGE ? HINIC3_DEFAULT_DISK_USAGE : available_size;
-        HINIC3_LOG(INFO, AGENT, "disk_usage %u is invalid, use value %u.", disk_usage_config,
+        HINIC3_LOG(INFO, AGENT, "disk_usage %lu is invalid, use value %u.", value,
             g_agent_config_init_arg.disk_usage);
         return 0;
     }
+    disk_usage_config = (uint32_t)value;
 
     if (disk_usage_config > available_size) {
         g_agent_config_init_arg.disk_usage = available_size;
@@ -481,11 +482,12 @@ static int hinic3_parse_pcap_cpu_config(struct rte_cfgfile *rte_file)
         return 0;
     }
 
-    pcap_cpu = (uint32_t)strtoul(pcap_cpu_str, &end_ptr, STR_TO_DEC_NUM);
-    if (end_ptr == NULL || *end_ptr != '\0' || (pcap_cpu > HINIC3_PCAP_CPU_MAX)) {
-        HINIC3_LOG(INFO, AGENT, "pcap_cpu value %u is invalid or out of range, use default value.", pcap_cpu);
+    unsigned long value = strtoul(pcap_cpu_str, &end_ptr, STR_TO_DEC_NUM);
+    if (end_ptr == NULL || *end_ptr != '\0' || (value > HINIC3_PCAP_CPU_MAX)) {
+        HINIC3_LOG(INFO, AGENT, "pcap_cpu value %lu is invalid or out of range, use default value.", value);
         return 0;
     }
+    pcap_cpu = (uint32_t)value;
 
     if (pcap_cpu >= nprocessors) {
         HINIC3_LOG(INFO, AGENT, "Ilegal cpu core id %u for pcap_cpu, use default value.", pcap_cpu);

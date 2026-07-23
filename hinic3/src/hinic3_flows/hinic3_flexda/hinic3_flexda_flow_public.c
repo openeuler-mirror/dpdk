@@ -134,6 +134,10 @@ static int hinic3_flexda_flow_parse_key_info(hovs_flexda_config_info_field_list_
     int ret = 0;
     uint16_t key_index = 0;
     for (int i = 0; i < key_info->field_num; i++) {
+        if (key_info->field_array[i] == NULL) {
+            HINIC3_LOG(ERR, FLOW, "hinic3_flexda_flow_parse_key_info: field_array %d is invalid", i);
+            return -EINVAL;
+        }
         if (hinic3_flexda_flow_check_key_type_valid(key_info->field_array[i]->field_type) != 0) {
             HINIC3_LOG(ERR, FLOW, "hinic3_flexda_flow_parse_key_info: field_type is invalid(%d)", key_info->field_array[i]->field_type);
             return -EINVAL;
@@ -290,6 +294,10 @@ int hinic3_flexda_flow_parse_config_info(hovs_flexda_config_info_t *hovs_flexda_
     }
     for (int i = 0; i < hovs_flexda_config->table_num; i++) {
         table_info = hovs_flexda_config->table_array[i];
+        if (table_info == NULL) {
+            HINIC3_LOG(ERR, FLOW, "hinic3_flexda_flow_parse_config_info: table_info is NULL ");
+            return -EINVAL;
+        }
 
         ret = hinic3_flexda_flow_parse_table_info(&table_info->table_info);
         if (ret != 0) {
@@ -461,6 +469,16 @@ void hinic3_flexda_free_flow_config(void)
     g_flexda_flow_config.total_flow_num = 0;
     g_flexda_flow_config.key_num = 0;
     g_flexda_flow_config.action_num = 0;
+}
+
+void hinic3_flexda_free_flow_action_dump_info(void)
+{
+    for (int i = 0; i < HINIC3_HYDRA_TYPE_ACTION_MAX; i++) {
+        if (g_flexda_flow_action_dump_info_arr[i].struct_members != NULL) {
+            hinic3_free(g_flexda_flow_action_dump_info_arr[i].struct_members);
+            g_flexda_flow_action_dump_info_arr[i].struct_members = NULL;
+        }
+    }
 }
 
 static const hovs_flexda_config_dump_info_t* hinic3_flexda_flow_get_hydra_config_key_dump_info(uint32_t key_type)

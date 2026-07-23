@@ -31,6 +31,9 @@ time_msec_to_str(long long int msec, char buf[], size_t bufsize __rte_unused)
         sec -= 1;
     }
     struct tm *info = localtime(&sec);
+    if (info == NULL) {
+        return -1;
+    }
     return sprintf(buf, HINIC3_MS_STR_FMT,
         info->tm_year + HINIC3_STRUCT_TM_BASE_YEAR, info->tm_mon + HINIC3_STRUCT_TM_BASE_MONTH, info->tm_mday,
         info->tm_hour, info->tm_min, info->tm_sec, millisec);

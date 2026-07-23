@@ -744,6 +744,13 @@ int hinic3_deal_aged_flow_by_event(struct hinic3_conntrack_full_key *full_key)
     port_id = aged_flow->port_id;
     aged_flow->flags.is_aged = 1;
     bond_dev = (struct hinic3_bond_dev *)hinic3_get_private_data(port_id);
+    if(bond_dev == NULL) {
+        hinic3_spinlock_unlock(&rte_bucket->spinlock);
+        (void)hinic3_wunlock_flush_all();
+        HINIC3_LOG(ERR, FLOW, "Invalid port id %u!", port_id);
+        hinic3_free(ptr);
+        return -1;
+    }
     hinic3_list_init(&ptr->node);
     ptr->flow = aged_flow;
     if (hinic3_is_bond_by_prefix(bond_dev->vport_id) == false)

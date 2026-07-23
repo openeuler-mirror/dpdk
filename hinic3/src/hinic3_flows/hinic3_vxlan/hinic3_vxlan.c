@@ -61,9 +61,9 @@ int hinic3_flow_tunnel_decap_set(struct rte_eth_dev *eth_dev HINIC3_UNUSED, stru
 uint32_t hinic3_get_hiovs_vni(const uint8_t *vni)
 {
     uint32_t vni_dst = 0;
-    vni_dst = (vni[HINIC3_VNI_HIGH] << HINIC3_VNI_HIGH_MOVE) |
-              (vni[HINIC3_VNI_MID] << HINIC3_VNI_MID_MOVE) |
-              (vni[HINIC3_VNI_LOW] << HINIC3_VNI_LOW_MOVE);
+    vni_dst = (((uint32_t)vni[HINIC3_VNI_HIGH]) << HINIC3_VNI_HIGH_MOVE) |
+              (((uint32_t)vni[HINIC3_VNI_MID]) << HINIC3_VNI_MID_MOVE) |
+              (((uint32_t)vni[HINIC3_VNI_LOW]) << HINIC3_VNI_LOW_MOVE);
     return vni_dst;
 }
 

@@ -235,6 +235,7 @@ hinic3_vf_dynamic_port_add(struct hinic3_vf_dev *vf_dev)
     ret = hinic3_port_mgmt_add_dynamic(&vf_dev->vport_id, &args);
     if (ret != 0) {
         hinic3_free_queues_from_port(&vf_dev->upcall_queue, vf_dev->n_upcall_queue);
+        hinic3_pthread_mutex_destroy(&vf_dev->aged_flow_list.mutex);
         HINIC3_LOG(ERR, VPORT, "failed to add dynamic port of the vf!");
     }
 
@@ -1026,6 +1027,10 @@ hinic3_virtual_queue_setup(struct hinic3_queue *rxq, uint16_t upcall_queue_id, u
 {
     int ret = 0;
     struct hinic3_virtual_queue *virtual_rxq = rxq->variant.virtqueue;
+    if (virtual_rxq == NULL || virtual_rxq->physical_queue == NULL) {
+        HINIC3_LOG(ERR, VPORT, "virtual_rxq is NULL!");
+        return -ENOMEM;
+    }
     struct hinic3_physical_queue *physical_rxq = virtual_rxq->physical_queue;
 
     virtual_rxq->ring = hinic3_ring_create(virtual_rxq->ring_name, desc, socket_id, 0, HINIC3_PORTS);

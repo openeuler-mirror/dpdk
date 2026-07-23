@@ -850,6 +850,7 @@ static int hinic3_port_show_one_api(struct unixctl_conn *conn, int argc, const c
     if (argc < SHOW_ONE_API_ARG_NUM)
     {
         hinic3_ds_put_format(&ds, HINIC3_UI_LEADING_SIGN_ERROR, "Incomplete command, please type -h or --help for help.\n");
+        goto err;
     }
     else if (argc > SHOW_ONE_API_ARG_NUM)
     {
@@ -953,6 +954,7 @@ static int hinic3_port_clear_api(struct unixctl_conn *conn, int argc, const char
     if (argc < CLEAR_PORT_API_ARG_NUM)
     {
         hinic3_ds_put_format(&ds, HINIC3_UI_LEADING_SIGN_ERROR, "Incomplete command, please type -h or --help for help.\n");
+        goto err;
     }
     else if (argc > CLEAR_PORT_API_ARG_NUM)
     {

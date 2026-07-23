@@ -789,7 +789,7 @@ int hinic3_log_flexda_limit(uint32_t level, uint32_t logtype, const char *format
     if (logtype < HINIC3_LOG_MAX) {
         dpdk_log_id = hinic3_get_log_module_dpdk_id(logtype);
     } else {
-        dpdk_log_id = g_hinic3_flexda_log_module_dpdk_id[logtype - RTE_LOG_MAX];
+        dpdk_log_id = g_hinic3_flexda_log_module_dpdk_id[logtype - HINIC3_LOG_MAX];
     }
     va_list ap;
     va_start(ap, format);
@@ -808,8 +808,8 @@ int hinic3_log_flexda(uint32_t level, uint32_t module, const char *format, ...)
     if (module < HINIC3_LOG_MAX) {
         len = snprintf(str, MAX_BUF_SIZE, "%s%s: ",
             FLEXDA_LOG_PREFIX, g_hinic3_log_index_map[module]);
-    } else if (module - HINIC3_LOG_MAX < RTE_LOG_MAX &&
-        g_hinic3_flexda_log_module_list[module - RTE_LOG_MAX].type == HINIC3_LOG_TYPE_FLEXDA) {
+    } else if (module - HINIC3_LOG_MAX < HINIC3_LOG_MAX &&
+        g_hinic3_flexda_log_module_list[module - HINIC3_LOG_MAX].type == HINIC3_LOG_TYPE_FLEXDA) {
         len = snprintf(str, MAX_BUF_SIZE, "%s%s: ",
             FLEXDA_LOG_PREFIX, g_hinic3_flexda_log_module_list[module - HINIC3_LOG_MAX].name);
     } else {
@@ -865,7 +865,7 @@ int hinic3_log_module_register(char *name)
         strncpy(g_hinic3_flexda_name_buffer[i], name, HINIC3_MODULE_NAME_MAX_LEN - 1);
         g_hinic3_flexda_name_buffer[i][HINIC3_MODULE_NAME_MAX_LEN - 1] = '\0';
         module->name = g_hinic3_flexda_name_buffer[i];
-        module->index = i + RTE_LOG_MAX;
+        module->index = i + HINIC3_LOG_MAX;
         module->type = HINIC3_LOG_TYPE_FLEXDA;
         g_hinic3_flexda_log_module_dpdk_id[i] = log_id;
 
