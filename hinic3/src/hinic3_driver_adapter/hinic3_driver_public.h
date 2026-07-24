@@ -114,7 +114,7 @@ struct hw_element {
 struct hinic3_flow_del_context {
     /* current num of hardware flow */
     size_t num_entries;
-    struct hinic3_flow_del_context_per_table *tables[HINIC3_HYDRA_TYPE_TABLE_END];
+    struct hinic3_flow_del_context_per_table *tables[HINIC3_TABLE_NUM_MAX];
 };
 
 struct hinic3_flow_del_context_per_table {
