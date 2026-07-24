@@ -1475,7 +1475,7 @@ int hinic3_vf_get_default_cos(void *hwdev, u8 *cos_id)
 		return -EIO;
 	}
 
-	*cos_id = vf_dcb.state.default_cos % HINIC3_COS_NUM_MAX_HTN;
+	*cos_id = vf_dcb.state.default_cos;
 
 	return 0;
 }

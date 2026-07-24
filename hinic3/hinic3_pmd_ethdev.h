@@ -223,6 +223,7 @@ struct hinic3_nic_dev {
 
 	u32 default_cos;
 	u32 rx_csum_en;
+	u8 cos_map[HINIC3_COS_NUM_MAX];
 
 	struct hinic3_dcb *dcb;
 

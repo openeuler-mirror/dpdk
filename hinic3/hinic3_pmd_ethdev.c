@@ -58,6 +58,7 @@
 #define HINIC3_DEFAULT_TX_FREE_THRESH	32
 
 #define HINIC3_RX_WAIT_CYCLE_THRESH	150
+#define HINIC3_DEFAULT_COS_MASK_BITMAP	0xff
 
 /*
  * Vlan_id is a 12 bit number. The VFTA array is actually a 4096 bit array,
@@ -1302,6 +1303,10 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 		txq->cos = nic_dev->dcb->txq_cos[qid];
 	else
 		txq->cos = nic_dev->default_cos;
+
+	if (nic_dev->feature_cap & NIC_F_HTN_CMDQ)
+		txq->cos = nic_dev->cos_map[(int)(txq->cos)];
+
 	txq->tx_wqe_compact_task = HINIC3_SUPPORT_TX_WQE_COMPACT_TASK(nic_dev);
 	if (IS_QPOOL_MODE(nic_dev)) {
 		err = hinic3_get_tx_user_queue(nic_dev, txq);
@@ -4049,7 +4054,7 @@ static void hinic3_deinit_mac_addr(struct rte_eth_dev *eth_dev)
 	hinic3_delete_mc_addr_list(nic_dev);
 }
 
-static int hinic3_pf_get_default_cos(struct hinic3_hwdev *hwdev, u8 *cos_id, const u64 feature_cap)
+static int hinic3_pf_get_default_cos(struct hinic3_hwdev *hwdev, u8 *cos_id)
 {
 	u8 default_cos = 0;
 	u8 valid_cos_bitmap;
@@ -4060,10 +4065,6 @@ static int hinic3_pf_get_default_cos(struct hinic3_hwdev *hwdev, u8 *cos_id, con
 	if (!valid_cos_bitmap) {
 		PMD_DRV_LOG(ERR, "PF has none cos to support\n");
 		return -EFAULT;
-	}
-
-	if (feature_cap & NIC_F_HTN_CMDQ) {
-		cos_num_max = HINIC3_COS_NUM_MAX_HTN;
 	}
 
 	for (i = 0; i < cos_num_max; i++) {
@@ -4077,13 +4078,34 @@ static int hinic3_pf_get_default_cos(struct hinic3_hwdev *hwdev, u8 *cos_id, con
 	return 0;
 }
 
+static void hinic3_get_cos_mask_bitmap(struct hinic3_nic_dev *nic_dev)
+{
+	int i;
+	u8 default_cos = 0;
+	u8 cos_mask_bitmap = nic_dev->hwdev->cfg_mgmt->svc_cap.cos_mask_bitmap == 0
+			? HINIC3_DEFAULT_COS_MASK_BITMAP
+			: nic_dev->hwdev->cfg_mgmt->svc_cap.cos_mask_bitmap;
+
+	PMD_DRV_LOG(INFO, "cos_mask_bitmap: 0x%x", cos_mask_bitmap);
+	for (i = HINIC3_COS_NUM_MAX - 1; i >= 0; i--) {
+		if (cos_mask_bitmap & BIT(i)) {
+			default_cos = i;
+			break;
+		}
+	}
+
+	for (i = 0; i < HINIC3_COS_NUM_MAX; i++) {
+		nic_dev->cos_map[i] = ((BIT(i) & cos_mask_bitmap) == 0) ? default_cos : i;
+	}
+}
+
 static int hinic3_init_default_cos(struct hinic3_nic_dev *nic_dev)
 {
 	u8 cos_id = 0;
 	int err;
 
 	if (!HINIC3_IS_VF(nic_dev->hwdev)) {
-		err = hinic3_pf_get_default_cos(nic_dev->hwdev, &cos_id, nic_dev->feature_cap);
+		err = hinic3_pf_get_default_cos(nic_dev->hwdev, &cos_id);
 		if (err) {
 			PMD_DRV_LOG(ERR, "Get PF default cos failed, err: %d", err);
 			return err;
@@ -4105,6 +4127,7 @@ static int hinic3_set_default_hw_feature(struct hinic3_nic_dev *nic_dev)
 {
 	int err;
 
+	hinic3_get_cos_mask_bitmap(nic_dev);
 	err = hinic3_init_default_cos(nic_dev);
 	if (err)
 		return err;
