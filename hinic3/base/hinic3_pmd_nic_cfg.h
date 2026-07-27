@@ -151,8 +151,8 @@ struct hinic3_dcb_config {
 	u8 pcp2cos[PCP_MAX_UP];
 	u8 dscp2cos[DSCP_MAC_UP];
 
-	u8 cos_qp_offset[NIC_DCB_COS_MAX];
-	u8 cos_qp_num[NIC_DCB_COS_MAX];
+	u16 cos_qp_offset[NIC_DCB_COS_MAX];
+	u16 cos_qp_num[NIC_DCB_COS_MAX];
 };
 
 #define MAX_FEATURE_QWORD	4

@@ -655,6 +655,11 @@ static int init_rq_ctxts_qpool(struct hinic3_nic_dev *nic_dev)
 		for (i = 0; i < max_ctxts; i++) {
 			curr_id = q_id + i;
 			rq = nic_dev->rxqs[curr_id];
+			if (rq == NULL) {
+				PMD_DRV_LOG(ERR, "rq is NULL for curr_id %u", curr_id);
+				hinic3_free_cmd_buf(cmd_buf);
+				return -EINVAL;
+			}
 			hinic3_rq_prepare_ctxt(rq, &rq_ctxt[i]);
 		}
 
@@ -697,6 +702,10 @@ int hinic3_init_rq_cqe_ctxts(struct hinic3_nic_dev *nic_dev)
 
 	while (q_id < nic_dev->num_rqs) {
 		rxq = nic_dev->rxqs[q_id];
+		if (rxq == NULL) {
+			PMD_DRV_LOG(ERR, "rxq is NULL for q_id %u", q_id);
+			return -EINVAL;
+		}
 		if (rxq->wqe_type == HINIC3_COMPACT_RQ_WQE) {
 			rq_ci_paddr = rxq->rq_ci_paddr >> RQ_CI_ADDR_SHIFT;
 			cqe_ctx.ci_addr_hi = upper_32_bits(rq_ci_paddr);

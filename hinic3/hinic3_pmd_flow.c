@@ -1346,6 +1346,7 @@ static int hinic3_flow_set_normal_rss_action_config(struct rte_eth_dev *dev,
 		if (act_r->queue_num > HINIC3_QUEUE_MAX) {
 			rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION, act,
 					"queue_num exceeds max");
+			rte_free(template_entry);
 			goto free_rss_template;
 		}
 		rte_memcpy(template_entry->queues, act_r->queue, act_r->queue_num * sizeof(uint16_t));
@@ -2771,7 +2772,7 @@ hinic3_flow_flush_fdir_filter(struct rte_eth_dev *dev)
 			return ret;
 
 		if (filter_rules->template_entry != NULL)
- 	 			hinic3_flow_release_rss_template(nic_dev, filter_rules->template_entry);
+			hinic3_flow_release_rss_template(nic_dev, filter_rules->template_entry);
 
 		TAILQ_REMOVE(&nic_dev->filter_fdir_rule_list, flow, node);
 		rte_free(filter_rules);

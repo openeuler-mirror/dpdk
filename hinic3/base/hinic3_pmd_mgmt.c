@@ -11,7 +11,7 @@
 
 #define HINIC3_MSG_TO_MGMT_MAX_LEN	2016
 
-#define MAX_PF_MGMT_BUF_SIZE		2048UL
+#define MAX_PF_MGMT_BUF_SIZE (MGMT_MSG_MAX_SEQ_ID * SEGMENT_LEN + SEGMENT_LEN)
 #define SEGMENT_LEN			48
 #define ASYNC_MSG_FLAG			0x20
 #define MGMT_MSG_MAX_SEQ_ID	(RTE_ALIGN(HINIC3_MSG_TO_MGMT_MAX_LEN, \
@@ -182,7 +182,7 @@ static int recv_mgmt_msg_handler(struct hinic3_msg_pf_to_mgmt *pf_to_mgmt,
 		return HINIC3_MSG_HANDLER_RES;
 	}
 
-	offset  = seq_id * SEGMENT_LEN;
+	offset = seq_id * SEGMENT_LEN;
 	memcpy((u8 *)recv_msg->msg + offset, msg_body, seq_len);
 
 	if (!HINIC3_MSG_HEADER_GET(mbox_header, LAST))

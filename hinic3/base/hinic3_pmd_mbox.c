@@ -150,6 +150,11 @@ static int recv_vf_mbox_handler(struct hinic3_mbox *func_to_func,
 {
 	int err = 0;
 
+	if (recv_mbox == NULL) {
+		PMD_DRV_LOG(ERR, "recv_mbox is NULL");
+		return -EINVAL;
+	}
+
 	switch (recv_mbox->mod) {
 	case HINIC3_MOD_COMM:
 		err = vf_handle_pf_comm_mbox(func_to_func->hwdev, func_to_func,

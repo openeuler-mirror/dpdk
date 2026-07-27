@@ -1428,6 +1428,8 @@ alloc_sq_mz_fail:
 
 alloc_ci_mz_fail:
 close_fd:
+	if (IS_QPOOL_MODE() && hwdev->qpool_qgrp_id == 0)
+		(void)hinic3_release_template(nic_dev);
 alloc_template_fail:
 	return err;
 }
@@ -3904,6 +3906,10 @@ static void hinic3_rxq_info_get(struct rte_eth_dev *dev, uint16_t queue_id,
 {
 	struct hinic3_rxq *rxq = dev->data->rx_queues[queue_id];
 
+	if (rxq == NULL) {
+		PMD_DRV_LOG(ERR, "rxq is NULL for queue_id %u", queue_id);
+		return;
+	}
 	rxq_info->mp = rxq->mb_pool;
 	rxq_info->nb_desc = rxq->q_depth;
 	rxq_info->scattered_rx = dev->data->scattered_rx;
