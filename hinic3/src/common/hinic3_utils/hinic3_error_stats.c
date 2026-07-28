@@ -459,7 +459,7 @@ hinic3_get_error_stats(enum hinic3_errstat_type index, struct hinic3_error_stats
         g_hinic3_agent_error_stats[HINIC3_COMMON_ERROR_ERRSTAT_TYPE_NO_INFO]++;
         return -1;
     }
-    stats->level= hinic3_errstat_get_level_by_string(stats->string);
+    stats->level=  hinic3_errstat_get_level_by_string(stats->string);
     stats->count = g_hinic3_agent_error_stats[index];
     return 0;
 }
