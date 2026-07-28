@@ -113,7 +113,7 @@ int hinic3_offload_parse_vxlan_act(struct hinic3_offload_action *offload_action,
         vxlan_hdr = hinic3_nlattr_put_unspec_uninit(hinic3_actions, HINIC3_FLOW_ACT_VXL_GPE_PUSH,
                                                sizeof(struct hinic3_flow_act_vxlan_gpe_header));
     if (vxlan_hdr == NULL) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_FLOW_NO_VXLAN_ACTION_OFFSET, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_FLOW_NO_VXLAN_ACTION_OFFSET, 1);
         return -1;
     }
     offload_action->vxlan_hdr = vxlan_hdr;
@@ -228,7 +228,7 @@ static int hinic3_offload_set_tag_act(struct hinic3_nlattr *hinic3_actions, cons
     block.block_version = set_tag->data;
 
     if (block.block_id >= hinic3_db->max_block_num) {
-        hinic3_add_error_stats(HINIC3_FLOW_ERROR_FLOW_BLOCK_ID_ERR, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_FLOW_BLOCK_ID_ERR, 1);
         return -1;
     }
 
@@ -359,7 +359,7 @@ bool hinic3_offload_check_actions(struct hinic3_nlattr *hinic3_actions)
     }
 
     if (output_cnt > 1) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_MANY_OUTPUT, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_WARNING_MANY_OUTPUT, 1);
         HINIC3_LOG(ERR, FLOW, "Multi-port flow error!");
         return false;
     }
@@ -377,7 +377,7 @@ bool hinic3_offload_flow_actions_check(struct rte_flow_action *action, size_t nu
     }
 
     if (output_cnt > 1) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_MANY_OUTPUT, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_WARNING_OFFLOAD_CHECK_ACTIONS_MANY_OUTPUT, 1);
         HINIC3_LOG(ERR, FLOW, "Multi-port flow error!");
         return false;
     }

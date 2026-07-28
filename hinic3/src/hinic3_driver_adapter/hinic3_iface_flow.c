@@ -662,7 +662,7 @@ int hinic3_iface_global_cfg_set(struct hiovs_mirror_session_info *hiovs_session_
                                    (struct nlattr *)set_nla.data, &set_nla.used_len);
     if (ret != 0)
     {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_GLOBAL_CFG_SET, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_GLOBAL_CFG_SET_EMC_SAMPLE, 1);
     }
     return hinic3_convert_error_code(ret);
 }

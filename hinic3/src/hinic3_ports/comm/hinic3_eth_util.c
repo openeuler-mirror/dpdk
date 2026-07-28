@@ -109,7 +109,7 @@ hinic3_eth_flow_destroy(struct rte_eth_dev *dev, struct rte_flow *flow, struct r
 {
     int ret = 0;
     if (dev == NULL || flow == NULL || error == NULL) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_FLOW_DEL_INPUT_NULL, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_FLOW_DEL_INPUT_NULL, 1);
         return -EINVAL;
     }
 
@@ -163,7 +163,7 @@ static bool
 hinic3_check_offload_disable(const struct hinic3_flow_agent_db *hinic3_db)
 {
     if (hinic3_db->operate_disable == 1) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_OFFLOAD_DISABLE, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_WARNING_OFFLOAD_DISABLE, 1);
         return true;
     }
     return false;
@@ -225,7 +225,7 @@ hinic3_eth_flow_create_ecology(struct rte_eth_dev *dev, const struct rte_flow_at
     if (attr->ingress == 1) {
         flow = hinic3_rte_flow_alloc();
         if (flow == NULL) {
-            hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_EMC_FLOW_ALLOC, 1);
+            hinic3_add_error_stats(HINIC3_FLOWS_ERROR_EMC_OFFLOAD_FLOW_ALLOC, 1);
             return NULL;
         }
         flow->flags.is_dumb = 1;
@@ -233,21 +233,21 @@ hinic3_eth_flow_create_ecology(struct rte_eth_dev *dev, const struct rte_flow_at
     } else if (actions->type == RTE_FLOW_ACTION_TYPE_METER) {
         flow = hinic3_set_multi_qos(pattern, actions);
         if (flow == NULL) {
-            hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_SET_MULTI_QOS, 1);
+            hinic3_add_error_stats(HINIC3_FLOWS_ERROR_SET_MULTI_QOS, 1);
             rte_flow_error_set(error, EPERM, RTE_FLOW_ERROR_TYPE_UNSPECIFIED, NULL, "set multi qos error.");
         }
         return flow;
     }
 
     if (hinic3_get_id_from_dev(dev, &port_id) != 0) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_EMC_FLOW_GET_PORT_ID, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_EMC_FLOW_GET_PORT_ID, 1);
         rte_flow_error_set(error, EPERM, RTE_FLOW_ERROR_TYPE_UNSPECIFIED, NULL, "get port id by dev error.");
         return NULL;
     }
 
     struct hinic3_dp_extend_info *offload_extend_info = hinic3_get_offload_extend_info();
     if (HINIC3_UNLIKELY(offload_extend_info == NULL || offload_extend_info->hw_offload == NULL)) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_ETH_FLOW_CREATE_ECOLOGY_NO_INIT, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_EMC_ETH_FLOW_CREATE_ECOLOGY_NO_INIT, 1);
         rte_flow_error_set(error, EPERM, RTE_FLOW_ERROR_TYPE_UNSPECIFIED, NULL, "get emc db info failed");
         return NULL;
     }
@@ -274,7 +274,7 @@ hinic3_eth_flow_create(struct rte_eth_dev *dev, const struct rte_flow_attr *attr
 {
     struct rte_flow *flow = NULL;
     if (dev == NULL || pattern == NULL || actions == NULL || error == NULL || attr == NULL) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_FLOW_CREATE_INPUT_NULL, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_FLOW_CREATE_INPUT_NULL, 1);
         return NULL;
     }
 
@@ -292,7 +292,7 @@ hinic3_eth_flow_query(struct rte_eth_dev *dev, struct rte_flow *flow, const stru
 {
     int ret = 0;
     if (dev == NULL || flow == NULL || data == NULL || actions == NULL || error == NULL) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_FLOW_QUERY_INPUT_NULL, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_FLOW_QUERY_INPUT_NULL, 1);
         return -EINVAL;
     }
 

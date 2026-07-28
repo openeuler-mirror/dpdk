@@ -194,7 +194,7 @@ hinic3_mega_flow_delete(struct rte_eth_dev *dev __rte_unused, struct rte_flow *f
     if (flow->flags.is_sample == HINIC3_FLOW_MEGA_MIRROR) {
         ret = hinic3_del_rte_flow_in_session(flow);
         if (ret != 0)
-            hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_MEGA_DEL_FLOW_IN_SESSION, 1);
+            hinic3_add_error_stats(HINIC3_FLOWS_ERROR_EMC_MEGA_DEL_FLOW_IN_SESSION, 1);
     }
 
     bool is_deleted = hinic3_mega_flow_table_del(mega_flow);

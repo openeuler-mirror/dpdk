@@ -955,7 +955,7 @@ static void hinic3_calculate_hydra_key_and_mask(struct hinic3_conntrack_full_key
     }
     while (hydra_key_current->next != NULL) {
         if (hinic3_insert_hydra_key(hydra_key_current, &(raw_key->key)) != 0) {
-            hinic3_add_error_stats(HINIC3_FLOW_ERROR_FLEXDA_FUZZY_FLOW_COPY_RAW_KEY_ITEM_FAIL, 1);
+            hinic3_add_error_stats(HINIC3_FLOWS_ERROR_FLEXDA_FUZZY_FLOW_COPY_RAW_KEY_ITEM_FAIL, 1);
         }
         for (size_t i = 0; i < hydra_key_current->item_data_size; i++) {
             ((uint8_t *)hydra_key_current->item_data)[i] = ((uint8_t *)hydra_mask_current->item_data)[i] & ((uint8_t *)hydra_key_current->item_data)[i]; 
@@ -1088,16 +1088,16 @@ static int hinic3_insert_rte_flow(struct hash_table_node *rte_bucket, struct rte
             ret = hinic3_flow_get_by_ufid(flow->hw_ufid, &hiovs_get, flow->table_id);
             hinic3_free_get_f(&hiovs_get);
             if (ret == 0) {
-                hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_OFFLOAD_CHECK_OFFLOADING_REPEATED, 1);
+                hinic3_add_error_stats(HINIC3_FLOWS_ERROR_EMC_OFFLOAD_CHECK_OFFLOAD_REPEATED, 1);
                 return rte_flow_error_set(error, EEXIST, RTE_FLOW_ERROR_TYPE_UNSPECIFIED,
                     NULL, HINIC3_EMC_ERROR_MSG_REPEATED);
             } else if (ret == HINIC3_NO_FOUND_FLOW) {
                 // 如果dpak流表卸载完成，但是硬件流表不存在，则再下一遍流表给硬件
-                hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_OFFLOAD_CHECK_OFFLOADING_EXIST_GAP, 1);
+                hinic3_add_error_stats(HINIC3_FLOWS_WARNING_EMC_OFFLOAD_CHECK_OFFLOAD_EXIT_GAP, 1);
                 return 0;
             }
         } else {
-            hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_OFFLOAD_CHECK_OFFLOADING_ONGOING, 1);
+            hinic3_add_error_stats(HINIC3_FLOWS_ERROR_EMC_OFFLOAD_CHECK_OFFLOAD_ONGOING, 1);
             return rte_flow_error_set(error, EEXIST, RTE_FLOW_ERROR_TYPE_UNSPECIFIED,
                 NULL, HINIC3_EMC_ERROR_MSG_REPEATED);
         }
@@ -1105,7 +1105,7 @@ static int hinic3_insert_rte_flow(struct hash_table_node *rte_bucket, struct rte
 
     ret = hinic3_insert_rte_flow_in_hmap(rte_bucket, mega_flow);
     if (ret != 0) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_OFFLOAD_INSERT_RTE_FLOW_IN_HMAP, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_EMC_OFFLOAD_INSERT_INTO_HMAP_FAIL, 1);
         return rte_flow_error_set(error, EPERM, RTE_FLOW_ERROR_TYPE_UNSPECIFIED, NULL, HINIC3_EMC_ERROR_MSG_ITEM);
     }
 
@@ -1172,7 +1172,7 @@ static int hinic3_process_offload_flow(const struct rte_flow_item pattern[],
     /* deal with key */
     int ret = hinic3_process_flow_key(pattern, &param, mega_flow, &flow, &has_vxlan_item);
     if (HINIC3_UNLIKELY(ret != 0)) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_OFFLOAD_PROCESS_FLOW_KEY, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_EMC_OFFLOAD_PROCESS_FLOW_KEY_FAIL, 1);
         return rte_flow_error_set(error, EINVAL, RTE_FLOW_ERROR_TYPE_ITEM_SPEC, NULL, HINIC3_EMC_ERROR_MSG_FLOW);
     }
 
@@ -1180,7 +1180,7 @@ static int hinic3_process_offload_flow(const struct rte_flow_item pattern[],
     if (IS_FLEXDA_FUZZY_TABLE(mega_flow->table_id)) {
         ret = hinic3_process_flow_mask(pattern, &param, (struct fuzzy_flow *)mega_flow, &flow, &has_vxlan_item);
         if (HINIC3_UNLIKELY(ret != 0)) {
-            hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_OFFLOAD_PROCESS_FLOW_MASK, 1);
+            hinic3_add_error_stats(HINIC3_FLOWS_ERROR_EMC_OFFLOAD_PROCESS_FLOW_MASK_FAIL, 1);
             return rte_flow_error_set(error, EINVAL, RTE_FLOW_ERROR_TYPE_ITEM_SPEC, NULL, HINIC3_EMC_ERROR_MSG_FLOW);
         }
     }
@@ -1203,7 +1203,7 @@ static int hinic3_process_offload_flow(const struct rte_flow_item pattern[],
     /* deal with action */
     ret = hinic3_offload_parse_flow_action(actions, &param, mega_flow, &flow, has_vxlan_item);
     if (HINIC3_UNLIKELY(ret != 0)) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_OFFLOAD_PARSE_FLOW_ACTION, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_EMC_OFFLOAD_PARSE_FLOW_ACTION, 1);
         ret = rte_flow_error_set(error, EINVAL, RTE_FLOW_ERROR_TYPE_ACTION_CONF, NULL, HINIC3_EMC_ERROR_MSG_ACTION);
         goto fail;
     }
@@ -1214,7 +1214,7 @@ static int hinic3_process_offload_flow(const struct rte_flow_item pattern[],
     ret = hinic3_flow_put(&flow, param.hinic3_args.data, param.hinic3_args.used_len, mega_flow->table_id);
     if (ret != 0) {
         hinic3_trace_flow_info_update(HINIC3_FLOW_AGENT_ERROR_HARDWARE_FAIL_TRACE, &mega_flow->key.key);
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_OFFLOAD_CALL_HARDWARE_FUNC, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_EMC_OFFLOAD_CALL_HARDWARE_FUNC, 1);
         (void)rte_flow_error_set(error, -ret, RTE_FLOW_ERROR_TYPE_STATE, NULL, HINIC3_EMC_ERROR_MSG_OFFLOAD_HOVS);
         goto fail;
     }
@@ -1235,7 +1235,7 @@ struct rte_flow *hinic3_offload_flow(const struct rte_flow_item pattern[], const
 
     struct rte_flow *alloc_flow = hinic3_rte_or_fuzzy_flow_alloc(table_id);
     if (HINIC3_UNLIKELY(alloc_flow == NULL)) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_EMC_FLOW_ALLOC, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_EMC_OFFLOAD_FLOW_ALLOC, 1);
         rte_flow_error_set(error, ENOMEM, RTE_FLOW_ERROR_TYPE_UNSPECIFIED, NULL, "alloc mem failed");
         return NULL;
     }
@@ -1254,14 +1254,14 @@ static int hinic3_check_flow_modify_valid(struct rte_flow *remain_flow, struct r
 {
     if (remain_flow == NULL)
     {
-        hinic3_add_error_stats(HINIC3_FLOW_ERROR_NO_EXIST_FLOW, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_NO_EXIST_FLOW, 1);
         rte_flow_error_set(error, EINVAL, RTE_FLOW_ERROR_TYPE_ITEM, NULL, "No exist flow");
         return -1;
     }
 
     if (remain_flow->flags.is_offload == 0)
     {
-        hinic3_add_error_stats(HINIC3_FLOW_ERROR_FLOW_NOT_READY, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_FLOW_NOT_READY, 1);
         rte_flow_error_set(error, EBUSY, RTE_FLOW_ERROR_TYPE_STATE, NULL, "flow not ready");
         return -1;
     }
@@ -1286,7 +1286,7 @@ static int hinic3_modify_session(struct rte_flow *remain_flow, struct rte_flow *
         ret = hinic3_del_rte_flow_in_session(remain_flow);
         if (ret != 0)
         {
-            hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_MODIFY_DEL_FLOW_IN_SESSION, 1);
+            hinic3_add_error_stats(HINIC3_FLOWS_ERROR_EMC_MODIFY_DEL_FLOW_IN_SESSION, 1);
             return rte_flow_error_set(error, EPERM, RTE_FLOW_ERROR_TYPE_STATE,
                                       NULL, HINIC3_EMC_ERROR_MSG_MODIFY_SESSION);
         }
@@ -1359,7 +1359,7 @@ struct rte_flow *hinic3_modify_flow(const struct rte_flow_item pattern[], const 
     ret = hinic3_process_flow_key(pattern, &param, &parse_flow, &dpif_flow, &has_vxlan_item);
     if (HINIC3_UNLIKELY(ret != 0))
     {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_OFFLOAD_PROCESS_FLOW_KEY, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_EMC_OFFLOAD_MODIFY_PROCESS_FLOW_KEY_FAIL, 1);
         rte_flow_error_set(error, EINVAL, RTE_FLOW_ERROR_TYPE_ITEM_SPEC, NULL, HINIC3_EMC_ERROR_MSG_FLOW);
         return NULL;
     }
@@ -1379,7 +1379,7 @@ struct rte_flow *hinic3_modify_flow(const struct rte_flow_item pattern[], const 
     ret = hinic3_offload_parse_flow_action(actions, &param, &parse_flow, &dpif_flow, has_vxlan_item);
     if (HINIC3_UNLIKELY(ret != 0))
     {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_OFFLOAD_PARSE_FLOW_ACTION, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_EMC_OFFLOAD_MODIFY_PARSE_FLOW_ACTION, 1);
         rte_flow_error_set(error, EINVAL, RTE_FLOW_ERROR_TYPE_ACTION_CONF, NULL, HINIC3_EMC_ERROR_MSG_ACTION);
         goto err;
     }
@@ -1395,7 +1395,7 @@ struct rte_flow *hinic3_modify_flow(const struct rte_flow_item pattern[], const 
     ret = hinic3_flow_modify(&dpif_flow, param.hinic3_args.data, param.hinic3_args.used_len);
     if (ret != 0)
     {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_OFFLOAD_CALL_HARDWARE_FUNC, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_EMC_OFFLOAD_MODIFY_CALL_HARDWARE_FUNC, 1);
         (void)rte_flow_error_set(error, -ret, RTE_FLOW_ERROR_TYPE_STATE, NULL, HINIC3_EMC_ERROR_MSG_MODIFY_HOVS);
         goto err;
     }

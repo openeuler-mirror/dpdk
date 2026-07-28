@@ -42,7 +42,7 @@ hinic3_eth_flow_dev_dump(struct rte_eth_dev *dev, struct rte_flow *flow HINIC3_U
     FILE *file, struct rte_flow_error *error)
 {
     if ((dev == NULL) || (file == NULL) || (error == NULL)) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_DEV_DUMP_NULL, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_DEV_DUMP_NULL, 1);
         return -EINVAL;
     }
 

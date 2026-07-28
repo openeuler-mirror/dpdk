@@ -21,7 +21,7 @@ static int hinic3_parse_mirror_IPv4_item(const struct rte_flow_item *item,
 {
     const struct rte_flow_item_ipv4 *ip = (const struct rte_flow_item_ipv4 *)item->spec;
     if (ip == NULL) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_SAMPLE_IPV4_ITEM_NULL, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_SAMPLE_IPV4_ITEM_NULL, 1);
         return -1;
     }
     session_info->key.sip[0] = ip->hdr.src_addr;
@@ -36,7 +36,7 @@ static int hinic3_parse_mirror_vlan_item(const struct rte_flow_item *item,
 {
     const struct rte_flow_item_vlan *vlan = (const struct rte_flow_item_vlan *)item->spec;
     if (vlan == NULL) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_SAMPLE_VLAN_ITEM_NULL, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_SAMPLE_VLAN_ITEM_NULL, 1);
         return -1;
     }
     session_info->key.tci = vlan->tci;
@@ -50,7 +50,7 @@ static int hinic3_parse_mirror_eth_item(const struct rte_flow_item *item,
 {
     const struct rte_flow_item_eth *eth = (const struct rte_flow_item_eth *)item->spec;
     if (eth == NULL) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_SAMPLE_ETH_ITEM_NULL, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_SAMPLE_ETH_ITEM_NULL, 1);
         return -1;
     }
     memcpy(session_info->key.dmac, &eth->dst, ETH_ALEN);
@@ -65,7 +65,7 @@ static int hinic3_parse_mirror_IPv6_item(const struct rte_flow_item *item,
 {
     const struct rte_flow_item_ipv6 *ip = (const struct rte_flow_item_ipv6 *)item->spec;
     if (ip == NULL) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_SAMPLE_IPV6_ITEM_NULL, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_SAMPLE_IPV6_ITEM_NULL, 1);
         return -1;
     }
 
@@ -86,7 +86,7 @@ static int hinic3_parse_mirror_vxlan_item(const struct rte_flow_item *item,
 {
     const struct rte_flow_item_vxlan *vxlan = (const struct rte_flow_item_vxlan *)item->spec;
     if (vxlan == NULL) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_SAMPLE_VXLAN_ITEM_NULL, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_SAMPLE_VXLAN_ITEM_NULL, 1);
         return -1;
     }
     session_info->key.tunnel.vxlan.flags = 0;
@@ -104,7 +104,7 @@ static int hinic3_parse_mirror_udp_item(const struct rte_flow_item *item,
 {
     const struct rte_flow_item_udp *udp = (const struct rte_flow_item_udp *)item->spec;
     if (udp == NULL) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_SAMPLE_UDP_ITEM_NULL, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_SAMPLE_UDP_ITEM_NULL, 1);
         return -1;
     }
 
@@ -119,7 +119,7 @@ static int hinic3_parse_mirror_gre_item(const struct rte_flow_item *item,
 {
     const struct rte_flow_item_gre *gre = (const struct rte_flow_item_gre *)item->spec;
     if (gre == NULL) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_SAMPLE_NVGRE_ITEM_NULL, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_SAMPLE_NVGRE_ITEM_NULL, 1);
         return -1;
     }
 
@@ -184,7 +184,7 @@ static int hinic3_parse_mirror_vxlan_nvgre_act(const struct rte_flow_action *act
             }
         }
         if (ret != 0) {
-            hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_SAMPLE_VXLAN_ENCAP, 1);
+            hinic3_add_error_stats(HINIC3_FLOWS_ERROR_SAMPLE_VXLAN_ENCAP, 1);
             return -1;
         }
         item = next_no_end_pattern(encap_info->definition, item);
@@ -310,7 +310,7 @@ static int hinic3_parse_mirror_port_id_act(const struct rte_flow_action *act,
 {
     const struct rte_flow_action_port_id *output_port = (const struct rte_flow_action_port_id *)act->conf;
     if (output_port == NULL) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_SAMPLE_PORT_ID, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_SAMPLE_PORT_ID, 1);
         return -1;
     }
     uint32_t output_port_id;
@@ -372,7 +372,7 @@ int hinic3_offload_parse_sample_act(const struct rte_flow_action *act, struct hi
     int ret = 0;
     const struct rte_flow_action_sample *sample_info = (const struct rte_flow_action_sample *)act->conf;
     if (sample_info == NULL || sample_info->actions == NULL) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_SAMPLE_ACTION, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_SAMPLE_ACTION, 1);
         return -1;
     }
     struct hinic3_mirror_session_info session_info = {0};
@@ -395,7 +395,7 @@ int hinic3_offload_parse_sample_act(const struct rte_flow_action *act, struct hi
                 break;
         }
         if (ret != 0) {
-            hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_SAMPLE_ACTION, 1);
+            hinic3_add_error_stats(HINIC3_FLOWS_ERROR_SAMPLE_ACTION, 1);
             return -1;
         }
         action = next_no_void_action(sample_info->actions, action);
@@ -415,7 +415,7 @@ int hinic3_offload_parse_sample_act(const struct rte_flow_action *act, struct hi
         ret = hinic3_set_mega_mirror_act(act_nla, session_info.session_id);
     }
     if (ret != 0) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_SAMPLE_ACTION_SET, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_SAMPLE_ACTION_SET, 1);
         return -1;
     }
     flow->session_id = session_info.session_id;

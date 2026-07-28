@@ -67,7 +67,7 @@ static void hinic3_flow_agent_sync_hw_flow_stats(const struct hinic3_dp_extend_i
         stats = &stats_buf;
         /* Get stats from hardware */
         if (hinic3_statistics_flow_get_by_ufid(&hw_ufid, 1, stats, flow->table_id) != 0) {
-            hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_GET_HW_STATS_BY_UFID, 1);
+            hinic3_add_error_stats(HINIC3_FLOWS_ERROR_GET_HW_STATS_BY_UFID, 1);
             return;
         }
     }
@@ -88,7 +88,7 @@ static int hinic3_sync_hardware_flow_statistics(const uint64_t *ufid, const size
     struct hinic3_stats_dump_context *sync_ctx, uint8_t table_id)
 {
     if (hinic3_statistics_flow_get_by_ufid(ufid, cnt, sync_ctx->stats, table_id) != 0) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_GET_HW_STATS_BY_UFID, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_GET_HW_STATS_BY_UFID, 1);
         return -1;
     }
 
@@ -173,7 +173,7 @@ int hinic3_sync_flow_statistics(uint32_t thread_id, struct hinic3_dp_extend_info
     if (thread_data->cur_buk_idx == thread_data->min_buk_idx) {
         if (hinic3_statistics_flow_get_by_ufid(NULL, thread_id, NULL, 0) != 0) {
             hinic3_free(sync_ctx);
-            hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_GET_TIME_STAMP, 1);
+            hinic3_add_error_stats(HINIC3_FLOWS_ERROR_GET_TIME_STAMP, 1);
             return -1;
         }
     }

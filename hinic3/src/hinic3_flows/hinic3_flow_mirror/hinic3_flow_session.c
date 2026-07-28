@@ -383,7 +383,7 @@ int hinic3_flow_get_port_id_by_session(uint8_t session_id, uint16_t *port_id)
 int hinic3_flow_dump_construct_vxlan_header(uint8_t session_id, struct hinic3_flow_act_vxlan_gpe_header *meta_header)
 {
     if (g_mirror_session_info.session_info[session_id].is_used == 0) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_SESSION_UNUSED, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_SESSION_UNUSED, 1);
         return -1;
     }
     struct hinic3_mirror_session_info session_info = g_mirror_session_info.session_info[session_id];
@@ -498,7 +498,7 @@ static int  hinic3_insert_session_in_list(struct hinic3_mirror_session_info *ses
     g_mirror_session_info.session_info[session_info->session_id].flow_list_len = 1;
     g_mirror_session_info.used_session_len++;
     if (session_info->key.tunnel.vxlan_gpe_shim.shim_len > HINIC3_SHIM_HEADER_LEN_MAX) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_SAMPLE_SHIM_ITEM,1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_SAMPLE_SHIM_ITEM,1);
         return -1;
     }
     memcpy(&g_mirror_session_info.session_info[session_info->session_id], session_info, sizeof(struct hinic3_mirror_session_info));
@@ -570,7 +570,7 @@ static void hinic3_construct_hiovs_session_info(const struct hinic3_mirror_sessi
 static int hinic3_mirror_set_session_to_hovs(struct hinic3_mirror_session_info *session_info)
 {
     if (session_info->sampling_interval > HINIC3_SAMPLING_INTERVAL_MAX) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_SESSION_RATIO, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_SESSION_RATIO, 1);
         return -1;
     }
 
@@ -611,12 +611,12 @@ int hinic3_deal_with_session_info(struct hinic3_mirror_session_info *session_inf
     } else {
         ret = hinic3_get_session_id(session_info);
         if (ret != 0) {
-            hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_SESSION_FULLED, 1);
+            hinic3_add_error_stats(HINIC3_FLOWS_ERROR_SESSION_FULLED, 1);
             return -1;
         }
         ret = hinic3_insert_session_in_list(session_info, flow);
         if (ret != 0) {
-            hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_SAMPLE_SHIM_ITEM,1);
+            hinic3_add_error_stats(HINIC3_FLOWS_ERROR_SAMPLE_SHIM_ITEM,1);
             return -1;
         }
         ret = hinic3_mirror_set_session_to_hovs(session_info);

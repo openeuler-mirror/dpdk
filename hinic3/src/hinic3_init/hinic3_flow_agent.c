@@ -358,7 +358,7 @@ static int hinic3_flow_agent_put_flow_callback(uint32_t table_id, uint64_t ufid,
     int ret;
 
     if (callback_info->flow_put_result != HINIC3_PUT_FLOW_SUCCESS) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_CALLBACK_FLOW_PUT_INFO, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_CALLBACK_FLOW_PUT_INFO, 1);
         return -1;
     }
 
@@ -372,7 +372,7 @@ static int hinic3_flow_agent_put_flow_callback(uint32_t table_id, uint64_t ufid,
 
     ret = hinic3_set_ufid_in_rte_flow(table_id, callback_info, ufid);
     if (ret != 0) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_CALLBACK_SET_UFID_IN_RTE_FLOW, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_CALLBACK_SET_UFID_IN_RTE_FLOW, 1);
         (void)hinic3_runlock_flush_all();
         return -1;
     }
@@ -391,7 +391,7 @@ static int hinic3_flow_agent_put_flow_callback(uint32_t table_id, uint64_t ufid,
 static int hinic3_flow_agent_modify_flow_callback(struct hinic3_flow_callback_info *callback_info)
 {
     if (callback_info->flow_put_result != HINIC3_PUT_FLOW_SUCCESS) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_CALLBACK_MODIFY_FLOW_PUT, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_CALLBACK_MODIFY_FLOW_PUT, 1);
         return -1;
     }
 
@@ -433,14 +433,14 @@ static int hinic3_flow_agent_init_common(struct hinic3_flow_agent_db *hinic3_db)
 
     (void)hinic3_flow_agent_init_db(hinic3_db);
     if (!hinic3_flow_agent_init_forward_engine(hinic3_db)) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_FORWARD_ENGINE_NOT_READY, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_FORWARD_ENGINE_NOT_READY, 1);
         HINIC3_LOG(ERR, AGENT, "Flow agent init forward engine failed.");
         return -1;
     }
 
     ret = hinic3_flow_agent_set_forward_mode();
     if (ret != 0) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_FORWARD_ENGINE_NOT_READY, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_FORWARD_ENGINE_NOT_READY, 1);
         HINIC3_LOG(ERR, AGENT, "Flow agent set forward_mode failed.");
         return ret;
     }

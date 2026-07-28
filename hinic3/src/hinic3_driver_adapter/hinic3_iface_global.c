@@ -1099,13 +1099,13 @@ uint16_t hinic3_global_rte_eth_tx_burst(uint16_t port_id, uint16_t queue_id, str
     ops = hinic3_get_drv_ops();
     if (HINIC3_UNLIKELY(ops->hovs_rte_tx_burst == NULL))
     {
-        hinic3_add_error_stats(HINIC3_VPORT_HOVS_RTE_TX_BURST_NULL, 1);
+        hinic3_add_error_stats(HINIC3_PORTS_ERROR_HOVS_RTE_TX_BURST_NULL, 1);
         return 0;
     }
 
     if (HINIC3_UNLIKELY(queue_id >= MAX_TX_QUEUE_PER_VPORT))
     {
-        hinic3_add_error_stats(HINIC3_VPORT_HOVS_RTE_TX_BURST_NULL, 1);
+        hinic3_add_error_stats(HINIC3_PORTS_ERROR_HOVS_RTE_TX_BURST_QUEUE_ID_OUT_OF_RANGE, 1);
         return 0;
     }
 
@@ -1124,7 +1124,7 @@ uint16_t hinic3_global_rte_eth_rx_burst(uint16_t port_id, uint16_t queue_id, str
     {
         if (HINIC3_UNLIKELY(ops->hovs_flexda_rte_rx_burst == NULL))
         {
-            hinic3_add_error_stats(HINIC3_VPORT_HOVS_RTE_RX_BURST_NULL, 1);
+            hinic3_add_error_stats(HINIC3_PORTS_ERROR_HOVS_RTE_RX_BURST_NULL, 1);
             return 0;
         }
         return ops->hovs_flexda_rte_rx_burst(port_id, queue_id, (void **)rx_pkts, nb_pkts);
@@ -1133,7 +1133,7 @@ uint16_t hinic3_global_rte_eth_rx_burst(uint16_t port_id, uint16_t queue_id, str
     {
         if (HINIC3_UNLIKELY(ops->hovs_rte_rx_burst == NULL))
         {
-            hinic3_add_error_stats(HINIC3_VPORT_HOVS_RTE_RX_BURST_NULL, 1);
+            hinic3_add_error_stats(HINIC3_PORTS_ERROR_HOVS_RTE_RX_BURST_NULL, 1);
             return 0;
         }
         return ops->hovs_rte_rx_burst(port_id, queue_id, (void **)rx_pkts, nb_pkts);

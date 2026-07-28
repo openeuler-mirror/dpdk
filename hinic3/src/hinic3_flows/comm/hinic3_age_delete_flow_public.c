@@ -14,7 +14,7 @@
 void hinic3_thread_rx_hw_age_info(uint32_t thread_id, const struct hinic3_dp_extend_info *dp_info)
 {
     if (dp_info == NULL) {
-        hinic3_add_error_stats(HINIC3_FLOW_ERROR_RX_HW_AGE_ERR, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_RX_HW_AGE_ERR, 1);
         return;
     }
     struct rte_mbuf *buffer[HINIC3_THREAD_RX_BURST_MAX] = {0};
