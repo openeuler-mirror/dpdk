@@ -67,7 +67,7 @@ enum hinic3_mbox_tx_status {
 #define MBOX_MSG_POLLING_TIMEOUT	500000 /* unit is 10us */
 #define HINIC3_MBOX_COMP_TIME		40000U
 
-#define MBOX_MAX_BUF_SZ			2048UL
+#define MBOX_MAX_BUF_SZ			4096UL
 #define MBOX_HEADER_SZ			8
 #define HINIC3_MBOX_DATA_SIZE		(MBOX_MAX_BUF_SZ - MBOX_HEADER_SZ)
 
