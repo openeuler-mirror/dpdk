@@ -12,10 +12,8 @@
 #include "hinic3_offload_action.h"
 #include "hinic3_flow_qos.h"
 
-#define HINIC3_RTE_VLAN_PCP_MASK 0x07
-#define HINIC3_FLEXDA_RTE_VLAN_PCP_MASK  0xe0
-#define VLAN_PCP_MOVE 13
-#define FLEXDA_VLAN_PCP_MOVE 8
+#define HINIC3_RTE_VLAN_PCP_MASK 0xe0
+#define VLAN_PCP_MOVE 8
 #define HWOF_DEFALUT_DP_HASH_OUT_PORT 0X0080
 #define VLAN_VID_MAX 4094
 #define VLAN_PCP_MAX 7
@@ -38,28 +36,15 @@ static inline int hinic3_offload_parse_vlan_act(struct hinic3_offload_action *of
     uint16_t vlan_pcp = 0;
     struct hinic3_nlattr *hinic3_actions = &offload_action->act_nla;
 
-    if (hinic3_card_mod_get() == PROG_MODE) {
-        vlan_tci = ntohs(rte_vlan_vid->vlan_vid);
-        vlan_id = (rte_vlan_pcp->vlan_pcp & HINIC3_FLEXDA_RTE_VLAN_PCP_MASK) << FLEXDA_VLAN_PCP_MOVE;
-        vlan_id = (vlan_id | vlan_tci);
-        offload_action->has_vlan_push = true;
-        offload_action->vlan_id = htons(vlan_id);
-        return hinic3_nlattr_put_u16(hinic3_actions, HINIC3_FLOW_ACT_DPDK_VLAN_PUSH, htons(vlan_id));
-    }
-
     vlan_id = ntohs(rte_vlan_vid->vlan_vid);
     vlan_pcp = (rte_vlan_pcp->vlan_pcp & HINIC3_RTE_VLAN_PCP_MASK) << VLAN_PCP_MOVE;
-
-    if (vlan_id > VLAN_VID_MAX)
-        return -1;
-
-    if (rte_vlan_pcp->vlan_pcp > VLAN_PCP_MAX)
-        return -1;
-
     vlan_tci = (vlan_pcp | vlan_id);
-
     offload_action->has_vlan_push = true;
     offload_action->vlan_id = htons(vlan_tci);
+
+    if (hinic3_card_mod_get() == PROG_MODE) {
+        return hinic3_nlattr_put_u16(hinic3_actions, HINIC3_FLOW_ACT_DPDK_VLAN_PUSH, htons(vlan_tci));
+    }
 
     return hinic3_nlattr_put_u16(hinic3_actions, HINIC3_FLOW_ACT_VLAN_PUSH, htons(vlan_tci));
 }
