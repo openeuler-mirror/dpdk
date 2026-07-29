@@ -116,6 +116,9 @@ static struct hinic3_error_stats_info g_error_stats_info[] = {
     [HINIC3_FLOWS_ERROR_DP_DUMP_DONE] = {HINIC3_FLOWS, "error_dp_dump_done"},
     [HINIC3_FLOWS_ERROR_DP_DUMP_NEXT] = {HINIC3_FLOWS, "error_dp_dump_next"},
     [HINIC3_FLOWS_ERROR_DP_DUMP_FORMAT] = {HINIC3_FLOWS, "error_dp_dump_format"},
+    [HINIC3_FLOWS_ERROR_DP_DUMP_ITEM_BUILD_FAIL] = {HINIC3_FLOWS, "error_dp_dump_item_build_fail"},
+    [HINIC3_FLOWS_ERROR_DP_DUMP_ACTION_BUILD_FAIL] = {HINIC3_FLOWS, "error_dp_dump_action_build_fail"},
+    [HINIC3_FLOWS_ERROR_DP_DUMP_PORT_SESSION_ID_ERR] = {HINIC3_FLOWS, "error_dp_dump_port_session_id_err"},
     // 流表模块 - MEGA DUMP
     [HINIC3_FLOWS_ERROR_MEGA_DUMP_START] = {HINIC3_FLOWS, "error_mega_dump_start"},
     [HINIC3_FLOWS_ERROR_MEGA_DUMP_START_HARD] = {HINIC3_FLOWS, "error_mega_dump_start_hard"},
