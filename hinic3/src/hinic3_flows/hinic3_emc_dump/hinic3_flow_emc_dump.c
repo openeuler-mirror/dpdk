@@ -84,7 +84,7 @@ static int hinic3_emc_flow_dump_start_sub(struct hinic3_flow_dump_context *conte
     int ret = 0;
     ret = hinic3_flow_dump_start(&(context->hiovs_state));
     if (ret != HIOVS_OK && ret != HIOVS_EEMPTY) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_DUMP_START_HARD, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_EMC_DUMP_START_HARD, 1);
         return ret;
     }
     return 0;
@@ -98,7 +98,7 @@ static int hinic3_emc_flow_dump_done_sub(struct hinic3_flow_dump_context *contex
     }
 
     if (ret != HIOVS_OK) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_DUMP_DONE_HARD, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_EMC_DUMP_DONE_HARD, 1);
         return ret;
     }
     return ret;
@@ -113,7 +113,7 @@ static int hinic3_emc_flow_dump_start(struct hinic3_flow_dump_context *context, 
     int ret = 0;
     ret = hinic3_emc_flow_dump_start_sub(context);
     if (ret != 0) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_DUMP_START, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_EMC_DUMP_START, 1);
     }
     return ret;
 }
@@ -127,7 +127,7 @@ static int hinic3_emc_flow_dump_next(struct hinic3_flow_dump_context *context, i
     int ret = 0;
     ret = hinic3_emc_flow_dump_next_sub(context, count, error);
     if (ret != 0) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_DUMP_NEXT, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_EMC_DUMP_NEXT, 1);
     }
     return ret;
 }
@@ -141,7 +141,7 @@ static int hinic3_emc_flow_dump_done(struct hinic3_flow_dump_context *context, s
     int ret = 0;
     ret = hinic3_emc_flow_dump_done_sub(context);
     if (ret != 0) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_DUMP_DONE, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_EMC_DUMP_DONE, 1);
     }
     return ret;
 }

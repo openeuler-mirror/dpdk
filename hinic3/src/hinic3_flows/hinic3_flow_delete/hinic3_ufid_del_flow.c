@@ -100,14 +100,14 @@ int hinic3_del_flow_qos_by_meter_id(uint32_t meter_id)
     if (meter == NULL)
     {
         hinic3_meter_list_unlock();
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_METER_NOT_FOUND, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_METER_NOT_FOUND, 1);
         return -1;
     }
     ret = hinic3_set_flow_qos_to_hovs_sub(meter, true, NULL, NULL);
     if (ret != 0)
     {
         hinic3_meter_list_unlock();
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_FLOW_DEL_QOS_HOVS, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_FLOW_DEL_QOS_HOVS, 1);
         return -1;
     }
 
@@ -118,14 +118,14 @@ int hinic3_del_flow_qos_by_meter_id(uint32_t meter_id)
         if (next_meter == NULL)
         {
             hinic3_meter_list_unlock();
-            hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_METER_NOT_FOUND, 1);
+            hinic3_add_error_stats(HINIC3_FLOWS_ERROR_METER_NOT_FOUND, 1);
             return -1;
         }
         ret = hinic3_set_flow_qos_to_hovs_sub(next_meter, true, NULL, NULL);
         if (ret != 0)
         {
             hinic3_meter_list_unlock();
-            hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_FLOW_DEL_QOS_HOVS, 1);
+            hinic3_add_error_stats(HINIC3_FLOWS_ERROR_FLOW_DEL_QOS_HOVS, 1);
             return -1;
         }
     }

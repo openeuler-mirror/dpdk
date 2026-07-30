@@ -181,12 +181,12 @@ static int hinic3_dump_context_input_check(const struct hinic3_flow_dump_context
                                    enum hinic3_dump_context_status type)
 {
     if (context->thread_id != pthread_self()) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_DUMP_INPUT_CHECK_PTHREAD, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_DUMP_INPUT_CHECK_PTHREAD, 1);
         return -1;
     }
 
     if (context->dumping != type) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_DUMP_INPUT_CHECK_TYPE, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_DUMP_INPUT_CHECK_TYPE, 1);
         return -1;
     }
     return 0;
@@ -226,7 +226,7 @@ static int hinic3_accurate_flow_dump_next_sub(void *context, uint32_t count, uin
 
     struct hinic3_dump_flow_info *flows = hinic3_dump_flow_infos_construct(count);
     if (flows == NULL) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_DUMP_NEXT_MEM, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_EMC_DUMP_NEXT_MEM, 1);
         return rte_flow_error_set(error, ENOMEM, RTE_FLOW_ERROR_TYPE_ITEM,
                                   NULL, "malloc for dump flow failed");
     }

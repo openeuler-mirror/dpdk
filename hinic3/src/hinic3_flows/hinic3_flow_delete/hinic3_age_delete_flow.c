@@ -33,7 +33,7 @@ static int hinic3_flow_destroy_check(struct rte_flow *flow, struct rte_flow_erro
 
     if (flow->flags.is_offload == 0)
     {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_FLOW_NOT_OFFLOADED, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_EMC_FLOW_NOT_OFFLOAD, 1);
         return rte_flow_error_set(error, EBUSY, RTE_FLOW_ERROR_TYPE_UNSPECIFIED, NULL,
                                   "Flow destroy: Flow not completely offloaded.");
     }
@@ -43,7 +43,7 @@ static int hinic3_flow_destroy_check(struct rte_flow *flow, struct rte_flow_erro
         ret = hinic3_del_rte_flow_in_session(flow);
         if (ret != 0)
         {
-            hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_AGE_DEL_FLOW_IN_SESSION, 1);
+            hinic3_add_error_stats(HINIC3_FLOWS_ERROR_EMC_AGE_DEL_FLOW_IN_SESSION, 1);
             return rte_flow_error_set(error, EBUSY, RTE_FLOW_ERROR_TYPE_STATE, NULL,
                                       "Flow destroy: Driver interface error.");
         }
@@ -53,7 +53,7 @@ static int hinic3_flow_destroy_check(struct rte_flow *flow, struct rte_flow_erro
         ret = hinic3_del_flow_qos_by_meter_id(flow->meter_id);
         if (ret != 0)
         {
-            hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_DEL_FLOW_QOS, 1);
+            hinic3_add_error_stats(HINIC3_FLOWS_ERROR_EMC_DEL_FLOW_QOS, 1);
             return rte_flow_error_set(error, EPERM, RTE_FLOW_ERROR_TYPE_STATE, NULL,
                                       "Flow destroy: Flow qos delete error.");
         }
@@ -112,7 +112,7 @@ static int hinic3_flow_destroy_sub(struct rte_eth_dev *dev, struct rte_flow *flo
     ret = hinic3_del_rte_flow_in_hmap(rte_bucket, flow);
     if (ret != 0)
     {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_DEL_RTE_FLOW_IN_HMAP, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_EMC_DEL_FLOW_IN_HMAP, 1);
         hinic3_spinlock_unlock(&rte_bucket->spinlock);
         return rte_flow_error_set(error, EBUSY, RTE_FLOW_ERROR_TYPE_UNSPECIFIED, NULL,
                                   "Flow destroy: Failed to del flow in hmap.");
@@ -123,7 +123,7 @@ static int hinic3_flow_destroy_sub(struct rte_eth_dev *dev, struct rte_flow *flo
         ret = hinic3_flow_del_by_ufid(flow->hw_ufid, flow->table_id);
         if (ret != 0)
         {
-            hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_DEL_HARD_FLOW, 1);
+            hinic3_add_error_stats(HINIC3_FLOWS_ERROR_EMC_DEL_HARD_FLOW, 1);
             hinic3_spinlock_unlock(&rte_bucket->spinlock);
             (void)rte_flow_error_set(error, -ret, RTE_FLOW_ERROR_TYPE_STATE, NULL, "Flow destroy : Driver interface error.");
             return ret;
@@ -218,7 +218,7 @@ int hinic3_flow_flush_all(struct rte_flow_error *error)
     if (ret != 0)
     {
         (void)hinic3_wunlock_flush_all();
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_MIRROR_SESSION_FLUSH, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_EMC_FLUSH_MIRROR_SESSION, 1);
         return rte_flow_error_set(error, EPERM, RTE_FLOW_ERROR_TYPE_STATE, NULL,
                                   "Flow flush all: Session driver interface error.");
     }
@@ -226,7 +226,7 @@ int hinic3_flow_flush_all(struct rte_flow_error *error)
     if (ret != 0)
     {
         (void)hinic3_wunlock_flush_all();
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_EMC_MPOOL_FLUSH, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_EMC_FLUSH_MPOOL, 1);
         return rte_flow_error_set(error, -ret, RTE_FLOW_ERROR_TYPE_STATE, NULL,
                                   "Flow flush all: Dpak interface error.");
     }
@@ -235,7 +235,7 @@ int hinic3_flow_flush_all(struct rte_flow_error *error)
     if (ret != 0)
     {
         (void)hinic3_wunlock_flush_all();
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_UFID_MAP_MPOOL_FLUSH, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_UFID_MAP_MPOOL_FLUSH, 1);
         return rte_flow_error_set(error, -ret, RTE_FLOW_ERROR_TYPE_STATE, NULL,
                                   "Flow flush all: Dpak interface error.");
     }
@@ -243,7 +243,7 @@ int hinic3_flow_flush_all(struct rte_flow_error *error)
     if (ret != 0)
     {
         (void)hinic3_wunlock_flush_all();
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_EMC_HARD_FLOW_FLUSH, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_EMC_FLUSH_HARD_FLOW, 1);
         (void)rte_flow_error_set(error, -ret, RTE_FLOW_ERROR_TYPE_STATE, NULL,
                                  "Flow flush all: Driver interface error.");
         return ret;

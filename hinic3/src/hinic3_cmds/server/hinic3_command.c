@@ -231,12 +231,12 @@ dispatch_command(struct unixctl_conn *conn, int argc, const char *argv[])
         if (ret == 0) {
             cmd_func(conn, argc, argv, &ret);
         } else if (ret == HINIC3_COMMAND_ERROR_TYPE_EXCESSIVE) {
-            hinic3_add_error_stats(HINIC3_EXCESSIVE_COMMAND, 1);
+            hinic3_add_error_stats(HINIC3_CMD_ERROR_EXCESSIVE_COMMAND, 1);
             HINIC3_LOG(ERR, AGENT, HINIC3_UI_ERROR_TOO_MANY_PARAMETER);
             hinic3_command_reply_error(conn, HINIC3_UI_LEADING_SIGN_ERROR HINIC3_UI_ERROR_TOO_MANY_PARAMETER "!\n");
             return -EINVAL;
         } else if (ret == HINIC3_COMMAND_ERROR_TYPE_INSUFFICIENT) {
-            hinic3_add_error_stats(HINIC3_INCOMPLETE_COMMAND, 1);
+            hinic3_add_error_stats(HINIC3_CMD_ERROR_INCOMPLETE_COMMAND, 1);
             HINIC3_LOG(ERR, AGENT, HINIC3_UI_ERROR_INCOMPLETE_COMMAND);
             hinic3_command_reply_error(conn, HINIC3_UI_LEADING_SIGN_ERROR HINIC3_UI_ERROR_INCOMPLETE_COMMAND "!\n");
             return -EINVAL;

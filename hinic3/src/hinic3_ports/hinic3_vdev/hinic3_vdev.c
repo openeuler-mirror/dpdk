@@ -463,7 +463,7 @@ hinic3_mbuf_set_share_upcall_port(uint16_t upcall_num, uint16_t queue_id, struct
 
         vf_dev = (struct hinic3_vf_dev *)hinic3_get_private_data(dpdk_index_id);
         if (HINIC3_UNLIKELY(vf_dev == NULL)) {
-            hinic3_add_error_stats(HINIC3_VPORT_DEV_SHARE_UPCALL_PRIVATE_DATA_NULL, 1);
+            hinic3_add_error_stats(HINIC3_PORTS_ERROR_DEV_SHARE_UPCALL_PRIVATE_DATA_NULL, 1);
             continue;
         }
 
@@ -486,7 +486,7 @@ hinic3_mbuf_set_common_port(uint16_t upcall_num, struct hinic3_queue *rxq, struc
 
     vf_dev = (struct hinic3_vf_dev *)hinic3_get_private_data(rxq->dpdk_index_id);
     if (vf_dev == NULL) {
-        hinic3_add_error_stats(HINIC3_VPORT_DEV_COMMOM_PORT_PRIVATE_DATA_NULL, 1);
+        hinic3_add_error_stats(HINIC3_PORTS_ERROR_DEV_COMMOM_PORT_PRIVATE_DATA_NULL, 1);
         return;
     }
 
@@ -509,7 +509,7 @@ hinic3_vf_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, uint16_t nb_pkts)
     uint16_t upcall_num = 0;
 
     if (hinic3_queue_valid(rxq) != 0) {
-        hinic3_add_error_stats(HINIC3_VPORT_VF_RX_QUEUE_INVALID, 1);
+        hinic3_add_error_stats(HINIC3_PORTS_ERROR_VF_RX_QUEUE_INVALID, 1);
         return 0;
     }
 
@@ -534,7 +534,7 @@ hinic3_mbuf_set_virtual_queue_port(uint16_t upcall_num, struct hinic3_queue *rxq
 
     vf_dev = (struct hinic3_vf_dev *)hinic3_get_private_data(rxq->dpdk_index_id);
     if (vf_dev == NULL) {
-        hinic3_add_error_stats(HINIC3_VPORT_DEV_COMMOM_PORT_PRIVATE_DATA_NULL, 1);
+        hinic3_add_error_stats(HINIC3_PORTS_ERROR_DEV_COMMOM_PORT_PRIVATE_DATA_NULL, 1);
         return 0;
     }
 
@@ -591,7 +591,7 @@ hinic3_virtual_queue_recv_pkts_distribute(struct hinic3_queue *rxq,
         if (HINIC3_UNLIKELY(buffer[i] != NULL)) {
             rte_pktmbuf_free(buffer[i]);
             buffer[i] = NULL;
-            hinic3_add_error_stats(HINIC3_VPORT_VIRTUAL_QUEUE_RECV_PKTS_DISTRIBUTE_DROP, 1);
+            hinic3_add_error_stats(HINIC3_PORTS_ERROR_VIRTUAL_QUEUE_RECV_PKTS_DISTRIBUTE_DROP, 1);
             break;
         }
     }
@@ -613,7 +613,7 @@ hinic3_vf_recv_pkts_in_virtual_queue(void *virtual_rx_queue, struct rte_mbuf **r
         nb_pkts = HINIC3_NETDEV_MAX_BURST;
 
     if (hinic3_queue_valid(rxq) != 0) {
-        hinic3_add_error_stats(HINIC3_VPORT_VIRTUAL_RX_QUEUE_INVALID, 1);
+        hinic3_add_error_stats(HINIC3_PORTS_ERROR_VIRTUAL_RX_QUEUE_INVALID, 1);
         return 0;
     }
 
@@ -651,7 +651,7 @@ hinic3_vf_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
         hinic3_forward_mode_get() != OVS_KEY_EXTRACT_EXTEND_MODE_7TUPLE;
 
     if (hinic3_queue_valid(txq) != 0) {
-        hinic3_add_error_stats(HINIC3_VPORT_VF_TX_QUEUE_INVALID, 1);
+        hinic3_add_error_stats(HINIC3_PORTS_ERROR_VF_TX_QUEUE_INVALID, 1);
         return 0;
     }
     hinic3_set_vport_id_into_userdata(txq->vport_id, tx_pkts, nb_pkts);
@@ -665,7 +665,7 @@ hinic3_vf_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
     if (reinject_num > 0) {
         vf_dev = (struct hinic3_vf_dev*)hinic3_get_private_data(txq->dpdk_index_id);
         if (HINIC3_UNLIKELY(vf_dev == NULL)) {
-            hinic3_add_error_stats(HINIC3_VPORT_DEV_VF_XMIT_PRIVATE_DATA_NULL, 1);
+            hinic3_add_error_stats(HINIC3_PORTS_ERROR_DEV_VF_XMIT_PRIVATE_DATA_NULL, 1);
             return 0;
         }
 
@@ -1065,7 +1065,7 @@ hinic3_bond_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, uint16_t nb_pkt
     int64_t upcall_byt = 0;
 
     if (hinic3_queue_valid(rxq) != 0) {
-        hinic3_add_error_stats(HINIC3_VPORT_BOND_RX_QUEUE_INVALID, 1);
+        hinic3_add_error_stats(HINIC3_PORTS_ERROR_BOND_RX_QUEUE_INVALID, 1);
         return 0;
     }
 
@@ -1074,7 +1074,7 @@ hinic3_bond_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, uint16_t nb_pkt
     if (upcall_num > 0) {
         bond_dev = (struct hinic3_bond_dev *)hinic3_get_private_data(rxq->dpdk_index_id);
         if (bond_dev == NULL) {
-            hinic3_add_error_stats(HINIC3_VPORT_DEV_BOND_RECV_PRIVATE_DATA_NULL, 1);
+            hinic3_add_error_stats(HINIC3_PORTS_ERROR_DEV_BOND_RECV_PRIVATE_DATA_NULL, 1);
             return 0;
         }
 
@@ -1105,7 +1105,7 @@ hinic3_bond_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkt
         hinic3_forward_mode_get() != OVS_KEY_EXTRACT_EXTEND_MODE_7TUPLE;
                                     
     if (hinic3_queue_valid(txq) != 0) {
-        hinic3_add_error_stats(HINIC3_VPORT_BOND_TX_QUEUE_INVALID, 1);
+        hinic3_add_error_stats(HINIC3_PORTS_ERROR_BOND_TX_QUEUE_INVALID, 1);
         return 0;
     }
     hinic3_set_vport_id_into_userdata(txq->vport_id, tx_pkts, nb_pkts);
@@ -1119,7 +1119,7 @@ hinic3_bond_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkt
     if (reinject_num > 0) {
         bond_dev = (struct hinic3_bond_dev *)hinic3_get_private_data(txq->dpdk_index_id);
         if (bond_dev == NULL) {
-            hinic3_add_error_stats(HINIC3_VPORT_DEV_BOND_XMIT_PRIVATE_DATA_NULL, 1);
+            hinic3_add_error_stats(HINIC3_PORTS_ERROR_DEV_BOND_XMIT_PRIVATE_DATA_NULL, 1);
             return 0;
         }
 

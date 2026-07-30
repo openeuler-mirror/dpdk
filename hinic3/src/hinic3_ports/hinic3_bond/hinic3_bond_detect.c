@@ -188,12 +188,12 @@ hinic3_bond_detect_process(uint16_t vport_id, struct rte_mbuf *mbuf,
         if (hinic3_bond_detect_pci_addr_equal(&g_hinic3_bond_slaves_array[i].pci_addr, &detect_field)) {
             hinic3_metadata->vport_id = HINIC3_SLAVE_SELECT_PREFIX + (vport_id & HINIC3_PORT_ID_MASK);
             hinic3_metadata->slave_port_id = g_hinic3_bond_slaves_array[i].slave_id;
-            hinic3_add_error_stats(HINIC3_FLOW_AGENT_WARNING_BOND_SLAVE_DETECT_PKT, 1);
+            hinic3_add_error_stats(HINIC3_FLOWS_WARNING_BOND_SLAVE_DETECT_PKT, 1);
             return;
         }
     }
     // 没有匹配到则传入非法vport_id让组件丢包
     hinic3_metadata->vport_id = HINIC3_SLAVE_INVALID_PREFIX + (vport_id & HINIC3_PORT_ID_MASK);
-    hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_BOND_SLAVE_DETECT_NO_MATCH, 1);
+    hinic3_add_error_stats(HINIC3_FLOWS_ERROR_BOND_SLAVE_DETECT_NO_MATCH, 1);
     return;
 }

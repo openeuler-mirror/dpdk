@@ -116,7 +116,7 @@ hinic3_set_flow_qos_to_hovs_sub(struct hinic3_meter_node *meter, bool is_clear,
     // 如果meter已经被非流表级QoS占用，则返回失败
     if (meter->type != QOS_TYPE_MAX && meter->type != QOS_TYPE_FLOW_LIMIT) {
         HINIC3_LOG(ERR, FLOW, "set flow qos to hovs failed type is %d.", meter->type);
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_METER_TYPE, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_METER_TYPE, 1);
         return -1;
     }
 
@@ -145,7 +145,7 @@ hinic3_set_flow_qos_to_hovs_sub(struct hinic3_meter_node *meter, bool is_clear,
     if (*qos_id == MAX_FLOW_QOS_ID_NUM) {
         *qos_id = hinic3_find_unused_qos_id();
         if (*qos_id >= MAX_FLOW_QOS_ID_NUM) {
-            hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_FLOW_QOS_FULL, 1);
+            hinic3_add_error_stats(HINIC3_FLOWS_ERROR_FLOW_QOS_FULL, 1);
             return -1;
         }
     }
@@ -153,11 +153,11 @@ hinic3_set_flow_qos_to_hovs_sub(struct hinic3_meter_node *meter, bool is_clear,
         ret = hinic3_flow_qos_limit_set(*qos_id, profile->packet_mode, profile->max_rate, profile->max_burst,
                                        profile->min_rate, profile->min_burst);
     } else {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_FLOW_QOS_PACKET_MODE, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_FLOW_QOS_PACKET_MODE, 1);
         return -1;
     }
     if (ret != 0) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_FLOW_SET_QOS_HOVS, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_FLOW_SET_QOS_HOVS, 1);
         return ret;
     }
     hinic3_multi_flow_qos_set(meter, *qos_id, *qos_packet_mode, profile);
@@ -189,7 +189,7 @@ hinic3_set_flow_qos_to_hovs(struct hinic3_nlattr *hinic3_actions, uint32_t meter
     hinic3_meter_list_lock();
     meter = hinic3_meter_find(meter_id);
     if (meter == NULL || meter->profile == NULL) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_METER_NOT_FOUND, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_METER_NOT_FOUND, 1);
         goto err;
     }
     policy_node = meter->policy;
@@ -202,7 +202,7 @@ hinic3_set_flow_qos_to_hovs(struct hinic3_nlattr *hinic3_actions, uint32_t meter
     if (policy_node->has_next_meter == true) {
         next_meter = hinic3_meter_find(policy_node->next_meter_id);
         if (next_meter == NULL) {
-            hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_METER_NOT_FOUND, 1);
+            hinic3_add_error_stats(HINIC3_FLOWS_ERROR_METER_NOT_FOUND, 1);
             goto clear;
         }
     
@@ -233,7 +233,7 @@ hinic3_offload_parse_qos_act_sub(struct hinic3_offload_action *offload_action,
     struct hinic3_nlattr *hinic3_actions = &offload_action->act_nla;
 
     if (mtr == NULL) {
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_METER_ACTION, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_METER_ACTION, 1);
         return -1;
     }
 

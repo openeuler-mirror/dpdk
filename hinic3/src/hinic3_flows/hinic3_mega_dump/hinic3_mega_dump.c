@@ -164,7 +164,7 @@ hinic3_mega_dump_start(struct hinic3_flow_dump_context *context, struct rte_flow
 
     int ret = hinic3_mega_flow_dump_start(&(context->hiovs_state));
     if (ret != HIOVS_OK && ret != HIOVS_EEMPTY)
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_DUMP_START, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_MEGA_DUMP_START, 1);
 
     return ret;
 }
@@ -220,6 +220,7 @@ hinic3_mega_dump_next(struct hinic3_flow_dump_context *context, int count, struc
         } else if (ret == HIOVS_EEMPTY) {
             return err;
         } else if (ret != HIOVS_OK) {
+            hinic3_add_error_stats(HINIC3_FLOWS_ERROR_MEGA_DUMP_NEXT, 1);
             err = ret;
         }
         context->context_mem.cur_flow_num++;
@@ -238,7 +239,7 @@ hinic3_mega_dump_done(struct hinic3_flow_dump_context *context, struct rte_flow_
 
     int ret =  hinic3_mega_flow_dump_done(context->hiovs_state);
     if (ret != 0)
-        hinic3_add_error_stats(HINIC3_FLOW_AGENT_ERROR_DUMP_DONE, 1);
+        hinic3_add_error_stats(HINIC3_FLOWS_ERROR_MEGA_DUMP_DONE, 1);
 
     return ret;
 }
