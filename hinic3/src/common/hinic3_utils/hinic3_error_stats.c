@@ -369,6 +369,7 @@ static struct hinic3_error_stats_info g_error_stats_info[] = {
     [HINIC3_OVS_FLOW_ERROR_PARSE_PKT_INFO] = {HINIC3_OVS_FLOW, "error_parse_pkt_info"},
     [HINIC3_OVS_FLOW_ERROR_PARSE_HDR_PARSE] = {HINIC3_OVS_FLOW, "error_parse_hdr_parse"},
     [HINIC3_OVS_FLOW_ERROR_IP_FRAGMENT] = {HINIC3_OVS_FLOW, "error_ip_fragment"},
+    [HINIC3_OVS_FLOW_ERROR_IP_HEADER_LEN_CHECK] = {HINIC3_OVS_FLOW, "error_ip_header_len_check"},
     [HINIC3_OVS_FLOW_ERROR_IPV6_FRAGMENT] = {HINIC3_OVS_FLOW, "error_ipv6_fragment"},
     [HINIC3_OVS_FLOW_ERROR_IPV6_ICMP_NOT_ECHO] = {HINIC3_OVS_FLOW, "error_ipv6_icmp_not_echo"},
     [HINIC3_OVS_FLOW_ERROR_BROADCAST_PKT] = {HINIC3_OVS_FLOW, "error_broadcast_pkt"},
