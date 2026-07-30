@@ -688,6 +688,9 @@ static void hinic3_unmmap_bar_addr(struct hinic3_hwdev *hwdev) {
 		munmap(hwif->cfg_regs_base - HINIC3_VF_CFG_REG_OFFSET,
 			pci_dev->mem_resource[HINIC3_VF_PCI_CFG_REG_BAR].len);
 	}
+	hwif->cfg_regs_base = NULL;
+	hwif->mgmt_regs_base = NULL;
+	hwif->db_base = NULL;
 }
 
 static int hinic3_get_bar_addr(struct hinic3_hwdev *hwdev)
@@ -826,7 +829,8 @@ bar_addr_err:
 void hinic3_free_hwif(void *dev)
 {
 	struct hinic3_hwdev *hwdev = (struct hinic3_hwdev *)dev;
-
+	if (IS_QPOOL_MODE())
+		hinic3_unmmap_bar_addr(hwdev);
 	rte_free(hwdev->hwif);
 }
 

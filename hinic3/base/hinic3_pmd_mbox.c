@@ -1294,8 +1294,17 @@ int hinic3_func_to_func_init(struct hinic3_hwdev *hwdev)
 
 	func_to_func->save_mbox = save_mbox;
 
-	(void)hinic3_mutex_init_shared(&func_to_func->mbox_send_mutex);
-	(void)hinic3_mutex_init_shared(&func_to_func->msg_send_mutex);
+	err = hinic3_mutex_init_shared(&func_to_func->mbox_send_mutex);
+	if (err) {
+		PMD_DRV_LOG(ERR, "Nbox_send_mutex init failed.");
+		goto mutex_init_mbox_send_fail;
+	}
+
+ 	err = hinic3_mutex_init_shared(&func_to_func->msg_send_mutex);
+ 	if (err) {
+		PMD_DRV_LOG(ERR, "Msg_send_mutex init failed.");
+		goto mutex_init_msg_send_fail;
+	}
 	rte_spinlock_init(&func_to_func->mbox_lock);
 
 	err = alloc_mbox_info(func_to_func->mbox_send, MBOX_MAX_BUF_SZ);
@@ -1334,10 +1343,12 @@ alloc_tlp_buffer_err:
 
 alloc_mbox_for_resp_err:
 	free_mbox_info(func_to_func->mbox_send);
-
+ 	
 alloc_mbox_for_send_err:
 	(void)hinic3_mutex_destroy(&func_to_func->msg_send_mutex);
+mutex_init_msg_send_fail:
 	(void)hinic3_mutex_destroy(&func_to_func->mbox_send_mutex);
+mutex_init_mbox_send_fail:
 	rte_free(save_mbox);
 	hwdev->func_to_func = NULL;
 
@@ -1356,7 +1367,7 @@ void hinic3_func_to_func_free(struct hinic3_hwdev *hwdev)
 	free_mbox_info(func_to_func->mbox_send);
 	(void)hinic3_mutex_destroy(&func_to_func->mbox_send_mutex);
 	(void)hinic3_mutex_destroy(&func_to_func->msg_send_mutex);
-
+	rte_free(func_to_func->save_mbox);
 	rte_free(func_to_func);
 }
 
