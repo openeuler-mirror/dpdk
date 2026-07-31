@@ -15,4 +15,5 @@ uint64_t hinic3_get_default_file_directory_size(bool *is_obtained);
 uint64_t hinic3_get_partition_free_space_size(void);
 int hinic3_check_file_realpath(const char *absolute_path, char *resolve_path, struct ds *ds);
 int hinic3_agent_chown_output_file_path(const char *resolve_path);
+int hinic3_agent_chmod_output_file_path(const char *resolve_path);
 #endif

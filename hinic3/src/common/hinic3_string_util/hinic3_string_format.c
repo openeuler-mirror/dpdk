@@ -120,7 +120,7 @@ int hinic3_key_dmac_parse(struct pcap_key_t *cap_key, const char *key_name, cons
 int hinic3_key_eth_type_parse(struct pcap_key_t *cap_key, const char *key_name, const char *value, struct ds *ds)
 {
     int ret;
-    uint32_t tmp_value;
+    unsigned long tmp_value;
     char *endPtr = NULL;
 
     if ((cap_key->flags & PCAP_FLAG_KEY_ETH_TYPE) != 0) {
@@ -135,7 +135,7 @@ int hinic3_key_eth_type_parse(struct pcap_key_t *cap_key, const char *key_name, 
     }
 
     tmp_value = strtoul(value, &endPtr, STR_TO_HEX_BASE);
-    if (endPtr == NULL || *endPtr != '\0') {
+    if (tmp_value > UINT16_MAX || endPtr == NULL || *endPtr != '\0') {
         hinic3_ds_put_format(ds, "%sWrong parameter, Value of parameter \"%s\" is invalid!\n", HINIC3_UI_LEADING_SIGN_ERROR, key_name);
         return -1;
     }
@@ -332,7 +332,7 @@ rte_be16_t hinic3_get_inter_type(void)
 
 int hinic3_key_port_id_parse(struct pcap_key_t *cap_key, const char *key_name, const char *value, struct ds *ds)
 {
-    uint32_t port_id;
+    unsigned long port_id;
     char *endPtr = NULL;
     if ((cap_key->flags & PCAP_FLAG_KEY_PORT_ID) != 0) {
         hinic3_ds_put_format(ds, "%sWrong parameter, Duplicate parameter \"%s\"!\n", HINIC3_UI_LEADING_SIGN_ERROR, key_name);
@@ -356,14 +356,14 @@ int hinic3_key_port_id_parse(struct pcap_key_t *cap_key, const char *key_name, c
         return -1;
     }
 
-    cap_key->port_id = port_id;
+    cap_key->port_id = (uint32_t)port_id;
     cap_key->flags |= PCAP_FLAG_KEY_PORT_ID;
     return 0;
 }
 
 int hinic3_key_icmp_type_parse(struct pcap_key_t *cap_key, const char *key_name, const char *value, struct ds *ds)
 {
-    uint8_t icmp_type;
+    unsigned int icmp_type;
     char *endPtr = NULL;
 
     if (!is_valid_digit(value)) {
@@ -372,18 +372,18 @@ int hinic3_key_icmp_type_parse(struct pcap_key_t *cap_key, const char *key_name,
     }
 
     icmp_type = strtoul(value, &endPtr, STR_TO_DEC_NUM);
-    if (endPtr == NULL || *endPtr != '\0') {
+    if (icmp_type > UINT8_MAX || endPtr == NULL || *endPtr != '\0') {
         hinic3_ds_put_format(ds, "%sWrong parameter, Value of parameter \"%s\" is invalid!\n", HINIC3_UI_LEADING_SIGN_ERROR, key_name);
         return -1;
     }
 
-    cap_key->icmp_type = icmp_type;
+    cap_key->icmp_type = (uint8_t)icmp_type;
     return 0;
 }
 
 int hinic3_key_icmp_code_parse(struct pcap_key_t *cap_key, const char *key_name, const char *value, struct ds *ds)
 {
-    uint8_t icmp_code;
+    unsigned long icmp_code;
     char *endPtr = NULL;
 
     if (!is_valid_digit(value)) {
@@ -393,12 +393,12 @@ int hinic3_key_icmp_code_parse(struct pcap_key_t *cap_key, const char *key_name,
 
     icmp_code = strtoul(value, &endPtr, STR_TO_DEC_NUM);
 
-    if (endPtr == NULL || *endPtr != '\0') {
+    if (icmp_code > UINT8_MAX || endPtr == NULL || *endPtr != '\0') {
         hinic3_ds_put_format(ds, "%sWrong parameter, Value of parameter \"%s\" is invalid!\n", HINIC3_UI_LEADING_SIGN_ERROR, key_name);
         return -1;
     }
 
-    cap_key->icmp_code = icmp_code;
+    cap_key->icmp_code = (uint8_t)icmp_code;
     return 0;
 }
 
@@ -412,12 +412,13 @@ int hinic3_key_icmp_id_parse(struct pcap_key_t *cap_key, const char *key_name, c
         return -1;
     }
 
-    icmp_id = strtoul(value, &endPtr, STR_TO_DEC_NUM);
-    if (endPtr == NULL || *endPtr != '\0') {
+    unsigned long tmp_icmp_id = strtoul(value, &endPtr, STR_TO_DEC_NUM);
+    if (tmp_icmp_id > UINT16_MAX || endPtr == NULL || *endPtr != '\0') {
         hinic3_ds_put_format(ds, "%sWrong parameter, Value of parameter \"%s\" is invalid!\n", HINIC3_UI_LEADING_SIGN_ERROR, key_name);
         return -1;
     }
 
+    icmp_id = (uint16_t)tmp_icmp_id;
     cap_key->icmp_id = (uint16_t)htons((uint16_t)icmp_id);
     cap_key->icmp_id = htons(icmp_id);
     return 0;

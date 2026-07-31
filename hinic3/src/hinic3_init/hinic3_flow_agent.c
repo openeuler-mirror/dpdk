@@ -631,6 +631,8 @@ int hinic3_flow_agent_construct(void)
     }
     return 0;
 err:
+    hinic3_free(g_offload_extend_info->hw_offload);
+    g_offload_extend_info->hw_offload = NULL;
     hinic3_free(g_offload_extend_info);
     g_offload_extend_info = NULL;
     return ret;

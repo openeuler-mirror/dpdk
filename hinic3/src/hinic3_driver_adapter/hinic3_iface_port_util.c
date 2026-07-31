@@ -320,10 +320,10 @@ static int vport_upcall_ques_to_str(const hinic3_nlattr_itr nla, char *args, int
     }
 
     off = 0;
-    for (i = 0; i < n_que; i++) {
+    for (i = 0; (i < n_que) && (len - off - 1 > 0); i++) {
         succ_len = snprintf(args + off, len - off - 1,
                               "%u,", que_ids[i]);
-        if (succ_len <= 0) {
+        if (succ_len <= 0 || succ_len >= (len - off - 1)) {
             HINIC3_LOG(ERR, DRIVER, "Failed to snprintf arg buf, err_len is %d!", succ_len);
             return -1;
         }

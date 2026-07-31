@@ -365,12 +365,13 @@ hinic3_multi_qos_speed_show_sub(struct unixctl_conn *conn, int argc, const char 
         return;
     }
 
-    group_id = (uint16_t)strtoul((const char *)argv[1], &endPtr, DEC_BASE_NUM);
-    if (group_id > MAX_QOS_ID_NUM || group_id == 0 || endPtr == NULL || *endPtr != '\0') {
+    unsigned long tmp_group_id = strtoul((const char *)argv[1], &endPtr, DEC_BASE_NUM);
+    if (tmp_group_id > MAX_QOS_ID_NUM || tmp_group_id == 0 || endPtr == NULL || *endPtr != '\0') {
         hinic3_command_reply_error(conn, HINIC3_UI_LEADING_SIGN_ERROR HINIC3_UI_INVALID_GROUP_ID_STR);
         *(int *)aux = -1;
         return;
     }
+    group_id = (uint16_t)tmp_group_id;
     hinic3_group_info_lock(group_id);
     group_info = hinic3_group_info_get(group_id);
     if (group_info->length == 0) {
@@ -679,11 +680,12 @@ hinic3_multi_qos_dump_show_sub(struct unixctl_conn *conn, int argc, const char *
     if (argc == 1) {
         ret = hinic3_multi_qos_dump_show_all(&ds);
     } else if (argc == MULTI_QOS_ARG_NUMS) {
-        group_id = (uint16_t)strtoul((const char *)argv[1], &endPtr, DEC_BASE_NUM);
-        if (group_id > MAX_QOS_ID_NUM || group_id == 0 || endPtr == NULL || *endPtr != '\0') {
+        unsigned long tmp_group_id = strtoul((const char *)argv[1], &endPtr, DEC_BASE_NUM);
+        if (tmp_group_id > MAX_QOS_ID_NUM || tmp_group_id == 0 || endPtr == NULL || *endPtr != '\0') {
             hinic3_ds_put_format(&ds, HINIC3_UI_LEADING_SIGN_ERROR HINIC3_UI_INVALID_GROUP_ID_STR);
             ret = -1;
         } else {
+            group_id = (uint16_t)tmp_group_id;
             hinic3_group_info_lock(group_id);
             group_info = hinic3_group_info_get(group_id);
             if (group_info->length == 0) {
@@ -830,11 +832,12 @@ hinic3_multi_meter_show_sub(struct unixctl_conn *conn, int argc, const char *arg
     if (argc == 1) {
         hinic3_multi_meter_show_all(&ds);
     } else if (argc == MULTI_QOS_ARG_NUMS) {
-        meter_id = strtoul(argv[1], &endPtr, DEC_BASE_NUM);
-        if (endPtr == NULL || *endPtr != '\0') {
+        unsigned long tmp_meter_id = strtoul(argv[1], &endPtr, DEC_BASE_NUM);
+        if (tmp_meter_id > UINT32_MAX || endPtr == NULL || *endPtr != '\0') {
             hinic3_ds_put_format(&ds, HINIC3_UI_LEADING_SIGN_ERROR HINIC3_UI_INVALID_METER_ID_STR);
             ret = -1;
         } else {
+            meter_id = (uint32_t)tmp_meter_id;
             hinic3_meter_list_lock();
             meter = hinic3_meter_find(meter_id);
             if (meter == NULL) {
@@ -1127,12 +1130,13 @@ hinic3_multi_qos_dump_loss_sub(struct unixctl_conn *conn, int argc, const char *
         goto err;
     }
 
-    group_id = (uint16_t)strtoul(argv[1], &endPtr, DEC_BASE_NUM);
-    if (group_id > MAX_QOS_ID_NUM || group_id == 0 || endPtr == NULL || *endPtr != '\0') {
+    unsigned long tmp_group_id = strtoul(argv[1], &endPtr, DEC_BASE_NUM);
+    if (tmp_group_id > MAX_QOS_ID_NUM || tmp_group_id == 0 || endPtr == NULL || *endPtr != '\0') {
         hinic3_ds_put_format(&ds, HINIC3_UI_LEADING_SIGN_ERROR HINIC3_UI_INVALID_GROUP_ID_STR);
         goto err;
     }
 
+    group_id = (uint16_t)tmp_group_id;
     group_info = hinic3_group_info_get(group_id);
     if (group_info->length == 0) {
         hinic3_ds_put_format(&ds, HINIC3_UI_LEADING_SIGN_ERROR "Group has no port.\n");
@@ -1328,12 +1332,12 @@ hinic3_multi_qos_stats_show_sub(struct unixctl_conn *conn, int argc, const char 
         goto err;
     }
 
-    group_id = (uint16_t)strtoul(argv[1], &endPtr, DEC_BASE_NUM);
-    if (group_id > MAX_QOS_ID_NUM || group_id == 0 || endPtr == NULL || *endPtr != '\0') {
+    unsigned long tmp_group_id = strtoul(argv[1], &endPtr, DEC_BASE_NUM);
+    if (tmp_group_id > MAX_QOS_ID_NUM || tmp_group_id == 0 || endPtr == NULL || *endPtr != '\0') {
         hinic3_ds_put_format(&ds, HINIC3_UI_LEADING_SIGN_ERROR HINIC3_UI_INVALID_GROUP_ID_STR);
         goto err;
     }
-
+    group_id = (uint16_t)tmp_group_id;
     group_info = hinic3_group_info_get(group_id);
     if (group_info->length == 0) {
         hinic3_ds_put_format(&ds, HINIC3_UI_LEADING_SIGN_ERROR "Group has no port.\n");

@@ -787,13 +787,14 @@ hinic3_agent_process_dump_rte_flow_options(int argc, const char *argv[], struct 
         return hinic3_agent_dump_flows_to_file(filename, ds);
     } else if (strcmp("-t", option) == 0){
         char *endPtr = NULL;
-        uint32_t dump_table_id = strtoul(argv[HINIC3_DUMP_RTE_ARG_FILE_OR_TABLE], &endPtr, DEC_BASE_NUM);
-        if (endPtr == NULL || *endPtr != '\0' || hinic3_flexda_flow_check_table_id_valid(dump_table_id) != 0)
+        unsigned long dump_table_id = strtoul(argv[HINIC3_DUMP_RTE_ARG_FILE_OR_TABLE], &endPtr, DEC_BASE_NUM);
+        if (endPtr == NULL || *endPtr != '\0' || dump_table_id > UINT32_MAX ||
+            hinic3_flexda_flow_check_table_id_valid((uint32_t)dump_table_id) != 0)
         {
             hinic3_ds_put_format(ds, "%s%s\n", HINIC3_UI_LEADING_SIGN_ERROR, HINIC3_UI_FLOW_DUMP_TABLE_ID_ERROR_STRING);
             return -1;
         }
-        return hinic3_agent_dump_rte_flow_to_screen(ds, dump_table_id);
+        return hinic3_agent_dump_rte_flow_to_screen(ds, (uint32_t)dump_table_id);
     }
 unrecognized:
     hinic3_ds_put_format(ds, "%s%s, please input -h or --help to get help info.\n", HINIC3_UI_LEADING_SIGN_ERROR,

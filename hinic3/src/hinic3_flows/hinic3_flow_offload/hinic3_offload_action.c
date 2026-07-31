@@ -13,7 +13,9 @@
 #include "hinic3_flow_qos.h"
 
 #define HINIC3_RTE_VLAN_PCP_MASK 0xe0
+#define HINIC3_RTE_VLAN_PCP_MASK_BD 0x07
 #define VLAN_PCP_MOVE 8
+#define VLAN_PCP_MOVE_BD 13
 #define HWOF_DEFALUT_DP_HASH_OUT_PORT 0X0080
 #define VLAN_VID_MAX 4094
 #define VLAN_PCP_MAX 7
@@ -37,7 +39,11 @@ static inline int hinic3_offload_parse_vlan_act(struct hinic3_offload_action *of
     struct hinic3_nlattr *hinic3_actions = &offload_action->act_nla;
 
     vlan_id = ntohs(rte_vlan_vid->vlan_vid);
-    vlan_pcp = (rte_vlan_pcp->vlan_pcp & HINIC3_RTE_VLAN_PCP_MASK) << VLAN_PCP_MOVE;
+    if (hinic3_user_scenario_get() == COM_BD) {
+        vlan_pcp = (rte_vlan_pcp->vlan_pcp & HINIC3_RTE_VLAN_PCP_MASK_BD) << VLAN_PCP_MOVE_BD;
+    } else {
+        vlan_pcp = (rte_vlan_pcp->vlan_pcp & HINIC3_RTE_VLAN_PCP_MASK) << VLAN_PCP_MOVE;
+    }
     vlan_tci = (vlan_pcp | vlan_id);
     offload_action->has_vlan_push = true;
     offload_action->vlan_id = htons(vlan_tci);

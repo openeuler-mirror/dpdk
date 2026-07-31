@@ -485,15 +485,18 @@ hinic3_multi_flow_qos_dump_sub(struct unixctl_conn *conn, int argc, const char *
     if (argc == 1) {
         ret = hinic3_multi_flow_qos_dump_all(&ds);
     } else if (argc == MULTI_QOS_ARG_NUMS) {
-        qos_id = (uint16_t)strtoul((const char *)argv[1], &endPtr, DEC_BASE_NUM);
-        if (qos_id > MAX_QOS_ID_NUM || endPtr == NULL || *endPtr != '\0') {
+        unsigned long tmp_qos_id = strtoul((const char *)argv[1], &endPtr, DEC_BASE_NUM);
+        if (tmp_qos_id > MAX_QOS_ID_NUM || endPtr == NULL || *endPtr != '\0') {
             hinic3_ds_put_format(&ds, HINIC3_UI_LEADING_SIGN_ERROR HINIC3_UI_INVALID_QOS_ID_STR);
             ret = -1;
-        } else if (hinic3_check_qos_id_used(qos_id) == true) {
-            ret = hinic3_multi_flow_qos_dump_one(&ds, qos_id);
         } else {
-            hinic3_ds_put_format(&ds, HINIC3_UI_LEADING_SIGN_ERROR "Qos id is not used.\n");
-            ret = -1;
+            qos_id = (uint16_t)tmp_qos_id;
+            if (hinic3_check_qos_id_used(qos_id) == true) {
+                ret = hinic3_multi_flow_qos_dump_one(&ds, qos_id);
+            } else {
+                hinic3_ds_put_format(&ds, HINIC3_UI_LEADING_SIGN_ERROR "Qos id is not used.\n");
+                ret = -1;
+            }
         }
     } else {
         hinic3_ds_put_format(&ds, HINIC3_UI_LEADING_SIGN_ERROR "Invalid number of parameters.\n");
@@ -547,11 +550,13 @@ hinic3_multi_flow_qos_stats_show_main(struct unixctl_conn *conn, int argc, const
         hinic3_ds_put_format(&ds, HINIC3_UI_LEADING_SIGN_ERROR "Invalid number of parameters.\n");
         goto err;
     } else {
-        qos_id = (uint16_t)strtoul((const char *)argv[1], &endPtr, DEC_BASE_NUM);
-        if (qos_id > MAX_QOS_ID_NUM || endPtr == NULL || *endPtr != '\0') {
+        unsigned long tmp_qos_id = strtoul((const char *)argv[1], &endPtr, DEC_BASE_NUM);
+        if (tmp_qos_id > MAX_QOS_ID_NUM || endPtr == NULL || *endPtr != '\0') {
             hinic3_ds_put_format(&ds, HINIC3_UI_LEADING_SIGN_ERROR HINIC3_UI_INVALID_QOS_ID_STR);
             goto err;
-        } else if (hinic3_check_qos_id_used(qos_id) == true) {
+        }
+        qos_id = (uint16_t)tmp_qos_id;
+        if (hinic3_check_qos_id_used(qos_id) == true) {
             if (hinic3_multi_flow_qos_stats_show_sub(&ds, qos_id) != 0)
                 goto err;
         } else {
@@ -602,11 +607,13 @@ hinic3_multi_flow_qos_loss_main(struct unixctl_conn *conn, int argc, const char 
         hinic3_ds_put_format(&ds, HINIC3_UI_LEADING_SIGN_ERROR "Invalid number of parameters.\n");
         goto err;
     } else {
-        qos_id = (uint16_t)strtoul((const char *)argv[1], &endPtr, DEC_BASE_NUM);
-        if (qos_id > MAX_QOS_ID_NUM || endPtr == NULL || *endPtr != '\0') {
+        unsigned long tmp_qos_id = strtoul((const char *)argv[1], &endPtr, DEC_BASE_NUM);
+        if (tmp_qos_id > MAX_QOS_ID_NUM || endPtr == NULL || *endPtr != '\0') {
             hinic3_ds_put_format(&ds, HINIC3_UI_LEADING_SIGN_ERROR HINIC3_UI_INVALID_QOS_ID_STR);
             goto err;
-        } else if (hinic3_check_qos_id_used(qos_id) == true) {
+        } 
+        qos_id = (uint16_t)tmp_qos_id;
+        if (hinic3_check_qos_id_used(qos_id) == true) {
             if (hinic3_multi_flow_qos_loss_sub(&ds, qos_id) != 0)
                 goto err;
         } else {

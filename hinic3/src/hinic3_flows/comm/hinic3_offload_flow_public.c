@@ -52,7 +52,8 @@ void hinic3_free_pmd_pkt_info(const struct hinic3_inner_metadata *udata64)
         return;
 
     hw_offload = offload_extend_info->hw_offload;
-    if ((udata64->lcore_idx >= hw_offload->pmd_status_num) || (udata64->offset >= MAX_PKT_BURST)) {
+    if ((udata64->lcore_idx >= hw_offload->pmd_status_num) || (udata64->lcore_idx >= MAX_PMD_CORE) ||
+            (udata64->offset >= MAX_PKT_BURST)) {
         HINIC3_LOG(ERR, FLOW, "Release pmd pkt info error, pkt udata64"
                 " lcore id %hu or offset %hhu is out of range!", udata64->lcore_idx, udata64->offset);
         return;
