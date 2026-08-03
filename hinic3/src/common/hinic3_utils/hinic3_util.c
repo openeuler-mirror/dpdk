@@ -119,7 +119,7 @@ int smacs_stringfy(const struct eth_address *macs, int n, char *str_macs, int st
 
     for (int i = 0; (i < n) && (str_macs_len - off - 1 > 0); i++) {
         suc_len = snprintf(str_macs + off, str_macs_len - off, MAC_FMT, MAC_ARGS(macs[i].ea));
-        if (suc_len < 0) {
+        if (suc_len < 0 || (suc_len > str_macs_len - off - 1)) {
             HINIC3_LOG(ERR, AGENT, "Failed to snprintf macs, the suc_len is %d!", suc_len);
             return -EINVAL;
         }
@@ -148,7 +148,7 @@ int extra_eth_types_stringfy(const uint16_t types[], int n, char *str_types, int
 
     for (int i = 0; (i < n) && (str_types_len - off - 1 > 0); i++) {
         suc_len = snprintf(str_types + off, str_types_len - off, "%04x, ", types[i]);
-        if (suc_len < 0) {
+        if (suc_len < 0 || (suc_len > str_types_len - off - 1)) {
             HINIC3_LOG(ERR, AGENT, "Failed to snprintf eth type, the suc_len is %d!", suc_len);
             return -EINVAL;
         }

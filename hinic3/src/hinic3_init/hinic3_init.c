@@ -413,10 +413,12 @@ int hinic3_driver_class_init(void)
         ret = hinic3_flexda_flow_config_info_init();
         if (ret != 0) {
             HINIC3_LOG(ERR, AGENT, "hinic3_resource_init: hinic3_flexda_flow_config_info_init failed with %d", ret);
-            goto rollback_global;
+            goto rollback_port;
         }
     }
     return 0;
+rollback_port:
+    hinic3_port_class_uninit();
 rollback_flow:
     hinic3_flow_class_uninit();
 rollback_global:

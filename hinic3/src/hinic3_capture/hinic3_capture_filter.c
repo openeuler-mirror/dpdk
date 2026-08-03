@@ -1169,6 +1169,10 @@ pcap_file_open(const char *file_name, const char *mode)
         }
     }
 
+    if (hinic3_agent_chmod_output_file_path(file_name) != 0) {
+        fclose(file);
+        return NULL;
+    }
 
     return file;
 }

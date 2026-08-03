@@ -289,6 +289,11 @@ struct ds *ds)
 
     const hovs_flexda_config_dump_info_t* hydra_dump_info = hinic3_flexda_flow_get_hydra_config_dump_info(hydra_type,
     type);
+
+    if (hydra_dump_info == NULL) {
+        HINIC3_LOG(ERR, FLOW, "get hydra config dump info failed!");
+        return;
+    }
     // 非结构体格式化，主要输出ip，mac等信息
     if (hydra_dump_info->struct_member_num == 0) {
         if (hinic3_flexda_flow_dump_format_size_check(size, hydra_dump_info->dump_format)) {

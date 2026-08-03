@@ -436,7 +436,8 @@ hinic3_check_vf_args_valid(const struct rte_pci_addr *pci_addr, uint16_t functio
     }
 
     /* 判断将要分配的max_queue_num是否超过总容量,每个VF需要再占用一个控制队列 */
-    if (hw_offload->queue_num.used_now + max_queue_num + 1 > hw_offload->queue_num.total_count) {
+    if (hw_offload->queue_num.used_now > hw_offload->queue_num.total_count ||
+            max_queue_num + 1 > hw_offload->queue_num.total_count - hw_offload->queue_num.used_now) {
         HINIC3_LOG(ERR, VPORT, "Queue resources are insufficient!");
         return -1;
     }
@@ -745,7 +746,7 @@ hinic3_vf_pci_by_function_id(uint16_t *function_id, struct rte_pci_addr *pci_add
         return -1;
     }
 
-    for (uint32_t i = 0; i < dev.phy_dev_num; i++) {
+    for (uint32_t i = 0; i < dev.phy_dev_num && i < MAX_PHY_DEV_NUM; i++) {
         info = &dev.pci_info[i];
         if (*function_id == info->glb_func_inx) {
             memcpy(pci_addr, (struct rte_pci_addr *)&info->pci_addr, sizeof(struct rte_pci_addr));

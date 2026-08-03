@@ -127,6 +127,12 @@ hinic3_agent_parse_output_file_path(struct hinic3_dump_all_flows_mgmt_t *m, cons
             goto fail;
         }
     }
+
+    if (hinic3_agent_chmod_output_file_path(resolve_path) != 0) {
+        fclose(m->file);
+        m->file = NULL;
+        goto fail;
+    }
     
     hinic3_free(resolve_path);
     return 0;

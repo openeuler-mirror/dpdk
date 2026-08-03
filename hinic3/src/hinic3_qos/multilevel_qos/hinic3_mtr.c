@@ -729,7 +729,8 @@ static int hinic3_add_group_to_hovs(struct hinic3_vf_dev *vf_dev, struct hinic3_
     int ret = 0;
     struct hinic3_mtr_profile_node *profile_node = NULL;
 
-    if (vf_dev->group_qos_id > 0 && g_hinic3_group_infos[vf_dev->group_qos_id].meter[index].is_used == false) {
+    if (vf_dev->group_qos_id > 0 && vf_dev->group_qos_id < HINIC3_METER_NUM_MAX &&
+            g_hinic3_group_infos[vf_dev->group_qos_id].meter[index].is_used == false) {
         /* 如果vf_dev已经绑定group，且group的dir方向没有限速，则正常下发group限速 */
         meter->group_id = vf_dev->group_qos_id;
         hinic3_group_info_lock(meter->group_id);

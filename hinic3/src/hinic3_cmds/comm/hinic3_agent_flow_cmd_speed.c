@@ -227,6 +227,7 @@ hinic3_speed_measure_thread_create(struct hinic3_speed_measure_task_t *task,
     if (ret != 0) {
         HINIC3_LOG(ERR, AGENT, "Create thread fail.");
         hinic3_ds_put_format(ds, HINIC3_UI_LEADING_SIGN_FAILURE "Internal failure.\n");
+        hinic3_thread_cond_destroy(&task->cond);
         return -1;
     }
     task->alive = true;

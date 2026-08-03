@@ -23,6 +23,7 @@
 #define HINIC3_FILE_GROUP "dpak_ovs"
 #define HINIC3_FILE_USAGE_RESULT_LEN 64
 #define HINIC3_FILE_INNER_PRIVILEGE 0750
+#define HINIC3_FILE_PRIVILEGE 0640
 #define HINIC3_FILE_SIZE_KB 1024
 #define HINIC3_FILE_SIZE_MB (HINIC3_FILE_SIZE_KB * HINIC3_FILE_SIZE_KB)
 
@@ -252,7 +253,7 @@ uint64_t hinic3_get_partition_free_space_size(void)
         return 0;
     }
 
-    available_space = stat.f_frsize * stat.f_bavail;
+    available_space = (uint64_t)stat.f_frsize * (uint64_t)stat.f_bavail;
 
     return (uint64_t)ceil(available_space / HINIC3_FILE_SIZE_MB);
 }
@@ -300,4 +301,14 @@ int hinic3_agent_chown_output_file_path(const char *resolve_path)
         return -1;
     }
     return 0;
+}
+
+int hinic3_agent_chmod_output_file_path(const char *resolve_path)
+{
+    int ret = chmod(resolve_path, HINIC3_FILE_PRIVILEGE);
+    if (ret != 0) {
+        HINIC3_LOG(ERR, AGENT, "chmod fail, errno: %d!", errno);
+    }
+
+    return ret;
 }
