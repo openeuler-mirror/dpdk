@@ -579,7 +579,7 @@ static int wait_until_doorbell_and_outbound_enabled(struct hinic3_hwif *hwif)
 	return -EFAULT;
 }
 
- static int hinic3_mmap_bar_addr(struct hinic3_hwdev *hwdev)
+static int hinic3_mmap_bar_addr(struct hinic3_hwdev *hwdev)
 {
 	struct rte_pci_device *pci_dev = hwdev->pci_dev;
 	struct hinic3_hwif *hwif = hwdev->hwif;
@@ -673,6 +673,26 @@ err_out:
 	return -EFAULT;
 }
 
+static void hinic3_unmmap_bar_addr(struct hinic3_hwdev *hwdev) {
+	struct rte_pci_device *pci_dev = hwdev->pci_dev;
+	struct hinic3_hwif *hwif = hwdev->hwif;
+
+	munmap(hwif->db_base,
+		pci_dev->mem_resource[HINIC3_PCI_DB_BAR].len);
+	if (!HINIC3_IS_VF_DEV(pci_dev)) {
+		munmap(hwif->mgmt_regs_base,
+			pci_dev->mem_resource[HINIC3_PCI_MGMT_REG_BAR].len);
+		munmap(hwif->cfg_regs_base,
+			pci_dev->mem_resource[HINIC3_PF_PCI_CFG_REG_BAR].len);
+	} else {
+		munmap(hwif->cfg_regs_base - HINIC3_VF_CFG_REG_OFFSET,
+			pci_dev->mem_resource[HINIC3_VF_PCI_CFG_REG_BAR].len);
+	}
+	hwif->cfg_regs_base = NULL;
+	hwif->mgmt_regs_base = NULL;
+	hwif->db_base = NULL;
+}
+
 static int hinic3_get_bar_addr(struct hinic3_hwdev *hwdev)
 {
 	struct rte_pci_device *pci_dev = hwdev->pci_dev;
@@ -747,7 +767,7 @@ int hinic3_init_hwif(void *dev)
 
 	if (err != 0) {
 		PMD_DRV_LOG(ERR, "get bar addr fail");
-		goto hwif_ready_err;
+		goto bar_addr_err;
 	}
 
 	err = wait_hwif_ready(hwdev);
@@ -791,6 +811,9 @@ int hinic3_init_hwif(void *dev)
 	return 0;
 
 hwif_ready_err:
+	if (IS_QPOOL_MODE())
+		hinic3_unmmap_bar_addr(hwdev);
+bar_addr_err:
 	rte_free(hwdev->hwif);
 	hwdev->hwif = NULL;
 
@@ -806,7 +829,8 @@ hwif_ready_err:
 void hinic3_free_hwif(void *dev)
 {
 	struct hinic3_hwdev *hwdev = (struct hinic3_hwdev *)dev;
-
+	if (IS_QPOOL_MODE())
+		hinic3_unmmap_bar_addr(hwdev);
 	rte_free(hwdev->hwif);
 }
 

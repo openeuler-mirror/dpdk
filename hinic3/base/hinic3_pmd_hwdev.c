@@ -131,7 +131,8 @@ static void ffm_event_msg_handler(__rte_unused void *hwdev,
 		    intr->node_id, intr->err_type, intr->err_level,
 		    intr->err_csr_addr, intr->err_csr_value);
 
-	*out_size = sizeof(*intr);
+	if (out_size)
+		*out_size = sizeof(*intr);
 }
 
 static const struct mgmt_event_handle mgmt_event_proc[] = {
@@ -408,16 +409,6 @@ dma_attr_init_err:
 	return err;
 }
 
-static void hinic3_uninit_comm_ch_qpool(struct hinic3_hwdev *hwdev)
-{
-	int err;
-	err = hinic3_set_func_svc_used_state(hwdev, HINIC3_MOD_COMM, 0);
-	if (err)
-		PMD_DRV_LOG(ERR, "Set func used state failed");
-
-	return;
-}
-
 static int hinic3_init_comm_ch(struct hinic3_hwdev *hwdev)
 {
 	int err;
@@ -539,7 +530,9 @@ int hinic3_init_hwdev(struct hinic3_hwdev *hwdev)
 init_cap_err:
 	hinic3_deinit_cfg_mgmt(hwdev);
 init_cfg_err:
-	if (!IS_QPOOL_MODE())
+	if (IS_QPOOL_MODE())
+		rte_mempool_free(hwdev->cmd_buf_pool);
+	else
 		hinic3_uninit_comm_ch(hwdev);
 
 init_qpool_err:
@@ -557,7 +550,7 @@ void hinic3_free_hwdev(struct hinic3_hwdev *hwdev)
 	hinic3_deinit_cfg_mgmt(hwdev);
 
 	if (IS_QPOOL_MODE())
-		hinic3_uninit_comm_ch_qpool(hwdev);
+		rte_mempool_free(hwdev->cmd_buf_pool);
 	else
 		hinic3_uninit_comm_ch(hwdev);
 

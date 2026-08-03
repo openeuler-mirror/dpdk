@@ -151,8 +151,8 @@ struct hinic3_dcb_config {
 	u8 pcp2cos[PCP_MAX_UP];
 	u8 dscp2cos[DSCP_MAC_UP];
 
-	u8 cos_qp_offset[NIC_DCB_COS_MAX];
-	u8 cos_qp_num[NIC_DCB_COS_MAX];
+	u16 cos_qp_offset[NIC_DCB_COS_MAX];
+	u16 cos_qp_num[NIC_DCB_COS_MAX];
 };
 
 #define MAX_FEATURE_QWORD	4
@@ -1958,9 +1958,11 @@ int hinic3_set_fec_mode(struct hinic3_hwdev *hwdev, u8 fecparam);
 
 int hinic3_get_fec_mode(struct hinic3_hwdev *hwdev, u8 *advertised_fec, u8 *supported_fec);
 
- int hinic3_qinfo_type_init(const char *dev_file);
+int hinic3_qinfo_type_init(const char *dev_file);
 
- int hinic3_indir_set_qid_mmap(u16 q_id, u16 local_qid);
+int hinic3_indir_set_qid_mmap(u16 q_id, u16 local_qid);
+
+void hinic3_clear_qid_mmap(u16 q_id);
 
 /**
 * Get service feature driver supported

@@ -277,6 +277,11 @@ static void port_info_event_printf(void *hwdev, void *buf_in,
 {
 	struct mag_cmd_event_port_info *port_info = buf_in;
 
+	if (!buf_in) {
+		PMD_DRV_LOG(ERR, "buf_in is NULL");
+		return;
+	}
+
 	if (!buf_out) {
 		PMD_DRV_LOG(ERR, "buf_out is NULL");
 		return;

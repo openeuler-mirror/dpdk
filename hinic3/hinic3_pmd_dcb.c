@@ -251,12 +251,12 @@ hinic3_update_qp_cos_cfg(struct hinic3_nic_dev *nic_dev, u8 num_cos)
 {
 	struct hinic3_dcb_config *hw_dcb_cfg = &nic_dev->dcb->hw_dcb_cfg;
 	struct hinic3_dcb_config *wanted_dcb_cfg = &nic_dev->dcb->wanted_dcb_cfg;
-	u8 i, remainder, num_sq_per_cos, cur_cos_num = 0;
-	u8 valid_cos_map = hinic3_get_dev_valid_cos_map(nic_dev);
+	u16 i, remainder, num_sq_per_cos, cur_cos_num = 0;
+	u16 valid_cos_map = hinic3_get_dev_valid_cos_map(nic_dev);
 	if (num_cos == 0)
 		return;
 
-	num_sq_per_cos = (u8)(nic_dev->num_sqs / num_cos);
+	num_sq_per_cos = (u16)(nic_dev->num_sqs / num_cos);
 	if (num_sq_per_cos == 0)
 		return;
 
@@ -266,8 +266,8 @@ hinic3_update_qp_cos_cfg(struct hinic3_nic_dev *nic_dev, u8 num_cos)
 
 	for (i = 0; i < PCP_MAX_UP; i++) {
 		if (BIT(i) & valid_cos_map) {
-			u8 cos_qp_num = num_sq_per_cos;
-			u8 cos_qp_offset = (u8)(cur_cos_num * num_sq_per_cos);
+			u16 cos_qp_num = num_sq_per_cos;
+			u16 cos_qp_offset = cur_cos_num * num_sq_per_cos;
 
 			if (cur_cos_num < remainder) {
 				cos_qp_num++;
@@ -277,7 +277,7 @@ hinic3_update_qp_cos_cfg(struct hinic3_nic_dev *nic_dev, u8 num_cos)
 			}
 
 			cur_cos_num++;
-			valid_cos_map -= (u8)BIT(i);
+			valid_cos_map -= (u16)BIT(i);
 
 			hw_dcb_cfg->cos_qp_offset[i] = cos_qp_offset;
 			hw_dcb_cfg->cos_qp_num[i] = cos_qp_num;

@@ -696,6 +696,7 @@ static u16 hinic3_ipv6_udptcp_cksum(struct rte_mbuf *mbuf, const struct rte_ipv6
 	hinic3_ip_cs_handler_t *ip_handler = NULL;
 	ip_handler = &g_ip_cs_handlers[IPV6_INDEX];
 	l4_len = rte_be_to_cpu_16(ipv6_hdr->payload_len);
+
 	sum = __rte_raw_cksum(l4_hdr, l4_len, 0);
 	sum = __rte_raw_cksum_reduce(sum);
 	sum += ip_handler->cksum_func(ipv6_hdr, mbuf->ol_flags);

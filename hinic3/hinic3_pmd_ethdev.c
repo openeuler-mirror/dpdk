@@ -403,6 +403,11 @@ static void hinic3_dev_interrupt_handler_qpool(void *param)
  	ssize_t bytes_read;
  	u8 link_state = 0;
 
+	if (intr_handle->fd < 0) {
+	 	PMD_DRV_LOG(ERR, "Invalid interrupt fd: %d", intr_handle->fd);
+	 	return;
+	}
+
  	if (!hinic3_get_bit(HINIC3_DEV_INTR_EN, &nic_dev->dev_status)) {
  		PMD_DRV_LOG(WARNING,
  			    "Intr is disabled, ignore intr event, dev_name: %s, port_id: %d",
@@ -424,8 +429,9 @@ static void hinic3_dev_interrupt_handler_qpool(void *param)
 			memmove(addr_bytes, event.data, RTE_ETHER_ADDR_LEN);
 			rte_ether_addr_copy((struct rte_ether_addr *)addr_bytes,
 				&dev->data->mac_addrs[0]);
-			if (rte_is_zero_ether_addr(&dev->data->mac_addrs[0]))
-				PMD_DRV_LOG(INFO, "mac addr is zero");
+			if (rte_is_zero_ether_addr(&dev->data->mac_addrs[0]) ||
+	 		    !rte_is_unicast_ether_addr(&dev->data->mac_addrs[0]))
+				PMD_DRV_LOG(WARNING, "mac addr is discouraged");
 		} else if (event.type == NETDEV_CHANGEMTU) {
 			PMD_DRV_LOG(INFO, "Set new mtu address");
 			nic_dev->mtu_size = event.data_mtu;
@@ -983,6 +989,7 @@ static int hinic3_get_rx_user_queue(struct hinic3_nic_dev *nic_dev, struct hinic
 		PMD_DRV_LOG(ERR, "Get rx user queue err: %d", err);
 
 	rxq->local_qid = queueinfo.local_qid;
+	hinic3_indir_set_qid_mmap(rxq->q_id, rxq->local_qid);
 	return err;
 }
 
@@ -1000,6 +1007,8 @@ static int hinic3_release_user_queue(struct hinic3_nic_dev *nic_dev, int queue_i
 	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
 	if (err < 0)
 		PMD_DRV_LOG(ERR, "Release user queue error: %d.", err);
+	else 
+		hinic3_clear_qid_mmap(queue_id);
 
 	return err;
 }
@@ -1333,8 +1342,6 @@ static int hinic3_get_tx_user_queue(struct hinic3_nic_dev *nic_dev, struct hinic
 
 	txq->local_qid = queueinfo.local_qid;
 
-	hinic3_indir_set_qid_mmap(txq->q_id, txq->local_qid);
-
 	return err;
 }
 
@@ -1428,6 +1435,8 @@ alloc_sq_mz_fail:
 
 alloc_ci_mz_fail:
 close_fd:
+	if (IS_QPOOL_MODE() && hwdev->qpool_qgrp_id == 0)
+		(void)hinic3_release_template(nic_dev);
 alloc_template_fail:
 	return err;
 }
@@ -3904,6 +3913,10 @@ static void hinic3_rxq_info_get(struct rte_eth_dev *dev, uint16_t queue_id,
 {
 	struct hinic3_rxq *rxq = dev->data->rx_queues[queue_id];
 
+	if (rxq == NULL) {
+		PMD_DRV_LOG(ERR, "rxq is NULL for queue_id %u", queue_id);
+		return;
+	}
 	rxq_info->mp = rxq->mb_pool;
 	rxq_info->nb_desc = rxq->q_depth;
 	rxq_info->scattered_rx = dev->data->scattered_rx;
@@ -5198,6 +5211,9 @@ static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev)
 
 dcb_init_fail:
 init_rx_ptype_table_fail:
+	(void)rte_intr_callback_unregister(PCI_DEV_TO_INTR_HANDLE(pci_dev),
+					   hinic3_dev_interrupt_handler_qpool,
+					   (void *)eth_dev);
 reg_intr_cb_fail:
 #ifdef DPDK_21_11
 set_default_feature_fail:
