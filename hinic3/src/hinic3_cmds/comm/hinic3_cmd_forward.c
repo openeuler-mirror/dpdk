@@ -192,6 +192,11 @@ hinic3_set_escape_mode(struct ds *reply, bool escape_mode_enable)
         return ret;
     }
 
+    if (escape_mode_enable) {
+        hinic3_ds_put_format(reply, "%sEscape mode enabled successfully.\n", HINIC3_UI_LEADING_SIGN_INFO);
+    } else {
+        hinic3_ds_put_format(reply, "%sEscape mode disabled successfully.\n", HINIC3_UI_LEADING_SIGN_INFO);
+    }
     return 0;
 }
 
