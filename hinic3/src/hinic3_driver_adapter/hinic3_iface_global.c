@@ -1245,6 +1245,10 @@ void hinic3_global_cfg_set_when_restart(void)
     hinic3_smap_destroy(&unset_args);
 
     hinic3_flow_flush();
+
+    if (hinic3_user_scenario_get() == COM_BD) {
+        hinic3_mega_flow_flush();
+    }
 }
 
 struct rte_mempool *dpdk_shared_mp_get(void)
