@@ -278,12 +278,6 @@ int hinic3_check_file_realpath(const char *absolute_path, char *resolve_path, st
         return -1;
     }
 
-    if (result == NULL) {
-        hinic3_ds_put_format(ds, HINIC3_UI_FILE_PATH_CREATE_STRING, HINIC3_UI_LEADING_SIGN_INFO, resolve_path);
-    } else {
-        hinic3_ds_put_format(ds, HINIC3_UI_FILE_PATH_APPEND_STRING, HINIC3_UI_LEADING_SIGN_INFO, resolve_path);
-    }
-
     return 0;
 }
 
