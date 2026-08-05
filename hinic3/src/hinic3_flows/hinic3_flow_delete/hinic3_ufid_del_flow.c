@@ -18,6 +18,7 @@
 #include "hinic3_ufid_hmap.h"
 #include "hinic3_ufid_map_rte_flow.h"
 #include "hinic3_ufid_del_flow.h"
+#include "hinic3_flow_agent.h"
 #define ARGC 2
 
 static void hinic3_flow_del_by_ufid_ovs_sub(struct unixctl_conn *conn, int argc, const char *argv[], void *aux)
@@ -41,6 +42,11 @@ static void hinic3_flow_del_by_ufid_ovs_sub(struct unixctl_conn *conn, int argc,
     if (ret != 0) {
         hinic3_ds_put_format(&ds, "Failure: Delete hw flow by ufid failed.\n");
         goto out;
+    }
+    
+    if (hinic3_get_offload_flow_nums() > 0)
+    {
+        hinic3_dec_offload_flow_nums();
     }
 
     ret = hinic3_flow_destroy_in_hmap_by_ufid(ufid);
