@@ -101,10 +101,14 @@ function get_info() {
     echo ""
 
     #已卸载流表个数信息
-    echo "--------------------------Flow num-----------------------------------------"
+    echo "--------------------------Hwoff flow num-----------------------------------------"
     dpak-ovs-ctl hwoff/show-offload-flow-num #软件流表
     dpak-ovs-ctl hwoff/dump-hwoff-flows -n #硬件流表
     dpak-ovs-ctl hwoff/show-hmap-flow-num #哈希流表
+    echo ""
+
+    echo "--------------------------Fuzzy flow num-----------------------------------------"
+    dpak-ovs-ctl hwoff/dump-fuzzy-flows -n
     echo ""
 
     #dump硬件流表信息

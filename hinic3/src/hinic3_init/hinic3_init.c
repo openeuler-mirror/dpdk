@@ -71,6 +71,7 @@ static struct hinic3_drv_ops_map g_hinic3_drv_ops_map[] = {
     HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_flow_mgmt_dump_next),
     HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_flow_mgmt_dump_done),
     HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_flow_mgmt_get_maxflows),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_mega_flow_mgmt_get_flow_num),
     HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_flow_mgmt_get_capability),
     HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_statistics_flow_get_by_ufid),
     HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_statistics_flow_flush_by_ufid),

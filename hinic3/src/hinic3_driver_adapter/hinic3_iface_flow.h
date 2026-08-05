@@ -47,6 +47,7 @@ typedef enum tag_hinic3_flow_api {
     HINIC3_FLOW_AGENT_DUMP_NEXT,
     HINIC3_FLOW_AGENT_DUMP_DONE,
     HINIC3_FLOW_AGENT_GET_MAXFLOWS,
+    HINIC3_FLOW_AGENT_GET_MEGA_MAXFLOWS,
     HINIC3_FLOW_AGENT_GET_CAPABILITY,
     HINIC3_FLOW_AGENT_SET_FORWARD_MODE,
     HINIC3_FLOW_AGENT_GET_FORWARD_MODE,
@@ -149,6 +150,7 @@ int hinic3_flow_get_forward_mode(uint8_t *forward_mode);
 int hinic3_flow_set_forward_mode(uint8_t forward_mode);
 int hinic3_flow_get_maxflows(uint32_t table_id, uint32_t *max_flows);
 int hinic3_flow_get_maxflows_by_table_id(uint32_t table_id, uint32_t *max_flows);
+int hinic3_get_mega_get_flow_num(uint32_t *flow_num, uint32_t *max_flow_num);
 int hinic3_flow_dump_done(void *state);
 int hinic3_flow_dump_next(void *state, struct hinic3_dpif_flow_for_get *dump);
 int hinic3_flow_dump_start(void **state);

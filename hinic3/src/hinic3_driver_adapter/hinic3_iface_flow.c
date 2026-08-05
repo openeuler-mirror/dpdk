@@ -36,6 +36,7 @@ static const struct hiovs_flow_map g_flow_api_arr[HINIC3_FLOW_API_MAX] = {
     {HINIC3_FLOW_AGENT_DUMP_NEXT, "hovs_flow_mgmt_dump_next"},
     {HINIC3_FLOW_AGENT_DUMP_DONE, "hovs_flow_mgmt_dump_done"},
     {HINIC3_FLOW_AGENT_GET_MAXFLOWS, "hovs_flow_mgmt_get_maxflows"},
+    {HINIC3_FLOW_AGENT_GET_MEGA_MAXFLOWS, "hovs_mega_flow_mgmt_get_flow_num"},
     {HINIC3_FLOW_AGENT_GET_CAPABILITY, "hovs_flow_mgmt_get_capability"},
     {HINIC3_FLOW_AGENT_SET_FORWARD_MODE, "hovs_flow_mgmt_set_forward_mode"},
     {HINIC3_FLOW_AGENT_GET_FORWARD_MODE, "hovs_flow_mgmt_get_forward_mode"},
@@ -500,6 +501,23 @@ int hinic3_flow_get_maxflows_by_table_id(uint32_t table_id, uint32_t *max_flows)
     HINIC3_FUNC_PTR_OR_ERR_RET(ops->hovs_flexda_flow_mgmt_get_maxflows, HINIC3_DRV_FUNC_NO_PTR);
     HINIC3_LOG_HINIC_FLOW_API_LOG(ret, HINIC3_FLEXDA_FLOW_AGENT_GET_MAXFLOWS, ops->hovs_flexda_flow_mgmt_get_maxflows(table_id, max_flows));
 
+    return hinic3_convert_error_code(ret);
+}
+
+int hinic3_get_mega_get_flow_num(uint32_t *flow_num, uint32_t *max_flow_num)
+{
+    int ret;
+    struct hinic3_drv_ops *ops = NULL;
+    if (flow_num == NULL || max_flow_num == NULL) {
+        HINIC3_LOG(WARNING, DRIVER, "The hinic3_get_mega_get_flow_num pointer parameter is NULL!");
+        return -EINVAL;
+    }
+    
+    ops = hinic3_get_drv_ops();
+    HINIC3_FUNC_PTR_OR_ERR_RET(ops->hovs_mega_flow_mgmt_get_flow_num, HINIC3_DRV_FUNC_NO_PTR);
+    
+    HINIC3_LOG_HINIC_FLOW_API_LOG(ret, HINIC3_FLOW_AGENT_GET_MEGA_MAXFLOWS,
+                                  ops->hovs_mega_flow_mgmt_get_flow_num(flow_num, max_flow_num));
     return hinic3_convert_error_code(ret);
 }
 

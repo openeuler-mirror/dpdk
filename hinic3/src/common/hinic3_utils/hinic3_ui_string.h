@@ -511,9 +511,10 @@ enum hinic3_ui_indent
 #define HINIC3_UI_DUMP_METER_HELP_STR \
     "Queries the corresponding rate limiting information based on the ID. Value range: 0-1023"
 
+#define HINIC3_UI_DUMP_FLOW_NUM_HELP_TIPS_STR "Print current total flow count"
 #define HINIC3_UI_DUMP_RTE_FLOW_HELP_STR "-r"
 #define HINIC3_UI_DUMP_DP_HASH_HELP_STR "Print rte flow info"
-#define HINIC3_UI_DUMP_FUZZY_TIPS_STRING "hwoff/dump-fuzzy-flows [ -r | { -h | --help } ]"
+#define HINIC3_UI_DUMP_FUZZY_TIPS_STRING "hwoff/dump-fuzzy-flows [ -r | -n | { -h | --help } ]"
 #define HINIC3_UI_DUMP_DP_HASH_TIPS_STRING "hwoff/dump-dp-hash-flows [ -r | { -h | --help } ]"
 
 #define HINIC3_UI_DUMP_ACL_TIPS_STRING "hwoff/dump-acl-flow [ -m | -g <group_id> | -r [ -m ] | { -h | --help } ]"
