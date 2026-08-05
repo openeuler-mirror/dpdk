@@ -107,6 +107,10 @@ function get_info() {
     dpak-ovs-ctl hwoff/show-hmap-flow-num #哈希流表
     echo ""
 
+    echo "--------------------------Fuzzy flow num-----------------------------------------"
+    dpak-ovs-ctl hwoff/dump-fuzzy-flows -n
+    echo ""
+
     #dump硬件流表信息
     echo "--------------------------Dump hwoff flows----------------------------------"
     flows_filename=dump-flows-$(date +%Y_%m_%d_%H_%M_%S).log

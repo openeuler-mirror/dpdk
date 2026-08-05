@@ -648,6 +648,8 @@ int hovs_flow_mgmt_dump_done(void *state);
 
 int hovs_flow_mgmt_get_maxflows(uint32_t *max_flows);
 
+int hovs_mega_flow_mgmt_get_flow_num(uint32_t *flow_num, uint32_t *max_flow_num);
+
 int hovs_flow_mgmt_get_capability(struct hovs_flow_capability *cap);
 
 int hovs_statistics_flow_get_by_ufid(const uint64_t *ufid, const size_t cnt, struct hovs_flow_stats *stats);

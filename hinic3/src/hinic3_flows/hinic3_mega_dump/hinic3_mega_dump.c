@@ -11,6 +11,7 @@
 #include "hinic3_mega_dump_format.h"
 #include "hinic3_mega_dump.h"
 #include "hinic3_rte_flow_format.h"
+#include "hinic3_option.h"
 
 #define HINIC3_DFX_FLOW_ALLOC_MEM_BASE_SIZE 2048
 
@@ -121,6 +122,29 @@ err:
     hinic3_ds_destroy(&ds);
 }
 
+static void
+hinic3_agent_dump_hinic3_mega_flows_num(struct unixctl_conn *conn, int argc HINIC3_UNUSED,
+    const char *argv[] HINIC3_UNUSED, void *aux)
+{
+    uint32_t flow_num = 0;
+    uint32_t max_flow_num = 0;
+    struct ds ds = DS_EMPTY_INITIALIZER;
+    int ret = hinic3_get_mega_get_flow_num(&flow_num, &max_flow_num);
+    if (ret != 0) {
+        hinic3_ds_put_format(
+            &ds, "%s%s\n", HINIC3_UI_LEADING_SIGN_FAILURE, HINIC3_UI_FLOW_DUMP_GET_FLOW_COUNT_FAILED_STRING);
+        *(int *)aux = -1;
+        goto err;
+    }
+    hinic3_ds_put_format(&ds, HINIC3_UI_FLOW_DUMP_FLOW_COUNT_STRING, flow_num);
+    hinic3_command_reply(conn, hinic3_ds_cstr(&ds));
+    *(int *)aux = 0;
+    hinic3_ds_destroy(&ds);
+    return;
+err:
+    hinic3_command_reply_error(conn, hinic3_ds_cstr(&ds));
+    hinic3_ds_destroy(&ds);
+}
 static void
 hinic3_agent_dump_rte_flow_mega(struct unixctl_conn *conn, int argc HINIC3_UNUSED, const char *argv[] HINIC3_UNUSED, void *aux)
 {
@@ -261,6 +285,8 @@ static void hinic3_agent_dump_mega_flows_help(struct unixctl_conn *conn, void *a
     hinic3_ds_put_format(&ds, "%4s%-30s%-s\n", HINIC3_UI_INDENT_SPACE,
         HINIC3_UI_DUMP_RTE_FLOW_HELP_STR, HINIC3_UI_DUMP_DP_HASH_HELP_STR);
     hinic3_ds_put_format(&ds, "%4s%-30s%-s\n", HINIC3_UI_INDENT_SPACE,
+        HINIC3_UI_FLOW_DUMP_COUNT_FORMAT_STRING, HINIC3_UI_FLOW_DUMP_FLOW_COUNT_STRING);
+    hinic3_ds_put_format(&ds, "%4s%-30s%-s\n", HINIC3_UI_INDENT_SPACE,
         HINIC3_UI_ESCAPE_MODE_SHOW_HELP_STRING, HINIC3_UI_ESCAPE_MODE_SHOW_HELP_TIPS_STRING);
 
     hinic3_command_reply(conn, hinic3_ds_cstr(&ds));
@@ -271,24 +297,42 @@ static void hinic3_agent_dump_mega_flows_help(struct unixctl_conn *conn, void *a
 static void 
 hinic3_agent_dump_mega_flows(struct unixctl_conn *conn, int argc, const char *argv[], void *aux)
 {
-    enum {
-        HELP_ARGC = 2
-    };
-        
-    if ((argc == HELP_ARGC) && ((strcmp(argv[1], "-h") == 0) || (strcmp(argv[1], "--help") == 0))) {
-        hinic3_agent_dump_mega_flows_help(conn, aux);
+    struct ds ds = DS_EMPTY_INITIALIZER;
+ 	 
+    if (argc == NO_ARGUMENT + 1) {
+        hinic3_agent_dump_hinic3_mega_flows(conn, argc, argv, aux);
+
+
         return;
     }
+    
+    if (argc == REQUIRED_ARGUMENT + 1) {
+        if (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0) {
+            hinic3_agent_dump_mega_flows_help(conn, aux);
+            return;
+        }
 
-    if (hinic3_get_dump_rte_flow_options(argc, argv)) {
-        hinic3_agent_dump_rte_flow_mega(conn, argc, argv, aux);
-    } else {
-        hinic3_agent_dump_hinic3_mega_flows(conn, argc, argv, aux);
+        if (strcmp(argv[1], "-r") == 0) {
+            hinic3_agent_dump_rte_flow_mega(conn, argc, argv, aux);
+            return;
+        }
+
+        if (strcmp(argv[1], "-n") == 0) {
+            hinic3_agent_dump_hinic3_mega_flows_num(conn, argc, argv, aux);
+            return;
+        }
     }
+
+    hinic3_ds_put_format(&ds, HINIC3_UI_LEADING_SIGN_ERROR
+        HINIC3_UI_ERROR_UNRECOGNIZED_COMMAND ", please type -h or --help for help.\n");
+
+    hinic3_command_reply(conn, hinic3_ds_cstr(&ds));
+       hinic3_ds_destroy(&ds);
+    return;
 }
 
 void
 unixctl_hinic3_mega_flow_dump_cmd_init(void)
 {
-    hinic3_command_register("hwoff/dump-fuzzy-flows", "[ -r | { -h | --help } ]", 0, 1, hinic3_agent_dump_mega_flows, NULL);
+    hinic3_command_register("hwoff/dump-fuzzy-flows", "[ -r | -n | { -h | --help } ]", 0, 1, hinic3_agent_dump_mega_flows, NULL);
 }
