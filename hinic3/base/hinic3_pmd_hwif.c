@@ -155,6 +155,7 @@
 					(pdev)->id.device_id == HINIC3_DEV_ID_VF_BP3_620 || \
 					(pdev)->id.device_id == HINIC3_DEV_ID_VF_SP230 || \
 					(pdev)->id.device_id == HINIC3_DEV_ID_VF_SP230_OLD || \
+					(pdev)->id.device_id == HINIC3_DEV_ID_VF_BP4_230 || \
  	 				((pdev)->id.device_id == HINIC3_DEV_ID_VF_SP560) || \
  	 				((pdev)->id.device_id == HINIC3_DEV_ID_HYPER_VF_SP560) \
 )
