@@ -239,9 +239,9 @@ int hinic3_mbox_to_vf(struct hinic3_hwdev *hwdev, enum hinic3_mod_type mod,
 		      void *buf_out, u16 *out_size, u32 timeout);
 
 int hinic3_send_mbox_to_kernel(struct hinic3_hwdev *hwdev,
-			enum hinic3_mod_type mod, u16 cmd, void *buf_in,
-			u16 in_size, void *buf_out, u16 *out_size,
-			enum module_name module, unsigned int msg_formate);
+			       enum hinic3_mod_type mod, u16 cmd, void *buf_in,
+			       u16 in_size, void *buf_out, u16 *out_size,
+			       enum module_name module, unsigned int msg_formate);
 
 #endif /* _HINIC3_PMD_MBOX_H_ */
 

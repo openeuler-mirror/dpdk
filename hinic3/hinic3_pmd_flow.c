@@ -1175,18 +1175,18 @@ hinic3_check_rss_queues(struct rte_eth_dev		 *dev,
 			(hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev) && act_r->queue[i] >= HINIC3_QUEUE_ALLOW_NUM) ||
 			(act_r->queue[i] >= dev->data->nb_rx_queues)) {
 			rte_flow_error_set(error, EINVAL,
-						HINIC3_FLOW_ERROR_TYPE_ACTION,
-						act, "Invalid action queue id.");
+					   HINIC3_FLOW_ERROR_TYPE_ACTION,
+					   act, "Invalid action queue id.");
 			return -rte_errno;
 		}
 	}
 
 	if ((hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev) && act_r->queue_num > HINIC3_QUEUE_ALLOW_NUM) ||
-			(pci_dev->id.device_id == HINIC3_DEV_ID_SP920 && act_r->queue_num > HINIC3_QUEUE_MAX)) {
-			rte_flow_error_set(error, EINVAL,
-					   HINIC3_FLOW_ERROR_TYPE_ACTION,
-					   act, "Invalid action queue number.");
-			return -rte_errno;
+	    (pci_dev->id.device_id == HINIC3_DEV_ID_SP920 && act_r->queue_num > HINIC3_QUEUE_MAX)) {
+		rte_flow_error_set(error, EINVAL,
+				   HINIC3_FLOW_ERROR_TYPE_ACTION,
+				   act, "Invalid action queue number.");
+		return -rte_errno;
 	}
 
 	return 0;
@@ -1239,11 +1239,12 @@ static int hinic3_flow_set_normal_rss_action_config_qpool(struct hinic3_nic_dev 
 	return 0;
 }
 
-static int hinic3_flow_set_normal_rss_action_config(struct rte_eth_dev *dev,
-							const struct rte_flow_action_rss *act_r,
-							const struct rte_flow_action *act,
-							struct rte_flow_error *error,
-							struct hinic3_rss_template_entry **template_entry_out)
+static int
+hinic3_flow_set_normal_rss_action_config(struct rte_eth_dev *dev,
+					 const struct rte_flow_action_rss *act_r,
+					 const struct rte_flow_action *act,
+					 struct rte_flow_error *error,
+					 struct hinic3_rss_template_entry **template_entry_out)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_rss_template_entry *template_entry = NULL;
@@ -1400,7 +1401,7 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 	filter->fdir_filter.action = act->type;
 
 	if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, 0, 0) != 0)
-		PMD_DRV_LOG(WARNING, "hinic3 get port table bifur enable status failed."); 
+		PMD_DRV_LOG(WARNING, "hinic3 get port table bifur enable status failed.");
 
 	switch (act->type) {
 	case RTE_FLOW_ACTION_TYPE_QUEUE:
@@ -1414,7 +1415,7 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 		(const struct rte_flow_action_queue *)act->conf;
 		filter->fdir_filter.rq_index = act_q->index;
 
-		if ((IS_BIFUR_MODE() && bifur_en) || (IS_NORMAL_MODE() && bifur_en)) 
+		if ((IS_BIFUR_MODE() && bifur_en) || (IS_NORMAL_MODE() && bifur_en))
 			filter->fdir_filter.queue_num = 1;
 
 		if (act_q->index >= dev->data->nb_rx_queues) {
@@ -1430,7 +1431,6 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 					   act, "Invalid action param.");
 			return -rte_errno;
 		}
-		
 		break;
 /* RSS process */
 	case RTE_FLOW_ACTION_TYPE_RSS:
@@ -1469,15 +1469,17 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 				return hinic3_flow_set_rss_action_config(dev, actions, error);
 		} else {
 			if (!act_r || act_r->queue_num == 0) {
- 	 		rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION, act,
- 	 						   "Invalid rss queue num is zero");
+ 	 			rte_flow_error_set(error, EINVAL,
+						   HINIC3_FLOW_ERROR_TYPE_ACTION, act, 
+						   "Invalid rss queue num is zero");
 				return -rte_errno;
 			}
 
 			for (i = 0; i < act_r->queue_num; i++) {
 				if (act_r->queue[i] >= dev->data->nb_rx_queues) {
-					rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION, act,
-									"Invalid action queue id.");
+					rte_flow_error_set(error, EINVAL, 
+							   HINIC3_FLOW_ERROR_TYPE_ACTION, act,
+							   "Invalid action queue id.");
 					return -rte_errno;
 				}
 			}
@@ -1646,17 +1648,17 @@ hinic3_flow_fdir_ipv6(const struct rte_flow_item *flow_item,
 		return -rte_errno;
 	}
 
-	#ifdef DPDK_24_11
+#ifdef DPDK_24_11
 	net_addr_to_host(filter->fdir_filter.key_mask.ipv6.src_ip, (const uint32_t *)mask_ipv6->hdr.src_addr.a, 4);
 	net_addr_to_host(filter->fdir_filter.key_spec.ipv6.src_ip, (const uint32_t *)spec_ipv6->hdr.src_addr.a, 4);
 	net_addr_to_host(filter->fdir_filter.key_mask.ipv6.dst_ip, (const uint32_t *)mask_ipv6->hdr.dst_addr.a, 4);
 	net_addr_to_host(filter->fdir_filter.key_spec.ipv6.dst_ip, (const uint32_t *)spec_ipv6->hdr.dst_addr.a, 4);
-	#else
+#else
 	net_addr_to_host(filter->fdir_filter.key_mask.ipv6.src_ip, (const uint32_t *)mask_ipv6->hdr.src_addr, 4);
 	net_addr_to_host(filter->fdir_filter.key_spec.ipv6.src_ip, (const uint32_t *)spec_ipv6->hdr.src_addr, 4);
 	net_addr_to_host(filter->fdir_filter.key_mask.ipv6.dst_ip, (const uint32_t *)mask_ipv6->hdr.dst_addr, 4);
 	net_addr_to_host(filter->fdir_filter.key_spec.ipv6.dst_ip, (const uint32_t *)spec_ipv6->hdr.dst_addr, 4);
-	#endif
+#endif
 	filter->fdir_filter.key_mask.proto = mask_ipv6->hdr.proto;
 	filter->fdir_filter.key_spec.proto = spec_ipv6->hdr.proto;
 
@@ -1815,8 +1817,7 @@ hinic3_flow_parse_fdir_filter(struct rte_eth_dev	  *dev,
 {
 	int ret;
 
-	ret = hinic3_flow_parse_fdir_pattern(dev, pattern, error,
-					   filter);
+	ret = hinic3_flow_parse_fdir_pattern(dev, pattern, error, filter);
 	if (ret)
 		return ret;
 
@@ -1975,8 +1976,7 @@ hinic3_flow_parse_ethertype_filter(struct rte_eth_dev	       *dev,
 {
 	int ret;
 
-	ret = hinic3_flow_parse_ethertype_pattern(dev, pattern, error,
-					   filter);
+	ret = hinic3_flow_parse_ethertype_pattern(dev, pattern, error, filter);
 	if (ret)
 		return ret;
 
@@ -2105,7 +2105,7 @@ hinic3_flow_fdir_tunnel_ipv6(struct rte_flow_error	 *error,
 			return -rte_errno;
 		}
 
-		#ifdef DPDK_24_11
+#ifdef DPDK_24_11
 		net_addr_to_host(filter->fdir_filter.key_mask.ipv6.src_ip,
 			(const uint32_t *)mask_ipv6->hdr.src_addr.a, 4);
 		net_addr_to_host(filter->fdir_filter.key_spec.ipv6.src_ip,
@@ -2114,7 +2114,7 @@ hinic3_flow_fdir_tunnel_ipv6(struct rte_flow_error	 *error,
 			(const uint32_t *)mask_ipv6->hdr.dst_addr.a, 4);
 		net_addr_to_host(filter->fdir_filter.key_spec.ipv6.dst_ip,
 			(const uint32_t *)spec_ipv6->hdr.dst_addr.a, 4);
-		#else
+#else
 		net_addr_to_host(filter->fdir_filter.key_mask.ipv6.src_ip,
 			(const uint32_t *)mask_ipv6->hdr.src_addr, 4);
 		net_addr_to_host(filter->fdir_filter.key_spec.ipv6.src_ip,
@@ -2123,7 +2123,7 @@ hinic3_flow_fdir_tunnel_ipv6(struct rte_flow_error	 *error,
 			(const uint32_t *)mask_ipv6->hdr.dst_addr, 4);
 		net_addr_to_host(filter->fdir_filter.key_spec.ipv6.dst_ip,
 			(const uint32_t *)spec_ipv6->hdr.dst_addr, 4);
-		#endif
+#endif
 	} else {
 		filter->fdir_filter.ip_type = HINIC3_FDIR_IP_TYPE_IPV6;
 
@@ -2143,7 +2143,7 @@ hinic3_flow_fdir_tunnel_ipv6(struct rte_flow_error	 *error,
 			return -rte_errno;
 		}
 
-		#ifdef DPDK_24_11
+#ifdef DPDK_24_11
 		net_addr_to_host(filter->fdir_filter.key_mask.inner_ipv6.src_ip,
 			(const uint32_t *)mask_ipv6->hdr.src_addr.a, 4);
 		net_addr_to_host(filter->fdir_filter.key_spec.inner_ipv6.src_ip,
@@ -2152,7 +2152,7 @@ hinic3_flow_fdir_tunnel_ipv6(struct rte_flow_error	 *error,
 			(const uint32_t *)mask_ipv6->hdr.dst_addr.a, 4);
 		net_addr_to_host(filter->fdir_filter.key_spec.inner_ipv6.dst_ip,
 			(const uint32_t *)spec_ipv6->hdr.dst_addr.a, 4);
-		#else
+#else
 		net_addr_to_host(filter->fdir_filter.key_mask.inner_ipv6.src_ip,
 			(const uint32_t *)mask_ipv6->hdr.src_addr, 4);
 		net_addr_to_host(filter->fdir_filter.key_spec.inner_ipv6.src_ip,
@@ -2161,7 +2161,7 @@ hinic3_flow_fdir_tunnel_ipv6(struct rte_flow_error	 *error,
 			(const uint32_t *)mask_ipv6->hdr.dst_addr, 4);
 		net_addr_to_host(filter->fdir_filter.key_spec.inner_ipv6.dst_ip,
 			(const uint32_t *)spec_ipv6->hdr.dst_addr, 4);
-		#endif
+#endif
 
 		filter->fdir_filter.key_mask.proto = mask_ipv6->hdr.proto;
 		filter->fdir_filter.key_spec.proto = spec_ipv6->hdr.proto;
@@ -2457,26 +2457,27 @@ hinic3_flow_parse(struct rte_eth_dev          *dev,
 	uint32_t pattern_num = 0;
 	int ret = 0;
 
-    if (!pattern) {
+
+	if (!pattern) {
 		rte_flow_error_set(error, EINVAL,
 				   HINIC3_FLOW_ERROR_TYPE_UNSPECIFIED,
 				   NULL, "Pattern is NULL.");
 		return -rte_errno;
 	}
 
-    if (!actions) {
-        rte_flow_error_set(error, EINVAL,
-                    HINIC3_FLOW_ERROR_TYPE_ACTION,
-                    NULL, "Actions is NULL.");
-        return -rte_errno;
-    }
+	if (!actions) {
+		rte_flow_error_set(error, EINVAL,
+				   HINIC3_FLOW_ERROR_TYPE_ACTION,
+				   NULL, "Actions is NULL.");
+		return -rte_errno;
+	}
 
-    if (!attr) {
-        rte_flow_error_set(error, EINVAL,
-                    HINIC3_FLOW_ERROR_TYPE_ATTR,
-                    NULL, "Attr is NULL.");
-        return -rte_errno;
-    }
+	if (!attr) {
+		rte_flow_error_set(error, EINVAL,
+				   HINIC3_FLOW_ERROR_TYPE_ATTR,
+				   NULL, "Attr is NULL.");
+		return -rte_errno;
+	}
 
 	while ((pattern + pattern_num)->type != HINIC3_FLOW_ITEM_TYPE_END) {
 		pattern_num++;
@@ -2496,8 +2497,7 @@ hinic3_flow_parse(struct rte_eth_dev          *dev,
 		return -rte_errno;
 	}
 
-	ret = parse_filter(dev, attr, pattern, actions,
-			error, filter);
+	ret = parse_filter(dev, attr, pattern, actions, error, filter);
 
 	return ret;
 }
@@ -2511,8 +2511,7 @@ hinic3_flow_validate(struct rte_eth_dev          *dev,
 {
 	struct hinic3_filter_t filter_rules = {0};
 
-	return hinic3_flow_parse(dev, attr, pattern, actions, error,
-			&filter_rules);
+	return hinic3_flow_parse(dev, attr, pattern, actions, error, &filter_rules);
 }
 
 static void
@@ -2871,9 +2870,9 @@ hinic3_flow_query(struct rte_eth_dev *dev, struct rte_flow *flow,
 
 	if (ret) {
 		rte_flow_error_set(error, -ret, HINIC3_FLOW_ERROR_TYPE_HANDLE, NULL, "Failed to query flow.");
-    }
+	}
 
-    return ret;
+	return ret;
 }
 
 const struct rte_flow_ops hinic3_flow_ops = {

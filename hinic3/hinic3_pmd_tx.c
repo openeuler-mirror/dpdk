@@ -442,7 +442,7 @@ static inline void hinic3_calculate_tcp_checksum(struct rte_mbuf *mbuf,
 }
 
 static inline void hinic3_calculate_udp_checksum(struct rte_mbuf *mbuf,
-					u16 inner_l3_offset)
+						 u16 inner_l3_offset)
 {
 	struct rte_ipv4_hdr *ipv4_hdr;
 	struct rte_ipv6_hdr *ipv6_hdr;
@@ -450,21 +450,17 @@ static inline void hinic3_calculate_udp_checksum(struct rte_mbuf *mbuf,
 	uint64_t ol_flags = mbuf->ol_flags;
 
 	if (ol_flags & HINIC3_PKT_TX_IPV4) {
-		ipv4_hdr = rte_pktmbuf_mtod_offset(mbuf, struct rte_ipv4_hdr *,
-							inner_l3_offset);
+		ipv4_hdr = rte_pktmbuf_mtod_offset(mbuf, struct rte_ipv4_hdr *, inner_l3_offset);
 
 		if (ol_flags & HINIC3_PKT_TX_IP_CKSUM)
 			ipv4_hdr->hdr_checksum = 0;
 
-		udp_hdr = (struct rte_udp_hdr *)((char *)ipv4_hdr +
-						mbuf->l3_len);
+		udp_hdr = (struct rte_udp_hdr *)((char *)ipv4_hdr + mbuf->l3_len);
 		udp_hdr->dgram_cksum = rte_ipv4_phdr_cksum(ipv4_hdr, ol_flags);
 	} else {
-		ipv6_hdr = rte_pktmbuf_mtod_offset(mbuf, struct rte_ipv6_hdr *,
-							inner_l3_offset);
+		ipv6_hdr = rte_pktmbuf_mtod_offset(mbuf, struct rte_ipv6_hdr *, inner_l3_offset);
 		udp_hdr = rte_pktmbuf_mtod_offset(mbuf, struct rte_udp_hdr *,
-							(inner_l3_offset +
-							mbuf->l3_len));
+						  (inner_l3_offset + mbuf->l3_len));
 		udp_hdr->dgram_cksum = hinic3_ipv6_phdr_cksum(ipv6_hdr, ol_flags);
 	}
 
@@ -638,7 +634,7 @@ static hinic3_ip_cs_handler_t* hinic3_get_outer_l3_hdr(struct rte_mbuf *mbuf, ui
 
 static int hinic3_vxlan_tso_ip_phdr_cksum(struct rte_mbuf *mbuf)
 {
-    uint8_t *outer_ip_hdr = NULL;
+	uint8_t *outer_ip_hdr = NULL;
 	uint8_t *ip_hdr = NULL;
 	uint8_t version, ver_index, l4_proto;
 	uint16_t offset = 0;
@@ -1020,7 +1016,7 @@ static bool hinic3_is_tso_sge_valid(struct rte_mbuf *mbuf,
 	 */
 	if (unlikely(mbuf_head->data_len < wqe_info->payload_offset &&
 		     mbuf->nb_segs > HINIC3_NONTSO_PKT_MAX_SGE)) {
-		PMD_DRV_LOG(WARNING, "illegal pkt, payload offset (%u) > data len (%u).\n", 
+		PMD_DRV_LOG(WARNING, "illegal pkt, payload offset (%u) > data len (%u).\n",
  	 		    wqe_info->payload_offset, mbuf->data_len);
 		return false;
 	}

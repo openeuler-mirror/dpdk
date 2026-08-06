@@ -76,8 +76,7 @@ hinic3_tc_queue_mapping_cfg(struct hinic3_nic_dev *nic_dev, uint16_t nb_tx_q)
 }
 
 static int
-hinic3_queue_to_tc_mapping(struct hinic3_nic_dev *nic_dev, uint16_t nb_rx_q,
-			uint16_t nb_tx_q)
+hinic3_queue_to_tc_mapping(struct hinic3_nic_dev *nic_dev, uint16_t nb_rx_q, uint16_t nb_tx_q)
 {
 	struct hinic3_ets *ets = nic_dev->ets;
 
@@ -222,10 +221,9 @@ hinic3_dcb_init_tm(struct hinic3_nic_dev *nic_dev)
 	default_tqp_num = ets->tqps_num / HINIC3_MAX_TC_NUM;
 	ets->num_tc = HINIC3_MAX_TC_NUM;
 	ret = hinic3_queue_to_tc_mapping(nic_dev, default_tqp_num,
-				      default_tqp_num);
+					 default_tqp_num);
 	if (ret) {
-		PMD_DRV_LOG(ERR, "update tc queue mapping failed, ret = %d.",
-			    ret);
+		PMD_DRV_LOG(ERR, "update tc queue mapping failed, ret = %d.", ret);
 		return ret;
 	}
 
@@ -556,8 +554,7 @@ hinic3_configure_dcb_hw(struct hinic3_nic_dev *nic_dev, u8 dcb_en)
 		return err;
 	}
 
-	if(is_sp620_nic(nic_dev) ||
-	   !HINIC3_IS_VF(nic_dev->hwdev)) {
+	if(is_sp620_nic(nic_dev) || !HINIC3_IS_VF(nic_dev->hwdev)) {
 		err = hinic3_sync_dcb_state(nic_dev->hwdev, CMD_QOS_OP_SET, dcb_en);
 		if (err) {
 			PMD_DRV_LOG(ERR, "Set dcb state failed");

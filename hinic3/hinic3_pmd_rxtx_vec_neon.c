@@ -231,8 +231,8 @@ hinic3_recv_pkts_vec(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
                 break;
 
                 if (rxq->delta > rxq->rx_free_thresh)
-                hinic3_rearm_rxq_mbuf_vec_neon(rxq);
+                        hinic3_rearm_rxq_mbuf_vec_neon(rxq);
         }
-        
+
         return nb_rx;
 }

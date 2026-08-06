@@ -66,7 +66,7 @@
 #define HINIC3_RSS_KEY_SIZE		40
 #define HINIC3_RSS_ENABLE		0x01
 #define HINIC3_RSS_DISABLE		0x00
-#define HINIC3_INVAILD_QID_BASE       0xffff
+#define HINIC3_INVALID_QID_BASE       0xffff
 
 #ifndef ETH_SPEED_NUM_200G
 #define ETH_SPEED_NUM_200G    200000 /* < 200 Gbps */
@@ -1135,7 +1135,6 @@ struct hinic3_set_fdir_ethertype_rule {
 	u8 flags;
 };
 
-
 struct hinic3_cmd_set_rq_flush {
 	union {
 		struct {
@@ -1598,7 +1597,7 @@ int hinic3_set_rx_vlan_offload(void *hwdev, u8 en);
  * @retval zero : Success
  * @retval non-zero : Failure
  */
-int hinic3_set_rx_lro_state(void *hwdev, u8 lro_en, u32 lro_timer,
+int hinic3_set_rx_lro_state(void *hwdev, bool lro_en, u32 lro_timer,
 			    u32 lro_max_pkt_len);
 
 /**

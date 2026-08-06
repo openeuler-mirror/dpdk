@@ -239,14 +239,14 @@ enum hinic3_compact_cqe_csum_err_type {
 
 /* keep same with IPSU_METADATA_L3_TP_E */
 enum HINIC3_RX_CQE_PT_L3 {
-    HINIC3_RX_CQE_L3_IPV4 = 0u,
-    HINIC3_RX_CQE_L3_IPV6 = 1u,
+	HINIC3_RX_CQE_L3_IPV4 = 0u,
+	HINIC3_RX_CQE_L3_IPV6 = 1u,
 };
 
 /* keep same with IPSU_PKT_TYPE_L45FINAL_E */
 enum HINIC3_RX_CQE_PT_L4 {
-    HINIC3_RX_CQE_L4_TCP = 3,
-    HINIC3_RX_CQE_L4_UDP = 4,
+	HINIC3_RX_CQE_L4_TCP = 3,
+	HINIC3_RX_CQE_L4_UDP = 4,
 };
 
 enum IPSU_METADATA_L3_TP_E {
@@ -410,6 +410,7 @@ struct hinic3_rq_ci_wb {
 
 	u32 rsvd[3];
 };
+
 struct hinic3_rxq {
 	/* Cache Line 0 : RX Fast Path Hot Data */
 	struct hinic3_nic_dev *nic_dev;
@@ -433,6 +434,8 @@ struct hinic3_rxq {
 	u8  is_scattered_rx;
 	u8  dp_intr_en;
 
+	u16 hw_cons_idx;
+	bool prefetch_flag;
 	/* Cache Line 1 : Queue Configuration */
 	u16 q_id;
 	u16 local_qid;

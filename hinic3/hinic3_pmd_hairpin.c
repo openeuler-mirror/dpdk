@@ -25,16 +25,16 @@ int
 hinic3_hairpin_cap_get(struct rte_eth_dev *dev, struct rte_eth_hairpin_cap *cap)
 {
 	struct hinic3_nic_dev *nic_dev;
-    nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	if (!(nic_dev->feature_cap & NIC_F_HAIRPIN)) {
 		PMD_DRV_LOG(ERR, "current firmware not support hairpin");
 		rte_errno = ENOTSUP;
 		return -rte_errno;
 	}
-    cap->max_nb_queues = UINT16_MAX;
-    cap->max_rx_2_tx = 1;
-    cap->max_tx_2_rx = 1;
-    cap->max_nb_desc = HINIC3_MAX_QUEUE_DEPTH;
+	cap->max_nb_queues = UINT16_MAX;
+	cap->max_rx_2_tx = 1;
+	cap->max_tx_2_rx = 1;
+	cap->max_nb_desc = HINIC3_MAX_QUEUE_DEPTH;
 #ifdef DPDK_22_11
 	/*not support yet*/
 	cap->rx_cap.locked_device_memory = 0;
@@ -95,7 +95,7 @@ hinic3_hairpin_get_peer_ports(struct rte_eth_dev *dev, uint16_t *peer_ports,
 					data->port_id, i, len);
 				return -rte_errno;
 			}
-			peer_ports[peer_cnt++] = txq[i]->hairpin_conf.peers[0].port;	
+			peer_ports[peer_cnt++] = txq[i]->hairpin_conf.peers[0].port;
 		}
 	} else {
 		for (i = 0; i < rxq_num; i++) {
@@ -130,16 +130,16 @@ hinic3_hairpin_get_peer_ports(struct rte_eth_dev *dev, uint16_t *peer_ports,
  */
 int
 hinic3_rx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
-							  uint16_t nb_desc,
-							  const struct rte_eth_hairpin_conf *conf)
+			      uint16_t nb_desc,
+			      const struct rte_eth_hairpin_conf *conf)
 {
-    struct hinic3_rxq *rxq = NULL;
-    struct hinic3_nic_dev *nic_dev;
+	struct hinic3_rxq *rxq = NULL;
+	struct hinic3_nic_dev *nic_dev;
 	u16 rq_depth;
 
-    nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 
-    /* Queue depth must be power of 2, otherwise will be aligned up */
+	/* Queue depth must be power of 2, otherwise will be aligned up */
 	rq_depth = (nb_desc & (nb_desc - 1)) ?
 		((u16)(1U << (ilog2(nb_desc) + 1))) : nb_desc;
 
@@ -153,7 +153,7 @@ hinic3_rx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 		return -EINVAL;
 	}
 
-    if (conf->peer_count > 1) {
+	if (conf->peer_count > 1) {
 		rte_errno = EINVAL;
 		PMD_DRV_LOG(ERR, "port %u unable to setup Rx hairpin queue index %u"
 			" peer count is %u", dev->data->port_id,
@@ -186,24 +186,24 @@ hinic3_rx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 #endif
 		}
 	}
-    rxq = rte_zmalloc_socket("hinic3_rq", sizeof(struct hinic3_rxq),
+	rxq = rte_zmalloc_socket("hinic3_rq", sizeof(struct hinic3_rxq),
 				 RTE_CACHE_LINE_SIZE, SOCKET_ID_ANY);
-    if (!rxq) {
+	if (!rxq) {
 		PMD_DRV_LOG(ERR, "Allocate rxq[%d] failed, dev_name: %s",
 			    qid, dev->data->name);
 		return -ENOMEM;
 	}
-    rxq->nic_dev = nic_dev;
-    nic_dev->rxqs[qid] = rxq;
-    rxq->q_id = qid;
+	rxq->nic_dev = nic_dev;
+	nic_dev->rxqs[qid] = rxq;
+	rxq->q_id = qid;
 	rxq->q_depth = rq_depth;
 	rxq->hairpin_conf = *conf;
-    rxq->is_hairpin = true;
+	rxq->is_hairpin = true;
 
-    dev->data->rx_queues[qid] = rxq;
+	dev->data->rx_queues[qid] = rxq;
 	dev->data->rx_queue_state[qid] = RTE_ETH_QUEUE_STATE_HAIRPIN;
 
-    return 0;
+	return 0;
 }
 
 /**
@@ -226,17 +226,17 @@ hinic3_tx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 							  uint16_t nb_desc,
 							  const struct rte_eth_hairpin_conf *conf)
 {
-    struct hinic3_txq *txq = NULL;
-    struct hinic3_nic_dev *nic_dev;
-    u16 sq_depth;
+	struct hinic3_txq *txq = NULL;
+	struct hinic3_nic_dev *nic_dev;
+	u16 sq_depth;
 
-    nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 
-    /* Queue depth must be power of 2, otherwise will be aligned up */
+	/* Queue depth must be power of 2, otherwise will be aligned up */
 	sq_depth = (nb_desc & (nb_desc - 1)) ?
 		   ((u16)(1U << (ilog2(nb_desc) + 1))) : nb_desc;
 
-    /*
+	/*
 	 * Validate number of transmit descriptors.
 	 * It must not exceed hardware maximum and minimum.
 	 */
@@ -282,23 +282,23 @@ hinic3_tx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 #endif
 		}
 	}
-    txq = rte_zmalloc_socket("hinic3_tq", sizeof(struct hinic3_txq),
-                RTE_CACHE_LINE_SIZE, SOCKET_ID_ANY);
-    if (!txq) {
+	txq = rte_zmalloc_socket("hinic3_tq", sizeof(struct hinic3_txq),
+				 RTE_CACHE_LINE_SIZE, SOCKET_ID_ANY);
+	if (!txq) {
 		PMD_DRV_LOG(ERR, "Allocate txq[%d] failed, dev_name: %s",
 			    qid, dev->data->name);
 		return -ENOMEM;
 	}
-    nic_dev->txqs[qid] = txq;
-    txq->nic_dev = nic_dev;
+	nic_dev->txqs[qid] = txq;
+	txq->nic_dev = nic_dev;
 	txq->q_id = qid;
 	txq->q_depth = sq_depth;
 	txq->hairpin_conf = *conf;
-    txq->is_hairpin = true;
+	txq->is_hairpin = true;
 
-    dev->data->tx_queues[qid] = txq;
+	dev->data->tx_queues[qid] = txq;
 	dev->data->tx_queue_state[qid] = RTE_ETH_QUEUE_STATE_HAIRPIN;
-    return 0;
+	return 0;
 }
 
 int hinic3_hairpin_bind(struct rte_eth_dev *dev, uint16_t rx_port)

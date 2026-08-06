@@ -84,7 +84,6 @@ hinic3_telemetry_info(const char *cmd, const char *params, struct rte_tel_data *
 			return -ENOMEM;
 		}
 
-
 		rte_tel_data_start_dict(func_data);
 		rte_tel_data_add_dict_int(func_data, "send_cnt", mbox_cnt.func_info[i].send_cnt);
 		rte_tel_data_add_dict_int(func_data, "ack_cnt", mbox_cnt.func_info[i].ack_cnt);

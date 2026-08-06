@@ -293,6 +293,13 @@ static inline u16 hinic3_get_rq_local_pi(struct hinic3_rxq *rxq)
 	return MASKED_QUEUE_IDX(rxq, rxq->prod_idx);
 }
 
+static inline u16 hinic3_get_rq_hw_ci(struct hinic3_rxq *rxq)
+{
+	struct hinic3_rq_ci_wb rq_ci;
+	rq_ci.dw1.value = hinic3_hw_cpu32(__atomic_load_n(&rxq->rq_ci->dw1.value, __ATOMIC_ACQUIRE));
+	return rq_ci.dw1.bs.hw_ci;
+}
+
 /**
  * Update receive queue hardware pi
  *
@@ -556,7 +563,7 @@ static int hinic3_rearm_rxq_mbuf(struct hinic3_rxq *rxq)
 				hinic3_hw_be32(lower_32_bits(dma_addr));
 			rq_wqe->extend_wqe.buf_desc.sge.len =
 				nic_dev->rx_buff_len;
-		}else if (rxq->wqe_type == HINIC3_NORMAL_RQ_WQE) {
+		} else if (rxq->wqe_type == HINIC3_NORMAL_RQ_WQE) {
 			rq_wqe->normal_wqe.buf_hi_addr =
 				hinic3_hw_be32(upper_32_bits(dma_addr));
 			rq_wqe->normal_wqe.buf_lo_addr =
@@ -738,8 +745,8 @@ int hinic3_update_rss_config(struct rte_eth_dev *dev,
 		goto init_rss_fail;
 	}
 
-	err = hinic3_rss_set_hash_engine(nic_dev->hwdev,
-					 HINIC3_RSS_HASH_ENGINE_TYPE_TOEP);
+	err = hinic3_rss_set_hash_engine(nic_dev->hwdev, HINIC3_RSS_HASH_ENGINE_TYPE_TOEP);
+
 	if (err) {
 		PMD_DRV_LOG(ERR, "Init rss hash function failed, err: %d", err);
 		goto init_rss_fail;
@@ -760,6 +767,7 @@ init_rss_fail:
 
 	return err;
 }
+
 /**
  * Initialize the receive packet type table
  * @param[in] dev
@@ -767,7 +775,7 @@ init_rss_fail:
  */
 
 int
-hinic3_init_rx_ptype_table(struct rte_eth_dev *dev) 
+hinic3_init_rx_ptype_table(struct rte_eth_dev *dev)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_ptype_table *tbl =
@@ -909,26 +917,27 @@ static int hinic3_poll_rq_empty(struct hinic3_rxq *rxq)
 static int hinic3_poll_integrated_cqe_rq_empty(struct hinic3_rxq *rxq)
 {
 	struct hinic3_rx_info *rx_info;
-	struct hinic3_rq_ci_wb rq_ci;
 	u16 sw_ci, sw_pi, hw_ci;
 	unsigned long timeout;
 
 	sw_ci = hinic3_get_rq_local_ci(rxq);
 	sw_pi = hinic3_get_rq_local_pi(rxq);
+	hw_ci = hinic3_get_rq_hw_ci(rxq);
 
 	/* 等待硬件排空 */
-	timeout = msecs_to_jiffies(HINIC3_FLUSH_QUEUE_TIMEOUT) + jiffies;
-	do {
-		rq_ci.dw1.value = hinic3_hw_cpu32(__atomic_load_n(&rxq->rq_ci->dw1.value, __ATOMIC_ACQUIRE));
-		hw_ci = rq_ci.dw1.bs.hw_ci;
-		if (sw_pi == hw_ci)
-			break;
+	if (is_sp560_nic(rxq->nic_dev)) {
+		timeout = msecs_to_jiffies(HINIC3_FLUSH_QUEUE_TIMEOUT) + jiffies;
+		do {
+			hw_ci = hinic3_get_rq_hw_ci(rxq);
+			if (sw_pi == hw_ci)
+				break;
 
-		rte_delay_us(1);
-	} while (time_before(jiffies, timeout));
+			rte_delay_us(1);
+		} while (time_before(jiffies, timeout));
 
-	if (sw_pi != hw_ci)
-		return -EFAULT;
+		if (sw_pi != hw_ci)
+			return -EFAULT;
+	}
 
 	/* rx流程还未结束 */
 	while (sw_ci != hw_ci) {
@@ -1038,10 +1047,7 @@ int hinic3_stop_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq)
 	rte_spinlock_unlock(&nic_dev->queue_list_lock);
 
 	/* Send flush rq cmd to uCode */
-	if (IS_QPOOL_MODE())
-		err = hinic3_set_rq_flush(nic_dev->hwdev, rxq->local_qid);
-	else
-		err = hinic3_set_rq_flush(nic_dev->hwdev, rxq->q_id);
+	err = hinic3_set_rq_flush(nic_dev->hwdev, rxq->local_qid);
 
 	if (err) {
 		PMD_DRV_LOG(ERR, "Flush rq failed, eth_dev:%s, q_id:%d, local_qid: %d",
@@ -1049,10 +1055,10 @@ int hinic3_stop_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq)
 		goto rq_flush_failed;
 	}
 
-	if (is_sp620_nic(nic_dev))
-		err = hinic3_poll_rq_empty(rxq);
-	else
+	if (nic_dev->config.rx_cqe_compact_en)
 		err = hinic3_poll_integrated_cqe_rq_empty(rxq);
+	else
+		err = hinic3_poll_rq_empty(rxq);
 
 	if (err) {
 		hinic3_dump_cqe_status(rxq);
@@ -1117,36 +1123,6 @@ static inline uint64_t hinic3_rx_vlan(u8 vlan_offload, u16 vlan_tag,
 	*vlan_tci = vlan_tag;
 
 	return HINIC3_PKT_RX_VLAN | HINIC3_PKT_RX_VLAN_STRIPPED;
-}
-
-static int hinic3_rx_packet_type(u32 offload_type)
-{
-	u32 l3_type = 0, l4_type = 0;
-	/* l3 */
-	switch(HINIC3_GET_RX_IP_TYPE(offload_type)) {
-		case HINIC3_RX_CQE_L3_IPV4:
-			l3_type = RTE_PTYPE_L3_IPV4;
-			break;
-		case HINIC3_RX_CQE_L3_IPV6:
-			l3_type = RTE_PTYPE_L3_IPV6;
-			break;
-		default:
-			break;
-	}
-
-	/* l4 */
-	switch(HINIC3_GET_RX_PKT_TYPE(offload_type)) {
-		case HINIC3_RX_CQE_L4_TCP:
-			l4_type = RTE_PTYPE_L4_TCP;
-			break;
-		case HINIC3_RX_CQE_L4_UDP:
-			l4_type = RTE_PTYPE_L4_UDP;
-			break;
-		default:
-			break;
-	}
-
-	return l3_type | l4_type;
 }
 
 static uint64_t hinic3_rx_csum(uint16_t csum_err, struct hinic3_rxq *rxq)
@@ -1243,7 +1219,7 @@ static void hinic3_recv_jumbo_pkt(struct hinic3_rxq *rxq,
 int hinic3_start_all_rqs(struct rte_eth_dev *eth_dev)
 {
 	struct hinic3_nic_dev *nic_dev = NULL;
-	struct hinic3_rxq *tmp = NULL, *rxq = NULL;
+	struct hinic3_rxq *rxq = NULL;
 	struct rte_mbuf *mbuf = NULL;
 	int err = 0;
 	int i = 0;
@@ -1252,10 +1228,9 @@ int hinic3_start_all_rqs(struct rte_eth_dev *eth_dev)
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
 
 	for (i = 0; i < nic_dev->num_rqs; i++) {
-		tmp = eth_dev->data->rx_queues[i];
-		if (tmp == NULL || tmp->is_hairpin)
+		rxq = eth_dev->data->rx_queues[i];
+		if (rxq == NULL ||rxq->is_hairpin)
 			break;
-		rxq = tmp;
 		rxq->is_scattered_rx = eth_dev->data->scattered_rx;
 		hinic3_add_rq_to_rx_queue_list(nic_dev, rxq->q_id);
 		err = hinic3_rearm_rxq_mbuf(rxq);
@@ -1353,17 +1328,21 @@ hinic3_rx_get_compact_cqe_info(struct hinic3_rxq *rxq,
 static bool
 hinic3_rx_integrated_cqe_done(struct hinic3_rxq *rxq, volatile struct hinic3_rq_cqe **rx_cqe)
 {
-	struct hinic3_rq_ci_wb rq_ci;
 	struct rte_mbuf *rxm = NULL;
 	uint16_t sw_ci, hw_ci;
 
 	sw_ci = hinic3_get_rq_local_ci(rxq);
-	rq_ci.dw1.value = hinic3_hw_cpu32(__atomic_load_n(&rxq->rq_ci->dw1.value, __ATOMIC_ACQUIRE));
-	hw_ci = rq_ci.dw1.bs.hw_ci;
 
-	if (hw_ci == sw_ci)
+	/* Avoid excessive CI memory access */
+	if (sw_ci == rxq->hw_cons_idx) {
+		hw_ci = hinic3_get_rq_hw_ci(rxq);
+		rxq->hw_cons_idx = hw_ci;
+	}
+
+	if (sw_ci == rxq->hw_cons_idx)
 		return false;
 
+	rxq->prefetch_flag = false;
 	rxm = rxq->rx_info[sw_ci].mbuf;
 #ifdef DPDK_21_11
 	*rx_cqe = (struct hinic3_rq_cqe *)rte_mbuf_data_addr_default(rxm);
@@ -1387,8 +1366,11 @@ u16 hinic3_recv_pkts_compact_cqe(void *rx_queue, struct rte_mbuf **rx_pkts, u16 
 	volatile struct hinic3_rq_cqe *rx_cqe = NULL;
 	struct hinic3_cqe_info cqe_info = {0};
 	struct rte_mbuf *rxm = NULL;
+	struct rte_mbuf *prefetch_mbuf = NULL;
 	u16 sw_ci, rx_buf_len, pkts = 0;
-	u32 offload_type;
+	u16 hw_ci;
+	u16 idx, pos;
+	u16 nb_prefetch = 0;
 	u32 pkt_len;
 	u64 rx_bytes = 0;
 #ifdef HINIC3_XSTAT_PROF_RX
@@ -1401,6 +1383,8 @@ u16 hinic3_recv_pkts_compact_cqe(void *rx_queue, struct rte_mbuf **rx_pkts, u16 
 
 	sw_ci = hinic3_get_rq_local_ci(rxq);
 
+	rxq->hw_cons_idx = sw_ci;
+	rxq->prefetch_flag = false;
 	while (pkts < nb_pkts) {
 		if (!hinic3_rx_integrated_cqe_done(rxq, &rx_cqe)) {
 			rxq->rxq_stats.empty++;
@@ -1419,12 +1403,23 @@ u16 hinic3_recv_pkts_compact_cqe(void *rx_queue, struct rte_mbuf **rx_pkts, u16 
 		rx_info = &rxq->rx_info[sw_ci];
 		rxm = rx_info->mbuf;
 
-		/* 1. Next ci point and prefetch. */
+		/* 1. Prefetch next (hw_ci - sw_ci) cqe */
+		if (rxq->prefetch_flag == false) {
+			hw_ci = rxq->hw_cons_idx;
+			idx = sw_ci;
+			while(idx != hw_ci && nb_prefetch++ < nb_pkts) {
+				pos = idx & rxq->q_mask;
+				prefetch_mbuf = rxq->rx_info[pos].mbuf;
+				rte_prefetch0(prefetch_mbuf);
+				rte_prefetch0(rte_mbuf_buf_addr((prefetch_mbuf), prefetch_mbuf->pool) + RTE_PKTMBUF_HEADROOM);
+				idx++;
+			}
+			rxq->prefetch_flag = true;
+		}
+
+		/* 2. Next ci point */
 		sw_ci++;
 		sw_ci &= rxq->q_mask;
-
-		/* 2. Prefetch next mbuf first 64B. */
-		rte_prefetch0(rxq->rx_info[sw_ci].mbuf);
 
 		/* 3. Jumbo frame process. */
 		if (rte_eth_devices[rxq->port_id].data->scattered_rx) {
@@ -1437,9 +1432,9 @@ u16 hinic3_recv_pkts_compact_cqe(void *rx_queue, struct rte_mbuf **rx_pkts, u16 
 				rxm->pkt_len = rx_buf_len;
 
 				/*
-				 * If receive jumbo, updating ci will be done by
-				 * hinic3_recv_jumbo_pkt function.
-				 */
+				* If receive jumbo, updating ci will be done by
+				* hinic3_recv_jumbo_pkt function.
+				*/
 				hinic3_update_rq_local_ci(rxq, 1);
 				hinic3_recv_jumbo_pkt(rxq, rxm, pkt_len - rx_buf_len);
 				sw_ci = hinic3_get_rq_local_ci(rxq);
@@ -1470,10 +1465,6 @@ u16 hinic3_recv_pkts_compact_cqe(void *rx_queue, struct rte_mbuf **rx_pkts, u16 
 			rxm->tso_segsz = pkt_len / cqe_info.lro_num;
 		}
 
-		if (IS_BIFUR_MODE()) {
-			offload_type = hinic3_hw_cpu32(rx_cqe->offload_type);
-			rxm->packet_type |= hinic3_rx_packet_type(offload_type);
-		}
 		rx_cqe->status = 0;
 
 		rx_bytes += pkt_len;
@@ -1516,7 +1507,7 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 	u32 status, pkt_len, vlan_len, offload_type, pkt_type, lro_num;
 	u64 rx_bytes = 0;
 	u32 hash_value ;
-	const struct hinic3_ptype_table * const ptype_tbl = rxq->nic_dev->ptype_tbl;
+	const struct hinic3_ptype_table * const ptype_tbl = nic_dev->ptype_tbl;
 
 #ifdef HINIC3_XSTAT_PROF_RX
 	uint64_t t1 = rte_get_tsc_cycles();
