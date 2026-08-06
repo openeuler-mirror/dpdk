@@ -31,18 +31,17 @@
 
 static inline void
 pcap_pkt_save_info_get(struct pcap_pkt_summary *buf, const struct pcap_key_t *key,
-                                          struct pcap_pkt_save_info *info)
+                                           struct pcap_pkt_save_info *info)
 {
-    if (key->vxlan_inner && buf->pkt_header.is_vxlan) {
-        info->save_head = buf->pkt_header.out_header.save_head;
-        info->save_len = buf->pkt_header.out_header.save_len + buf->pkt_header.inner_header.save_len;
-        goto end;
-    }
-
-    info->save_head = buf->pkt_header.out_header.save_head;
-    info->save_len = buf->pkt_header.out_header.save_len;
-end:
-    if (hinic3_support_payload_capture_get() == true) {
+    if (pcap_mode_get() == ONLY_HEADER) {
+        if (key->vxlan_inner && buf->pkt_header.is_vxlan) {
+            info->save_head = buf->pkt_header.out_header.save_head;
+            info->save_len = buf->pkt_header.out_header.save_len + buf->pkt_header.inner_header.save_len;
+        } else {
+            info->save_head = buf->pkt_header.out_header.save_head;
+            info->save_len = buf->pkt_header.out_header.save_len;
+        }
+    } else {
         info->save_head = buf->data;
         info->save_len = buf->len;
     }
@@ -73,9 +72,11 @@ pcap_pkt_file_write(const struct pcap_task_t *cap_task, struct iovec *iov, uint3
     byte_cnt = writev(fileno(cap_task->save_file), iov, iov_cnt);
     if (byte_cnt <= 0) {
         wr_cnt = 0;
-        HINIC3_LOG(ERR, CAPTURE, "writev fail, ret is %ld, errno is %d!", byte_cnt, errno);
-    } else
+        HINIC3_LOG(WARNING, CAPTURE, "writev fail, ret is %ld, errno is %d, "
+            "pcap file rotate may occur!", byte_cnt, errno);
+    } else {
         wr_cnt = pcap_calc_write_pkt_cnt(byte_cnt, iov, iov_cnt);
+    }
 
     if (wr_cnt >= iov_cnt)
         save_stats->wr_iov_cnt = iov_cnt;
@@ -99,10 +100,23 @@ pcap_pkt_file_save(struct pcap_task_t *cap_task, uint64_t remain_cnt, struct pca
     struct pcap_pkt_summary *tmp_buf = NULL;
     struct pcap_file_record_hdr record_hdr[PKT_MAX_BURST];
     struct iovec iov[PKT_MAX_BURST * PCAP_DOUBLE];
+    uint32_t first_file_pkt_cnt;
+    uint32_t pkt_to_write = count;
+
+    if (cap_task->filenum > 1 &&
+        cap_task->file_pkt_cnt + count > cap_task->count_per_file &&
+        cap_task->file_index + 1 < cap_task->filenum) {
+        first_file_pkt_cnt = cap_task->count_per_file - cap_task->file_pkt_cnt;
+    } else {
+        first_file_pkt_cnt = count;
+    }
 
     gettimeofday(&tv, NULL);
-    for (i = 0; i < count; i++) {
+    for (i = 0; i < first_file_pkt_cnt; i++) {
         tmp_buf = buf[i];
+        if (tmp_buf == NULL) {
+            continue;
+        }
         pcap_pkt_save_info_get(tmp_buf, &cap_task->key, &save_info);
 
         record_hdr[i].pkt_ts_sec = (uint32_t)tv.tv_sec;
@@ -118,11 +132,49 @@ pcap_pkt_file_save(struct pcap_task_t *cap_task, uint64_t remain_cnt, struct pca
         iov_cnt += PCAP_DOUBLE;
     }
 
-    if (remain_cnt < count)
+    if (remain_cnt < first_file_pkt_cnt)
         iov_cnt = remain_cnt * PCAP_DOUBLE;
 
     pcap_pkt_file_write(cap_task, iov, iov_cnt, save_stats);
     save_stats->wr_cnt = save_stats->wr_iov_cnt / PCAP_DOUBLE;
+    cap_task->file_pkt_cnt += save_stats->wr_cnt;
+
+    if (pkt_to_write > first_file_pkt_cnt &&
+        !cap_task->stop_flag &&
+        cap_task->file_index + 1 < cap_task->filenum) {
+        cap_task->file_index++;
+        if (pcap_file_rotate(cap_task) != 0) {
+            HINIC3_LOG(ERR, CAPTURE, "pcap_file_rotate fail!");
+            cap_task->file_index--;
+            return;
+        }
+
+        iov_cnt = 0;
+        for (i = first_file_pkt_cnt; i < count; i++) {
+            tmp_buf = buf[i];
+            if (tmp_buf == NULL) {
+                continue;
+            }
+            pcap_pkt_save_info_get(tmp_buf, &cap_task->key, &save_info);
+
+            record_hdr[i - first_file_pkt_cnt].pkt_ts_sec = (uint32_t)tv.tv_sec;
+            record_hdr[i - first_file_pkt_cnt].pkt_ts_usec = (uint32_t)tv.tv_usec;
+            record_hdr[i - first_file_pkt_cnt].pkt_incl_len = save_info.save_len;
+            record_hdr[i - first_file_pkt_cnt].pkt_orig_len = tmp_buf->pkt_len;
+
+            idx = (i - first_file_pkt_cnt) * PCAP_DOUBLE;
+            iov[idx].iov_base = &(record_hdr[i - first_file_pkt_cnt]);
+            iov[idx].iov_len = sizeof(struct pcap_file_record_hdr);
+            iov[idx + 1].iov_base = save_info.save_head;
+            iov[idx + 1].iov_len = save_info.save_len;
+            iov_cnt += PCAP_DOUBLE;
+        }
+
+        pcap_pkt_file_write(cap_task, iov, iov_cnt, save_stats);
+        save_stats->wr_cnt = save_stats->wr_iov_cnt / PCAP_DOUBLE;
+        cap_task->file_pkt_cnt += save_stats->wr_cnt;
+    }
+
     return;
 }
 
@@ -166,10 +218,40 @@ pcap_epoll_event_process(uint32_t pcap_id)
     }
     save_cnt = (pkt_cnt > task_mirror.remain_count) ? task_mirror.remain_count : pkt_cnt;
 
+    uint32_t first_file_pkt_cnt;
+    if (cap_task->filenum > 1 &&
+        cap_task->file_pkt_cnt + save_cnt > cap_task->count_per_file &&
+        cap_task->file_index + 1 < cap_task->filenum) {
+        first_file_pkt_cnt = cap_task->count_per_file - cap_task->file_pkt_cnt;
+    } else {
+        first_file_pkt_cnt = save_cnt;
+    }
+
     memset(&save_stats, 0, sizeof(save_stats));
-    pcap_pkt_file_write(cap_task, iov, save_cnt, &save_stats);
+    pcap_pkt_file_write(cap_task, iov, first_file_pkt_cnt, &save_stats);
     save_stats.wr_cnt = save_stats.wr_iov_cnt;
+    cap_task->file_pkt_cnt += save_stats.wr_cnt;
     pcap_task_stats_update(cap_task, &save_stats);
+
+    if (save_cnt > first_file_pkt_cnt &&
+        !cap_task->stop_flag &&
+        cap_task->file_index + 1 < cap_task->filenum) {
+        cap_task->file_index++;
+        if (pcap_file_rotate(cap_task) != 0) {
+            HINIC3_LOG(ERR, CAPTURE, "pcap_file_rotate fail in epoll!");
+            cap_task->file_index--;
+            pcap_task_put(cap_task);
+            pcap_rte_mempool_put_bulk(task_mgr->mem_pool, (void * const *)pkt_dump_list, pkt_cnt);
+            return;
+        }
+
+        memset(&save_stats, 0, sizeof(save_stats));
+        pcap_pkt_file_write(cap_task, iov + first_file_pkt_cnt, save_cnt - first_file_pkt_cnt, &save_stats);
+        save_stats.wr_cnt = save_stats.wr_iov_cnt;
+        cap_task->file_pkt_cnt += save_stats.wr_cnt;
+        pcap_task_stats_update(cap_task, &save_stats);
+
+    }
 
     if (pcap_rte_ring_count(cap_task->ring) == 0)
         eventfd_read(cap_task->event_fd, &value);

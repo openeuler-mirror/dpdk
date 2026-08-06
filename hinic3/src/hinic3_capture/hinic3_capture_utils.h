@@ -31,7 +31,7 @@
 #define PCAP_EPOLL_TIMEOUT         (20 * 1000)
 
 #define PCAP_TIME_S_TO_MS           1000
-#define PCAP_SIEEP_TIME             1000
+#define PCAP_SLEEP_TIME             1000
 
 #define PCAP_PERIOD_US              1000
 #define PCAP_CPU_TARGET_RATE        0.3
@@ -135,6 +135,7 @@ struct pcap_key_t {
     uint32_t flags;
     uint64_t count_total;
     char filename[PCAP_MAX_FILE_NAME];
+    char output_path[PCAP_MAX_FILE_NAME];
     uint32_t ip_type;
     struct pcap_ip_t sip;
     struct pcap_ip_t dip;
@@ -161,6 +162,8 @@ struct pcap_key_t {
     enum pcap_write_way write_way;
     long long task_start_time;
     long long task_time;
+    uint32_t filenum;
+    uint32_t count;
 };
 
 struct pcap_stats_t {
@@ -205,6 +208,10 @@ struct pcap_task_t {
     bool wr_fail_flag;
     uint32_t pcap_id;
     uint64_t remain_count;
+    uint32_t count_per_file;
+    uint32_t filenum;
+    uint32_t file_index;
+    uint32_t file_pkt_cnt;
 
     int event_fd;
     FILE *save_file;

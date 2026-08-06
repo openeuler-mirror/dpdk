@@ -38,7 +38,8 @@
 "                                          -eth_type <eth-type-hex> | -ip_proto ENUM<TCP,UDP,ICMP,SCTP,ICMPV6> |\n"  \
 "                                          -vxlan_inner | -vlan INTEGER<0-4095> | -sport INTEGER<0-65535> |\n"       \
 "                                          -dport INTEGER<0-65535> | -vxlan_vni INTEGER<0-16777215> |\n"             \
-"                                          -P ENUM<in,out,intout> | -c INTEGER<1-1000000> ] * |\n"                   \
+"                                          -P ENUM<in,out,inout> | -c INTEGER<1-1000000> | \n"                       \
+"                                          -n INTEGER<1-4294967295> | -o ] * |\n"                                    \
 "                                          stop { <portname> | -pcap_id <id> } |\n"                                  \
 "                                          show { all | -pcap_id <id> } |\n"                                         \
 "                                          { -h | --help } }\n\n"                                                    \
@@ -62,8 +63,12 @@
 "      -dport                                        Destination port\n"                                         \
 "      -vxlan_vni                                    VXLAN ID, an integer with a range <0-16777215>\n"           \
 "      -P                                            Packet capture direction, ENUM<in,out,inout>\n"             \
-"      -c                                            Number of captured packets, an integer with a "             \
+"      -c                                            Number of captured packets per file, an integer with a "    \
 "range <1-1000000>. The default value is 8000 \n"                                                                \
+"      -n                                            Number of files to dump, an integer with a "                \
+"range <1-4294967295>. Each file contains -c packets. The default value is 1\n"                                  \
+"      -o                                            Output directory path for capture files. "                  \
+"(must be absolute path).\n"                                                                                     \
 "      -thread                                       Write files without the PMD thread\n"                       \
 "    stop                                            Stop the packet capture task of a specified port or id\n"   \
 "      -pcap_id                                      Stop the packet capture task of a specified id. The value " \
@@ -77,16 +82,16 @@
 #define PCAP_CMD_ENBLE_DESC                                                                                 \
 "  Usage: dpak-ovs-ctl hwoff/enable-capture-probe [ -c ENUM<high,low> | -q | { -h | --help } ]\n\n"         \
 "  Options list:                                                                                  \n"       \
-"    -c                            Set capture thread CPU usage level, ENUM<high,low>, the default value is high\n"                    \
+"    -c                            Set capture thread CPU usage level, ENUM<high,low>, the default value is high\n"     \
 "    -q                            Query current capture enable status and CPU usage\n"                     \
 "    -h, --help                    Display the help information\n"
 
 #define PCAP_CMD_ENBLE_DESC_FULLY_CAP                                                                       \
 "  Usage: dpak-ovs-ctl hwoff/enable-capture-probe "                                                         \
-"[ [ -p ENUM#<limited-capture,fully-capture> | -c ENUM#<high,low> ] * | -q | { -h | --help } ]\n\n"         \
+"[ [ -p ENUM#<only-header,limited-capture,fully-capture> | -c ENUM#<high,low> ] * | -q | { -h | --help } ]\n\n"         \
 "  Options list:                                                                                  \n"       \
-"    -p                            Set packet capture mode, the default value is limited-capture\n"         \
-"    -c                            Set capture thread CPU usage level, ENUM<high,low>, the default value is high\n"                    \
+"    -p                            Set packet capture mode, the default value is only-header\n"         \
+"    -c                            Set capture thread CPU usage level, ENUM<high,low>, the default value is high\n"     \
 "    -q                            Query current capture enable status and CPU usage\n"                     \
 "    -h, --help                    Display the help information\n"
 
@@ -101,7 +106,7 @@ static struct pcap_cmd_t g_cap_main_command = { "hwoff/capture-probe",
                                                 "-vxlan_inner | -vlan INTEGER<0-4095> | "
                                                 "-sport INTEGER<0-65535> | -dport INTEGER<0-65535> | "
                                                 "-vxlan_vni INTEGER<0-16777215> | -P ENUM<in,out,intout> | "
-                                                "-c INTEGER<1-1000000> ] * | "
+                                                "-c INTEGER<1-1000000> | -n INTEGER<1-4294967295> | -o ] * | "
                                                 "stop { <portname> | -pcap_id <id> } | "
                                                 "show { all | -pcap_id <id> } | "
                                                 "{ -h | --help } }",
@@ -179,7 +184,9 @@ pcap_cmd_enable_help(struct ds *ds)
 static int
 pcap_cmd_enable_set_pcap_mode(const char *mode_str)
 {
-    if (strcmp(mode_str, "limited-capture") == 0)
+    if (strcmp(mode_str, "only-header") == 0)
+        pcap_mode_set(ONLY_HEADER);
+    else if (strcmp(mode_str, "limited-capture") == 0)
         pcap_mode_set(LIMITED_CAPTURE);
     else if (strcmp(mode_str, "fully-capture") == 0)
         pcap_mode_set(FULLY_CAPTURE);
@@ -273,10 +280,7 @@ pcap_cmd_enable_parse_setup_args(int argc, const char *argv[])
     int option_val = 0;
 
     pcap_cpu_usage_set(PCAP_CPU_HIGH);
-    if (hinic3_support_payload_capture_get() == false)
-        pcap_mode_set(ONLY_HEADER);
-    else
-        pcap_mode_set(LIMITED_CAPTURE);
+    pcap_mode_set(ONLY_HEADER);
 
     if (argc == 1)
         return 0;
@@ -524,8 +528,13 @@ pcap_cmd_start(struct unixctl_conn *conn, int argc, const char *argv[], void *au
     }
 
     HINIC3_LOG(INFO, CAPTURE, "Start a new capture task, pcap_id is %u.", pcap_id);
-    hinic3_ds_put_format(&ds, "%sPort %s start packet capture, pcap id %u.\n", HINIC3_UI_LEADING_SIGN_INFO, port_name,
-        pcap_id);
+    if (param.pcap_key.filenum >= 2) {
+        hinic3_ds_put_format(&ds, "%sPort %s start packet capture, pcap id %u. Multi-file dump is enabled, "
+            "please make sure disk space is enough.\n", HINIC3_UI_LEADING_SIGN_WARNING, port_name, pcap_id);
+    } else {
+        hinic3_ds_put_format(&ds, "%sPort %s start packet capture, pcap id %u.\n", HINIC3_UI_LEADING_SIGN_INFO, port_name,
+            pcap_id);
+    }
     hinic3_command_reply(conn, hinic3_ds_cstr(&ds));
     hinic3_ds_destroy(&ds);
     hinic3_ds_destroy(&save_param);

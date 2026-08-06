@@ -30,7 +30,7 @@
 #include "hinic3_ui_string.h"
 #include "hinic3_capture_utils.h"
 
-#define HINIC3_EVENT_FD_INVAILD (-1)
+#define HINIC3_EVENT_FD_INVALID (-1)
 uint64_t g_ticks_per_ms;
 static uint32_t g_pcap_id_begin = 1;
 static bool g_pcap_rule_idx[PCAP_MAX_CAP_TASK] = {0};
@@ -192,6 +192,13 @@ pcap_task_stop_reply_format(struct pcap_task_t *task, struct ds *ds)
 {
     const char *tmp_str = NULL;
     struct pcap_stats_t *stats = &task->stats;
+    char full_path[PCAP_MAX_FILE_NAME];
+
+    if (task->key.output_path[strlen(task->key.output_path) - 1] == '/') {
+        snprintf(full_path, sizeof(full_path), "%s%s", task->key.output_path, task->key.filename);
+    } else {
+        snprintf(full_path, sizeof(full_path), "%s/%s", task->key.output_path, task->key.filename);
+    }
 
     hinic3_ds_put_format(ds, "%2sstopped pcap id:  %u \n", HINIC3_UI_INDENT_SPACE, task->pcap_id);
     tmp_str = task->wr_fail_flag ? "true" : "false";
@@ -203,6 +210,7 @@ pcap_task_stop_reply_format(struct pcap_task_t *task, struct ds *ds)
                          HINIC3_UI_INDENT_SPACE, (unsigned long long)stats->soft_drop_cnt);
     hinic3_ds_put_format(ds, "%2swrite-success:    %s\n",
                          HINIC3_UI_INDENT_SPACE, tmp_str);
+    hinic3_ds_put_format(ds, "%2soutput path:      %s\n", HINIC3_UI_INDENT_SPACE, full_path);
 
     hinic3_ds_put_format(ds, "%2shardware card:\n", HINIC3_UI_INDENT_SPACE);
     hinic3_ds_put_format(ds, "%4scaptured:       %llu\n",
@@ -553,7 +561,7 @@ pcap_task_epoll_fd_create(struct pcap_task_t *task)
     {
         HINIC3_LOG(ERR, CAPTURE, "EPOLL_CTL_ADD fail, ret is %d, errno is %d!", ret, errno);
         close(task->event_fd);
-        task->event_fd = HINIC3_EVENT_FD_INVAILD;
+        task->event_fd = HINIC3_EVENT_FD_INVALID;
         return -1;
     }
 
@@ -565,10 +573,18 @@ pcap_task_resource_create(struct pcap_task_t *task)
 {
     int ret;
     struct pcap_key_t *task_key = &task->key;
+    char full_path[PCAP_MAX_FILE_NAME];
 
     rte_spinlock_init(&task->lock);
 
-    task->save_file = pcap_file_open(task_key->filename, "wb");
+    HINIC3_LOG(INFO, CAPTURE, "pcap_task_resource_create output_path=%s, filename=%s",
+        task_key->output_path, task_key->filename);
+    if (task_key->output_path[strlen(task_key->output_path) - 1] == '/') {
+        snprintf(full_path, sizeof(full_path), "%s%s", task_key->output_path, task_key->filename);
+    } else {
+        snprintf(full_path, sizeof(full_path), "%s/%s", task_key->output_path, task_key->filename);
+    }
+    task->save_file = pcap_file_open(full_path, "wb");
     if (!task->save_file)
         return -1;
 
@@ -619,7 +635,7 @@ pcap_task_resource_destroy(struct pcap_task_t *task)
     {
         epoll_ctl(task_mgr->epoll_fd, EPOLL_CTL_DEL, task->event_fd, NULL);
         close(task->event_fd);
-        task->event_fd = HINIC3_EVENT_FD_INVAILD;
+        task->event_fd = HINIC3_EVENT_FD_INVALID;
     }
 
     return;
@@ -666,6 +682,11 @@ pcap_task_create(struct pcap_key_t *pcap_key, struct ds *save_param)
 
     cap_task->ref_cnt = 1;
     cap_task->remain_count = pcap_key->count_total;
+    cap_task->stop_flag = false;
+    cap_task->filenum = pcap_key->filenum;
+    cap_task->count_per_file = (pcap_key->filenum > 0) ? pcap_key->count : pcap_key->count_total;
+    cap_task->file_index = 0;
+    cap_task->file_pkt_cnt = 0;
     cap_task->pcap_id = g_pcap_id_begin++;
     ret = pcap_task_resource_create(cap_task);
     if (ret != 0)
@@ -1449,7 +1470,7 @@ pcap_thread_main(void *arg HINIC3_UNUSED)
 
         if (pcap_switch_get() == 0)
         {
-            usleep(PCAP_SIEEP_TIME);
+            usleep(PCAP_SLEEP_TIME);
             continue;
         }
 

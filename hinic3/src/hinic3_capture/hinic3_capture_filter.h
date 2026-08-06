@@ -26,6 +26,8 @@
 #define PCAP_FLAG_KEY_VLAN                (1LLU << 12)
 #define PCAP_FLAG_KEY_VXLAN_VNI           (1LLU << 13)
 #define PCAP_FLAG_KEY_TIME                (1LLU << 14)
+#define PCAP_FLAG_KEY_FILENUM             (1LLU << 15)
+#define PCAP_FLAG_KEY_OUTPUT              (1LLU << 16)
 
 #define PCAP_FILTER_ALL_MASK              (PCAP_FLAG_KEY_SIP |         \
                                            PCAP_FLAG_KEY_DIP |         \
@@ -50,6 +52,8 @@
 
 #define PCAP_DEF_PKT_CNT                   8000
 #define PCAP_MAX_PKT_CNT                   1000000
+
+#define PCAP_DEF_OUTPUT_PATH               "/var/log/dpak/dpak_ovs_data/"
 
 #define PCAP_MAX_VLAN_NUM                  4096
 #define PCAP_MAX_VLAN                      4095
@@ -172,6 +176,7 @@ int parse_l4_proto(const char *value, uint8_t *output);
 void pcap_convert_key_to_driver_filter(struct pcap_task_t *task);
 FILE *pcap_file_open(const char *file_name, const char *mode);
 int pcap_file_write_header(FILE *file);
+int pcap_file_rotate(struct pcap_task_t *task);
 int pcap_ip_mask_parse(const char *value, struct pcap_ip_t *ip, uint8_t *mask_len, uint32_t *p_ip_type);
 int pcap_key_parse(struct pcap_key_t *cap_key, int argc, const char *argv[], struct ds *ds, struct ds *save_param);
 struct pcap_pkt_sub_hdr *pcap_pkt_dst_hdr_get(struct pcap_pkt_summary *buf, const struct pcap_key_t *key);
@@ -187,4 +192,5 @@ unsigned int pcap_rte_ring_enqueue_burst(struct rte_ring *r, void * const *obj_t
     unsigned int *free_space);
 int pcap_show_param_parse(int argc, const char *argv[], struct pcap_show_param *param, struct ds *ds);
 int pcap_stop_param_parse(int argc, const char *argv[], struct pcap_stop_param *param, struct ds *ds);
+
 #endif /* HINIC3_CAPTURE_FILTER_H */
