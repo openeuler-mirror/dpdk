@@ -49,7 +49,7 @@ struct hinic3_init_arg init_arg_openovs_standard_dpu_virt = {
     .card_mode = STANDARD_MODE,
     .user_scenario = OPEN_OVS,
     .support_vlan_tci = false,
-    .support_payload_capture = false,
+    .support_payload_capture = true,
 };
 
 static struct hinic3_init_arg init_arg_openovs_standard_dpu_metal = {
@@ -88,7 +88,7 @@ static struct hinic3_init_arg init_arg_openovs_standard_dpu_metal = {
     .card_mode = STANDARD_MODE,
     .user_scenario = OPEN_OVS,
     .support_vlan_tci = false,
-    .support_payload_capture = false,
+    .support_payload_capture = true,
 };
 
 struct hinic3_init_arg init_arg_openovs_standard_smartnic_virt = {
@@ -127,7 +127,7 @@ struct hinic3_init_arg init_arg_openovs_standard_smartnic_virt = {
     .card_mode = STANDARD_MODE,
     .user_scenario = OPEN_OVS,
     .support_vlan_tci = false,
-    .support_payload_capture = false,
+    .support_payload_capture = true,
 };
 
 struct hinic3_init_arg init_arg_cmnnet_standard_dpu_metal = {
@@ -167,7 +167,7 @@ struct hinic3_init_arg init_arg_cmnnet_standard_dpu_metal = {
     .card_mode = STANDARD_MODE,
     .user_scenario = CMN_NET,
     .support_vlan_tci = true,
-    .support_payload_capture = false,
+    .support_payload_capture = true,
 };
 
 struct hinic3_init_arg init_arg_cmnnet_standard_dpu_container = {
@@ -207,7 +207,7 @@ struct hinic3_init_arg init_arg_cmnnet_standard_dpu_container = {
     .card_mode = STANDARD_MODE,
     .user_scenario = CMN_NET,
     .support_vlan_tci = true,
-    .support_payload_capture = false,
+    .support_payload_capture = true,
 };
 
 struct hinic3_init_arg init_arg_cmnnet_standard_smartnic_virt = {
@@ -248,7 +248,7 @@ struct hinic3_init_arg init_arg_cmnnet_standard_smartnic_virt = {
     .card_mode = STANDARD_MODE,
     .user_scenario = CMN_NET,
     .support_vlan_tci = true,
-    .support_payload_capture = false,
+    .support_payload_capture = true,
 };
 
 struct hinic3_init_arg init_arg_cmnit_standard_dpu_metal = {
@@ -288,7 +288,7 @@ struct hinic3_init_arg init_arg_cmnit_standard_dpu_metal = {
     .card_mode = STANDARD_MODE,
     .user_scenario = CMN_IT,
     .support_vlan_tci = true,
-    .support_payload_capture = false,
+    .support_payload_capture = true,
 };
 
 struct hinic3_init_arg init_arg_combd_standard_dpu_virt = {

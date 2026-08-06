@@ -615,6 +615,8 @@ _complete_capture_probe_start()
         -vxlan_vni
         -P
         -c
+        -n
+        -o
         -thread
     "
     local ip_proto_opts="
@@ -634,10 +636,23 @@ _complete_capture_probe_start()
         opts=("${opts[@]/$word}")
     done
 
-    if [[ "${prev}" == "-ip_proto" ]]; then
+ if [[ "${prev}" == "-ip_proto" ]]; then
         COMPREPLY=( $(compgen -W "${ip_proto_opts}" -- ${cur}) )
     elif [[ "${prev}" == "-P" ]]; then
         COMPREPLY=( $(compgen -W "${p_opts}" -- ${cur}) )
+    elif [[ "${prev}" == "-n" ]]; then
+        COMPREPLY=( $(compgen -W "3 5 8 10" -- ${cur}) )
+    elif [[ "${prev}" == "-t" ]]; then
+        COMPREPLY=( $(compgen -W "10 30 60" -- ${cur}) )
+    elif [[ "${prev}" == "-c" ]]; then
+        COMPREPLY=( $(compgen -W "50000 300000 1000000" -- ${cur}) )
+    elif [[ "${prev}" == "-o" ]]; then
+        compopt -o nospace
+        COMPREPLY=( $(compgen -d -S '/' -- ${cur}) )
+        if [[ ${#COMPREPLY[@]} -eq 0 ]]; then
+            compopt +o nospace
+            COMPREPLY=( "" )
+        fi
     else
         COMPREPLY=( $(compgen -W "${opts[*]}" -- ${cur}) )
     fi
@@ -649,10 +664,22 @@ _complete_enable_capture_probe() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
     # 可用选项列表（短选项和长选项）
-    local main_options="-c --cpu -p --pcap"
+    local main_options="-c --cpu"
     local alone_options="-q --query -h --help"
     local cpu_options="high low"
-    local probe_modes="limited-capture fully-capture"
+
+    # 动态获取帮助文本，检查是否支持 -p 参数
+    local help_output
+    help_output=$(dpak-ovs-ctl hwoff/enable-capture-probe --help 2>/dev/null)
+
+    # 检查是否支持 -p 参数
+    local probe_modes=""
+    local has_p_option=0
+    if echo "$help_output" | grep -E '(^|\s)-p(\s|$)' > /dev/null; then
+        has_p_option=1
+        # 从 ENUM#<...> 中提取模式列表
+        probe_modes=$(echo "$help_output" | grep "ENUM#<" | awk -F'ENUM#<' '{print $2}' | awk -F'>' '{print $1}' | tr ',' ' ')
+    fi
 
     # 检查是否已经使用了独立选项(-q/--query或-h/--help)
     local has_standalone_option=0
@@ -666,7 +693,11 @@ _complete_enable_capture_probe() {
 
     case ${COMP_CWORD} in
         2)
-            COMPREPLY=( $(compgen -W "$main_options $alone_options" -- ${cur}) )
+            if [[ $has_p_option -eq 1 ]]; then
+                COMPREPLY=( $(compgen -W "$main_options -p --pcap $alone_options" -- ${cur}) )
+            else
+                COMPREPLY=( $(compgen -W "$main_options $alone_options" -- ${cur}) )
+            fi
             ;;
         3)
             case ${prev} in
@@ -674,7 +705,9 @@ _complete_enable_capture_probe() {
                     COMPREPLY=( $(compgen -W "$cpu_options" -- ${cur}) )
                     ;;
                 -p|--pcap)
-                    COMPREPLY=( $(compgen -W "$probe_modes" -- ${cur}) )
+                    if [[ -n "$probe_modes" ]]; then
+                        COMPREPLY=( $(compgen -W "$probe_modes" -- ${cur}) )
+                    fi
                     ;;
                 -q|--query|-h|--help)
                     # 独立选项不需要进一步补全
@@ -682,7 +715,11 @@ _complete_enable_capture_probe() {
                     ;;
                 *)
                     # 默认情况，显示所有选项
-                    COMPREPLY=( $(compgen -W "$main_options $alone_options" -- ${cur}) )
+                    if [[ $has_p_option -eq 1 ]]; then
+                        COMPREPLY=( $(compgen -W "$main_options -p --pcap $alone_options" -- ${cur}) )
+                    else
+                        COMPREPLY=( $(compgen -W "$main_options $alone_options" -- ${cur}) )
+                    fi
                     ;;
             esac
             ;;
@@ -706,7 +743,9 @@ _complete_enable_capture_probe() {
                         COMPREPLY=( $(compgen -W "$cpu_options" -- ${cur}) )
                         ;;
                     -p|--pcap)
-                        COMPREPLY=( $(compgen -W "$probe_modes" -- ${cur}) )
+                        if [[ -n "$probe_modes" ]]; then
+                            COMPREPLY=( $(compgen -W "$probe_modes" -- ${cur}) )
+                        fi
                         ;;
                     *)
                         # 如果不是跟在选项后面，提供可用的主选项
@@ -714,7 +753,7 @@ _complete_enable_capture_probe() {
                         if [[ ! $used_main_options =~ "-c" && ! $used_main_options =~ "--cpu" ]]; then
                             available_options="$available_options -c --cpu"
                         fi
-                        if [[ ! $used_main_options =~ "-p" && ! $used_main_options =~ "--pcap" ]]; then
+                        if [[ $has_p_option -eq 1 && ! $used_main_options =~ "-p" && ! $used_main_options =~ "--pcap" ]]; then
                             available_options="$available_options -p --pcap"
                         fi
 

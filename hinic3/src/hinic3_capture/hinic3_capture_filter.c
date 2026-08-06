@@ -4,7 +4,11 @@
 
 #include <errno.h>
 #include <sys/uio.h>
+#include <sys/stat.h>
 #include <grp.h>
+#include <limits.h>
+#include <string.h>
+#include <fnmatch.h>
 #include "rte_ip.h"
 
 #include "hinic3_unaligned.h"
@@ -29,11 +33,15 @@ static int pcap_key_count_parse(struct pcap_key_t *cap_key, const char *key_name
 static int pcap_key_dir_parse(struct pcap_key_t *cap_key, const char *key_name, const char *value, struct ds *ds);
 static int pcap_key_file_parse(struct pcap_key_t *cap_key, const char *key_name, const char *value, struct ds *ds);
 static int pcap_key_host_parse(struct pcap_key_t *cap_key, const char *key_name, const char *value, struct ds *ds);
+static int pcap_key_filenum_parse(struct pcap_key_t *cap_key, const char *key_name, const char *value, struct ds *ds);
+static int pcap_key_output_parse(struct pcap_key_t *cap_key, const char *key_name, const char *value, struct ds *ds);
 
 static struct pcap_sub_key_parser g_pcap_sub_key_parser[] = {
     {"-c", sizeof("-c"), pcap_key_count_parse},
     {"-w", sizeof("-w"), pcap_key_file_parse},
     {"-P", sizeof("-P"), pcap_key_dir_parse},
+    {"-n", sizeof("-n"), pcap_key_filenum_parse},
+    {"-o", sizeof("-o"), pcap_key_output_parse},
     {"-sip", sizeof("-sip"), hinic3_key_sip_parse},
     {"-dip", sizeof("-dip"), hinic3_key_dip_parse},
     {"-host", sizeof("-host"), pcap_key_host_parse},
@@ -47,6 +55,142 @@ static struct pcap_sub_key_parser g_pcap_sub_key_parser[] = {
     {"-vxlan_vni", sizeof("-vxlan_vni"), hinic3_key_vni_parse},
     {"-t", sizeof("-t"), hinic3_key_time_parse},
 };
+
+static const char g_path_blacklist_chars[] = {
+    '|', '&', ';', '`', '$', '!',      /* 命令分隔 */
+    '<', '>', '(', ')', '{', '}',      /* 重定向 */
+    '[', ']', '*', '?', '~',           /* 通配符与特殊符号 */
+    ' ', '\t', '\n', '\r', '\v', '\f', /* 空白与控制字符 */
+    '\'', '"', '\\'                     /* 引号与转义 */
+};
+
+static const char g_filename_blacklist_chars[] = {
+    '/',                               /* 路径分隔符，系统绝对禁止 */
+    '|', '&', ';', '`', '$', '!',      /* 命令分隔 */
+    '<', '>', '(', ')', '{', '}',      /* 重定向 */
+    '[', ']', '*', '?', '~',           /* 通配符与特殊符号 */
+    ' ', '\t', '\n', '\r', '\v', '\f', /* 空白与控制字符 */
+    '\'', '"', '\\'                     /* 引号与转义 */
+};
+
+static const char *g_protected_paths[] = {
+    "/home/*/.local/share/*",
+    "/home/*/.local/share/",
+    "/home/*/.local/share",
+    "/home/*/.gnupg/*",
+    "/home/*/.gnupg/",
+    "/home/*/.gnupg",
+    "/home/*/.mozilla/*",
+    "/home/*/.mozilla/",
+    "/home/*/.mozilla",
+    "/home/*/.cache/*",
+    "/home/*/.cache/",
+    "/home/*/.cache",
+    "/home/*/.aws/*",
+    "/home/*/.aws/",
+    "/home/*/.aws",
+    "/home/*/.gcp/*",
+    "/home/*/.gcp/",
+    "/home/*/.gcp",
+    "/home/*/.azure/*",
+    "/home/*/.azure/",
+    "/home/*/.azure",
+    "/home/*/.config/*",
+    "/home/*/.config/",
+    "/home/*/.config",
+    "/home/*/.ssh/*",
+    "/home/*/.ssh/",
+    "/home/*/.ssh",
+    "/home/*/.huawei/*",
+    "/home/*/.huawei/",
+    "/home/*/.huawei",
+    "/home/*/.bash_history/*",
+    "/home/*/.bash_history/",
+    "/home/*/.bash_history",
+    "/home/*/.zsh_history/*",
+    "/home/*/.zsh_history/",
+    "/home/*/.zsh_history",
+    "/home/*/.history/*",
+    "/home/*/.history/",
+    "/home/*/.history",
+    "/opt/huawei",
+    "/var/spool",
+    "/var/mail",
+    "/root",
+    "/boot",
+    "/etc",
+    "/proc",
+    "/sys",
+    "/dev",
+    "/bin",
+    "/sbin",
+    "/usr/bin",
+    "/usr/sbin",
+    "/lib",
+    "/usr/lib",
+    "/run",
+    NULL
+};
+
+static const char *pcap_check_path_invalid_chars(const char *path)
+{
+    size_t i, j;
+
+    if (path == NULL) {
+        return NULL;
+    }
+    for (i = 0; i < strlen(path); i++) {
+        for (j = 0; j < sizeof(g_path_blacklist_chars); j++) {
+            if (path[i] == g_path_blacklist_chars[j]) {
+                return &path[i];
+            }
+        }
+    }
+
+    return NULL;
+}
+
+static const char *pcap_check_filename_invalid_chars(const char *filename)
+{
+    size_t i, j;
+
+    if (filename == NULL) {
+        return NULL;
+    }
+    for (i = 0; i < strlen(filename); i++) {
+        for (j = 0; j < sizeof(g_filename_blacklist_chars); j++) {
+            if (filename[i] == g_filename_blacklist_chars[j]) {
+                return &filename[i];
+            }
+        }
+    }
+
+    return NULL;
+}
+
+static const char *pcap_check_protected_path(const char *path)
+{
+    size_t i;
+    size_t pattern_len;
+
+    if (path == NULL) {
+        return NULL;
+    }
+    for (i = 0; g_protected_paths[i] != NULL; i++) {
+        if (strchr(g_protected_paths[i], '*') != NULL) {
+            if (fnmatch(g_protected_paths[i], path, 0) == 0) {
+                return g_protected_paths[i];
+            }
+        } else {
+            pattern_len = strlen(g_protected_paths[i]);
+            if (strncmp(path, g_protected_paths[i], pattern_len) == 0) {
+                return g_protected_paths[i];
+            }
+        }
+    }
+
+    return NULL;
+}
 
 static inline uint32_t
 pcap_masklen_to_netmask(uint8_t masklen)
@@ -202,7 +346,7 @@ static int
 pcap_key_count_parse(struct pcap_key_t *cap_key, const char *key_name, const char *value, struct ds *ds)
 {
     char *endPtr = NULL;
-    uint64_t count;
+    unsigned long long count;
 
     if ((cap_key->flags & PCAP_FLAG_KEY_COUNT) != 0) {
         hinic3_ds_put_format(ds, HINIC3_UI_LEADING_SIGN_ERROR "Duplicate parameter \"%s\"!\n", key_name);
@@ -211,7 +355,7 @@ pcap_key_count_parse(struct pcap_key_t *cap_key, const char *key_name, const cha
 
     count = strtoull(value, &endPtr, STR_TO_DEC_NUM);
     if (endPtr == NULL || *endPtr != '\0') {
-        HINIC3_LOG(ERR, CAPTURE, "Parameter count is invalid, err is %" PRIu64 "!", count);
+        HINIC3_LOG(ERR, CAPTURE, "Parameter count is invalid, err is %llu!", count);
         return -1;
     }
 
@@ -220,18 +364,42 @@ pcap_key_count_parse(struct pcap_key_t *cap_key, const char *key_name, const cha
         return -1;
     }
 
-    cap_key->count_total = count;
+    cap_key->count = (uint32_t)count;
     cap_key->flags |= PCAP_FLAG_KEY_COUNT;
+    return 0;
+}
+
+static int
+pcap_key_filenum_parse(struct pcap_key_t *cap_key, const char *key_name, const char *value, struct ds *ds)
+{
+    char *endPtr = NULL;
+    unsigned long long filenum;
+
+    if ((cap_key->flags & PCAP_FLAG_KEY_FILENUM) != 0) {
+        hinic3_ds_put_format(ds, HINIC3_UI_LEADING_SIGN_ERROR "Duplicate parameter \"%s\"!\n", key_name);
+        return -1;
+    }
+
+    filenum = strtoull(value, &endPtr, STR_TO_DEC_NUM);
+    if (endPtr == NULL || *endPtr != '\0') {
+        HINIC3_LOG(ERR, CAPTURE, "Parameter filenum is invalid!");
+        return -1;
+    }
+
+    if (filenum < 1) {
+        hinic3_ds_put_format(ds, HINIC3_UI_LEADING_SIGN_ERROR "Value of parameter \"%s\" must be >= 1!\n", key_name);
+        return -1;
+    }
+
+    cap_key->filenum = (uint32_t)filenum;
+    cap_key->flags |= PCAP_FLAG_KEY_FILENUM;
     return 0;
 }
 
 static int
 pcap_key_file_parse(struct pcap_key_t *cap_key, const char *key_name, const char *value, struct ds *ds)
 {
-    int ret;
-    char *result = NULL;
-    char *resolve_path = NULL;
-    char absolute_path[PATH_MAX];
+    const char *invalid_char = NULL;
 
     if ((cap_key->flags & PCAP_FLAG_KEY_FILE) != 0) {
         hinic3_ds_put_format(ds, HINIC3_UI_LEADING_SIGN_ERROR "Duplicate parameter \"%s\"!\n", key_name);
@@ -243,40 +411,15 @@ pcap_key_file_parse(struct pcap_key_t *cap_key, const char *key_name, const char
         return -1;
     }
 
-    ret = hinic3_check_output_file_directory(value, absolute_path, sizeof(absolute_path), ds);
-    if (ret != 0)
-        return -1;
-
-    resolve_path = (char*)hinic3_calloc(1, PATH_MAX, HINIC3_CAPTURE);
-    if (!resolve_path) {
-        hinic3_ds_put_format(ds, HINIC3_UI_LEADING_SIGN_ERROR HINIC3_UI_FILE_PATH_MALLOC_TIPS_STRING);
+    invalid_char = pcap_check_filename_invalid_chars(value);
+    if (invalid_char != NULL) {
+        hinic3_ds_put_format(ds, "%sfilename \"%s\" contains invalid character '%c'!\n",
+            HINIC3_UI_LEADING_SIGN_ERROR, value, *invalid_char);
         return -1;
     }
 
-    result = realpath(absolute_path, resolve_path);
-    (void)result;
+    snprintf(cap_key->filename, sizeof(cap_key->filename), "%s", value);
 
-    if ((strlen(resolve_path) == 0) || (strlen(resolve_path) >= PCAP_MAX_FILE_NAME)) {
-        hinic3_ds_put_format(ds, HINIC3_UI_FILE_PATH_TIPS_STRING, HINIC3_UI_LEADING_SIGN_ERROR, resolve_path);
-        hinic3_free(resolve_path);
-        return -1;
-    }
-
-    /* 不允许软链接文件,realpath处理前后文件名一致 */
-    if (strcmp(resolve_path, absolute_path) != 0) {
-        hinic3_ds_put_format(ds, HINIC3_UI_LEADING_SIGN_ERROR HINIC3_UI_FILE_NOT_ABSOLUTE_PATH_STRING);
-        hinic3_free(resolve_path);
-        return -1;
-    }
-
-    strcpy(cap_key->filename, resolve_path);
-    if (cap_key->filename == NULL) {
-        hinic3_ds_put_format(ds, HINIC3_UI_LEADING_SIGN_ERROR "Internal fail!\n");
-        hinic3_free(resolve_path);
-        return -1;
-    }
-
-    hinic3_free(resolve_path);
     cap_key->flags |= PCAP_FLAG_KEY_FILE;
     return 0;
 }
@@ -336,6 +479,118 @@ pcap_key_host_parse(struct pcap_key_t *cap_key, const char *key_name, const char
     return 0;
 }
 
+static int pcap_create_output_directory(const char *path, struct ds *ds)
+{
+    if (access(path, F_OK) == 0) {
+        return 0;
+    }
+
+    char path_copy[PCAP_MAX_FILE_NAME];
+    snprintf(path_copy, sizeof(path_copy), "%s", path);
+
+    for (char *p = path_copy + 1; *p != '\0'; p++) {
+        if (*p == '/') {
+            *p = '\0';
+            if (access(path_copy, F_OK) != 0) {
+                if (mkdir(path_copy, S_IRWXU | S_IRGRP | S_IXGRP) != 0) {
+                    if (errno != EEXIST) {
+                        hinic3_ds_put_format(ds, "%sFailed to create directory: %s\n",
+                            HINIC3_UI_LEADING_SIGN_ERROR, path);
+                        return -1;
+                    }
+                }
+            }
+            *p = '/';
+        }
+    }
+
+    if (access(path_copy, F_OK) != 0) {
+        if (mkdir(path_copy, S_IRWXU | S_IRGRP | S_IXGRP) != 0) {
+            if (errno != EEXIST) {
+                hinic3_ds_put_format(ds, "%sFailed to create directory: %s\n",
+                    HINIC3_UI_LEADING_SIGN_ERROR, path);
+                return -1;
+            }
+        }
+    }
+    return 0;
+}
+
+static void
+pcap_normalize_path_slashes(char *path)
+{
+    size_t i, j;
+
+    for (i = 0, j = 0; path[i] != '\0'; i++) {
+        if (path[i] == '/' && path[i + 1] == '/') {
+            continue;
+        }
+        path[j++] = path[i];
+    }
+    path[j] = '\0';
+}
+
+static int
+pcap_validate_output_path_format(const char *key_name, const char *value, struct ds *ds)
+{
+    const char *invalid_char = NULL;
+
+    if (strlen(value) >= PCAP_MAX_FILE_NAME) {
+        hinic3_ds_put_format(ds, "%sPath too long: %s\n",
+            HINIC3_UI_LEADING_SIGN_ERROR, key_name);
+        return -1;
+    }
+
+    invalid_char = pcap_check_path_invalid_chars(value);
+    if (invalid_char != NULL) {
+        hinic3_ds_put_format(ds, "%spath \"%s\" contains invalid character '%c'!\n",
+            HINIC3_UI_LEADING_SIGN_ERROR, value, *invalid_char);
+        return -1;
+    }
+
+    if (value[0] != '/') {
+        hinic3_ds_put_format(ds, "%spath must be absolute path!\n",
+            HINIC3_UI_LEADING_SIGN_ERROR, value);
+        return -1;
+    }
+
+    return 0;
+}
+
+static int pcap_key_output_parse(struct pcap_key_t *cap_key, const char *key_name,
+    const char *value, struct ds *ds)
+{
+    char path_copy[PCAP_MAX_FILE_NAME];
+    const char *invalid_char = NULL;
+
+    if (cap_key->flags & PCAP_FLAG_KEY_OUTPUT) {
+        hinic3_ds_put_format(ds, "%sDuplicate parameter: %s\n",
+            HINIC3_UI_LEADING_SIGN_ERROR, key_name);
+        return -1;
+    }
+
+    if (pcap_validate_output_path_format(key_name, value, ds) != 0)
+        return -1;
+
+    snprintf(path_copy, sizeof(path_copy), "%s", value);
+
+    pcap_normalize_path_slashes(path_copy);
+
+    invalid_char = pcap_check_protected_path(path_copy);
+    if (invalid_char != NULL) {
+        hinic3_ds_put_format(ds, "%sprotected path \"%s\" is not allowed!\n",
+            HINIC3_UI_LEADING_SIGN_ERROR, invalid_char);
+        return -1;
+    }
+
+    if (pcap_create_output_directory(path_copy, ds) != 0)
+        return -1;
+
+    snprintf(cap_key->output_path, sizeof(cap_key->output_path), "%s", path_copy);
+    cap_key->flags |= PCAP_FLAG_KEY_OUTPUT;
+    return 0;
+}
+
 static int
 pcap_sub_key_parse(struct pcap_key_t *cap_key, const char *key_name, const char *value, struct ds *ds)
 {
@@ -374,7 +629,10 @@ pcap_key_parse(struct pcap_key_t *cap_key, int argc, const char *argv[], struct 
 
     memset(cap_key, 0, sizeof(struct pcap_key_t));
     cap_key->direction = PCAP_DIR_RX | PCAP_DIR_TX;
-    cap_key->count_total = PCAP_DEF_PKT_CNT;
+    cap_key->filenum = 1;
+    cap_key->count = PCAP_DEF_PKT_CNT;
+    cap_key->count_total = (uint64_t)cap_key->count * cap_key->filenum;
+    snprintf(cap_key->output_path, sizeof(cap_key->output_path), "%s", PCAP_DEF_OUTPUT_PATH);
 
     i = 0;
     while (i < work_argc) {
@@ -408,6 +666,19 @@ pcap_key_parse(struct pcap_key_t *cap_key, int argc, const char *argv[], struct 
         else
             hinic3_ds_put_format(save_param, " %s %s", (const char *)work_argv[i], (const char *)work_argv[i + 1]);
         i += PCAP_DOUBLE;
+    }
+
+    if ((cap_key->flags & PCAP_FLAG_KEY_FILENUM) != 0 &&
+        (cap_key->flags & PCAP_FLAG_KEY_COUNT) == 0) {
+        HINIC3_LOG(WARNING, CAPTURE, "Option -n is used without explicit -c, "
+            "will use default packet count(%u) per file!", PCAP_DEF_PKT_CNT);
+    }
+
+    if ((cap_key->flags & PCAP_FLAG_KEY_COUNT) != 0) {
+        cap_key->count_total = (uint64_t)cap_key->count *
+            ((cap_key->filenum > 0) ? (uint64_t)cap_key->filenum : 1ULL);
+    } else if ((cap_key->flags & PCAP_FLAG_KEY_FILENUM) != 0) {
+        cap_key->count_total = (uint64_t)cap_key->count * (uint64_t)cap_key->filenum;
     }
 
     /* check whether neccesary parameters exist */
@@ -1149,6 +1420,7 @@ FILE *
 pcap_file_open(const char *file_name, const char *mode)
 {
     FILE *file = NULL;
+    int fd;
 
     if ((strcmp(mode, "wb") != 0) && (strcmp(mode, "ab") != 0)) {
         HINIC3_LOG(ERR, CAPTURE, "The mode %s to open file is wrong!", mode);
@@ -1157,8 +1429,15 @@ pcap_file_open(const char *file_name, const char *mode)
 
     file = fopen(file_name, mode);
     if (file == NULL) {
-        HINIC3_LOG(ERR, CAPTURE, "pcap_file_open fail, errno is %d!", errno);
+        HINIC3_LOG(ERR, CAPTURE, "pcap_file_open fail, file_name=%s, errno is %d!", file_name, errno);
         return NULL;
+    }
+
+    fd = fileno(file);
+    if (fd >= 0) {
+        if (fchmod(fd, S_IRUSR | S_IWUSR | S_IRGRP) != 0) {
+            HINIC3_LOG(WARNING, CAPTURE, "pcap_file_open chmod fail, errno is %d!", errno);
+        }
     }
 
     if (hinic3_user_scenario_get() != COM_BD) {
@@ -1169,12 +1448,105 @@ pcap_file_open(const char *file_name, const char *mode)
         }
     }
 
-    if (hinic3_agent_chmod_output_file_path(file_name) != 0) {
-        fclose(file);
-        return NULL;
-    }
 
     return file;
+}
+
+static int
+pcap_generate_rotated_filename(const char *filename, char *new_filename, size_t name_size)
+{
+    const char *dot = strrchr(filename, '.');
+    struct timeval tv;
+    struct tm *tm_now;
+
+    (void)gettimeofday(&tv, NULL);
+    tm_now = localtime(&tv.tv_sec);
+    if (tm_now == NULL) {
+        HINIC3_LOG(ERR, CAPTURE, "pcap_file_rotate localtime fail!");
+        return -1;
+    }
+
+    if (dot != NULL && dot != filename) {
+        size_t base_len = dot - filename;
+        snprintf(new_filename, name_size, "%.*s_%04d%02d%02d%02d%02d%02d%03ld.pcap",
+            (int)base_len, filename,
+            tm_now->tm_year + 1900,
+            tm_now->tm_mon + 1,
+            tm_now->tm_mday,
+            tm_now->tm_hour,
+            tm_now->tm_min,
+            tm_now->tm_sec,
+            tv.tv_usec / 1000);
+    } else {
+        snprintf(new_filename, name_size, "%s_%04d%02d%02d%02d%02d%02d%03ld",
+            filename,
+            tm_now->tm_year + 1900,
+            tm_now->tm_mon + 1,
+            tm_now->tm_mday,
+            tm_now->tm_hour,
+            tm_now->tm_min,
+            tm_now->tm_sec,
+            tv.tv_usec / 1000);
+    }
+
+    return 0;
+}
+
+static int
+pcap_open_rotated_file(struct pcap_task_t *task, const char *new_filename)
+{
+    int ret;
+    char full_path[PCAP_MAX_FILE_NAME];
+
+    if (task->key.output_path[strlen(task->key.output_path) - 1] == '/') {
+        snprintf(full_path, sizeof(full_path), "%s%s", task->key.output_path, new_filename);
+    } else {
+        snprintf(full_path, sizeof(full_path), "%s/%s", task->key.output_path, new_filename);
+    }
+    task->save_file = pcap_file_open(full_path, "wb");
+    if (!task->save_file) {
+        HINIC3_LOG(ERR, CAPTURE, "pcap_file_rotate open file %s fail!", new_filename);
+        return -1;
+    }
+
+    ret = pcap_file_write_header(task->save_file);
+    if (ret != 0) {
+        (void)fclose(task->save_file);
+        task->save_file = NULL;
+        return -1;
+    }
+
+    return 0;
+}
+
+int
+pcap_file_rotate(struct pcap_task_t *task)
+{
+    int ret;
+    char new_filename[PCAP_MAX_FILE_NAME];
+
+    if (task->filenum <= 1)
+        return 0;
+
+    ret = fflush(task->save_file);
+    if (ret != 0) {
+        HINIC3_LOG(ERR, CAPTURE, "fflush fail before rotate, err is %d!", ret);
+        return -1;
+    }
+
+    (void)fclose(task->save_file);
+    task->save_file = NULL;
+
+    ret = pcap_generate_rotated_filename(task->key.filename, new_filename, sizeof(new_filename));
+    if (ret != 0)
+        return -1;
+
+    ret = pcap_open_rotated_file(task, new_filename);
+    if (ret != 0)
+        return -1;
+
+    task->file_pkt_cnt = 0;
+    return 0;
 }
 
 int
