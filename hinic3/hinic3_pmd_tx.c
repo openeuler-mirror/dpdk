@@ -738,8 +738,10 @@ static void hinic3_process_inner_cksums(void *l3_hdr, struct rte_mbuf *mbuf)
 
 	version = (*(uint8_t *)l3_hdr) >> 4;
 	ver_index = hinic3_check_ip_version(version);
-	if (unlikely(ver_index == IP_INDEX_INVALID))
+	if (unlikely(ver_index == IP_INDEX_INVALID)) {
 		PMD_DRV_LOG(ERR, "Invalid IP version %u", version);
+		return;
+	}
 
 	ip_handler = &g_ip_cs_handlers[ver_index];
 	if (unlikely(version == IPV4_VERSION)) {

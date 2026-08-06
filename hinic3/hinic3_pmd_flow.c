@@ -1417,9 +1417,14 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 		if ((IS_BIFUR_MODE() && bifur_en) || (IS_NORMAL_MODE() && bifur_en)) 
 			filter->fdir_filter.queue_num = 1;
 
+		if (act_q->index >= dev->data->nb_rx_queues) {
+			rte_flow_error_set(error, EINVAL,
+					   HINIC3_FLOW_ERROR_TYPE_ACTION,
+					   act, "Invalid queue index.");
+			return -rte_errno;
+		}
 		rxq = dev->data->rx_queues[act_q->index];
-		if (act_q->index >= dev->data->nb_rx_queues || rxq == NULL ||
-			(rxq->is_hairpin && rxq->hairpin_conf.peer_count == 0)) {
+		if (rxq == NULL || (rxq->is_hairpin && rxq->hairpin_conf.peer_count == 0)) {
 			rte_flow_error_set(error, EINVAL,
 					   HINIC3_FLOW_ERROR_TYPE_ACTION,
 					   act, "Invalid action param.");
