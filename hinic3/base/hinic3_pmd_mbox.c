@@ -206,7 +206,7 @@ static void response_for_recv_func_mbox(struct hinic3_mbox *func_to_func,
 			msg_info.status = HINIC3_MBOX_PF_SEND_ERR;
 
 		use_tlp = IS_TLP_MBX(src_func_idx) && (hinic3_pcie_itf_id(func_to_func->hwdev) < SPU_HOST_ID);
-		
+
  	 	if (use_tlp)
 			send_tlp_mbox_to_func(func_to_func, recv_mbox->mod,
 					      recv_mbox->cmd,

@@ -86,17 +86,18 @@ void tcam_key_calculate(struct hinic3_tcam_key *tcam_key, void *fdir_tcam_rule, 
 }
 
 static void hinic3_fdir_tcam_ipv4_init(struct hinic3_fdir_filter *rule,
-			struct hinic3_tcam_key *tcam_key, struct rte_eth_dev *dev)
+				       struct hinic3_tcam_key *tcam_key,
+				       struct rte_eth_dev *dev)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct rte_pci_device *pci_dev = NULL;
-	
+
 	pci_dev = RTE_ETH_DEV_TO_PCI(dev);
 	tcam_key->key_mask.ip_type = HINIC3_UINT1_MAX;
 	tcam_key->key_info.ip_type = HINIC3_FDIR_IP_TYPE_IPV4;
 
-	if ((pci_dev->id.device_id == HINIC3_DEV_ID_SP920 && IS_BIFUR_MODE())
-		|| hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev)) {
+	if ((pci_dev->id.device_id == HINIC3_DEV_ID_SP920 && IS_BIFUR_MODE()) ||
+	     hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev)) {
 		/* VF RSS flow table traffic distribution */
 		tcam_key->key_mask.bifur_flag = HINIC3_UINT2_MAX;
 		tcam_key->key_info.bifur_flag = BIFUR_EN;
@@ -233,7 +234,6 @@ static void hinic3_fdir_tcam_notunnel_init(struct rte_eth_dev *dev,
 	tcam_key->key_info.tunnel_type = HINIC3_FDIR_TUNNEL_MODE_NORMAL;
 
 	tcam_key->key_mask.function_id = HINIC3_UINT15_MAX;
-
 	tcam_key->key_info.function_id =
 			hinic3_global_func_id(nic_dev->hwdev) & HINIC3_UINT15_MAX;
 
@@ -529,12 +529,12 @@ hinic3_fdir_tcam_action_init(struct rte_eth_dev *dev,
 	struct rte_eth_dev *dst_dev;
 	struct hinic3_nic_dev *dst_nic;
 	u16 rss_temp_id, rss_node_id, rss_inst_id;
-	u8 bifur_en = 0; 
+	u8 bifur_en = 0;
 
 	fdir_tcam_rule->data.dw0.qid = rule->rq_index;
 
-	if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, 0, 0) != 0) 
-		PMD_DRV_LOG(WARNING, "hinic3 get port table bifur enable status failed."); 
+	if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, 0, 0) != 0)
+		PMD_DRV_LOG(WARNING, "hinic3 get port table bifur enable status failed.");
 
 	if (IS_QPOOL_MODE()) {
  	    	fdir_tcam_rule->data.dw0.q_grp.rss_level = rule->level;
@@ -587,10 +587,10 @@ hinic3_fdir_tcam_action_init(struct rte_eth_dev *dev,
 }
 
 static void
-hinic3_fdir_tcam_info_init(struct rte_eth_dev *dev,
-				struct hinic3_fdir_filter	  *rule,
-				struct hinic3_tcam_key		  *tcam_key,
-				struct hinic3_tcam_cfg_rule	  *fdir_tcam_rule)
+hinic3_fdir_tcam_info_init(struct rte_eth_dev          *dev,
+			   struct hinic3_fdir_filter   *rule,
+			   struct hinic3_tcam_key      *tcam_key,
+			   struct hinic3_tcam_cfg_rule *fdir_tcam_rule)
 {
 	if (rule->tunnel_type == HINIC3_FDIR_TUNNEL_MODE_NORMAL)
 		hinic3_fdir_tcam_notunnel_init(dev, rule, tcam_key);
@@ -602,18 +602,17 @@ hinic3_fdir_tcam_info_init(struct rte_eth_dev *dev,
 }
 
 static void hinic3_fdir_tcam_key_get(struct rte_eth_dev *dev,
-			struct hinic3_fdir_filter *rule,
-			struct hinic3_tcam_key *tcam_key)
+				     struct hinic3_fdir_filter *rule,
+				     struct hinic3_tcam_key *tcam_key)
 {
-    if (rule->tunnel_type == HINIC3_FDIR_TUNNEL_MODE_NORMAL)
+	if (rule->tunnel_type == HINIC3_FDIR_TUNNEL_MODE_NORMAL)
 		hinic3_fdir_tcam_notunnel_init(dev, rule, tcam_key);
 	else
 		hinic3_fdir_tcam_vxlan_geneve_init(dev, rule, tcam_key);
 }
 
 static inline uint16_t
-hinic3_ethertype_filter_lookup(struct hinic3_ethertype_filter_list *ethertype_list,
-			uint16_t type)
+hinic3_ethertype_filter_lookup(struct hinic3_ethertype_filter_list *ethertype_list, uint16_t type)
 {
 	struct rte_flow *it;
 	struct hinic3_filter_t *filter_rules;
@@ -650,7 +649,7 @@ hinic3_tcam_filter_lookup(struct hinic3_tcam_filter_list *filter_list,
 
 struct hinic3_tcam_dynamic_block *
 hinic3_alloc_dynamic_block_resource(struct hinic3_tcam_info *tcam_info,
-			u16 dynamic_block_id, u8 key_width, bool is_sec_fdir)
+				    u16 dynamic_block_id, u8 key_width, bool is_sec_fdir)
 {
 	struct hinic3_tcam_dynamic_block *dynamic_block_ptr = NULL;
 
@@ -670,7 +669,7 @@ hinic3_alloc_dynamic_block_resource(struct hinic3_tcam_info *tcam_info,
 		dynamic_block_ptr->key_width = HINIC3_TCAM_KEY_WIDTH_INVALID;
 
 	TAILQ_INSERT_TAIL(&tcam_info->tcam_dynamic_info.tcam_dynamic_list,
-			dynamic_block_ptr, entries);
+			  dynamic_block_ptr, entries);
 
 	tcam_info->tcam_dynamic_info.dynamic_block_cnt++;
 
@@ -780,8 +779,8 @@ failed:
 }
 
 static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
-				struct hinic3_tcam_key *tcam_key,
-				struct hinic3_tcam_cfg_rule *fdir_tcam_rule)
+				  struct hinic3_tcam_key *tcam_key,
+				  struct hinic3_tcam_cfg_rule *fdir_tcam_rule)
 {
 	struct hinic3_tcam_info *tcam_info =
 		HINIC3_DEV_PRIVATE_TO_TCAM_INFO(dev->data->dev_private);
@@ -795,8 +794,7 @@ static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
 	u8 tcam_rule_type;
 	int err;
 
-	tcam_filter = rte_zmalloc("hinic3_fdir_filter",
-			sizeof(struct hinic3_tcam_filter), 0);
+	tcam_filter = rte_zmalloc("hinic3_fdir_filter", sizeof(struct hinic3_tcam_filter), 0);
 	if (tcam_filter == NULL)
 		return -ENOMEM;
 	(void)rte_memcpy(&tcam_filter->tcam_key,
@@ -875,12 +873,12 @@ alloc_block_failed:
 		(void)hinic3_free_tcam_block(nic_dev->hwdev, &tcam_block_index);
 
 failed:
-    rte_free(tcam_filter);
+	rte_free(tcam_filter);
 	return -EFAULT;
 }
 
 static int hinic3_del_dynamic_tcam_filter(struct rte_eth_dev *dev,
-				struct hinic3_tcam_filter *tcam_filter)
+					  struct hinic3_tcam_filter *tcam_filter)
 {
 	struct hinic3_tcam_info *tcam_info =
 		HINIC3_DEV_PRIVATE_TO_TCAM_INFO(dev->data->dev_private);
@@ -890,8 +888,7 @@ static int hinic3_del_dynamic_tcam_filter(struct rte_eth_dev *dev,
 	u32 index = 0;
 	int err;
 
-	TAILQ_FOREACH(tmp, &tcam_info->tcam_dynamic_info.tcam_dynamic_list,
-			entries) {
+	TAILQ_FOREACH(tmp, &tcam_info->tcam_dynamic_info.tcam_dynamic_list, entries) {
 		if (tmp->dynamic_block_id == dynamic_block_id)
 			break;
 	}
@@ -901,8 +898,7 @@ static int hinic3_del_dynamic_tcam_filter(struct rte_eth_dev *dev,
 		return -EINVAL;
 	}
 
-	index = HINIC3_PKT_TCAM_DYNAMIC_INDEX_START(tmp->dynamic_block_id) +
-			tcam_filter->index;
+	index = HINIC3_PKT_TCAM_DYNAMIC_INDEX_START(tmp->dynamic_block_id) + tcam_filter->index;
 
 	err = hinic3_del_tcam_rule(nic_dev->hwdev, index, TCAM_RULE_FDIR_TYPE);
 	if (err) {
@@ -933,7 +929,7 @@ static int hinic3_del_dynamic_tcam_filter(struct rte_eth_dev *dev,
 }
 
 static int hinic3_del_tcam_filter(struct rte_eth_dev *dev,
-				struct hinic3_tcam_filter *tcam_filter)
+				  struct hinic3_tcam_filter *tcam_filter)
 {
 	struct hinic3_tcam_info *tcam_info =
 		HINIC3_DEV_PRIVATE_TO_TCAM_INFO(dev->data->dev_private);
@@ -1041,14 +1037,14 @@ int hinic3_enable_rxq_fdir_filter(struct rte_eth_dev *dev, u32 queue_id, u32 abl
 			}
 		}
 	} else {
-		queue_res = HINIC3_INVAILD_QID_BASE | queue_id;
+		queue_res = HINIC3_INVALID_QID_BASE | queue_id;
 
 		TAILQ_FOREACH (it, &tcam_info->tcam_list, entries) {
 			if (queue_id == it->queue) {
 				index = (u16)(HINIC3_PKT_TCAM_DYNAMIC_INDEX_START(it->dynamic_block_id) + it->index);
 
 				/* When the rxq is stop, delete the fdir rule from the tcam
-				   and add the corret fdir rule from the tcam */
+				   and add the correct fdir rule from the tcam */
 				ret = hinic3_del_tcam_rule(nic_dev->hwdev, index, TCAM_RULE_FDIR_TYPE);
 				if (ret) {
 					PMD_DRV_LOG(ERR, "del correct tcam rule failed!");
@@ -1189,53 +1185,53 @@ static int hinic3_flow_add_del_ethertype_filter_rule(struct rte_eth_dev *dev,
 	}
 
 	switch (ethertype_filter->ether_type) {
-		case RTE_ETHER_TYPE_ARP:
-			return hinic3_flow_set_arp_filter(dev, ethertype_filter, add);
-		case RTE_ETHER_TYPE_RARP:
-			return hinic3_set_fdir_ethertype_filter(nic_dev->hwdev,
-				HINIC3_PKT_TYPE_RARP, ethertype_filter, add);
+	case RTE_ETHER_TYPE_ARP:
+		return hinic3_flow_set_arp_filter(dev, ethertype_filter, add);
+	case RTE_ETHER_TYPE_RARP:
+		return hinic3_set_fdir_ethertype_filter(nic_dev->hwdev,
+			HINIC3_PKT_TYPE_RARP, ethertype_filter, add);
 
-		case RTE_ETHER_TYPE_SLOW:
-			return hinic3_flow_set_slow_filter(dev, ethertype_filter, add);
+	case RTE_ETHER_TYPE_SLOW:
+		return hinic3_flow_set_slow_filter(dev, ethertype_filter, add);
 
-		case RTE_ETHER_TYPE_LLDP:
-			return hinic3_flow_set_lldp_filter(dev, ethertype_filter, add);
+	case RTE_ETHER_TYPE_LLDP:
+		return hinic3_flow_set_lldp_filter(dev, ethertype_filter, add);
 
-		case RTE_ETHER_TYPE_CNM:
-			return hinic3_set_fdir_ethertype_filter(nic_dev->hwdev,
-				HINIC3_PKT_TYPE_CNM, ethertype_filter, add);
+	case RTE_ETHER_TYPE_CNM:
+		return hinic3_set_fdir_ethertype_filter(nic_dev->hwdev,
+			HINIC3_PKT_TYPE_CNM, ethertype_filter, add);
 
-		case RTE_ETHER_TYPE_ECP:
-			return hinic3_set_fdir_ethertype_filter(nic_dev->hwdev,
-				HINIC3_PKT_TYPE_ECP, ethertype_filter, add);
+	case RTE_ETHER_TYPE_ECP:
+		return hinic3_set_fdir_ethertype_filter(nic_dev->hwdev,
+			HINIC3_PKT_TYPE_ECP, ethertype_filter, add);
 
-		default:
-			PMD_DRV_LOG(ERR, "Unknown ethertype %d queue_id %d",
-				    ethertype_filter->ether_type, ethertype_filter->queue);
-			return -EPERM;
+	default:
+		PMD_DRV_LOG(ERR, "Unknown ethertype %d queue_id %d",
+			    ethertype_filter->ether_type, ethertype_filter->queue);
+		return -EPERM;
 	}
 }
 
 static int hinic3_flow_ethertype_rule_nums(struct rte_eth_ethertype_filter *ethertype_filter)
 {
 	switch (ethertype_filter->ether_type) {
-		case RTE_ETHER_TYPE_ARP:
-			return HINIC3_ARP_RULE_NUM;
-		case RTE_ETHER_TYPE_RARP:
-			return HINIC3_RARP_RULE_NUM;
-		case RTE_ETHER_TYPE_SLOW:
-			return HINIC3_SLOW_RULE_NUM;
-		case RTE_ETHER_TYPE_LLDP:
-			return HINIC3_LLDP_RULE_NUM;
-		case RTE_ETHER_TYPE_CNM:
-			return HINIC3_CNM_RULE_NUM;
-		case RTE_ETHER_TYPE_ECP:
-			return HINIC3_ECP_RULE_NUM;
+	case RTE_ETHER_TYPE_ARP:
+		return HINIC3_ARP_RULE_NUM;
+	case RTE_ETHER_TYPE_RARP:
+		return HINIC3_RARP_RULE_NUM;
+	case RTE_ETHER_TYPE_SLOW:
+		return HINIC3_SLOW_RULE_NUM;
+	case RTE_ETHER_TYPE_LLDP:
+		return HINIC3_LLDP_RULE_NUM;
+	case RTE_ETHER_TYPE_CNM:
+		return HINIC3_CNM_RULE_NUM;
+	case RTE_ETHER_TYPE_ECP:
+		return HINIC3_ECP_RULE_NUM;
 
-		default:
-			PMD_DRV_LOG(ERR, "Unknown ethertype %d",
-				    ethertype_filter->ether_type);
-			return 0;
+	default:
+		PMD_DRV_LOG(ERR, "Unknown ethertype %d",
+			    ethertype_filter->ether_type);
+		return 0;
 	}
 }
 

@@ -50,7 +50,7 @@
 #define HINIC3_MAX_LRO_SIZE		65536
 
 #define HINIC3_RX_EMPTY_THRESHOLD 3
-#define HINIC3_MAX_TX_FREE_LOOP   1000
+#define HINIC3_DEFAULT_TX_FREE_LOOP   1000
 
 #define HINIC3_DEFAULT_RX_FREE_THRESH	32
 #define HINIC3_DEFAULT_TX_FREE_THRESH	32
@@ -402,6 +402,7 @@ static void hinic3_dev_interrupt_handler_qpool(void *param)
  	struct rte_eth_link link;
  	ssize_t bytes_read;
  	u8 link_state = 0;
+	u8 addr_bytes[RTE_ETHER_ADDR_LEN];
 
 	if (intr_handle->fd < 0) {
 	 	PMD_DRV_LOG(ERR, "Invalid interrupt fd: %d", intr_handle->fd);
@@ -416,28 +417,33 @@ static void hinic3_dev_interrupt_handler_qpool(void *param)
  	}
 
 	while ((bytes_read = read(intr_handle->fd, &event, sizeof(event))) == sizeof(event)) {
-		if (event.type == NETDEV_UP) {
+		switch (event.type) {
+		case NETDEV_UP:
 			link_state = 1;
 			get_port_info(nic_dev->hwdev, link_state, &link);
 			rte_eth_linkstatus_set(dev, &link);
-		} else if (event.type == NETDEV_DOWN) {
+		break;
+		case NETDEV_DOWN:
 			link_state = 0;
 			get_port_info(nic_dev->hwdev, link_state, &link);
 			rte_eth_linkstatus_set(dev, &link);
-		} else if (event.type == NETDEV_CHANGEADDR) {
-			u8 addr_bytes[RTE_ETHER_ADDR_LEN];
+		break;
+		case NETDEV_CHANGEADDR:
 			memmove(addr_bytes, event.data, RTE_ETHER_ADDR_LEN);
 			rte_ether_addr_copy((struct rte_ether_addr *)addr_bytes,
 				&dev->data->mac_addrs[0]);
 			if (rte_is_zero_ether_addr(&dev->data->mac_addrs[0]) ||
 	 		    !rte_is_unicast_ether_addr(&dev->data->mac_addrs[0]))
 				PMD_DRV_LOG(WARNING, "mac addr is discouraged");
-		} else if (event.type == NETDEV_CHANGEMTU) {
+		break;
+		case NETDEV_CHANGEMTU:
 			PMD_DRV_LOG(INFO, "Set new mtu address");
 			nic_dev->mtu_size = event.data_mtu;
 			dev->data->mtu = event.data_mtu;
-		} else {
+		break;
+		default:
 			PMD_DRV_LOG(INFO, "event type not support");
+		break;
 		}
 	}
 
@@ -513,8 +519,11 @@ static int hinic3_dev_configure(struct rte_eth_dev *dev)
 		nic_dev->hinic3_offload_initialized = true;
 	}
 
-	/* Clear fdir filter */
-	hinic3_free_fdir_filter(dev);
+	/* In vfio mode, clear fdir filter to remove leftover rules
+	 * In qpool mode, fdir under function may belong to other processes, therefor do not clear
+	 */
+	if (!IS_QPOOL_MODE())
+		hinic3_free_fdir_filter(dev);
 
 	if (dev->data->dev_conf.txmode.mq_mode == ETH_MQ_TX_DCB) {
 		int err;
@@ -527,13 +536,21 @@ static int hinic3_dev_configure(struct rte_eth_dev *dev)
 
 		err = hinic3_tm_conf_update(dev);
 		if (err) {
-			PMD_DRV_LOG(ERR, "failed to update tm conf, errno %d",
-				    err);
+			PMD_DRV_LOG(ERR, "failed to update tm conf, errno %d", err);
 			return err;
 		}
 	}
 
 	return 0;
+}
+
+static void hinic3_dev_tnl_tso_support(struct rte_eth_dev_info *info, struct hinic3_nic_dev *nic_dev) {
+	if (HINIC3_SUPPORT_GENEVE_OFFLOAD(nic_dev)) {
+		info->tx_offload_capa |= DEV_TX_OFFLOAD_GENEVE_TNL_TSO;
+	}
+	if (HINIC3_SUPPORT_IPXIP_OFFLOAD(nic_dev)) {
+		info->tx_offload_capa |= DEV_TX_OFFLOAD_IPIP_TNL_TSO;
+	}
 }
 
 void hinic3_dev_info_get(struct rte_eth_dev_info *info, struct hinic3_nic_dev *nic_dev)
@@ -581,6 +598,8 @@ void hinic3_dev_info_get(struct rte_eth_dev_info *info, struct hinic3_nic_dev *n
 				DEV_TX_OFFLOAD_MULTI_SEGS |
 				DEV_TX_OFFLOAD_QINQ_INSERT;
 
+	if (!is_sp620_nic(nic_dev))
+		hinic3_dev_tnl_tso_support(info, nic_dev);
 	info->hash_key_size = HINIC3_RSS_KEY_SIZE;
 	info->reta_size = HINIC3_RSS_INDIR_SIZE;
 	info->flow_type_rss_offloads = HINIC3_RSS_OFFLOAD_ALL;
@@ -687,7 +706,7 @@ static int hinic3_get_kernel_addr(struct rte_eth_dev *eth_dev)
  	}
 
 	rte_ether_addr_copy((struct rte_ether_addr *)cfg_kernel_data.dev_addr,
- 				&eth_dev->data->mac_addrs[0]);
+ 			    &eth_dev->data->mac_addrs[0]);
 
  	return err;
 }
@@ -746,7 +765,7 @@ static int hinic3_fw_version_get(struct rte_eth_dev *dev, char *fw_version,
 static int hinic3_dev_set_link_up(struct rte_eth_dev *dev)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
-	struct rte_eth_link link = {0};
+	struct rte_eth_link link = { 0 };
 	int err;
 
 	if (IS_QPOOL_MODE()) {
@@ -1052,8 +1071,8 @@ hinic3_rx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_rxq *rxq,
 		vector_len = rxq->q_depth;
 
 	pi_mz = hinic3_dma_zone_reserve(dev, "hinic3_rq_pi", qid,
-					 RTE_PGSIZE_4K, RTE_CACHE_LINE_SIZE,
-					 (int)socket_id);
+					RTE_PGSIZE_4K, RTE_CACHE_LINE_SIZE,
+					(int)socket_id);
 	if (!pi_mz) {
 		PMD_DRV_LOG(ERR, "Allocate rxq[%d] pi_mz failed, dev_name: %s",
 			    qid, dev->data->name);
@@ -1116,7 +1135,7 @@ hinic3_rx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_rxq *rxq,
 						RTE_CACHE_LINE_SIZE, (int)socket_id);
 		if (!cqe_mz) {
 			PMD_DRV_LOG(ERR, "Allocate cqe mem zone failed, dev_name: %s",
-				dev->data->name);
+				    dev->data->name);
 			err = -ENOMEM;
 			goto alloc_cqe_ci_mz_fail;
 		}
@@ -1130,7 +1149,7 @@ hinic3_rx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_rxq *rxq,
 		wqe_count = hinic3_rx_fill_wqe(rxq);
 		if (wqe_count != rxq->q_depth) {
 			PMD_DRV_LOG(ERR, "Fill rx wqe failed, wqe_count: %d, dev_name: %s",
-				wqe_count, dev->data->name);
+				    wqe_count, dev->data->name);
 			err = -ENOMEM;
 			goto fill_rx_wqe_fail;
 		}
@@ -1215,8 +1234,7 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	}
 
 	/* Queue depth must be power of 2, otherwise will be aligned up */
-	rq_depth = (nb_desc & (nb_desc - 1)) ?
-		((u16)(1U << (ilog2(nb_desc) + 1))) : nb_desc;
+	rq_depth = (nb_desc & (nb_desc - 1)) ? ((u16)(1U << (ilog2(nb_desc) + 1))) : nb_desc;
 
 	/*
 	 * Validate number of receive descriptors.
@@ -1288,7 +1306,6 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 		goto adjust_bufsize_fail;
 	}
 
-
 	if (nic_dev->config.rx_cqe_compact_en) {
 		/* Default rx wqe type set to compact wqe if NIC supports compact rx CQE */
 		rxq->wqe_type = HINIC3_COMPACT_RQ_WQE;
@@ -1345,7 +1362,6 @@ static int hinic3_get_tx_user_queue(struct hinic3_nic_dev *nic_dev, struct hinic
 	return err;
 }
 
-
 static int
 hinic3_tx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_txq *txq,
 			   uint16_t qid, unsigned int socket_id)
@@ -1358,17 +1374,17 @@ hinic3_tx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_txq *txq,
 	u32 queue_buf_size;
 	int err;
 
-	if(IS_QPOOL_MODE()){
-		/* alloc template if not */ 
-		if (hwdev->qpool_qgrp_id == 0) { 
-			err = hinic3_alloc_template(nic_dev); 
-			if (err < 0) 
+	if (IS_QPOOL_MODE()) {
+		/* alloc template if not */
+		if (hwdev->qpool_qgrp_id == 0) {
+			err = hinic3_alloc_template(nic_dev);
+			if (err < 0)
 				goto alloc_template_fail;
 		}
 
 		err = hinic3_get_tx_user_queue(nic_dev, txq);
 		if (err < 0)
-			goto close_fd;
+			goto get_tx_user_queue_fail;
 	} else {
 		txq->local_qid = txq->q_id;
 	}
@@ -1426,7 +1442,7 @@ hinic3_tx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_txq *txq,
 
 alloc_tx_info_fail:
 	rte_free(txq->tx_info);
-
+	txq->db_addr = NULL;
 alloc_db_err_fail:
 	hinic3_memzone_free(txq->sq_mz);
 
@@ -1434,10 +1450,12 @@ alloc_sq_mz_fail:
 	hinic3_memzone_free(txq->ci_mz);
 
 alloc_ci_mz_fail:
-close_fd:
-	if (IS_QPOOL_MODE() && hwdev->qpool_qgrp_id == 0)
+get_tx_user_queue_fail:
+	if (IS_QPOOL_MODE() && hwdev->qpool_qgrp_id != 0)
 		(void)hinic3_release_template(nic_dev);
 alloc_template_fail:
+	rte_free(txq);
+	nic_dev->txqs[qid] = NULL;
 	return err;
 }
 
@@ -1481,7 +1499,7 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
  		if (err) {
  			PMD_DRV_LOG(ERR, "Get queue depth failed");
  			return -EINVAL;
- 		}	
+ 		}
 	}
 
 	/* Queue depth must be power of 2, otherwise will be aligned up */
@@ -1603,7 +1621,7 @@ static void hinic3_rx_queue_release(struct rte_eth_dev *dev, uint16_t queue_id)
 			goto release_resources;
 		}
 
-		if (rxq->q_id == 0) {
+		if (nic_dev->hwdev->qpool_qgrp_id != 0) {
 			err = hinic3_release_template(nic_dev);
 			if (err < 0) {
 				PMD_DRV_LOG(WARNING, "NIC device queue release template err, err = %d", err);
@@ -1616,17 +1634,7 @@ static void hinic3_rx_queue_release(struct rte_eth_dev *dev, uint16_t queue_id)
 			PMD_DRV_LOG(WARNING, "NIC device queue release user queue err, err = %d", err);
 			goto release_resources;
 		}
-
-		u32 rqcqe_buf_size = RQCQE_BUF_SIZE(rxq->q_depth);
-		munmap(rxq->cqe_start_vaddr, rqcqe_buf_size);
-
-		rte_free(rxq->rx_info);
-		rxq->rx_info = NULL;
-
-		u32 queue_buf_size = BIT(rxq->wqebb_shift) * rxq->q_depth;
-		munmap(rxq->queue_buf_vaddr, queue_buf_size);
 	}
-
 release_resources:
 	if (!rxq->is_hairpin) {
 		if (nic_dev->config.rx_cqe_compact_en)
@@ -1676,12 +1684,14 @@ static void hinic3_tx_queue_release(struct rte_eth_dev *dev, uint16_t queue_id)
 
 	hinic3_free_txq_mbufs(txq);
 
-	rte_free(txq->tx_info);
-	txq->tx_info = NULL;
+	if (!txq->is_hairpin) {
+		rte_free(txq->tx_info);
+		txq->tx_info = NULL;
 
-	hinic3_memzone_free(txq->sq_mz);
+		hinic3_memzone_free(txq->sq_mz);
 
-	hinic3_memzone_free(txq->ci_mz);
+		hinic3_memzone_free(txq->ci_mz);
+	}
 
 	nic_dev->txqs[txq->q_id] = NULL;
 	rte_free(txq);
@@ -2041,12 +2051,12 @@ static void hinic3_disable_interrupt(struct rte_eth_dev *dev)
 
 	if (IS_QPOOL_MODE()) {
  		rte_intr_callback_unregister(PCI_DEV_TO_INTR_HANDLE(pci_dev),
- 					hinic3_dev_interrupt_handler_qpool, (void *)dev);
+ 					     hinic3_dev_interrupt_handler_qpool, (void *)dev);
  	} else {
  		/* disable rte interrupt */
  		rte_intr_disable(PCI_DEV_TO_INTR_HANDLE(pci_dev));
  		rte_intr_callback_unregister(PCI_DEV_TO_INTR_HANDLE(pci_dev),
- 					hinic3_dev_interrupt_handler, (void *)dev);
+ 					     hinic3_dev_interrupt_handler, (void *)dev);
  	}
 }
 
@@ -2060,12 +2070,12 @@ static void hinic3_enable_interrupt(struct rte_eth_dev *dev)
 
 	if (IS_QPOOL_MODE()) {
  		rte_intr_callback_register(PCI_DEV_TO_INTR_HANDLE(pci_dev),
- 					hinic3_dev_interrupt_handler_qpool, (void *)dev);
+ 					   hinic3_dev_interrupt_handler_qpool, (void *)dev);
  	} else {
  		/* enable rte interrupt */
  		rte_intr_enable(PCI_DEV_TO_INTR_HANDLE(pci_dev));
  		rte_intr_callback_register(PCI_DEV_TO_INTR_HANDLE(pci_dev),
- 					hinic3_dev_interrupt_handler, (void *)dev);
+ 					   hinic3_dev_interrupt_handler, (void *)dev);
  	}
 }
 
@@ -2292,12 +2302,11 @@ static void hinic3_print_hairpin_map(struct rte_eth_dev *dev)
 
 static int hinic3_dev_start_qpool(struct rte_eth_dev *eth_dev)
 {
-	struct hinic3_nic_dev *nic_dev = NULL;
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
 	struct hinic3_rxq *rxq = NULL;
 	int i;
 	int err;
 
-	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
 	hinic3_get_func_rx_buf_size(nic_dev);
 	err = hinic3_get_kernel_mtu(eth_dev);
 	if (err)
@@ -2306,14 +2315,6 @@ static int hinic3_dev_start_qpool(struct rte_eth_dev *eth_dev)
 	err = hinic3_get_kernel_addr(eth_dev);
 	if (err)
 		return err;
-
-	err = hinic3_set_feature_to_hw(nic_dev->hwdev, &nic_dev->feature_cap, 1);
-	if (err) {
-		PMD_DRV_LOG(ERR, "Failed to set nic features to hardware, err %d",
-			    err);
-		goto get_feature_err;
-	}
-
 	/* reset rx and tx queue */
 	hinic3_reset_rx_queue(eth_dev);
 	hinic3_reset_tx_queue(eth_dev);
@@ -2325,7 +2326,7 @@ static int hinic3_dev_start_qpool(struct rte_eth_dev *eth_dev)
 	if (err) {
 		PMD_DRV_LOG(ERR, "Init qp context failed, dev_name: %s",
 			    eth_dev->data->name);
-		goto handle_err;
+		goto init_qp_fail;
 	}
 
 	/* Set rx configuration: rss/checksum/rxmode/lro */
@@ -2345,7 +2346,7 @@ static int hinic3_dev_start_qpool(struct rte_eth_dev *eth_dev)
 	if (err) {
 		PMD_DRV_LOG(ERR, "Set rx config failed, dev_name: %s",
 			    eth_dev->data->name);
-		goto handle_err;
+		goto start_rqs_fail;
 	}
 
 	hinic3_start_all_sqs(eth_dev);
@@ -2358,7 +2359,7 @@ static int hinic3_dev_start_qpool(struct rte_eth_dev *eth_dev)
 
 	return 0;
 
-handle_err:
+start_rqs_fail:
 	/* Flush tx && rx chip resources in case of setting vport fake fail */
 	(void)hinic3_flush_qps_res(nic_dev->hwdev);
 	rte_delay_ms(DEV_START_DELAY_MS);
@@ -2376,8 +2377,7 @@ handle_err:
 
 	hinic3_free_qp_ctxts(nic_dev->hwdev);
 
-get_feature_err:
-	hinic3_deinit_rxq_intr(eth_dev);
+init_qp_fail:
 	hinic3_copy_mempool_uninit(nic_dev);
 
 	return err;
@@ -2414,8 +2414,7 @@ static int hinic3_dev_start(struct rte_eth_dev *eth_dev)
 
 	err = hinic3_refill_hairpinq(eth_dev);
 	if (err) {
-		PMD_DRV_LOG(ERR, "Refill hairpinq fail, dev_name: %s",
-			 eth_dev->data->name);
+		PMD_DRV_LOG(ERR, "Refill hairpinq fail, dev_name: %s", eth_dev->data->name);
 		goto refill_hairpin_fail;
 	}
 	hinic3_print_hairpin_map(eth_dev);
@@ -2436,14 +2435,17 @@ static int hinic3_dev_start(struct rte_eth_dev *eth_dev)
 
 	err = hinic3_set_feature_to_hw(nic_dev->hwdev, &nic_dev->feature_cap, 1);
 	if (err) {
-		PMD_DRV_LOG(ERR, "Failed to set nic features to hardware, err %d\n",
-			    err);
+		PMD_DRV_LOG(ERR, "Failed to set nic features to hardware, err %d\n", err);
 		goto get_feature_err;
 	}
 
 	/* reset rx and tx queue */
 	hinic3_reset_rx_queue(eth_dev);
 	hinic3_reset_tx_queue(eth_dev);
+
+	nic_dev->lro_en = (eth_dev->data->dev_conf.rxmode.offloads & DEV_RX_OFFLOAD_TCP_LRO) &&
+			  (nic_dev->feature_cap & NIC_F_LRO);
+	PMD_DRV_LOG(DEBUG, "lro is %d.", nic_dev->lro_en);
 
 	/* Init txq and rxq context */
 	err = hinic3_init_qp_ctxts(nic_dev);
@@ -2471,7 +2473,7 @@ static int hinic3_dev_start(struct rte_eth_dev *eth_dev)
 	}
 
 	/* Add scatter support if scatter mode should be enabled */
-	if (eth_dev->data->dev_conf.rxmode.offloads & DEV_RX_OFFLOAD_SCATTER )
+	if (eth_dev->data->dev_conf.rxmode.offloads & DEV_RX_OFFLOAD_SCATTER)
 		eth_dev->data->scattered_rx = true;
 	else
 		eth_dev->data->scattered_rx = false;
@@ -2538,7 +2540,7 @@ set_mtu_fail:
 init_qp_fail:
 get_feature_err:
 init_func_tbl_fail:
-    hinic3_deinit_rxq_intr(eth_dev);
+	hinic3_deinit_rxq_intr(eth_dev);
 init_rxq_intr_fail:
 refill_hairpin_fail:
 	hinic3_copy_mempool_uninit(nic_dev);
@@ -2600,52 +2602,51 @@ static void hinic3_dev_stop(struct rte_eth_dev *dev)
 		return 0;
 #endif
 	}
-
+	/* sp230 and sp560 vf function not support dcb cmd */
 	if (nic_dev->dcb->dcb_on) {
 		if (is_sp620_nic(nic_dev) ||
 		    !HINIC3_IS_VF(nic_dev->hwdev))
 			hinic3_sync_dcb_state(nic_dev->hwdev, 1, 0);
 	}
-
-	hinic3_tm_dev_stop_proc(dev);
-
 	/* Clear recorded link status */
 	memset(&link, 0, sizeof(link));
 	(void)rte_eth_linkstatus_set(dev, &link);
 
-	/* Stop phy port and vport */
 	if (!IS_QPOOL_MODE()) {
+		hinic3_tm_dev_stop_proc(dev);
+
+		/* Stop phy port and vport */
  		err = hinic3_set_port_enable(nic_dev->hwdev, false);
  		if (err)
  			PMD_DRV_LOG(WARNING, "Disable phy port failed, error: %d, "
- 					"dev_name: %s, port_id: %d", err, dev->data->name,
- 					dev->data->port_id);
+ 					     "dev_name: %s, port_id: %d", err, dev->data->name,
+ 					     dev->data->port_id);
 
  		err = hinic3_set_vport_enable(nic_dev->hwdev, false);
  		if (err)
  			PMD_DRV_LOG(WARNING, "Disable vport failed, error: %d, "
- 					"dev_name: %s, port_id: %d", err, dev->data->name,
- 					dev->data->port_id);
+ 					     "dev_name: %s, port_id: %d", err, dev->data->name,
+ 					     dev->data->port_id);
 
  		/* disable dp interrupt */
  		hinic3_disable_queue_intr(dev);
  		hinic3_deinit_rxq_intr(dev);
- 	}
 
-	/* Flush pending io request */
-	hinic3_flush_txqs(nic_dev);
+		/* Flush pending io request */
+		hinic3_flush_txqs(nic_dev);
 
-	/* After set vport disable 100ms,
-	 * no packets will be send to host
-	 */
-	rte_delay_ms(DEV_STOP_DELAY_MS);
+		/* After set vport disable 100ms,
+		 * no packets will be send to host
+		 */
+		rte_delay_ms(DEV_STOP_DELAY_MS);
 
-	if (!IS_QPOOL_MODE()) {
  		hinic3_flush_qps_res(nic_dev->hwdev);
 
  		/* Clean root context */
  		hinic3_free_qp_ctxts(nic_dev->hwdev);
  	} else {
+		hinic3_flush_txqs(nic_dev);
+		rte_delay_ms(DEV_STOP_DELAY_MS);
  		hinic3_flush_assign_qps_res(nic_dev->hwdev);
  	}
 
@@ -2683,8 +2684,7 @@ static void hinic3_dev_stop(struct rte_eth_dev *dev)
 
 static void hinic3_dev_release(struct rte_eth_dev *eth_dev)
 {
-	struct hinic3_nic_dev *nic_dev =
-		HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
 	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
 	int qid;
 
@@ -2723,7 +2723,6 @@ static void hinic3_dev_release(struct rte_eth_dev *eth_dev)
  					   hinic3_dev_interrupt_handler,
  					   (void *)eth_dev);
  	}
-
 
 	/* Destroy rx mode mutex */
 	hinic3_mutex_destroy(&nic_dev->rx_mode_mutex);
@@ -2773,8 +2772,7 @@ static void hinic3_dev_close(struct rte_eth_dev *eth_dev)
 
 	if (!IS_QPOOL_MODE()) {
 		if (hinic3_test_and_set_bit(HINIC3_DEV_CLOSE, &nic_dev->dev_status)) {
-			PMD_DRV_LOG(WARNING, "Device %s already closed",
-			    	nic_dev->dev_name);
+			PMD_DRV_LOG(WARNING, "Device %s already closed", nic_dev->dev_name);
 #ifdef DPDK_20_11
 		return 0;
 #endif
@@ -2808,7 +2806,7 @@ static int hinic3_dev_set_mtu(struct rte_eth_dev *dev, uint16_t mtu)
 
 	if (IS_QPOOL_MODE()) {
  	 	PMD_DRV_LOG(WARNING, "Qpool mode not support set mtu.");
- 	 	return -EINVAL;
+ 	 	return 0;
  	}
 
 	PMD_DRV_LOG(INFO, "Set port mtu, port_id: %d, mtu: %d, max_pkt_len: %d",
@@ -3641,7 +3639,7 @@ get_port_cir_drop(struct hinic3_nic_dev *nic_dev,
 	int err = 0;
 
 	memset(&port_stats, 0, sizeof(port_stats));
-	
+
 	if (is_sp620_nic(nic_dev)) {
 		err = hinic3_get_cir_drop(nic_dev->hwdev, &port_stats);
 		if (err) {
@@ -3875,6 +3873,7 @@ static int hinic3_dev_xstats_get_names(struct rte_eth_dev *dev,
 
 	return count;
 }
+
 #ifdef DPDK_24_11
 static const uint32_t *
 hinic3_dev_supported_ptypes_get(__rte_unused struct rte_eth_dev *dev, size_t *no_of_elements)
@@ -4348,14 +4347,12 @@ static const struct eth_dev_ops hinic3_pmd_ops = {
 	.get_reg                       = hinic3_get_reg,
 	.get_dcb_info                  = hinic3_get_dcb_info,
 	.tm_ops_get                    = hinic3_tm_ops_get,
-	.hairpin_cap_get			   = hinic3_hairpin_cap_get,
+	.hairpin_cap_get               = hinic3_hairpin_cap_get,
 #ifdef DPDK_20_11
-	.hairpin_get_peer_ports		   = hinic3_hairpin_get_peer_ports,
-	.hairpin_bind				   = hinic3_hairpin_bind,
-	.hairpin_unbind				   = hinic3_hairpin_unbind,
+	.hairpin_get_peer_ports        = hinic3_hairpin_get_peer_ports,
 #endif
-	.rx_hairpin_queue_setup		   = hinic3_rx_hairpin_queue_setup,
-	.tx_hairpin_queue_setup		   = hinic3_tx_hairpin_queue_setup,
+	.rx_hairpin_queue_setup        = hinic3_rx_hairpin_queue_setup,
+	.tx_hairpin_queue_setup        = hinic3_tx_hairpin_queue_setup,
 	.tx_burst_mode_get             = hinic3_tx_burst_mode_get,
 #ifdef DPDK_20_11
 	.fec_get_capability	       = hinic3_fec_capability_get,
@@ -4417,14 +4414,12 @@ static const struct eth_dev_ops hinic3_pmd_vf_ops = {
 #endif
 	.get_dcb_info                  = hinic3_get_dcb_info,
 	.tm_ops_get                    = hinic3_tm_ops_get,
-	.hairpin_cap_get			   = hinic3_hairpin_cap_get,
+	.hairpin_cap_get               = hinic3_hairpin_cap_get,
 #ifdef DPDK_20_11
-	.hairpin_get_peer_ports		   = hinic3_hairpin_get_peer_ports,
-	.hairpin_bind				   = hinic3_hairpin_bind,
-	.hairpin_unbind				   = hinic3_hairpin_unbind,
+	.hairpin_get_peer_ports        = hinic3_hairpin_get_peer_ports,
 #endif
-	.rx_hairpin_queue_setup		   = hinic3_rx_hairpin_queue_setup,
-	.tx_hairpin_queue_setup		   = hinic3_tx_hairpin_queue_setup,
+	.rx_hairpin_queue_setup        = hinic3_rx_hairpin_queue_setup,
+	.tx_hairpin_queue_setup        = hinic3_tx_hairpin_queue_setup,
 	.tx_burst_mode_get             = hinic3_tx_burst_mode_get,
 };
 
@@ -4535,15 +4530,13 @@ static int hinic3_init_default_cos(struct hinic3_nic_dev *nic_dev)
 	if (!HINIC3_IS_VF(nic_dev->hwdev)) {
 		err = hinic3_pf_get_default_cos(nic_dev->hwdev, &cos_id);
 		if (err) {
-			PMD_DRV_LOG(ERR, "Get PF default cos failed, err: %d",
-				    err);
+			PMD_DRV_LOG(ERR, "Get PF default cos failed, err: %d", err);
 			return err;
 		}
 	} else {
 		err = hinic3_vf_get_default_cos(nic_dev->hwdev, &cos_id);
 		if (err) {
-			PMD_DRV_LOG(ERR, "Get VF default cos failed, err: %d",
-				    err);
+			PMD_DRV_LOG(ERR, "Get VF default cos failed, err: %d", err);
 			return err;
 		}
 	}
@@ -4562,7 +4555,7 @@ static int hinic3_set_default_hw_feature(struct hinic3_nic_dev *nic_dev)
 		return err;
 
 	if (hinic3_func_type(nic_dev->hwdev) == TYPE_VF)
-        return 0;
+		return 0;
 
 	err = hinic3_set_link_status_follow(nic_dev->hwdev,
 					   HINIC3_LINK_FOLLOW_PORT);
@@ -4575,33 +4568,33 @@ static int hinic3_set_default_hw_feature(struct hinic3_nic_dev *nic_dev)
 }
 
 static int hinic3_parse_version(const char *str, uint8_t *ver) {
-    if (str == NULL || ver == NULL)
+	if (str == NULL || ver == NULL)
 		return -EINVAL;
 
-    uint8_t idx = 0;
-    uint8_t val = 0;
-    uint8_t char_cnt = 0;
+	uint8_t idx = 0;
+	uint8_t val = 0;
+	uint8_t char_cnt = 0;
 
-    for (const char *p = str; *p; ++p) {
-        if (++char_cnt > HINIC3_FW_VERSION_LEN)
+	for (const char *p = str; *p; ++p) {
+		if (++char_cnt > HINIC3_FW_VERSION_LEN)
 			return -EINVAL;
 
-        unsigned char c = *p;
-        if (c >= '0' && c <= '9')
-            val = val * 10 + (c - '0');
-        else if (c == '.') {
-			if (idx >= HINIC3_FW_VERSION_NUM - 1)
-				return -EINVAL;
-			ver[idx++] = val;
-			val = 0;
-        } else
-            return -EINVAL;
-    }
+		unsigned char c = *p;
+		if (c >= '0' && c <= '9')
+			val = val * 10 + (c - '0');
+		else if (c == '.') {
+				if (idx >= HINIC3_FW_VERSION_NUM - 1)
+					return -EINVAL;
+				ver[idx++] = val;
+				val = 0;
+		} else
+			return -EINVAL;
+	}
 	if (idx != HINIC3_FW_VERSION_NUM - 1)
 		return -EINVAL;
 
 	ver[idx++] = val;
-    return 0;
+	return 0;
 }
 
 static int hinic3_check_fw_version(struct rte_eth_dev *eth_dev)
@@ -4677,9 +4670,9 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 	nic_dev->id_table = pci_id_hinic3_map;
 
 	(void)snprintf(nic_dev->dev_name, sizeof(nic_dev->dev_name),
-		 "dbdf-%.4x:%.2x:%.2x.%x",
-		 pci_dev->addr.domain, pci_dev->addr.bus,
-		 pci_dev->addr.devid, pci_dev->addr.function);
+		       "dbdf-%.4x:%.2x:%.2x.%x",
+		       pci_dev->addr.domain, pci_dev->addr.bus,
+		       pci_dev->addr.devid, pci_dev->addr.function);
 
 	/* Alloc mac_addrs */
 	eth_dev->data->mac_addrs = rte_zmalloc("hinic3_mac",
@@ -4908,15 +4901,14 @@ static int hinic3_get_nic_fd(struct rte_eth_dev *eth_dev)
 	fd = open(dev_file, O_RDWR | O_TRUNC);
 	if (fd < 0) {
 		PMD_DRV_LOG(ERR, "Open nic_cdev file failed.\n");
-		return -1;
+		return -EINVAL;
 	}
 
 	return fd;
 }
 
 static int
-hinic3_nic_common_args_check_handler(const char *key, const char *val,
-				     void *opaque)
+hinic3_nic_common_args_check_handler(const char *key, const char *val, void *opaque)
 {
 	struct hinic3_nic_common_dev_config *config = opaque;
 	signed long tmp;
@@ -4962,10 +4954,10 @@ hinic3_nic_common_config_get(struct rte_pci_device *pci_dev,
 
 	/* Set private param defaults. */
 	config->rx_empty_threshold = HINIC3_RX_EMPTY_THRESHOLD;
-	config->tx_free_loop = HINIC3_MAX_TX_FREE_LOOP;
+	config->tx_free_loop = HINIC3_DEFAULT_TX_FREE_LOOP;
 	config->tx_pending_limit = HINIC3_DEFAULT_TX_CI_PENDING_LIMIT;
 	config->tx_coalescing_time = HINIC3_DEFAULT_TX_CI_COALESCING_TIME;
-	config->rx_cqe_compact_en = HINIC3_DEFAULT_CQE_COMPACT_EN;
+	config->rx_cqe_compact_en = HINIC3_RX_CQE_COMPACT_EN;
 	config->rx_cqe_coalesce_num = HINIC3_RX_CQE_COALESCE_NUM;
 	config->rx_cqe_timer_loop = HINIC3_RX_CQE_TIMER_LOOP;
 
@@ -4994,8 +4986,8 @@ hinic3_nic_common_config_get(struct rte_pci_device *pci_dev,
 static void hinic3_nic_feature_init(struct hinic3_nic_dev *nic_dev)
 {
 	if ((HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev) || HINIC3_SUPPORT_RX_SW_COMPACT_CQE(nic_dev)) &&
-		(nic_dev->config.rx_cqe_compact_en == HINIC3_DEFAULT_CQE_COMPACT_EN)) {
-		nic_dev->config.rx_cqe_compact_en = 1;
+	   (nic_dev->config.rx_cqe_compact_en == HINIC3_RX_CQE_COMPACT_EN)) {
+		nic_dev->config.rx_cqe_compact_en = HINIC3_RX_CQE_COMPACT_EN;
 		PMD_DRV_LOG(INFO, "nic compact_cqe is on.");
 	} else {
 		nic_dev->config.rx_cqe_compact_en = 0;
@@ -5045,9 +5037,9 @@ static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev)
 	nic_dev->id_table = pci_id_hinic3_map;
 
 	(void)snprintf(nic_dev->dev_name, sizeof(nic_dev->dev_name),
-		"dbdf-%.4x:%.2x:%.2x.%x",
-		pci_dev->addr.domain, pci_dev->addr.bus,
-		pci_dev->addr.devid, pci_dev->addr.function);
+		       "dbdf-%.4x:%.2x:%.2x.%x",
+		       pci_dev->addr.domain, pci_dev->addr.bus,
+		       pci_dev->addr.devid, pci_dev->addr.function);
 
 	/* Alloc mac_addrs */
 	eth_dev->data->mac_addrs = rte_zmalloc("hinic3_mac",
@@ -5098,8 +5090,7 @@ static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev)
 
 	nic_dev->fd = hinic3_get_nic_fd(eth_dev);
 	if (nic_dev->fd < 0) {
-		PMD_DRV_LOG(ERR, "Qpool func init get nic fd failed, fd: %d",
-			nic_dev->fd);
+		PMD_DRV_LOG(ERR, "Qpool func init get nic fd failed, fd: %d", nic_dev->fd);
 		err = nic_dev->fd;
 		goto get_nic_fd_fail;
 	}
@@ -5166,7 +5157,7 @@ static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev)
 	/* Register callback func to eal lib */
 	err = rte_intr_callback_register(PCI_DEV_TO_INTR_HANDLE(pci_dev),
 					 hinic3_dev_interrupt_handler_qpool,
-						 (void *)eth_dev);
+					 (void *)eth_dev);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Register intr callback failed, dev_name: %s",
 			    eth_dev->data->name);
@@ -5218,8 +5209,6 @@ reg_intr_cb_fail:
 #ifdef DPDK_21_11
 set_default_feature_fail:
 #endif
-	hinic3_deinit_mac_addr(eth_dev);
-
 	hinic3_deinit_sw_rxtxqs(nic_dev);
 
 init_sw_rxtxqs_fail:
@@ -5230,6 +5219,7 @@ get_cap_fail:
 init_hwdev_fail:
 link_state_err:
 	close(nic_dev->fd);
+	nic_dev->fd = -1;
 get_nic_fd_fail:
 	rte_free(nic_dev->hwdev);
 	nic_dev->hwdev = NULL;
@@ -5250,11 +5240,9 @@ alloc_eth_addr_fail:
 
 static int hinic3_dev_init(struct rte_eth_dev *eth_dev)
 {
-	struct rte_pci_device *pci_dev;
+	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);;
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
 	int err;
-
-	pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
 
 	PMD_DRV_LOG(INFO, "Initializing %.4x:%.2x:%.2x.%x in %s process",
 		    pci_dev->addr.domain, pci_dev->addr.bus,
@@ -5268,7 +5256,7 @@ static int hinic3_dev_init(struct rte_eth_dev *eth_dev)
  		err = hinic3_func_init_qpool(eth_dev);
 	else
 		err = hinic3_func_init(eth_dev);
-	if (err < 0)
+	if (err)
 		return err;
 
 	err = hinic3_nic_common_config_get(pci_dev, &nic_dev->config);
@@ -5279,15 +5267,14 @@ static int hinic3_dev_init(struct rte_eth_dev *eth_dev)
 	}
 
 	hinic3_nic_feature_init(nic_dev);
-
-	if (is_sp620_nic(nic_dev) || !HINIC3_SUPPORT_RX_SW_COMPACT_CQE(nic_dev)) {
+	
+	if ((nic_dev->config.rx_cqe_compact_en != HINIC3_RX_CQE_COMPACT_EN)) {
+		eth_dev->rx_pkt_burst = hinic3_recv_pkts;
+		eth_dev->tx_pkt_burst = hinic3_xmit_pkts;
 #ifdef RTE_ARCH_ARM
 		if (nic_dev->vec_allowed == 1)
 			eth_dev->rx_pkt_burst = hinic3_recv_pkts_vec;
-		else
 #endif
-			eth_dev->rx_pkt_burst = hinic3_recv_pkts;
-		eth_dev->tx_pkt_burst = hinic3_xmit_pkts;
 	} else {
 		eth_dev->rx_pkt_burst = hinic3_recv_pkts_compact_cqe;
 		eth_dev->tx_pkt_burst = hinic3_xmit_pkts_compact_cqe;

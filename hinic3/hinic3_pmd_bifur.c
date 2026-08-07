@@ -237,7 +237,8 @@ hinic3_bifur_pci_unmap_device(struct rte_pci_device *dev)
 }
 
 static int
-hinic3_bifur_func_pair_from_kernel(struct rte_pci_addr *target_pci_addr, struct rte_pci_addr *pair_pci_addr)
+hinic3_bifur_func_pair_from_kernel(struct rte_pci_addr *target_pci_addr,
+				   struct rte_pci_addr *pair_pci_addr)
 {
 	int ret;
 	u32 dbdf;

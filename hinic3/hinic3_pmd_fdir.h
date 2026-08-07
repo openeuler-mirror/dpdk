@@ -1214,7 +1214,7 @@ struct hinic3_tcam_info {
 #define HINIC3_CNM_RULE_NUM 1
 #define HINIC3_ECP_RULE_NUM 2
 
-#define RTE_ETHER_TYPE_CNM  0x22e7
+#define RTE_ETHER_TYPE_CNM 0x22e7
 #define RTE_ETHER_TYPE_ECP 0x8940
 
 enum hinic3_ether_type {
@@ -1264,19 +1264,18 @@ void
 hinic3_fdir_tcam_action_init(struct rte_eth_dev *dev,
 			    const struct hinic3_fdir_filter *rule,
 			    struct hinic3_tcam_cfg_rule *fdir_tcam_rule);
-void tcam_key_calculate(struct hinic3_tcam_key *tcam_key,
-				void *fdir_tcam_rule, u8 key_len);
+void tcam_key_calculate(struct hinic3_tcam_key *tcam_key, void *fdir_tcam_rule, u8 key_len);
 
 void hinic3_free_fdir_filter(struct rte_eth_dev *dev);
 int hinic3_enable_rxq_fdir_filter(struct rte_eth_dev *dev, u32 queue_id, u32 able);
 int hinic3_flow_parse_attr(const struct rte_flow_attr *attr, struct rte_flow_error *error);
 
 int hinic3_flow_query_fdir_filter(struct rte_eth_dev *dev, struct hinic3_fdir_filter *fdir_filter,
-					__rte_unused u64 *hits, __rte_unused u64 *bytes_count);
+				  __rte_unused u64 *hits, __rte_unused u64 *bytes_count);
 
 struct hinic3_tcam_dynamic_block *
 hinic3_alloc_dynamic_block_resource(struct hinic3_tcam_info *tcam_info,
-			u16 dynamic_block_id, u8 key_width, bool is_sec_fdir);
+				    u16 dynamic_block_id, u8 key_width, bool is_sec_fdir);
 
 void hinic3_free_dynamic_block_resource(
 			struct hinic3_tcam_info *tcam_info,

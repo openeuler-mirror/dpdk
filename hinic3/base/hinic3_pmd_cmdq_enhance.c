@@ -62,7 +62,7 @@ hinic3_enhance_cmdq_init_queue_ctxt(struct hinic3_cmdq *cmdq)
 	ctxt_info->ci_cla_addr = ENHANCED_CMDQ_SET(pfn, CTXT4_CI_CLA_ADDR);
 }
 
-static void 
+static void
 enhance_cmdq_set_completion(struct cmdq_enhance_completion *completion,
 			    const struct hinic3_cmd_buf *buf_out)
 {

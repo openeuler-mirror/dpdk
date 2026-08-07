@@ -26,7 +26,8 @@
 #define HINIC3_CI_PADDR(base_paddr, q_id)	((base_paddr) + \
 						(q_id) * HINIC3_CI_Q_ADDR_SIZE)
 
-#define HINIC3_Q_CTXT_MAX		(u16)(((HINIC3_CMDQ_BUF_SIZE - 8) - RTE_PKTMBUF_HEADROOM) / 64)
+#define HINIC3_Q_CTXT_MAX	((u16)(((HINIC3_CMDQ_BUF_SIZE - 8) - RTE_PKTMBUF_HEADROOM) / 64))
+
 
 #define RQ_CTXT_PREF_CACHE_THRESHOLD_SHIFT		0
 #define RQ_CTXT_PREF_CACHE_MAX_SHIFT			14
@@ -286,7 +287,7 @@ int hinic3_init_rq_cqe_ctxts(struct hinic3_nic_dev *nic_dev);
  * Free queue pair context
  *
  * @param[in] hwdev
- *   Device pointer to hwdev
+ * Device pointer to hwdev
  */
 void hinic3_free_qp_ctxts(void *hwdev);
 

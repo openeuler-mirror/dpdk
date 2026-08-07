@@ -109,7 +109,7 @@
 
 #define HINIC3_DEFAULT_TX_CI_PENDING_LIMIT	2
 #define HINIC3_DEFAULT_TX_CI_COALESCING_TIME	2
-#define HINIC3_DEFAULT_CQE_COMPACT_EN 1
+#define HINIC3_RX_CQE_COMPACT_EN 1
 #define HINIC3_RX_CQE_TIMER_LOOP 		8
 #define HINIC3_RX_CQE_COALESCE_NUM		7
 
@@ -192,9 +192,6 @@ enum hinic3_function_mode {
 };
 
 #define DEFAULT_DRV_FEATURE 0x0BFC3FFF
-#define SP600_NIC_FEATURE   0x0003FFEF
-#define SP560_NIC_FEATURE   0x88C9FFEF
-
 #define HINIC3_VERIFY_RX_DEPTH     1
 #define HINIC3_VERIFY_TX_DEPTH     0
 
@@ -261,6 +258,7 @@ struct hinic3_nic_dev {
 	unsigned long dev_status;
 
 	bool pause_set;
+	bool lro_en;
 	pthread_mutex_t pause_mutuex;
 	struct nic_pause_config nic_pause;
 	struct hinic3_nic_common_dev_config config;
@@ -294,17 +292,19 @@ struct hinic3_nic_dev {
 	bool vec_allowed;
 };
 
-#define NETDEV_UP	0x0001	/* For now you can't veto a device up/down */
-#define NETDEV_DOWN	0x0002
-#define NETDEV_REBOOT	0x0003	/* Tell a protocol stack a network interface
+enum netdev_event_type {
+	NETDEV_UP	  = 1, /* For now you can't veto a device up/down */
+	NETDEV_DOWN	  = 2, 
+	NETDEV_REBOOT	  = 3, /* Tell a protocol stack a network interface
 				   detected a hardware crash and restarted
 				   - we can use this eg to kick tcp sessions
 				   once done */
-#define NETDEV_CHANGE	0x0004	/* Notify device state change */
-#define NETDEV_REGISTER 0x0005
-#define NETDEV_UNREGISTER	0x0006
-#define NETDEV_CHANGEMTU	0x0007
-#define NETDEV_CHANGEADDR	0x0008
+	NETDEV_CHANGE	  = 4,  /* Notify device state change */
+	NETDEV_REGISTER	  = 5,
+	NETDEV_UNREGISTER = 6,
+	NETDEV_CHANGEMTU  = 7,
+	NETDEV_CHANGEADDR = 8,
+};
 
 #define MAX_PROCESS 64
 
@@ -320,6 +320,7 @@ struct netdev_event {
 
 extern const struct rte_flow_ops hinic3_flow_ops;
 
+bool is_sp230_nic(struct hinic3_nic_dev *nic_dev);
 bool is_sp620_nic(struct hinic3_nic_dev *nic_dev);
 bool is_sp560_nic(struct hinic3_nic_dev *nic_dev);
 

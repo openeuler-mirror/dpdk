@@ -410,8 +410,7 @@ static int cmdq_sync_cmd(struct hinic3_cmdq *cmdq,
 	time = msecs_to_jiffies(timeout ? timeout : CMDQ_CMD_TIMEOUT);
 	err = hinic3_cmdq_poll_msg(cmdq, time);
 	if (err) {
-		PMD_DRV_LOG(ERR, "Cmdq poll msg ack failed, prod idx: 0x%x",
-			    curr_prod_idx);
+		PMD_DRV_LOG(ERR, "Cmdq poll msg ack failed, prod idx: 0x%x", curr_prod_idx);
 		err = -ETIMEDOUT;
 		goto cmdq_unlock;
 	}
@@ -422,7 +421,7 @@ static int cmdq_sync_cmd(struct hinic3_cmdq *cmdq,
 		if (cmdq->cmdqs->cmdq_mode == HINIC3_NORMAL_CMDQ)
 			direct_resp = (u64 *)(&curr_wqe->wqe_lcmd.completion.direct_resp);
 		else
-			direct_resp = 
+			direct_resp =
 				(u64 *)(&curr_wqe->enhanced_cmdq_wqe.completion.sge_resp_lo_addr);
 
 		*out_param = cpu_to_be64(*direct_resp);
@@ -690,7 +689,7 @@ static int hinic3_set_cmdqs(struct hinic3_hwdev *hwdev, struct hinic3_cmdqs *cmd
 		}
 
 		if (cmdqs->cmdq_mode == HINIC3_NORMAL_CMDQ)
-			cmdq_init_queue_ctxt(&cmdqs->cmdq[cmdq_type], 
+			cmdq_init_queue_ctxt(&cmdqs->cmdq[cmdq_type],
 					     &cmdqs->cmdq[cmdq_type].cmdq_ctxt);
 		else
 			hinic3_enhance_cmdq_init_queue_ctxt(&cmdqs->cmdq[cmdq_type]);
@@ -783,7 +782,7 @@ alloc_wqs_err:
 
 int hinic3_init_qpool_cmdqs(struct hinic3_hwdev *hwdev)
 {
-	char cmdq_pool_name[RTE_MEMPOOL_NAMESIZE] = {0};
+	char cmdq_pool_name[RTE_MEMPOOL_NAMESIZE] = { 0 };
 	(void)snprintf(cmdq_pool_name, sizeof(cmdq_pool_name), "hinic3_cmdq_%u", hwdev->port_id);
 
 	hwdev->cmd_buf_pool = rte_pktmbuf_pool_create(cmdq_pool_name,

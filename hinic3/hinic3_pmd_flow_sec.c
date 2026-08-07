@@ -1402,7 +1402,7 @@ alloc_block_failed:
 		(void)hinic3_fdir_sec_tcam_block_free(nic_dev->hwdev, key_width, &tcam_block_index);
 
 failed:
-    rte_free(tcam_filter);
+	rte_free(tcam_filter);
 	return -EFAULT;
 }
 
