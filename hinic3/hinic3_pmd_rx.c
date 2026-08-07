@@ -1336,12 +1336,12 @@ bool hinic3_rx_integrated_cqe_done(struct hinic3_rxq *rxq, volatile struct hinic
         if (sw_ci == rxq->hw_cons_idx) {
                 hw_ci = hinic3_get_rq_hw_ci(rxq);
                 rxq->hw_cons_idx = hw_ci;
+				rxq->prefetch_flag = false;
         }
 
         if (sw_ci == rxq->hw_cons_idx)
 		return false;
 
-        rxq->prefetch_flag = false;
 	rxm = rxq->rx_info[sw_ci].mbuf;
 #ifdef DPDK_21_11
 	*rx_cqe = (struct hinic3_rq_cqe *)rte_mbuf_data_addr_default(rxm);
@@ -1417,6 +1417,7 @@ u16 hinic3_recv_pkts_compact_cqe(void *rx_queue, struct rte_mbuf **rx_pkts, u16 
                                 rte_prefetch0(prefetch_mbuf);
                                 rte_prefetch0(rte_mbuf_buf_addr((prefetch_mbuf), prefetch_mbuf->pool) + RTE_PKTMBUF_HEADROOM);
                                 idx++;
+								idx &= rxq->q_mask;
                         }
                         rxq->prefetch_flag = true;
                 }
@@ -1563,6 +1564,7 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
                                 rte_prefetch0(prefetch_mbuf);
                                 rte_prefetch0(rte_mbuf_buf_addr((prefetch_mbuf), prefetch_mbuf->pool) + RTE_PKTMBUF_HEADROOM);
                                 idx++;
+								idx &= rxq->q_mask;
                         }
                         rxq->prefetch_flag = true;
                 }
