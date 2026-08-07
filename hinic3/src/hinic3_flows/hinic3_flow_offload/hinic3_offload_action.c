@@ -41,6 +41,8 @@ static inline int hinic3_offload_parse_vlan_act(struct hinic3_offload_action *of
     vlan_id = ntohs(rte_vlan_vid->vlan_vid);
     if (hinic3_user_scenario_get() == COM_BD) {
         vlan_pcp = (rte_vlan_pcp->vlan_pcp & HINIC3_RTE_VLAN_PCP_MASK_BD) << VLAN_PCP_MOVE_BD;
+        if (vlan_id > VLAN_VID_MAX || rte_vlan_pcp->vlan_pcp > VLAN_PCP_MAX)
+            return -1;
     } else {
         vlan_pcp = (rte_vlan_pcp->vlan_pcp & HINIC3_RTE_VLAN_PCP_MASK) << VLAN_PCP_MOVE;
     }
