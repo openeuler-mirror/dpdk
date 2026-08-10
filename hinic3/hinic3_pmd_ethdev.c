@@ -33,7 +33,9 @@
 #include "base/hinic3_pmd_nic_cfg.h"
 #include "mml/hinic3_pmd_mml_lib.h"
 #include "stn/hinic3_stn_cmdq.h"
+#include "htn/hinic3_htn_cmdq.h"
 #include "hinic3_pmd_nic_io.h"
+#include "hinic3_pmd_flow.h"
 #include "hinic3_pmd_tx.h"
 #include "hinic3_pmd_rx.h"
 #include "hinic3_pmd_ethdev.h"
@@ -56,7 +58,7 @@
 #define HINIC3_DEFAULT_TX_FREE_THRESH	32
 
 #define HINIC3_RX_WAIT_CYCLE_THRESH	150
-
+#define HINIC3_DEFAULT_COS_MASK_BITMAP	0xff
 #define HINIC3_FEC_CAPA_NUM_PER_SPEED	1
 
 #define RQ_WQE_TYPE_PATH "/sys/module/hinic5/parameters/rq_wqe_type"
@@ -108,6 +110,13 @@ static const struct rte_pci_id pci_id_hinic3_map[] = {
 
 	{RTE_PCI_DEVICE(PCI_VENDOR_ID_BP3, HINIC3_DEV_ID_BP3_620)},
 	{RTE_PCI_DEVICE(PCI_VENDOR_ID_BP3, HINIC3_DEV_ID_VF_BP3_620)},
+
+	{RTE_PCI_DEVICE(PCI_VENDOR_ID_BP4, HINIC3_DEV_ID_BP4_230)},
+	{RTE_PCI_DEVICE(PCI_VENDOR_ID_BP4, HINIC3_DEV_ID_VF_BP4_230)},
+
+	{RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI,  HINIC3_DEV_ID_SP230)},
+	{RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI,  HINIC3_DEV_ID_VF_SP230)},
+	{RTE_PCI_DEVICE(PCI_VENDOR_ID_HUAWEI,  HINIC3_DEV_ID_VF_SP230_OLD)},
 
 	{.vendor_id = 0},
 };
@@ -293,6 +302,8 @@ static const struct hinic3_xstats_name_off hinic3_txq_stats_strings[] = {
 	{"burst_pkts", offsetof(struct hinic3_txq_stats, burst_pkts)},
 	{"sge_len0", offsetof(struct hinic3_txq_stats, sge_len0)},
 	{"mbuf_null", offsetof(struct hinic3_txq_stats, mbuf_null)},
+	{"cpy_pkts", offsetof(struct hinic3_txq_stats, cpy_pkts)},
+	{"sge_len_too_large", offsetof(struct hinic3_txq_stats, sge_len_too_large)},
 
 #ifdef HINIC3_XSTAT_PROF_TX
 	{"app_tsc", offsetof(struct hinic3_txq_stats, app_tsc)},
@@ -380,6 +391,26 @@ is_sp560_nic(struct hinic3_nic_dev *nic_dev)
 	case HINIC3_DEV_ID_SP560:
 	case HINIC3_DEV_ID_VF_SP560:
 	case HINIC3_DEV_ID_HYPER_VF_SP560:
+		return true;
+	default:
+		return false;
+	}
+}
+
+bool
+is_sp230_nic(struct hinic3_nic_dev *nic_dev)
+{
+	struct rte_pci_device *pci_dev = NULL;
+	struct hinic3_hwdev *hwdev = nic_dev->hwdev;
+	struct rte_eth_dev *eth_dev = &rte_eth_devices[hwdev->port_id];
+
+	pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
+
+	switch (pci_dev->id.device_id) {
+	case HINIC3_DEV_ID_SP230:
+	case HINIC3_DEV_ID_VF_SP230:
+	case HINIC3_DEV_ID_VF_SP230_OLD:
+	case HINIC3_DEV_ID_VF_BP4_230:
 		return true;
 	default:
 		return false;
@@ -773,6 +804,10 @@ static int hinic3_dev_set_link_up(struct rte_eth_dev *dev)
  		return -EAGAIN;
  	}
 
+	if (HINIC3_FUNC_TYPE(nic_dev->hwdev) == TYPE_VF && is_sp230_nic(nic_dev)) {
+ 		PMD_DRV_LOG(WARNING, "sp230 not support set vf link up.");
+ 		return -EAGAIN;
+	}
 	/* Vport enable will set function valid in mpu.
 	   So dev start status need to be checked before vport enable.*/
 	if (hinic3_get_bit(HINIC3_DEV_START, &nic_dev->dev_status)) {
@@ -791,7 +826,7 @@ static int hinic3_dev_set_link_up(struct rte_eth_dev *dev)
 		return err;
 	}
 
-	if(HINIC3_IS_VF(nic_dev->hwdev)) {
+	if(!is_sp230_nic(nic_dev) && HINIC3_IS_VF(nic_dev->hwdev)) {
 		link = dev->data->dev_link;
 		link.link_status = nic_dev->hwdev->link_status & nic_dev->hwdev->vf_valid_status;
 		if (link.link_status == ETH_LINK_DOWN) {
@@ -843,7 +878,7 @@ static int hinic3_dev_set_link_down(struct rte_eth_dev *dev)
 		return err;
 	}
 
-	if(HINIC3_IS_VF(nic_dev->hwdev)) {
+	if(!is_sp230_nic(nic_dev) && HINIC3_IS_VF(nic_dev->hwdev)) {
 		link = dev->data->dev_link;
 		link.link_status = nic_dev->hwdev->link_status & nic_dev->hwdev->vf_valid_status;
 
@@ -895,7 +930,7 @@ static int hinic3_link_update(struct rte_eth_dev *dev, int wait_to_complete)
 	} while (rep_cnt--);
 
 out:
-	if(HINIC3_IS_VF(nic_dev->hwdev) && !IS_QPOOL_MODE()) {
+	if(!is_sp230_nic(nic_dev) && HINIC3_IS_VF(nic_dev->hwdev) && !IS_QPOOL_MODE()) {
 		nic_dev->hwdev->link_status = link.link_status;
 		link.link_status = nic_dev->hwdev->link_status & nic_dev->hwdev->vf_valid_status;
 	}
@@ -1158,6 +1193,7 @@ hinic3_rx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_rxq *rxq,
 	return 0;
 
 fill_rx_wqe_fail:
+	hinic3_memzone_free(rxq->ci_mz);
 	hinic3_memzone_free(rxq->cqe_mz);
 
 alloc_cqe_ci_mz_fail:
@@ -1176,7 +1212,7 @@ alloc_pi_mz_fail:
 		hinic3_release_user_queue(nic_dev, qid);
 
 get_rx_user_queue_fail:
-	if (IS_QPOOL_MODE())
+	if (IS_QPOOL_MODE() && !is_sp230_nic(nic_dev) && hwdev->qpool_qgrp_id != 0)
 		hinic3_release_template(nic_dev);
 
 alloc_template_fail:
@@ -1376,7 +1412,7 @@ hinic3_tx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_txq *txq,
 
 	if (IS_QPOOL_MODE()) {
 		/* alloc template if not */
-		if (hwdev->qpool_qgrp_id == 0) {
+		if (!is_sp230_nic(nic_dev) && hwdev->qpool_qgrp_id == 0) {
 			err = hinic3_alloc_template(nic_dev);
 			if (err < 0)
 				goto alloc_template_fail;
@@ -1451,7 +1487,7 @@ alloc_sq_mz_fail:
 
 alloc_ci_mz_fail:
 get_tx_user_queue_fail:
-	if (IS_QPOOL_MODE() && hwdev->qpool_qgrp_id != 0)
+	if (IS_QPOOL_MODE() && !is_sp230_nic(nic_dev) && hwdev->qpool_qgrp_id != 0)
 		(void)hinic3_release_template(nic_dev);
 alloc_template_fail:
 	rte_free(txq);
@@ -1559,16 +1595,21 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	txq->tx_free_thresh = tx_free_thresh;
 	txq->owner = 1;
 	txq->is_sp620_nic = is_sp620_nic(nic_dev);
+	txq->non_tso_max_pkt_len = 
+		is_sp230_nic(nic_dev) ? MAX_SINGLE_SGE_SIZE : HINIC3_MAX_JUMBO_FRAME_SIZE;
 	txq->tx_free_loop = nic_dev->config.tx_free_loop;
 	if (nic_dev->dcb->dcb_on)
 		txq->cos = nic_dev->dcb->txq_cos[qid];
 	else {
 		if (!ODD_NUMBER_QUEUE_ID(qid) &&
-		    hinic3_cmd_vf_lag(nic_dev->hwdev, hinic3_global_func_id(nic_dev->hwdev), HINIC3_CMD_OPCODE_GET) == 1)
+			hinic3_cmd_vf_lag(nic_dev->hwdev, hinic3_global_func_id(nic_dev->hwdev), HINIC3_CMD_OPCODE_GET) == 1)
 			txq->cos = SELECT_OTHER_COS_ID(nic_dev->default_cos);
 		else
 			txq->cos = nic_dev->default_cos;
 	}
+
+	if (is_sp230_nic(nic_dev))
+			txq->cos = nic_dev->cos_map[(int)(txq->cos)];
 
 	txq->tx_wqe_compact_task = HINIC3_SUPPORT_TX_WQE_COMPACT_TASK(nic_dev);
 
@@ -1703,6 +1744,7 @@ static void hinic3_tx_queue_release(struct rte_eth_dev *dev, uint16_t queue_id)
 static int hinic3_dev_rx_queue_start(__rte_unused struct rte_eth_dev *dev,
 				     __rte_unused uint16_t rq_id)
 {
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_rxq *rxq = NULL;
 	int rc;
 
@@ -1719,7 +1761,7 @@ static int hinic3_dev_rx_queue_start(__rte_unused struct rte_eth_dev *dev,
 		dev->data->rx_queue_state[rq_id] = RTE_ETH_QUEUE_STATE_STARTED;
 	}
 
-	if (!IS_QPOOL_MODE()) {
+	if (!IS_QPOOL_MODE() || !is_sp230_nic(nic_dev)) {
  		rc = hinic3_enable_rxq_fdir_filter(dev, (u32)rq_id, (u32)true);
  		if (rc) {
  			PMD_DRV_LOG(ERR, "Failed to enable rq : %d fdir filter.", rq_id);
@@ -1733,6 +1775,7 @@ static int hinic3_dev_rx_queue_start(__rte_unused struct rte_eth_dev *dev,
 static int hinic3_dev_rx_queue_stop(__rte_unused struct rte_eth_dev *dev,
 				    __rte_unused uint16_t rq_id)
 {
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_rxq *rxq = NULL;
 	int rc;
 
@@ -1749,7 +1792,7 @@ static int hinic3_dev_rx_queue_stop(__rte_unused struct rte_eth_dev *dev,
 		dev->data->rx_queue_state[rq_id] = RTE_ETH_QUEUE_STATE_STOPPED;
 	}
 
-	if (!IS_QPOOL_MODE()) {
+	if (!IS_QPOOL_MODE() || !is_sp230_nic(nic_dev)) {
  		rc = hinic3_enable_rxq_fdir_filter(dev, (u32)rq_id, (u32)false);
  		if (rc) {
  			PMD_DRV_LOG(ERR, "Failed to disable rq : %d fdir filter.", rq_id);
@@ -1815,6 +1858,9 @@ int hinic3_dev_rx_queue_intr_enable(struct rte_eth_dev *dev,
 	u16 msix_intr;
 
 	if (!rte_intr_dp_is_en(intr_handle) || !intr_handle->intr_vec)
+		return 0;
+
+	if (is_sp230_nic(nic_dev) && !dev->data->dev_conf.intr_conf.rxq)
 		return 0;
 
 	if (queue_id >= dev->data->nb_rx_queues)
@@ -2129,7 +2175,8 @@ static int hinic3_init_rxq_intr(struct rte_eth_dev *dev)
 
 	intr_handle = dev->intr_handle;
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
-	if (!dev->data->dev_conf.intr_conf.rxq)
+
+	if (is_sp230_nic(nic_dev) && !dev->data->dev_conf.intr_conf.rxq)
 		return 0;
 
 	if (!rte_intr_cap_multiple(intr_handle)) {
@@ -2411,13 +2458,14 @@ static int hinic3_dev_start(struct rte_eth_dev *eth_dev)
  		return hinic3_dev_start_qpool(eth_dev);
 
 	hinic3_disable_interrupt(eth_dev);
-
-	err = hinic3_refill_hairpinq(eth_dev);
-	if (err) {
-		PMD_DRV_LOG(ERR, "Refill hairpinq fail, dev_name: %s", eth_dev->data->name);
-		goto refill_hairpin_fail;
+	if (!is_sp230_nic(nic_dev)) {
+		err = hinic3_refill_hairpinq(eth_dev);
+		if (err) {
+			PMD_DRV_LOG(ERR, "Refill hairpinq fail, dev_name: %s", eth_dev->data->name);
+			goto refill_hairpin_fail;
+		}
+		hinic3_print_hairpin_map(eth_dev);
 	}
-	hinic3_print_hairpin_map(eth_dev);
 	err = hinic3_init_rxq_intr(eth_dev);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Init rxq intr fail, eth_dev:%s",
@@ -2770,14 +2818,14 @@ static void hinic3_dev_close(struct rte_eth_dev *eth_dev)
 	int ret;
 #endif
 
-	if (!IS_QPOOL_MODE()) {
-		if (hinic3_test_and_set_bit(HINIC3_DEV_CLOSE, &nic_dev->dev_status)) {
-			PMD_DRV_LOG(WARNING, "Device %s already closed", nic_dev->dev_name);
+	if (hinic3_test_and_set_bit(HINIC3_DEV_CLOSE, &nic_dev->dev_status)) {
+		PMD_DRV_LOG(WARNING, "Device %s already closed",
+			    nic_dev->dev_name);
 #ifdef DPDK_20_11
 		return 0;
 #endif
-		}
 	}
+
 #ifdef DPDK_20_11
 	ret = hinic3_dev_stop(eth_dev);
 #else
@@ -4522,6 +4570,27 @@ static int hinic3_pf_get_default_cos(struct hinic3_hwdev *hwdev, u8 *cos_id)
 	return 0;
 }
 
+static void hinic3_get_cos_mask_bitmap(struct hinic3_nic_dev *nic_dev)
+{
+	int i;
+	u8 default_cos = 0;
+	u8 cos_mask_bitmap = nic_dev->hwdev->cfg_mgmt->svc_cap.cos_mask_bitmap == 0
+			? HINIC3_DEFAULT_COS_MASK_BITMAP
+			: nic_dev->hwdev->cfg_mgmt->svc_cap.cos_mask_bitmap;
+
+	PMD_DRV_LOG(INFO, "cos_mask_bitmap: 0x%x", cos_mask_bitmap);
+	for (i = HINIC3_COS_NUM_MAX - 1; i >= 0; i--) {
+		if (cos_mask_bitmap & BIT(i)) {
+			default_cos = i;
+			break;
+		}
+	}
+
+	for (i = 0; i < HINIC3_COS_NUM_MAX; i++) {
+		nic_dev->cos_map[i] = ((BIT(i) & cos_mask_bitmap) == 0) ? default_cos : i;
+	}
+}
+
 static int hinic3_init_default_cos(struct hinic3_nic_dev *nic_dev)
 {
 	u8 cos_id = 0;
@@ -4549,7 +4618,7 @@ static int hinic3_init_default_cos(struct hinic3_nic_dev *nic_dev)
 static int hinic3_set_default_hw_feature(struct hinic3_nic_dev *nic_dev)
 {
 	int err;
-
+	hinic3_get_cos_mask_bitmap(nic_dev);
 	err = hinic3_init_default_cos(nic_dev);
 	if (err)
 		return err;

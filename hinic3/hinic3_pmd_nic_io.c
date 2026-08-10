@@ -23,35 +23,14 @@
 #include "base/hinic3_pmd_hwdev.h"
 #include "base/hinic3_pmd_hw_comm.h"
 #include "base/hinic3_pmd_nic_cfg.h"
+#include "base/hinic3_pmd_hwif.h"
 #include "mml/hinic3_pmd_mml_lib.h"
 #include "stn/hinic3_stn_cmdq.h"
+#include "htn/hinic3_htn_cmdq.h"
 #include "hinic3_pmd_nic_io.h"
 #include "hinic3_pmd_tx.h"
 #include "hinic3_pmd_rx.h"
 #include "hinic3_pmd_ethdev.h"
-
-#define HINIC3_DEAULT_DROP_THD_ON		0xFFFF
-#define HINIC3_DEAULT_DROP_THD_OFF		0
-
-#define WQ_PREFETCH_MAX			6
-#define WQ_PREFETCH_MIN			1
-#define WQ_PREFETCH_THRESHOLD		256
-
-struct hinic3_sq_ctxt_block {
-	struct hinic3_qp_ctxt_header cmdq_hdr;
-	struct hinic3_sq_ctxt sq_ctxt[HINIC3_Q_CTXT_MAX];
-};
-
-struct hinic3_rq_ctxt_block {
-	struct hinic3_qp_ctxt_header cmdq_hdr;
-	struct hinic3_rq_ctxt rq_ctxt[HINIC3_Q_CTXT_MAX];
-};
-
-#define SQ_CTXT_SIZE(num_sqs)	((u16)(sizeof(struct hinic3_qp_ctxt_header) \
-				+ (num_sqs) * sizeof(struct hinic3_sq_ctxt)))
-
-#define RQ_CTXT_SIZE(num_rqs)	((u16)(sizeof(struct hinic3_qp_ctxt_header) \
-				+ (num_rqs) * sizeof(struct hinic3_rq_ctxt)))
 
 #define CI_IDX_HIGH_SHIFH				12
 
@@ -128,18 +107,6 @@ struct hinic3_rq_ctxt_block {
 					RQ_CTXT_##member##_MASK) \
 					<< RQ_CTXT_##member##_SHIFT)
 
-#define RQ_CTXT_CEQ_ATTR_INTR_SHIFT			21
-#define RQ_CTXT_CEQ_ATTR_INTR_ARM_SHIFT			30
-#define RQ_CTXT_CEQ_ATTR_EN_SHIFT			31
-
-#define RQ_CTXT_CEQ_ATTR_INTR_MASK			0x3FFU
-#define RQ_CTXT_CEQ_ATTR_INTR_ARM_MASK			0x1U
-#define RQ_CTXT_CEQ_ATTR_EN_MASK			0x1U
-
-#define RQ_CTXT_CEQ_ATTR_SET(val, member)		(((val) & \
-					RQ_CTXT_CEQ_ATTR_##member##_MASK) \
-					<< RQ_CTXT_CEQ_ATTR_##member##_SHIFT)
-
 #define RQ_CTXT_WQ_PAGE_HI_PFN_SHIFT			0
 #define RQ_CTXT_WQ_PAGE_WQE_TYPE_SHIFT			28
 #define RQ_CTXT_WQ_PAGE_OWNER_SHIFT			31
@@ -158,32 +125,14 @@ struct hinic3_rq_ctxt_block {
 
 #define RQ_CTXT_WQ_BLOCK_SET(val, member)		(((val) & \
 					RQ_CTXT_WQ_BLOCK_##member##_MASK) << \
-					RQ_CTXT_WQ_BLOCK_##member##_SHIFT)				
+					RQ_CTXT_WQ_BLOCK_##member##_SHIFT)
 
 #define SIZE_16BYTES(size)		(RTE_ALIGN((size), 16) >> 4)
 
 #define	WQ_PAGE_PFN_SHIFT				12
-#define	WQ_BLOCK_PFN_SHIFT				9
-
 #define WQ_PAGE_PFN(page_addr)		((page_addr) >> WQ_PAGE_PFN_SHIFT)
-#define WQ_BLOCK_PFN(page_addr)		((page_addr) >> WQ_BLOCK_PFN_SHIFT)
 
-static void hinic3_qp_prepare_cmdq_header(
-	struct hinic3_qp_ctxt_header *qp_ctxt_hdr,
-	enum hinic3_qp_ctxt_type ctxt_type, u16 num_queues, u16 q_id)
-{
-	qp_ctxt_hdr->queue_type = ctxt_type;
-	qp_ctxt_hdr->num_queues = num_queues;
-	qp_ctxt_hdr->start_qid = q_id;
-	qp_ctxt_hdr->rsvd = 0;
-
-	rte_mb();
-
-	hinic3_cpu_to_be32(qp_ctxt_hdr, sizeof(*qp_ctxt_hdr));
-}
-
-void hinic3_sq_prepare_ctxt(struct hinic3_txq *sq, u16 sq_id,
-				   struct hinic3_sq_ctxt *sq_ctxt)
+void hinic3_sq_prepare_ctxt(struct hinic3_txq *sq, u16 sq_id, struct hinic3_sq_ctxt *sq_ctxt)
 {
 	u64 wq_page_addr;
 	u64 wq_page_pfn, wq_block_pfn;
@@ -191,8 +140,10 @@ void hinic3_sq_prepare_ctxt(struct hinic3_txq *sq, u16 sq_id,
 	u32 wq_block_pfn_hi, wq_block_pfn_lo;
 	u16 pi_start, ci_start;
 
-	if (is_sp560_nic(sq->nic_dev))
-		hinic3_prepare_sq_ctxt_drop_and_prefetch(sq_ctxt);
+	if (is_sp230_nic(sq->nic_dev))
+		hinic3_prepare_sq_ctxt_drop_and_prefetch_htn(sq_ctxt);
+	else
+		hinic3_prepare_sq_ctxt_drop_and_prefetch_stn(sq_ctxt);
 
 	ci_start = sq->cons_idx & sq->q_mask;
 	pi_start = sq->prod_idx & sq->q_mask;
@@ -220,10 +171,6 @@ void hinic3_sq_prepare_ctxt(struct hinic3_txq *sq, u16 sq_id,
 
 	sq_ctxt->wq_pfn_lo = wq_page_pfn_lo;
 
-	sq_ctxt->pkt_drop_thd =
-		SQ_CTXT_PKT_DROP_THD_SET(HINIC3_DEAULT_DROP_THD_ON, THD_ON) |
-		SQ_CTXT_PKT_DROP_THD_SET(HINIC3_DEAULT_DROP_THD_OFF, THD_OFF);
-
 	sq_ctxt->global_sq_id =
 		SQ_CTXT_GLOBAL_QUEUE_ID_SET(sq_id, GLOBAL_SQ_ID);
 
@@ -232,11 +179,6 @@ void hinic3_sq_prepare_ctxt(struct hinic3_txq *sq, u16 sq_id,
 				 SQ_CTXT_VLAN_CEQ_SET(1, INSERT_MODE);
 
 	sq_ctxt->rsvd0 = 0;
-
-	sq_ctxt->pref_cache = SQ_CTXT_PREF_SET(WQ_PREFETCH_MIN, CACHE_MIN) |
-			      SQ_CTXT_PREF_SET(WQ_PREFETCH_MAX, CACHE_MAX) |
-			      SQ_CTXT_PREF_SET(WQ_PREFETCH_THRESHOLD,
-					       CACHE_THRESHOLD);
 
 	sq_ctxt->pref_ci_owner =
 		SQ_CTXT_PREF_SET(CI_HIGN_IDX(ci_start), CI_HI) |
@@ -264,8 +206,6 @@ void hinic3_rq_prepare_ctxt(struct hinic3_rxq *rq, struct hinic3_rq_ctxt *rq_ctx
 	u32 wq_page_pfn_hi, wq_page_pfn_lo, wq_block_pfn_hi, wq_block_pfn_lo;
 	u16 pi_start, ci_start;
 	u16 wqe_type = rq->wqe_type;
-	u8 intr_disable;
-	bool support_rq_sw_compact_cqe = false;
 
 	/* RQ depth is in unit of 8 Bytes */
 	ci_start = (u16)((rq->cons_idx & rq->q_mask) << wqe_type);
@@ -286,28 +226,18 @@ void hinic3_rq_prepare_ctxt(struct hinic3_rxq *rq, struct hinic3_rq_ctxt *rq_ctx
 
 	rq_ctxt->ci_pi = RQ_CTXT_CI_PI_SET(ci_start, CI_IDX) | RQ_CTXT_CI_PI_SET(pi_start, PI_IDX);
 
-	/* RQ doesn't need ceq, msix_entry_idx set 1, but mask not enable */
-	intr_disable = rq->dp_intr_en ? 0 : 1;
-
-	if (is_sp560_nic(rq->nic_dev)) {
-		support_rq_sw_compact_cqe = rq->nic_dev->config.rx_cqe_compact_en;
-		hinic3_prepare_rq_ctxt_ceq_and_prefetch(rq, rq_ctxt, support_rq_sw_compact_cqe, intr_disable);
-	} else {
-		rq_ctxt->ceq_attr = RQ_CTXT_CEQ_ATTR_SET(intr_disable, EN) |
-			RQ_CTXT_CEQ_ATTR_SET(0, INTR_ARM) |
-			RQ_CTXT_CEQ_ATTR_SET(rq->msix_entry_idx, INTR);
-		
-		rq_ctxt->pref_cache = RQ_CTXT_PREF_SET(WQ_PREFETCH_MIN, CACHE_MIN) |
-		RQ_CTXT_PREF_SET(WQ_PREFETCH_MAX, CACHE_MAX) |
-		RQ_CTXT_PREF_SET(WQ_PREFETCH_THRESHOLD, CACHE_THRESHOLD);
-	}
-
 	/* Use 32Byte WQE with SGE for CQE in default */
 	rq_ctxt->wq_pfn_hi_type_owner = RQ_CTXT_WQ_PAGE_SET(wq_page_pfn_hi, HI_PFN) |
 		RQ_CTXT_WQ_PAGE_SET(1, OWNER);
 
 	rq_ctxt->pi_paddr_hi = upper_32_bits(rq->pi_dma_addr);
 	rq_ctxt->pi_paddr_lo = lower_32_bits(rq->pi_dma_addr);
+
+	/* RQ doesn't need ceq, msix_entry_idx set 1, but mask not enable */
+	if (is_sp230_nic(rq->nic_dev))
+		hinic3_prepare_rq_ctxt_ceq_and_prefetch_htn(rq, rq_ctxt);
+	else
+		hinic3_prepare_rq_ctxt_ceq_and_prefetch_stn(rq, rq_ctxt);
 
 	switch (wqe_type) {
 	case HINIC3_EXTEND_RQ_WQE:
@@ -322,11 +252,6 @@ void hinic3_rq_prepare_ctxt(struct hinic3_rxq *rq, struct hinic3_rq_ctxt *rq_ctx
 	case HINIC3_COMPACT_RQ_WQE:
 		/* Use 8Byte WQE without SGE for CQE */
 		rq_ctxt->wq_pfn_hi_type_owner |= RQ_CTXT_WQ_PAGE_SET(3, WQE_TYPE);
-		if (HINIC3_SUPPORT_RX_SW_COMPACT_CQE(rq->nic_dev)) {
-			rq_ctxt->cqe_sge_len |= RQ_CTXT_CQE_LEN_SET(RQ_CQE_AGGREGATE_NUM, MAX_COUNT);
-			rq_ctxt->pi_paddr_hi = upper_32_bits(rq->rq_ci_paddr >> RQ_CI_ADDR_SHIFT);
-			rq_ctxt->pi_paddr_lo = lower_32_bits(rq->rq_ci_paddr >> RQ_CI_ADDR_SHIFT);
-		}
 		break;
 	default:
 		PMD_DRV_LOG(INFO, "Invalid rq wqe type: %u", wqe_type);
@@ -335,10 +260,10 @@ void hinic3_rq_prepare_ctxt(struct hinic3_rxq *rq, struct hinic3_rq_ctxt *rq_ctx
 	rq_ctxt->wq_pfn_lo = wq_page_pfn_lo;
 
 	rq_ctxt->pref_ci_owner = RQ_CTXT_PREF_SET(CI_HIGN_IDX(ci_start), CI_HI) |
-		RQ_CTXT_PREF_SET(1, OWNER);
+				 RQ_CTXT_PREF_SET(1, OWNER);
 
 	rq_ctxt->pref_wq_pfn_hi_ci = RQ_CTXT_PREF_SET(wq_page_pfn_hi, WQ_PFN_HI) |
-		RQ_CTXT_PREF_SET(ci_start, CI_LOW);
+				     RQ_CTXT_PREF_SET(ci_start, CI_LOW);
 
 	rq_ctxt->pref_wq_pfn_lo = wq_page_pfn_lo;
 
@@ -352,13 +277,11 @@ void hinic3_rq_prepare_ctxt(struct hinic3_rxq *rq, struct hinic3_rq_ctxt *rq_ctx
 
 static int init_sq_ctxts(struct hinic3_nic_dev *nic_dev)
 {
-	struct hinic3_sq_ctxt_block *sq_ctxt_block = NULL;
-	struct hinic3_sq_ctxt *sq_ctxt = NULL;
 	struct hinic3_cmd_buf *cmd_buf = NULL;
-	struct hinic3_txq *sq = NULL;
 	u64 out_param = 0;
-	u16 q_id, curr_id, max_ctxts, i;
+	u16 q_id, max_ctxts;
 	int err = 0;
+	u8 cmd;
 
 	cmd_buf = hinic3_alloc_cmd_buf(nic_dev->hwdev);
 	if (!cmd_buf) {
@@ -368,28 +291,20 @@ static int init_sq_ctxts(struct hinic3_nic_dev *nic_dev)
 
 	q_id = 0;
 	while (q_id < nic_dev->num_sqs) {
-		sq_ctxt_block = cmd_buf->buf;
-		sq_ctxt = sq_ctxt_block->sq_ctxt;
-
 		max_ctxts = (nic_dev->num_sqs - q_id) > HINIC3_Q_CTXT_MAX ?
-			     HINIC3_Q_CTXT_MAX : (nic_dev->num_sqs - q_id);
-
-		hinic3_qp_prepare_cmdq_header(&sq_ctxt_block->cmdq_hdr,
-					      HINIC3_QP_CTXT_TYPE_SQ,
-					      max_ctxts, q_id);
-
-		for (i = 0; i < max_ctxts; i++) {
-			curr_id = q_id + i;
-			sq = nic_dev->txqs[curr_id];
-			if (sq != NULL && !sq->is_hairpin)
-				hinic3_sq_prepare_ctxt(sq, curr_id, &sq_ctxt[i]);
-		}
-
-		cmd_buf->size = SQ_CTXT_SIZE(max_ctxts);
+					HINIC3_Q_CTXT_MAX : (nic_dev->num_sqs - q_id);
+		if (is_sp230_nic(nic_dev))
+			cmd = hinic3_prepare_cmd_buf_qp_context_multi_store_htn(nic_dev, cmd_buf,
+					HINIC3_QP_CTXT_TYPE_SQ, q_id, max_ctxts);
+		else
+			cmd = hinic3_prepare_cmd_buf_qp_context_multi_store_stn(nic_dev, cmd_buf,
+					HINIC3_QP_CTXT_TYPE_SQ, q_id, max_ctxts);
 		rte_mb();
-		err = hinic3_cmdq_direct_resp(nic_dev->hwdev, HINIC3_MOD_L2NIC,
-					      HINIC3_UCODE_CMD_MODIFY_QUEUE_CTX,
-					      cmd_buf, &out_param, 0);
+		if (!IS_QPOOL_MODE())
+			err = hinic3_cmdq_direct_resp(nic_dev->hwdev, HINIC3_MOD_L2NIC, cmd, cmd_buf, &out_param, 0);
+		else
+			err = hinic3_cmd_modify_queue_ctx_stn(nic_dev, cmd_buf->buf);
+
 		if (err || out_param != 0) {
 			PMD_DRV_LOG(ERR, "Set SQ ctxts failed, "
 				    "err: %d, out_param: %"PRIu64,
@@ -408,12 +323,10 @@ static int init_sq_ctxts(struct hinic3_nic_dev *nic_dev)
 
 static int init_rq_ctxts(struct hinic3_nic_dev *nic_dev)
 {
-	struct hinic3_rq_ctxt_block *rq_ctxt_block = NULL;
-	struct hinic3_rq_ctxt *rq_ctxt = NULL;
 	struct hinic3_cmd_buf *cmd_buf = NULL;
-	struct hinic3_rxq *rq = NULL;
 	u64 out_param = 0;
-	u16 q_id, curr_id, max_ctxts, i;
+	u16 q_id, max_ctxts;
+	u8 cmd;
 	int err = 0;
 
 	cmd_buf = hinic3_alloc_cmd_buf(nic_dev->hwdev);
@@ -424,31 +337,22 @@ static int init_rq_ctxts(struct hinic3_nic_dev *nic_dev)
 
 	q_id = 0;
 	while (q_id < nic_dev->num_rqs) {
-		rq_ctxt_block = cmd_buf->buf;
-		rq_ctxt = rq_ctxt_block->rq_ctxt;
-
 		max_ctxts = (nic_dev->num_rqs - q_id) > HINIC3_Q_CTXT_MAX ?
 			    HINIC3_Q_CTXT_MAX : (nic_dev->num_rqs - q_id);
+		if (is_sp230_nic(nic_dev))
+			cmd = hinic3_prepare_cmd_buf_qp_context_multi_store_htn(nic_dev, cmd_buf,
+					HINIC3_QP_CTXT_TYPE_RQ, q_id, max_ctxts);
+		else
+			cmd = hinic3_prepare_cmd_buf_qp_context_multi_store_stn(nic_dev, cmd_buf,
+					HINIC3_QP_CTXT_TYPE_RQ, q_id, max_ctxts);
 
-		hinic3_qp_prepare_cmdq_header(&rq_ctxt_block->cmdq_hdr,
-					      HINIC3_QP_CTXT_TYPE_RQ, max_ctxts,
-					      q_id);
-
-		for (i = 0; i < max_ctxts; i++) {
-			curr_id = q_id + i;
-			rq = nic_dev->rxqs[curr_id];
-			if (rq != NULL && !rq->is_hairpin)
-				hinic3_rq_prepare_ctxt(rq, &rq_ctxt[i]);
-		}
-
-		cmd_buf->size = RQ_CTXT_SIZE(max_ctxts);
 		rte_mb();
-		err = hinic3_cmdq_direct_resp(nic_dev->hwdev, HINIC3_MOD_L2NIC,
-					      HINIC3_UCODE_CMD_MODIFY_QUEUE_CTX,
-					      cmd_buf, &out_param, 0);
+		if (!IS_QPOOL_MODE())
+			err = hinic3_cmdq_direct_resp(nic_dev->hwdev, HINIC3_MOD_L2NIC, cmd, cmd_buf, &out_param, 0);
+		else
+			err = hinic3_cmd_modify_queue_ctx_stn(nic_dev, cmd_buf->buf);
 		if (err || out_param != 0) {
-			PMD_DRV_LOG(ERR, "Set RQ ctxts failed, "
-				    "err: %d, out_param: %"PRIu64,
+			PMD_DRV_LOG(ERR, "Set RQ ctxts failed, err: %d, out_param: %"PRIu64,
 				    err, out_param);
 			err = -EFAULT;
 			break;
@@ -464,9 +368,9 @@ static int init_rq_ctxts(struct hinic3_nic_dev *nic_dev)
 static int clean_queue_offload_ctxt(struct hinic3_nic_dev *nic_dev,
 				    enum hinic3_qp_ctxt_type ctxt_type)
 {
-	struct hinic3_clean_queue_ctxt *ctxt_block = NULL;
 	struct hinic3_cmd_buf *cmd_buf;
 	u64 out_param = 0;
+	u8 cmd;
 	int err;
 
 	cmd_buf = hinic3_alloc_cmd_buf(nic_dev->hwdev);
@@ -474,24 +378,11 @@ static int clean_queue_offload_ctxt(struct hinic3_nic_dev *nic_dev,
 		PMD_DRV_LOG(ERR, "Allocate cmd buf for LRO/TSO space failed");
 		return -ENOMEM;
 	}
-
-	ctxt_block = cmd_buf->buf;
-	ctxt_block->cmdq_hdr.num_queues = nic_dev->max_sqs;
-	ctxt_block->cmdq_hdr.queue_type = ctxt_type;
-	ctxt_block->cmdq_hdr.start_qid = 0;
-	/*
-	 Add a memory barrier to ensure that instructions are not out of order due to compilation
-	 optimization
-	*/
-	rte_mb();
-
-	hinic3_cpu_to_be32(ctxt_block, sizeof(*ctxt_block));
-
-	cmd_buf->size = sizeof(*ctxt_block);
-
-	err = hinic3_cmdq_direct_resp(nic_dev->hwdev, HINIC3_MOD_L2NIC,
-				      HINIC3_UCODE_CMD_CLEAN_QUEUE_CONTEXT,
-				      cmd_buf, &out_param, 0);
+	if (is_sp230_nic(nic_dev))
+		cmd = hinic3_prepare_cmd_buf_clean_tso_lro_space_htn(nic_dev, cmd_buf, ctxt_type);
+	else
+		cmd = hinic3_prepare_cmd_buf_clean_tso_lro_space_stn(nic_dev, cmd_buf, ctxt_type);
+	err = hinic3_cmdq_direct_resp(nic_dev->hwdev, HINIC3_MOD_L2NIC, cmd, cmd_buf, &out_param, 0);
 	if ((err) || (out_param)) {
 		PMD_DRV_LOG(ERR, "Clean queue offload ctxts failed, "
 			    "err: %d, out_param: %"PRIu64, err, out_param);
@@ -529,154 +420,6 @@ void hinic3_get_func_rx_buf_size(void *dev)
 	}
 
 	nic_dev->rx_buff_len = buf_size;
-}
-
-static int hinic3_cmd_modify_tx_queue_ctx(struct hinic3_nic_dev *nic_dev,
-					struct hinic3_sq_ctxt_block *sq_ctxt_block)
-{
-	struct msg_module msg_to_kernel = {0};
-	int err;
-
-	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NPU, 0,
-			sizeof(struct hinic3_sq_ctxt_block),
-			sizeof(struct hinic3_sq_ctxt_block),
-			sq_ctxt_block, sq_ctxt_block);
-	msg_to_kernel.npu_cmd.direct_resp = 1;
-	msg_to_kernel.npu_cmd.mod = HINIC3_MOD_L2NIC;
-	msg_to_kernel.npu_cmd.cmd = HINIC3_UCODE_CMD_MODIFY_QUEUE_CTX;
-	msg_to_kernel.npu_cmd.ack_type = HINIC3_ACK_TYPE_CMDQ;
-
-	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
-	if (err < 0)
-		PMD_DRV_LOG(ERR, "Modify tx queue ctx error: %d.", errno);
-	return err;
-}
-
-static int init_sq_ctxts_qpool(struct hinic3_nic_dev *nic_dev)
-{
-	struct hinic3_sq_ctxt_block *sq_ctxt_block = NULL;
-	struct hinic3_sq_ctxt *sq_ctxt = NULL;
-	struct hinic3_cmd_buf *cmd_buf = NULL;
-	struct hinic3_txq *sq = NULL;
-	u16 q_id, curr_id, max_ctxts, i;
-	int err = 0;
-
-	cmd_buf = hinic3_alloc_cmd_buf(nic_dev->hwdev);
-	if (!cmd_buf) {
-		PMD_DRV_LOG(ERR, "Allocate cmd buf for sq ctx failed.");
-		return -ENOMEM;
-	}
-
-	q_id = 0;
-	while (q_id < nic_dev->num_sqs) {
-		sq_ctxt_block = cmd_buf->buf;
-		sq_ctxt = sq_ctxt_block->sq_ctxt;
-
-		max_ctxts = (nic_dev->num_sqs - q_id) > HINIC3_Q_CTXT_MAX ?
-			     HINIC3_Q_CTXT_MAX : (nic_dev->num_sqs - q_id);
-
-		hinic3_qp_prepare_cmdq_header(&sq_ctxt_block->cmdq_hdr,
-					      HINIC3_QP_CTXT_TYPE_SQ,
-					      max_ctxts, nic_dev->txqs[q_id]->local_qid);
-
-		for (i = 0; i < max_ctxts; i++) {
-			curr_id = q_id + i;
-			sq = nic_dev->txqs[curr_id];
-			hinic3_sq_prepare_ctxt(sq, nic_dev->txqs[curr_id]->local_qid, &sq_ctxt[i]);
-		}
-
-		cmd_buf->size = SQ_CTXT_SIZE(max_ctxts);
-		rte_mb();
-
-		err = hinic3_cmd_modify_tx_queue_ctx(nic_dev, sq_ctxt_block);
-		if (err < 0) {
-			hinic3_free_cmd_buf(cmd_buf);
-			return err;
-		}
-
-		q_id += max_ctxts;
-	}
-
-	hinic3_free_cmd_buf(cmd_buf);
-	return err;
-}
-
-static int hinic3_cmd_modify_rx_queue_ctx(struct hinic3_rq_ctxt_block *rq_ctxt_block,
-					int fd)
-{
-	struct msg_module msg_to_kernel = { 0 };
-	int err;
-
-	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NPU, 0,
-			sizeof(struct hinic3_rq_ctxt_block),
-			sizeof(struct hinic3_rq_ctxt_block),
-			rq_ctxt_block, rq_ctxt_block);
-	msg_to_kernel.npu_cmd.direct_resp = 1;
-	msg_to_kernel.npu_cmd.mod = HINIC3_MOD_L2NIC;
-	msg_to_kernel.npu_cmd.cmd = HINIC3_UCODE_CMD_MODIFY_QUEUE_CTX;
-	msg_to_kernel.npu_cmd.ack_type = HINIC3_ACK_TYPE_CMDQ;
-
-	err = ioctl(fd, 0, &msg_to_kernel);
-	if (err < 0)
-		PMD_DRV_LOG(ERR, "Modify rx queue ctx error: %d.", err);
-	return err;
-}
-
-static int init_rq_ctxts_qpool(struct hinic3_nic_dev *nic_dev)
-{
-	struct hinic3_rq_ctxt_block *rq_ctxt_block = NULL;
-	struct hinic3_rq_ctxt *rq_ctxt = NULL;
-	struct hinic3_cmd_buf *cmd_buf = NULL;
-	struct hinic3_rxq *rq = NULL;
-	u16 q_id, curr_id, max_ctxts, i;
-	int err = 0;
-	int fd;
-
-	cmd_buf = hinic3_alloc_cmd_buf(nic_dev->hwdev);
-	if (!cmd_buf) {
-		PMD_DRV_LOG(ERR, "Allocate cmd buf for rq ctx failed");
-		return -ENOMEM;
-	}
-
-	fd = nic_dev->fd;
-
-	q_id = 0;
-	while (q_id < nic_dev->num_rqs) {
-		rq_ctxt_block = cmd_buf->buf;
-		rq_ctxt = rq_ctxt_block->rq_ctxt;
-
-		max_ctxts = (nic_dev->num_rqs - q_id) > HINIC3_Q_CTXT_MAX ?
-			    HINIC3_Q_CTXT_MAX : (nic_dev->num_rqs - q_id);
-
-		hinic3_qp_prepare_cmdq_header(&rq_ctxt_block->cmdq_hdr,
-					      HINIC3_QP_CTXT_TYPE_RQ, max_ctxts,
-					      nic_dev->rxqs[q_id]->local_qid);
-
-		for (i = 0; i < max_ctxts; i++) {
-			curr_id = q_id + i;
-			rq = nic_dev->rxqs[curr_id];
-			if (rq == NULL) {
-				PMD_DRV_LOG(ERR, "rq is NULL for curr_id %u", curr_id);
-				hinic3_free_cmd_buf(cmd_buf);
-				return -EINVAL;
-			}
-			hinic3_rq_prepare_ctxt(rq, &rq_ctxt[i]);
-		}
-
-		cmd_buf->size = RQ_CTXT_SIZE(max_ctxts);
-		rte_mb();
-
-		err = hinic3_cmd_modify_rx_queue_ctx(rq_ctxt_block, fd);
-		if (err < 0) {
-			hinic3_free_cmd_buf(cmd_buf);
-			return err;
-		}
-
-		q_id += max_ctxts;
-	}
-
-	hinic3_free_cmd_buf(cmd_buf);
-	return err;
 }
 
 int hinic3_init_rq_cqe_ctxts(struct hinic3_nic_dev *nic_dev)
@@ -756,31 +499,18 @@ int hinic3_init_qp_ctxts(void *dev)
 	nic_dev = (struct hinic3_nic_dev *)dev;
 	hwdev = nic_dev->hwdev;
 
-	if (IS_QPOOL_MODE()) {
-		err = init_sq_ctxts_qpool(nic_dev);
-		if (err) {
-			PMD_DRV_LOG(ERR, "Init SQ ctxts qpool failed");
-			return err;
-		}
+	err = init_sq_ctxts(nic_dev);
+	if (err) {
+		PMD_DRV_LOG(ERR, "Init SQ ctxts failed");
+		return err;
+	}
 
-		err = init_rq_ctxts_qpool(nic_dev);
-		if (err) {
-			PMD_DRV_LOG(ERR, "Init RQ ctxts qpool failed");
-			return err;
-		}
-	} else {
-		err = init_sq_ctxts(nic_dev);
-		if (err) {
-			PMD_DRV_LOG(ERR, "Init SQ ctxts failed");
-			return err;
-		}
-
-		err = init_rq_ctxts(nic_dev);
-		if (err) {
-			PMD_DRV_LOG(ERR, "Init RQ ctxts failed");
-			return err;
-		}
-
+	err = init_rq_ctxts(nic_dev);
+	if (err) {
+		PMD_DRV_LOG(ERR, "Init RQ ctxts failed");
+		return err;
+	}
+	if (!IS_QPOOL_MODE()) {
 		err = clean_qp_offload_ctxt(nic_dev);
 		if (err) {
 			PMD_DRV_LOG(ERR, "Clean qp offload ctxts failed");

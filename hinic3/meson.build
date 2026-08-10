@@ -48,7 +48,9 @@ endif
 subdir('base')
 subdir('mml')
 subdir('stn')
-objs = [base_objs] + [mml_objs] + [stn_objs]
+subdir('htn')
+
+objs = [base_objs] + [mml_objs] + [stn_objs] + [htn_objs]
 
 sources = files(
 	'hinic3_pmd_ethdev.c',
