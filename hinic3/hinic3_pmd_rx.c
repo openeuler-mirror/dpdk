@@ -1047,7 +1047,10 @@ int hinic3_stop_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq)
 	rte_spinlock_unlock(&nic_dev->queue_list_lock);
 
 	/* Send flush rq cmd to uCode */
-	err = hinic3_set_rq_flush(nic_dev->hwdev, rxq->local_qid);
+	if (is_sp230_nic(nic_dev))
+		err = hinic3_set_rq_enable(nic_dev, rxq->local_qid, false);
+	else
+		err = hinic3_set_rq_flush(nic_dev->hwdev, rxq->local_qid);
 
 	if (err) {
 		PMD_DRV_LOG(ERR, "Flush rq failed, eth_dev:%s, q_id:%d, local_qid: %d",
@@ -1068,6 +1071,8 @@ int hinic3_stop_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq)
 	return 0;
 
 poll_rq_failed:
+	if (is_sp230_nic(nic_dev))
+		(void)hinic3_set_rq_enable(nic_dev, rxq->local_qid, true);
 rq_flush_failed:
 	rte_spinlock_lock(&nic_dev->queue_list_lock);
 set_indir_failed:
@@ -1089,11 +1094,18 @@ int hinic3_start_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq)
 	hinic3_add_rq_to_rx_queue_list(nic_dev, rxq->q_id);
 
 	if (nic_dev->rss_state == HINIC3_RSS_ENABLE) {
-		err = hinic3_refill_indir_rqid(rxq);
+		if (is_sp230_nic(nic_dev))
+			err = hinic3_set_rq_enable(nic_dev, rxq->local_qid, true);
 		if (err) {
+			PMD_DRV_LOG(ERR, "Flush rq failed, eth_dev:%s, queue_idx:%d\n",
+				    nic_dev->dev_name, rxq->q_id);
+		} else {
+			err = hinic3_refill_indir_rqid(rxq);
+			if (err) {
 			PMD_DRV_LOG(ERR, "Refill rq to indrect table failed, eth_dev:%s, queue_idx:%d err:%d\n",
 				    nic_dev->dev_name, rxq->q_id, err);
-			hinic3_remove_rq_from_rx_queue_list(nic_dev, rxq->q_id);
+				hinic3_remove_rq_from_rx_queue_list(nic_dev, rxq->q_id);
+			}
 		}
 	}
 	hinic3_rearm_rxq_mbuf(rxq);
@@ -1337,12 +1349,12 @@ hinic3_rx_integrated_cqe_done(struct hinic3_rxq *rxq, volatile struct hinic3_rq_
 	if (sw_ci == rxq->hw_cons_idx) {
 		hw_ci = hinic3_get_rq_hw_ci(rxq);
 		rxq->hw_cons_idx = hw_ci;
+		rxq->prefetch_flag = false;
 	}
 
 	if (sw_ci == rxq->hw_cons_idx)
 		return false;
 
-	rxq->prefetch_flag = false;
 	rxm = rxq->rx_info[sw_ci].mbuf;
 #ifdef DPDK_21_11
 	*rx_cqe = (struct hinic3_rq_cqe *)rte_mbuf_data_addr_default(rxm);
@@ -1413,6 +1425,7 @@ u16 hinic3_recv_pkts_compact_cqe(void *rx_queue, struct rte_mbuf **rx_pkts, u16 
 				rte_prefetch0(prefetch_mbuf);
 				rte_prefetch0(rte_mbuf_buf_addr((prefetch_mbuf), prefetch_mbuf->pool) + RTE_PKTMBUF_HEADROOM);
 				idx++;
+				idx &= rxq->q_mask;
 			}
 			rxq->prefetch_flag = true;
 		}

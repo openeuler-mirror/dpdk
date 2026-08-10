@@ -21,6 +21,9 @@
 #include "hinic3_pmd_hw_cfg.h"
 #include "hinic3_pmd_ethdev.h"
 #include "hinic3_pmd_tx.h"
+#include "hinic3_pmd_nic_io.h"
+#include "htn/hinic3_htn_cmdq.h"
+#include "stn/hinic3_stn_cmdq.h"
 #include "hinic3_pmd_bifur.h"
 
 int g_qinfo_type = HINIC3_QINFO_TYPE_NORMAL;
@@ -159,10 +162,10 @@ int hinic3_set_mac(void *hwdev, const u8 *mac_addr, u16 vlan_id, u16 func_id)
 	}
 
  	if (IS_BIFUR_MODE()) {
-		if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
-			PMD_DRV_LOG(WARNING, "Share mode vf do not support change mac");
-			return 0;
-		}
+	if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
+		PMD_DRV_LOG(WARNING, "Share mode vf do not support change mac");
+		return 0;
+	}
 	}
 
 	memset(&mac_info, 0, sizeof(mac_info));
@@ -213,10 +216,10 @@ int hinic3_del_mac(void *hwdev, const u8 *mac_addr, u16 vlan_id, u16 func_id)
 	}
 
  	if (IS_BIFUR_MODE()) {
-		if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
-			PMD_DRV_LOG(WARNING, "Share mode vf do not support change mac");
-			return 0;
-		}
+	if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
+		PMD_DRV_LOG(WARNING, "Share mode vf do not support change mac");
+		return 0;
+	}
 	}
 
 	if (vlan_id >= VLAN_N_VID) {
@@ -257,10 +260,10 @@ int hinic3_update_mac(void *hwdev, u8 *old_mac, u8 *new_mac, u16 vlan_id,
 		return -EINVAL;
 
  	if (IS_BIFUR_MODE()) {
-		if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
-			PMD_DRV_LOG(WARNING, "Share mode vf do not support change mac");
-			return 0;
-		}
+	if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
+		PMD_DRV_LOG(WARNING, "Share mode vf do not support change mac");
+		return 0;
+	}
 	}
 
 	if (vlan_id >= VLAN_N_VID) {
@@ -1256,28 +1259,14 @@ void hinic3_clear_qid_mmap(u16 q_id)
 	}
 }
 
-static struct hinic3_indir_tbl_qid_lqid *hinic3_find_by_local_qid(u16 local_qid)
-{
-	struct hinic3_indir_tbl_qid_lqid *entry = NULL;
-
-	TAILQ_FOREACH(entry, &g_qid_lqid_list, entries) {
-		if (entry->local_qid == local_qid)
-			return entry;
-	}
-
-	return NULL;
-}
-
 int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table, u32 indir_table_size)
 {
 	struct hinic3_nic_dev *nic_dev = NULL;
 	struct hinic3_cmd_buf *cmd_buf = NULL;
 	struct nic_rss_indirect_tbl *nic_indir_tbl = NULL;
-	struct hinic3_indir_tbl_qid_lqid *entry = NULL;
 	u16 rss_temp_id, rss_node_id, rss_inst_id;
-	u16 *indir_tbl = NULL;
 	int err;
-	u32 i;
+	u8 cmd;
 
 	if (!hwdev || !indir_table)
 		return -EINVAL;
@@ -1289,8 +1278,8 @@ int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table, u32 indir_table_size
 	}
 
 	cmd_buf->size = sizeof(struct nic_rss_indirect_tbl);
+	nic_dev = ((struct hinic3_hwdev *)hwdev)->dev_handle;
 	if (IS_QPOOL_MODE()) {
-		nic_dev = ((struct hinic3_hwdev *)hwdev)->dev_handle;
 		nic_indir_tbl = (struct nic_rss_indirect_tbl *)cmd_buf->buf;
 		memset(nic_indir_tbl, 0, sizeof(struct nic_rss_indirect_tbl));
 		hinic3_mgmt_get_rss_id(hwdev, nic_dev->hwdev->qpool_qgrp_id, &rss_temp_id, &rss_node_id, &rss_inst_id);
@@ -1304,32 +1293,22 @@ int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table, u32 indir_table_size
 
 		err = hinic3_rss_get_indir_tbl_qpool(nic_indir_tbl, nic_dev->fd);
 	} else {
-		err = hinic3_cmdq_detail_resp(hwdev, HINIC3_MOD_L2NIC,
-				      HINIC3_UCODE_CMD_GET_RSS_INDIR_TABLE,
-				      cmd_buf, cmd_buf, 0);
+		if (is_sp230_nic(nic_dev))
+			cmd = hinic3_prepare_cmd_buf_get_rss_indir_table_htn(nic_dev, cmd_buf);
+		else
+			cmd = hinic3_prepare_cmd_buf_get_rss_indir_table_stn(nic_dev, cmd_buf);
+		err = hinic3_cmdq_detail_resp(hwdev, HINIC3_MOD_L2NIC, cmd, cmd_buf, cmd_buf, 0);
 	}
-	if (err) {
+	if (err || cmd_buf->buf == NULL) {
 		PMD_DRV_LOG(ERR, "Get rss indir table failed");
 		hinic3_free_cmd_buf(cmd_buf);
 		return err;
 	}
 
-	indir_tbl = (u16 *)cmd_buf->buf;
-	if (indir_tbl == NULL) {
-		PMD_DRV_LOG(ERR, "Get rss indir table failed, cmd_buf buf is null.");
-		hinic3_free_cmd_buf(cmd_buf);
-		return err;
-	}
-
-	if (IS_QPOOL_MODE()) {
-		for (i = 0; i < indir_table_size; i++) {
-			entry = hinic3_find_by_local_qid(*(indir_tbl + i));
-			indir_table[i] = entry ? entry->q_id : 0xFFF;
-		}
-	} else {
-		for (i = 0; i < indir_table_size; i++)
-			indir_table[i] = *(indir_tbl + i);
-	}
+	if (is_sp230_nic(nic_dev)) 
+		hinic3_cmd_buf_to_rss_indir_table_htn(cmd_buf, indir_table, indir_table_size);
+	else
+		hinic3_cmd_buf_to_rss_indir_table_stn(cmd_buf, indir_table, indir_table_size);
 
 	hinic3_free_cmd_buf(cmd_buf);
 	return 0;
@@ -1376,12 +1355,12 @@ int hinic3_rss_set_indir_tbl_qpool(void *hwdev, const u32 *indir_table, u32 indi
 
 int hinic3_rss_set_indir_tbl(void *hwdev, const u32 *indir_table, u32 indir_table_size)
 {
-	struct nic_rss_indirect_tbl *indir_tbl = NULL;
 	struct hinic3_cmd_buf *cmd_buf = NULL;
-	u32 i, size;
-	u32 *temp = NULL;
+	struct hinic3_nic_dev *nic_dev = NULL;
+	u8 cmd;
 	u64 out_param = 0;
 	int err;
+
 
 	if (!hwdev || !indir_table)
 		return -EINVAL;
@@ -1392,28 +1371,13 @@ int hinic3_rss_set_indir_tbl(void *hwdev, const u32 *indir_table, u32 indir_tabl
 		return -ENOMEM;
 	}
 
-	cmd_buf->size = sizeof(struct nic_rss_indirect_tbl);
-	indir_tbl = (struct nic_rss_indirect_tbl *)cmd_buf->buf;
-	memset(indir_tbl, 0, sizeof(*indir_tbl));
+	nic_dev = (struct hinic3_nic_dev *)(((struct hinic3_hwdev *)hwdev)->dev_handle);
+	if (is_sp230_nic(nic_dev))
+		cmd = hinic3_prepare_cmd_buf_set_rss_indir_table_htn(nic_dev, indir_table, cmd_buf, indir_table_size);
+	else
+		cmd = hinic3_prepare_cmd_buf_set_rss_indir_table_stn(nic_dev, indir_table, cmd_buf, indir_table_size);
 
-	if (indir_table_size > HINIC3_RSS_INDIR_SIZE) {
-		PMD_DRV_LOG(ERR, "indir_table_size %u exceeds max %u",
-			    indir_table_size, HINIC3_RSS_INDIR_SIZE);
-		return -EINVAL;
-	}
-
-	for (i = 0; i < indir_table_size; i++)
-		indir_tbl->entry[i] = (u16)(*(indir_table + i));
-
-	rte_mb();
-	size = sizeof(indir_tbl->entry) / sizeof(u32);
-	temp = (u32 *)indir_tbl->entry;
-	for (i = 0; i < size; i++)
-		temp[i] = cpu_to_be32(temp[i]);
-
-	err = hinic3_cmdq_direct_resp(hwdev, HINIC3_MOD_L2NIC,
-				      HINIC3_UCODE_CMD_SET_RSS_INDIR_TABLE,
-				      cmd_buf, &out_param, 0);
+	err = hinic3_cmdq_direct_resp(hwdev, HINIC3_MOD_L2NIC, cmd, cmd_buf, &out_param, 0);
 	if (err || out_param != 0) {
 		PMD_DRV_LOG(ERR, "Set rss indir table failed");
 		err = -EFAULT;
@@ -1623,7 +1587,7 @@ static int hinic3_rss_cfg_hash_engine(void *hwdev, u8 opcode, u8 *type)
 	if (IS_QPOOL_MODE())
  		hash_type.func_id = ((struct hinic3_hwdev *)hwdev)->qpool_qgrp_id;
  	else
- 		hash_type.func_id = hinic3_global_func_id(hwdev);
+		hash_type.func_id = hinic3_global_func_id(hwdev);
 
 	hash_type.opcode = opcode;
 	if (opcode == HINIC3_CMD_OP_SET)
@@ -1807,7 +1771,7 @@ int hinic3_del_tcam_rule(void *hwdev, u32 index, u8 tcam_rule_type)
 	if (IS_QPOOL_MODE())
  		tcam_cmd.func_id = ((struct hinic3_hwdev *)hwdev)->qpool_qgrp_id;
  	else
- 		tcam_cmd.func_id = hinic3_global_func_id(hwdev);
+	tcam_cmd.func_id = hinic3_global_func_id(hwdev);
 	tcam_cmd.index_start = index;
 	tcam_cmd.index_num = 1;
 	tcam_cmd.type = tcam_rule_type;
@@ -1835,7 +1799,7 @@ static int hinic3_cfg_tcam_block(void *hwdev, u8 alloc_en, u16 *index)
 	if (IS_QPOOL_MODE())
  		tcam_block_info.func_id = ((struct hinic3_hwdev *)hwdev)->qpool_qgrp_id;
  	else
- 		tcam_block_info.func_id = hinic3_global_func_id(hwdev);
+		tcam_block_info.func_id = hinic3_global_func_id(hwdev);
 
 	tcam_block_info.alloc_en = alloc_en;
 	tcam_block_info.tcam_type = HINIC3_TCAM_BLOCK_NORMAL_TYPE;
@@ -1882,7 +1846,7 @@ int hinic3_flush_tcam_rule(void *hwdev)
 	if (IS_QPOOL_MODE())
  	 	tcam_flush.func_id = ((struct hinic3_hwdev*)hwdev)->qpool_qgrp_id;
  	else
- 		tcam_flush.func_id = hinic3_global_func_id(hwdev);
+		tcam_flush.func_id = hinic3_global_func_id(hwdev);
 
 	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_FLUSH_TCAM,
 				     &tcam_flush,
@@ -2245,6 +2209,9 @@ hinic3_get_bifur_enable(void *hwdev, u8 *bifur_en, u8 *iso_en, u8 *bifur_type)
 	struct hinic3_port_flow_bifur_en_cmd bifur_cmd;
 	u16 out_size = sizeof(bifur_cmd);
 	int err;
+
+	if (is_sp230_nic(((struct hinic3_hwdev *)hwdev)->dev_handle))
+		return 0;
 
 	if (!hwdev)
 		return -EINVAL;

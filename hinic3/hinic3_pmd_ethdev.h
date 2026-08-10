@@ -277,6 +277,7 @@ struct hinic3_nic_dev {
 	struct hinic3_ethertype_filter_list filter_ethertype_list;
 	struct hinic3_fdir_rule_filter_list filter_fdir_rule_list;
 	struct hinic3_rss_template_list rss_template_list;
+	u8 cos_map[HINIC3_COS_NUM_MAX];
 
 	struct hinic3_nic_cmdq_ops *cmdq_ops;
 
@@ -329,5 +330,4 @@ int hinic3_dev_rx_queue_intr_disable(struct rte_eth_dev *dev,
 				     uint16_t queue_id);
 void hinic3_dev_info_get(struct rte_eth_dev_info *info,
 			 struct hinic3_nic_dev *nic_dev);
-
 #endif /* _HINIC3_PMD_ETHDEV_H_ */

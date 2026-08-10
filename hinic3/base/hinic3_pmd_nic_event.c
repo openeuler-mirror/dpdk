@@ -12,9 +12,9 @@
 #include "hinic3_pmd_ethdev.h"
 
 static const char *g_hw_to_char_fec[HILINK_FEC_MAX_TYPE] = {"not set", "rsfec", "basefec",
-						      "nofec", "llrsfec"};
+					  		    "nofec", "llrsfec"};
 static const char *g_hw_to_speed_info[PORT_SPEED_UNKNOWN] = {"not set", "10MB", "100MB", "1GB", "10GB",
-						       "25GB", "40GB", "50GB", "100GB", "200GB"};
+					   		     "25GB", "40GB", "50GB", "100GB", "200GB"};
 static const char *g_hw_to_an_state_info[PORT_CFG_AN_OFF + 1] = {"not set", "on", "off"};
 
 struct port_type_table {
@@ -116,7 +116,7 @@ static void link_status_event_handler(void *hwdev, void *buf_in,
 	/* Link event reported only after set vport enable */
 	get_port_info(dev, link_status->state, &link);
 
-	if(HINIC3_IS_VF(dev)) {
+	if(HINIC3_IS_VF(dev) && !is_sp230_nic(dev->dev_handle)) {
 		dev->link_status = link.link_status;
 		link.link_status = dev->link_status & dev->vf_valid_status;
 	}
@@ -271,9 +271,9 @@ static void print_port_info(void *hwdev, struct mag_cmd_event_port_info *port_in
 }
 
 static void port_info_event_printf(void *hwdev, void *buf_in,
-				      __rte_unused u16 in_size,
-				      void *buf_out,
-				      __rte_unused u16 *out_size)
+				   __rte_unused u16 in_size,
+				   void *buf_out,
+				   __rte_unused u16 *out_size)
 {
 	struct mag_cmd_event_port_info *port_info = buf_in;
 
@@ -292,8 +292,8 @@ static void port_info_event_printf(void *hwdev, void *buf_in,
 	struct hinic3_nic_dev *nic_dev = ((struct hinic3_hwdev *)hwdev)->dev_handle;
 
 	if (is_sp620_nic(nic_dev)) {
-		if (type < ETH_LINK_DOWN || type > ETH_LINK_UP) { 
-			PMD_DRV_LOG(ERR, "Invalid hilink info report, type: %d\n", type); 
+		if (type < ETH_LINK_DOWN || type > ETH_LINK_UP) {
+			PMD_DRV_LOG(ERR, "Invalid hilink info report, type: %d\n", type);
 			return;
 		}
 	}
@@ -312,7 +312,7 @@ static const struct nic_event_handler nic_cmd_handler[] = {
 };
 
 static void nic_event_handler(void *hwdev, u16 cmd, void *buf_in, u16 in_size,
-			   void *buf_out, u16 *out_size)
+			      void *buf_out, u16 *out_size)
 {
 	u32 i, size = ARRAY_LEN(nic_cmd_handler);
 
@@ -366,8 +366,8 @@ static const struct nic_event_handler mag_cmd_handler[] = {
 };
 
 static int hinic3_mag_event_handler(void *hwdev, u16 cmd, void *buf_in,
-				   u16 in_size, void *buf_out,
-				   u16 *out_size)
+				    u16 in_size, void *buf_out,
+				    u16 *out_size)
 {
 	u32 size = ARRAY_LEN(mag_cmd_handler);
 	u32 i;
@@ -392,8 +392,8 @@ static int hinic3_mag_event_handler(void *hwdev, u16 cmd, void *buf_in,
 }
 
 int hinic3_vf_mag_event_handler(void *hwdev, __rte_unused void *pri_handle, u16 cmd,
-			       void *buf_in, u16 in_size, void *buf_out,
-			       u16 *out_size)
+				void *buf_in, u16 in_size, void *buf_out,
+				u16 *out_size)
 {
 	return hinic3_mag_event_handler(hwdev, cmd, buf_in, in_size, buf_out,
 				       out_size);
@@ -401,8 +401,8 @@ int hinic3_vf_mag_event_handler(void *hwdev, __rte_unused void *pri_handle, u16 
 
 /* pf/ppf handler mgmt cpu report hilink event */
 void hinic3_pf_mag_event_handler(void *hwdev, __rte_unused void *pri_handle, u16 cmd,
-				void *buf_in, u16 in_size, void *buf_out,
-				u16 *out_size)
+				 void *buf_in, u16 in_size, void *buf_out,
+				 u16 *out_size)
 {
 	hinic3_mag_event_handler(hwdev, cmd, buf_in, in_size, buf_out, out_size);
 }

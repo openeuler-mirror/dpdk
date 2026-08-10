@@ -857,12 +857,15 @@ enum hinic3_func_tbl_cfg_bitmap {
 	FUNC_CFG_INIT,
 	FUNC_CFG_RX_BUF_SIZE,
 	FUNC_CFG_MTU,
+	FUNC_CFG_RX_COMPACT_WQE_EN, /**< RX 8Byte wqe 使能 */
 };
 
 struct hinic3_func_tbl_cfg {
 	u16 rx_wqe_buf_size;
 	u16 mtu;
-	u32 rsvd[9];
+	u8 rx_compact_wqe_en; /**< rx 8Byte wqe(合一cqe) 使能 */
+	u8 rsvd0[3];
+	u32 rsvd1[8];
 };
 
 struct hinic3_cmd_set_func_tbl {
@@ -1029,6 +1032,11 @@ struct hinic3_tcam_result {
 			u32 rss_level : 2;
 			u32 rsvd1 : 6;
 		} q_grp;
+		struct {
+			u32 qid : 10;
+			u32 flag : 1;
+			u32 rsvd : 21;
+		}bs;
 	}dw0;
 
 	union {
@@ -1065,7 +1073,7 @@ struct hinic3_tcam_cfg_rule {
 #define TCAM_RULE_Q_GROUP_TYPE 2
 
 enum hinic3_port_flow_bifur_cmd_type {
-    PORT_BIFUR_CMD_SET,
+	PORT_BIFUR_CMD_SET,
 	PORT_BIFUR_CMD_GET,
 };
 
@@ -1079,13 +1087,13 @@ struct hinic3_fdir_add_rule {
 };
 
 struct hinic3_port_flow_bifur_en_cmd {
-    struct mgmt_msg_head msg_head;
-    u16 port_id;
-    u8 flow_bifur_en;
-    u8 flow_bifur_type; /* 0->vf bifur, 2->traffic bifur */
-    u8 config_flag; /* 0-> set, 1-> get */
-    u8 iso_en; /* 0 -> off, 1 -> on */
-    u8 rsvd[2];
+	struct mgmt_msg_head msg_head;
+	u16 port_id;
+	u8 flow_bifur_en;
+	u8 flow_bifur_type; /* 0->vf bifur, 2->traffic bifur */
+	u8 config_flag; /* 0-> set, 1-> get */
+	u8 iso_en; /* 0 -> off, 1 -> on */
+	u8 rsvd[2];
 };
 
 struct hinic3_fdir_del_rule {
@@ -1128,7 +1136,7 @@ struct hinic3_set_fdir_ethertype_rule {
 	struct mgmt_msg_head head;
 
 	u16 func_id;
-	u16 rsvd1;
+	u16 index;
 	u8 pkt_type_en;
 	u8 pkt_type;
 	u8 qid;
@@ -1153,11 +1161,11 @@ enum hinic3_link_follow_status {
 };
 
 struct mag_cmd_set_link_follow {
-    struct mgmt_msg_head head;
-    u16 function_id;
-    u16 rsvd0;
-    u8 follow;
-    u8 rsvd1[3];
+	struct mgmt_msg_head head;
+	u16 function_id;
+	u16 rsvd0;
+	u8 follow;
+	u8 rsvd1[3];
 };
 
 enum hinic3_fec_mode_opcode {
