@@ -397,15 +397,9 @@ is_sp560_nic(struct hinic3_nic_dev *nic_dev)
 	}
 }
 
-bool
-is_sp230_nic(struct hinic3_nic_dev *nic_dev)
+static inline bool
+is_sp230_pci_dev(struct rte_pci_device *pci_dev)
 {
-	struct rte_pci_device *pci_dev = NULL;
-	struct hinic3_hwdev *hwdev = nic_dev->hwdev;
-	struct rte_eth_dev *eth_dev = &rte_eth_devices[hwdev->port_id];
-
-	pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
-
 	switch (pci_dev->id.device_id) {
 	case HINIC3_DEV_ID_SP230:
 	case HINIC3_DEV_ID_VF_SP230:
@@ -415,6 +409,18 @@ is_sp230_nic(struct hinic3_nic_dev *nic_dev)
 	default:
 		return false;
 	}
+}
+
+bool
+is_sp230_nic(struct hinic3_nic_dev *nic_dev)
+{
+	struct rte_pci_device *pci_dev = NULL;
+	struct hinic3_hwdev *hwdev = nic_dev->hwdev;
+	struct rte_eth_dev *eth_dev = &rte_eth_devices[hwdev->port_id];
+
+	pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
+
+	return is_sp230_pci_dev(pci_dev);
 }
 
 /**
@@ -649,16 +655,13 @@ void hinic3_dev_info_get(struct rte_eth_dev_info *info, struct hinic3_nic_dev *n
 
 static int hinic3_get_link_state_qpool(struct hinic3_nic_dev *nic_dev)
 {
-	struct drv_cmd_kernel_nic_data cfg_kernel_data;
- 	struct msg_module msg_to_kernel;
- 	int in_size, out_size, err;
-
- 	(void)memset(&msg_to_kernel, 0, sizeof(msg_to_kernel));
- 	in_size = sizeof(cfg_kernel_data);
- 	out_size = sizeof(cfg_kernel_data);
- 	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NIC_DRIVER, GET_KERN_DEV_DATA,
- 			in_size, out_size,
- 			&cfg_kernel_data, &cfg_kernel_data);
+	struct drv_cmd_kernel_nic_data cfg_kernel_data = { 0 };
+	struct msg_module msg_to_kernel = { 0 };
+	int err = 0;
+	u32 module = is_sp230_nic(nic_dev) ? SEND_TO_BIFUR_DRIVER : SEND_TO_NIC_DRIVER;
+	fill_ioctl_msg(&msg_to_kernel, module, GET_KERN_DEV_DATA,
+		       sizeof(cfg_kernel_data), sizeof(cfg_kernel_data),
+		       &cfg_kernel_data, &cfg_kernel_data);
 
  	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
  	if (err < 0)
@@ -667,7 +670,25 @@ static int hinic3_get_link_state_qpool(struct hinic3_nic_dev *nic_dev)
  	if (cfg_kernel_data.netdev_state == 0)
  		err = -EIO;
 
- 	return err;
+	return err;
+}
+int hinic3_get_group_num_qpool(struct hinic3_nic_dev *nic_dev, u8 *num_tc)
+{
+	struct drv_cmd_kernel_nic_data cfg_kernel_data = { 0 };
+	struct msg_module msg_to_kernel = { 0 };
+	int err = 0;
+
+	fill_ioctl_msg(&msg_to_kernel, SEND_TO_BIFUR_DRIVER, GET_KERN_DEV_DATA,
+			sizeof(cfg_kernel_data), sizeof(cfg_kernel_data),
+			&cfg_kernel_data, &cfg_kernel_data);
+
+	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
+	if (err < 0)
+		err = -EIO;
+
+	*num_tc = cfg_kernel_data.group_num;
+
+	return err;
 }
 
 static int hinic3_get_kernel_mtu(struct rte_eth_dev *eth_dev)
@@ -676,8 +697,8 @@ static int hinic3_get_kernel_mtu(struct rte_eth_dev *eth_dev)
  	struct drv_cmd_kernel_nic_data cfg_kernel_data  = { 0 };
  	struct msg_module msg_to_kernel = { 0 };
  	int err = 0;
-
- 	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NIC_DRIVER, GET_KERN_DEV_DATA,
+	u32 module = is_sp230_nic(nic_dev) ? SEND_TO_BIFUR_DRIVER : SEND_TO_NIC_DRIVER;
+ 	fill_ioctl_msg(&msg_to_kernel, module, GET_KERN_DEV_DATA,
  		       sizeof(cfg_kernel_data), sizeof(cfg_kernel_data),
  		       &cfg_kernel_data, &cfg_kernel_data);
 
@@ -697,8 +718,8 @@ static int hinic3_verify_queue_depth(struct hinic3_nic_dev *nic_dev, u16 *q_dept
 	struct drv_cmd_kernel_nic_data cfg_kernel_data  = { 0 };
  	struct msg_module msg_to_kernel = { 0 };
  	int err = 0;
-
- 	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NIC_DRIVER, GET_KERN_DEV_DATA,
+	u32 module = is_sp230_nic(nic_dev) ? SEND_TO_BIFUR_DRIVER : SEND_TO_NIC_DRIVER;
+ 	fill_ioctl_msg(&msg_to_kernel, module, GET_KERN_DEV_DATA,
  		       sizeof(cfg_kernel_data), sizeof(cfg_kernel_data),
  		       &cfg_kernel_data, &cfg_kernel_data);
 
@@ -725,8 +746,8 @@ static int hinic3_get_kernel_addr(struct rte_eth_dev *eth_dev)
  	struct drv_cmd_kernel_nic_data cfg_kernel_data  = { 0 };
  	struct msg_module msg_to_kernel = { 0 };
  	int err = 0;
-
- 	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NIC_DRIVER, GET_KERN_DEV_DATA,
+	u32 module = is_sp230_nic(nic_dev) ? SEND_TO_BIFUR_DRIVER : SEND_TO_NIC_DRIVER;
+ 	fill_ioctl_msg(&msg_to_kernel, module, GET_KERN_DEV_DATA,
  		       sizeof(cfg_kernel_data), sizeof(cfg_kernel_data),
  		       &cfg_kernel_data, &cfg_kernel_data);
 
@@ -1029,14 +1050,16 @@ static int hinic3_get_rx_user_queue(struct hinic3_nic_dev *nic_dev, struct hinic
 	struct drv_cmd_user_queue_get queueinfo;
 	struct msg_module msg_to_kernel;
 	int in_size, out_size, err;
-
+	queueinfo.lcore_id = nic_dev->global_id;
+	queueinfo.func_id = hinic3_global_func_id(nic_dev->hwdev);
 	queueinfo.qid = rxq->q_id;
+	u32 module = is_sp230_nic(nic_dev) ? SEND_TO_BIFUR_DRIVER : SEND_TO_NIC_DRIVER;
 
 	(void)memset(&msg_to_kernel, 0, sizeof(msg_to_kernel));
 	in_size = sizeof(queueinfo);
 	out_size = sizeof(queueinfo);
-
-	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NIC_DRIVER, GET_USER_QUEUE_ID, in_size, out_size,
+	
+	fill_ioctl_msg(&msg_to_kernel, module, GET_USER_QUEUE_ID, in_size, out_size,
 		&queueinfo, &queueinfo);
 	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
 	if (err < 0)
@@ -1052,10 +1075,12 @@ static int hinic3_release_user_queue(struct hinic3_nic_dev *nic_dev, int queue_i
 	int err;
 	struct msg_module msg_to_kernel;
 	struct drv_cmd_user_queue_get queueinfo;
-
+	queueinfo.lcore_id = nic_dev->global_id;
+	queueinfo.func_id = hinic3_global_func_id(nic_dev->hwdev);
 	queueinfo.qid = queue_id;
+	u32 module = is_sp230_nic(nic_dev) ? SEND_TO_BIFUR_DRIVER : SEND_TO_NIC_DRIVER;
 	(void)memset(&msg_to_kernel, 0, sizeof(msg_to_kernel));
-	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NIC_DRIVER, DEL_USER_QUEUE_ID,
+	fill_ioctl_msg(&msg_to_kernel, module, DEL_USER_QUEUE_ID,
 			sizeof(queueinfo), sizeof(queueinfo),
 			&queueinfo, &queueinfo);
 	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
@@ -1085,13 +1110,18 @@ hinic3_rx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_rxq *rxq,
 	int ci_mz_size = sizeof(*rxq->rq_ci), ci_mz_align = RTE_CACHE_LINE_SIZE;
 
 	if (IS_QPOOL_MODE()) {
-		/* alloc template if not */
-		if (hwdev->qpool_qgrp_id == 0) { 
-			err = hinic3_alloc_template(nic_dev); 
-			if (err < 0) 
+		if (!is_sp230_nic(nic_dev)) {
+			/* alloc template if not */
+			if (hwdev->qpool_qgrp_id == 0) {
+				err = hinic3_alloc_template(nic_dev);
+				if (err < 0)
 				goto alloc_template_fail;
+			}
+		} else {
+			err = hinic3_compare_kernel_mbuf_size(nic_dev->fd, rxq->buf_len, nic_dev->hwdev);
+			if (err)
+				goto mbuf_size_err;
 		}
-
 		/* Get user queue */
 		err = hinic3_get_rx_user_queue(nic_dev, rxq);
 		if (err < 0)
@@ -1210,7 +1240,7 @@ alloc_db_err_fail:
 alloc_pi_mz_fail:
 	if (IS_QPOOL_MODE())
 		hinic3_release_user_queue(nic_dev, qid);
-
+mbuf_size_err:
 get_rx_user_queue_fail:
 	if (IS_QPOOL_MODE() && !is_sp230_nic(nic_dev) && hwdev->qpool_qgrp_id != 0)
 		hinic3_release_template(nic_dev);
@@ -1380,14 +1410,16 @@ static int hinic3_get_tx_user_queue(struct hinic3_nic_dev *nic_dev, struct hinic
 	struct drv_cmd_user_queue_get queueinfo;
 	struct msg_module msg_to_kernel;
 	int in_size, out_size, err;
-
+	u32 module = is_sp230_nic(nic_dev) ? SEND_TO_BIFUR_DRIVER : SEND_TO_NIC_DRIVER;
+	queueinfo.lcore_id = nic_dev->global_id;
+	queueinfo.func_id = hinic3_global_func_id(nic_dev->hwdev);
 	queueinfo.qid = txq->q_id;
 
 	(void)memset(&msg_to_kernel, 0, sizeof(msg_to_kernel));
 	in_size = sizeof(queueinfo);
 	out_size = sizeof(queueinfo);
 
-	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NIC_DRIVER, GET_USER_QUEUE_ID, in_size, out_size,
+	fill_ioctl_msg(&msg_to_kernel, module, GET_USER_QUEUE_ID, in_size, out_size,
 		&queueinfo, &queueinfo);
 	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
 	if (err < 0)
@@ -2718,12 +2750,13 @@ static void hinic3_dev_stop(struct rte_eth_dev *dev)
 
 	/* Clear scatter rx flag */
 	dev->data->scattered_rx = false;
+	if (is_sp620_nic(nic_dev)) {
+		(void)hinic3_fdir_cfg_sec_tcam(nic_dev->hwdev, &sec_tcam_en);
 
-	(void)hinic3_fdir_cfg_sec_tcam(nic_dev->hwdev, &sec_tcam_en);
-
-	(void)hinic3_flush_tcam_rule(nic_dev->hwdev);
-	if (sec_tcam_en == 1)
-		(void)hinic3_fdir_flush_sec_tcam_rule(nic_dev->hwdev);
+		(void)hinic3_flush_tcam_rule(nic_dev->hwdev);
+		if (sec_tcam_en == 1)
+			(void)hinic3_fdir_flush_sec_tcam_rule(nic_dev->hwdev);
+	}
 
 #ifdef DPDK_20_11
 	return 0;
@@ -2828,8 +2861,18 @@ static void hinic3_dev_close(struct rte_eth_dev *eth_dev)
 
 #ifdef DPDK_20_11
 	ret = hinic3_dev_stop(eth_dev);
+	if (ret == 0) {
+		if (!IS_QPOOL_MODE())
+			(void)hinic3_flush_tcam_rule(nic_dev->hwdev);
+		else
+			hinic3_flow_flush_qpool(eth_dev);
+	}
 #else
 	hinic3_dev_stop(eth_dev);
+	if (!IS_QPOOL_MODE())
+		(void)hinic3_flush_tcam_rule(nic_dev->hwdev);
+	else
+		hinic3_flow_flush_qpool(eth_dev);
 #endif
 
 	hinic3_dev_release(eth_dev);
@@ -3409,16 +3452,17 @@ static int hinic3_rss_reta_query(struct rte_eth_dev *dev,
 		return 0;
 	}
 
-	if (reta_size != HINIC3_RSS_INDIR_SIZE) {
-		PMD_DRV_LOG(ERR, "Invalid reta size, reta_size: %d", reta_size);
-		return -EINVAL;
-	}
-
 	err = hinic3_rss_get_indir_tbl(nic_dev->hwdev, indirtbl, HINIC3_RSS_INDIR_SIZE);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Get RSS retas table failed, error: %d",
 			    err);
 		return err;
+	}
+
+	if ((reta_size != HINIC3_RSS_INDIR_SIZE && !IS_QPOOL_MODE()) ||
+	    (reta_size != nic_dev->indir_table_size && IS_QPOOL_MODE() && is_sp230_nic(nic_dev))) {
+		PMD_DRV_LOG(ERR, "Invalid reta size, reta_size: %d", reta_size);
+		return -EINVAL;
 	}
 
 	for (i = 0; i < reta_size; i++) {
@@ -4960,13 +5004,22 @@ alloc_eth_addr_fail:
 
 static int hinic3_get_nic_fd(struct rte_eth_dev *eth_dev)
 {
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
 	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
 	char dev_file[PATH_MAX];
 	int fd;
-
-	snprintf(dev_file, sizeof(dev_file), "/dev/nic_cdev/" PCI_PRI_FMT, pci_dev->addr.domain,
-			pci_dev->addr.bus, pci_dev->addr.devid, pci_dev->addr.function);
-
+	if (is_sp230_nic(nic_dev))
+		snprintf(dev_file, sizeof(dev_file), "/dev/bifur_cdev/" PCI_PRI_FMT,
+			 pci_dev->addr.domain,
+		 	 pci_dev->addr.bus,
+			 pci_dev->addr.devid,
+			 pci_dev->addr.function);
+	else
+		snprintf(dev_file, sizeof(dev_file), "/dev/nic_cdev/" PCI_PRI_FMT,
+			 pci_dev->addr.domain,
+			 pci_dev->addr.bus,
+			 pci_dev->addr.devid,
+			 pci_dev->addr.function);
 	fd = open(dev_file, O_RDWR | O_TRUNC);
 	if (fd < 0) {
 		PMD_DRV_LOG(ERR, "Open nic_cdev file failed.\n");
@@ -5377,12 +5430,19 @@ static int hinic3_pci_probe(struct rte_pci_driver *pci_drv,
 	struct rte_pci_device *work_pci_dev = pci_dev;
 	char dev_file[PATH_MAX];
 	int ret = 0;
-
-	snprintf(dev_file, sizeof(dev_file), "/sys/class/nic_cdev/nic_cdev!" PCI_PRI_FMT "/qinfo_mode",
+	if (is_sp230_pci_dev(pci_dev)) {
+		snprintf(dev_file, sizeof(dev_file), "/sys/class/bifur_cdev/bifur_cdev!" PCI_PRI_FMT,
 		 pci_dev->addr.domain,
 		 pci_dev->addr.bus,
 		 pci_dev->addr.devid,
 		 pci_dev->addr.function);
+	} else {
+		snprintf(dev_file, sizeof(dev_file), "/sys/class/nic_cdev/nic_cdev!" PCI_PRI_FMT "/qinfo_mode",
+		 pci_dev->addr.domain,
+		 pci_dev->addr.bus,
+		 pci_dev->addr.devid,
+		 pci_dev->addr.function);
+	}
 
 	ret = hinic3_qinfo_type_init(dev_file);
 	if (ret != 0) {

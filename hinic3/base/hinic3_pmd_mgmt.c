@@ -8,6 +8,7 @@
 #include "hinic3_pmd_mgmt.h"
 #include "hinic3_pmd_mbox.h"
 #include "hinic3_pmd_nic_event.h"
+#include "hinic3_pmd_ethdev.h"
 
 #define HINIC3_MSG_TO_MGMT_MAX_LEN	2016
 
@@ -41,8 +42,12 @@ int hinic3_msg_to_mgmt_sync(void *hwdev, enum hinic3_mod_type mod, u16 cmd,
 	if (!hwdev)
 		return -EINVAL;
 
-	err = hinic3_send_mbox_to_mgmt(hwdev, mod, cmd, buf_in, in_size,
-				       buf_out, out_size, timeout);
+	if (IS_QPOOL_MODE())
+		err = hinic3_send_mbox_to_kernel(hwdev, mod, cmd, buf_in, in_size,
+						 buf_out, out_size, timeout);
+	else
+		err = hinic3_send_mbox_to_mgmt(hwdev, mod, cmd, buf_in, in_size,
+					       buf_out, out_size, timeout);
 	return err;
 }
 

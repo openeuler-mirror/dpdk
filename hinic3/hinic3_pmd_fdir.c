@@ -130,7 +130,6 @@ static void hinic3_fdir_tcam_ipv4_init(struct hinic3_fdir_filter *rule,
 
 }
 
-
 static inline void hinic3_fdir_ipv6_tcam_key_init_sip(struct hinic3_fdir_filter *rule,
 						      struct hinic3_tcam_key *tcam_key)
 {
@@ -351,7 +350,6 @@ hinic3_fdir_tcam_vxlan_geneve_ipv6_init(struct hinic3_fdir_filter *rule,
 	tcam_key->key_info_vxlan_ipv6.dipv6_key7 =
 		HINIC3_32_LOWER_16_BITS(rule->key_spec.inner_ipv6.dst_ip[0x3]);
 }
-
 
 static void
 hinic3_fdir_tcam_ipv6_vxlan_geneve_init(struct rte_eth_dev *	   dev,
@@ -681,7 +679,7 @@ hinic3_fdir_tcam_key_set_outer_ipv4_sip_dip(struct rte_eth_ipv4_flow *ipv4_mask,
 
 static void
 hinic3_fdir_tcam_key_set_ipv4_info(struct hinic3_fdir_filter *rule,
-					       struct hinic3_tcam_key *tcam_key)
+			           struct hinic3_tcam_key *tcam_key)
 {
 	tcam_key->key_mask_htn.ip_type = HINIC3_UINT2_MAX;
 	tcam_key->key_info_htn.ip_type = HINIC3_FDIR_IP_TYPE_IPV4;

@@ -256,7 +256,6 @@ dma_alloc_err:
 	return err;
 }
 
-
 /**
  * Allocate the pages for the queue
  *

@@ -1567,8 +1567,7 @@ struct hinic3_tcam_dynamic_block *
 hinic3_alloc_dynamic_block_resource(struct hinic3_tcam_info *tcam_info,
 				    u16 dynamic_block_id, u8 key_width, bool is_sec_fdir);
 
-void hinic3_free_dynamic_block_resource(
-			struct hinic3_tcam_info *tcam_info,
-			struct hinic3_tcam_dynamic_block *dynamic_block_ptr);
+void hinic3_free_dynamic_block_resource(struct hinic3_tcam_info *tcam_info,
+					struct hinic3_tcam_dynamic_block *dynamic_block_ptr);
 
-#endif
+#endif /**< _HINIC3_FDIR_H_ */

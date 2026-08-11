@@ -94,7 +94,6 @@ u8 hinic3_prepare_cmd_buf_qp_context_multi_store_stn(struct hinic3_nic_dev *nic_
 	return HINIC3_UCODE_CMD_MODIFY_QUEUE_CTX;
 }
 
-
 int hinic3_cmd_modify_queue_ctx_stn(struct hinic3_nic_dev *nic_dev,
 				    struct hinic3_qp_ctxt_block *ctxt_block)
 {
@@ -115,7 +114,6 @@ int hinic3_cmd_modify_queue_ctx_stn(struct hinic3_nic_dev *nic_dev,
 		PMD_DRV_LOG(ERR, "Modify tx queue ctx error: %d.", errno);
 	return err;
 }
-
 
 u8 hinic3_prepare_cmd_buf_clean_tso_lro_space_stn(struct hinic3_nic_dev *nic_dev,
 						  struct hinic3_cmd_buf *cmd_buf,

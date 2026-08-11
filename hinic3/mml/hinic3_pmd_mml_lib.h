@@ -76,6 +76,7 @@ enum module_name {
 	SEND_TO_IWAP_DRIVER,
 	SEND_TO_FC_DRIVER,
 	SEND_FCOE_DRIVER,
+	SEND_TO_BIFUR_DRIVER = 23,
 };
 
 enum driver_cmd_type {
@@ -181,16 +182,20 @@ struct msg_module {
 	void *in_buf;
 	void *out_buf;
 	int bus_num;
-	uint32_t rsvd2[5];
+	uint32_t lcore_id;
+	uint16_t qid;
+	uint16_t rsvd1;
+	uint32_t rsvd2[3];
 };
 
-/* 队列池化 */
+
 enum nic_driver_qpool_cmd_type {
 	GET_USER_QUEUE_ID,    /**< 队列池化中获取用户态队列ID */
 	DEL_USER_QUEUE_ID,    /**< 队列池化中删除用户态队列ID */
 	CFG_RSS_TEMPLATE,     /**< 队列池化中申请/释放q group id以及RSS模板 */
 	SET_RSS_INDIR_TBL,    /**< 队列池化中设置RSS间接表 */
 	GET_KERN_DEV_DATA,    /**< 队列池化中获取rx、tx队列深度、mtu、netdev_state  */
+	GET_RSS_INDIR_TBL,    /**< 队列池化中获取RSS间接表  */
 };
 
 struct cdev_msg_head {
@@ -198,6 +203,7 @@ struct cdev_msg_head {
 	u32 rsvd;
 };
 
+#define HINIC3_RSS_INDIR_SIZE		256
 struct nic_rss_indirect_tbl {
 	union {
 		struct {
@@ -238,7 +244,15 @@ struct nic_rss_indirect_tbl {
 };
 
 struct drv_cmd_rss_indir_tbl {
-	struct cdev_msg_head head;
+	union {
+		struct cdev_msg_head head;
+		struct {
+			u16 pid;
+			u16 func_id;
+			u16 indir_table_size;
+			u16 rsvd;
+		}; /*SP230 QPOOL */
+	};
 	struct nic_rss_indirect_tbl rss_indir;
 };
 
@@ -246,7 +260,9 @@ struct drv_cmd_user_queue_get {
 	struct cdev_msg_head head;
 	u16 qid;
 	u16 local_qid;
-	u32 rsvd[15];
+	u16 lcore_id;
+	u16 func_id;
+	u32 rsvd[14];
 };
 
 struct drv_cmd_cfg_rss_temp {
@@ -263,7 +279,10 @@ struct drv_cmd_kernel_nic_data {
 	u16 mtu;
 	u16 netdev_state;
 	u8 dev_addr[MAX_ADDR_LEN];
-	u32 rsvd[5];
+	u8 group_num;
+	u8 rsvd0;
+	u16 rsvd1;
+	u32 rsvd[4];
 };
 
 /*

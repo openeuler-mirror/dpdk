@@ -986,30 +986,27 @@ void fill_ioctl_msg(struct msg_module *msg, unsigned int module,
 }
 
 int hinic3_send_mbox_to_kernel(struct hinic3_hwdev *hwdev,
-			enum hinic3_mod_type mod, u16 cmd, void *buf_in,
-			u16 in_size, void *buf_out, u16 *out_size,
-			enum module_name module, unsigned int msg_formate)
+			       enum hinic3_mod_type mod, u16 cmd, void *buf_in,
+			       u16 in_size, void *buf_out, u16 *out_size,
+			       __rte_unused u32 timeout)
 {
-	struct msg_module msg_to_kernel = {0};
+	struct msg_module msg_to_kernel = { 0 };
 	struct hinic3_nic_dev *nic_dev = hwdev->dev_handle;
 	int err;
-	int fd;
 
-	fill_ioctl_msg(&msg_to_kernel, module, msg_formate, in_size, *out_size,
-		buf_in, buf_out);
+	fill_ioctl_msg(&msg_to_kernel, SEND_TO_MPU, 0, in_size, *out_size, buf_in, buf_out);
 
-	if (module == SEND_TO_MPU) {
-		msg_to_kernel.mpu_cmd.api_type = 1; /**< API_TYPE_MBOX */
-		msg_to_kernel.mpu_cmd.mod = mod;
-		msg_to_kernel.mpu_cmd.cmd = cmd;
-	}
+	msg_to_kernel.mpu_cmd.api_type = 1; /**< API_TYPE_MBOX */
+	msg_to_kernel.mpu_cmd.mod = mod;
+	msg_to_kernel.mpu_cmd.cmd = cmd;
 
-	fd = nic_dev->fd;
-	err = ioctl(fd, 0, &msg_to_kernel);
+	msg_to_kernel.lcore_id = nic_dev->global_id;
+
+	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
 	if (err < 0) {
-		return -1;
+		PMD_DRV_LOG(ERR, "Send mbox to kernel fail");
+		return -EINVAL;
 	}
-
 	return 0;
 }
 
@@ -1020,13 +1017,6 @@ int hinic3_send_mbox_to_mgmt(struct hinic3_hwdev *hwdev,
 {
 	struct hinic3_mbox *func_to_func = hwdev->func_to_func;
 	int err;
-
-	enum module_name module;
-	if (IS_QPOOL_MODE()) {
-		module = SEND_TO_MPU;
-		return hinic3_send_mbox_to_kernel(hwdev, mod, cmd, buf_in,
-					in_size, buf_out, out_size, module, 0);
-	}
 
 	err = mbox_func_params_valid(func_to_func, buf_in, in_size);
 	if (err)

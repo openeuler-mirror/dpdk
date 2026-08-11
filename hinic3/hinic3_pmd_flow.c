@@ -1638,7 +1638,9 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 			return -rte_errno;
 		}
 		act_r = (const struct rte_flow_action_rss *)act->conf;
-		if (IS_BIFUR_MODE() || (IS_NORMAL_MODE() && bifur_en)) {
+		if (IS_BIFUR_MODE() ||
+		   (IS_NORMAL_MODE() && bifur_en) ||
+		   (IS_QPOOL_MODE() && is_sp230_nic(nic_dev))) {
 			for (i = 0; i < HINIC3_QUEUE_MAX; i++) {
 		 		rte_bit_relaxed_clear32(i, &filter->fdir_filter.rq_index);
 		 	}
@@ -2773,7 +2775,6 @@ hinic3_flow_cfg_rss_indir_group_num(struct hinic3_nic_dev *nic_dev, u8 group_num
 	return hinic3_rss_cfg(nic_dev->hwdev, HINIC3_RSS_ENABLE, group_num, prio_tc);
 }
 
-
 static void
 hinic3_fillout_indir_tbl_by_rss_template(struct hinic3_nic_dev *nic_dev,
 					struct hinic3_rss_template_entry *template_entry,
@@ -3193,6 +3194,26 @@ hinic3_flow_flush(struct rte_eth_dev *dev, struct rte_flow_error *error)
 				   HINIC3_FLOW_ERROR_TYPE_HANDLE, NULL,
 				   "Failed to flush ethertype flows.");
 		return -rte_errno;
+	}
+
+	return ret;
+}
+
+int
+hinic3_flow_flush_qpool(struct rte_eth_dev *dev)
+{
+	int ret;
+
+	ret = hinic3_flow_flush_fdir_filter(dev);
+	if (ret) {
+		PMD_DRV_LOG(ERR, "Failed to flush fdir flows.");
+		return ret;
+	}
+
+	ret = hinic3_flow_flush_ethertype_filter(dev);
+	if (ret) {
+		PMD_DRV_LOG(ERR, "Failed to flush ethertype flows.");
+		return ret;
 	}
 
 	return ret;

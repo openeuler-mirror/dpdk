@@ -2,6 +2,8 @@
  * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd
  */
 
+#include <sys/ioctl.h>
+#include "mml/hinic3_pmd_mml_lib.h"
 #include "hinic3_compat.h"
 #include "hinic3_pmd_mbox.h"
 #include "hinic3_pmd_nic_cfg.h"
@@ -98,6 +100,25 @@ u8 hinic3_prepare_cmd_buf_qp_context_multi_store_htn(struct hinic3_nic_dev *nic_
 	return HINIC3_HTN_CMD_SQ_RQ_CONTEXT_MULTI_ST;
 }
 
+int hinic3_cmd_modify_queue_ctx_htn(struct hinic3_nic_dev *nic_dev,
+				    struct hinic3_qp_ctxt_block_htn *ctxt_block,
+				    int qid)
+{
+	struct msg_module msg_to_kernel = { 0 };
+	int err;
+	msg_to_kernel.qid = qid;
+	msg_to_kernel.func_idx = hinic3_global_func_id(nic_dev->hwdev);
+	msg_to_kernel.lcore_id = nic_dev->global_id;
+	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NPU, 0, sizeof(struct hinic3_qp_ctxt_block_htn),
+		       sizeof(struct hinic3_qp_ctxt_block_htn), ctxt_block, ctxt_block);
+	msg_to_kernel.npu_cmd.direct_resp = 1;
+	msg_to_kernel.npu_cmd.mod = HINIC3_MOD_L2NIC;
+	msg_to_kernel.npu_cmd.cmd = HINIC3_HTN_CMD_SQ_RQ_CONTEXT_MULTI_ST;
+	msg_to_kernel.npu_cmd.ack_type = HINIC3_ACK_TYPE_CMDQ;
+	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
+	return err;
+}
+
 u8 hinic3_prepare_cmd_buf_clean_tso_lro_space_htn(struct hinic3_nic_dev *nic_dev,
 						  struct hinic3_cmd_buf *cmd_buf,
 						  enum hinic3_qp_ctxt_type ctxt_type)
@@ -161,7 +182,8 @@ u8 hinic3_prepare_cmd_buf_get_rss_indir_table_htn(struct hinic3_nic_dev *nic_dev
 	return HINIC3_HTN_CMD_GET_RSS_INDIR_TABLE;
 }
 
-void hinic3_cmd_buf_to_rss_indir_table_htn(const struct hinic3_cmd_buf *cmd_buf, u32 *indir_table, u16 indir_table_size)
+static void hinic3_cmd_buf_to_rss_indir_table_htn_normal(const struct hinic3_cmd_buf *cmd_buf,
+							 u32 *indir_table, u16 indir_table_size)
 {
 	u32 i;
 	u8 *indir_tbl = NULL;
@@ -175,6 +197,28 @@ void hinic3_cmd_buf_to_rss_indir_table_htn(const struct hinic3_cmd_buf *cmd_buf,
 	}
 }
 
+static void hinic3_cmd_buf_to_rss_indir_table_htn_qpool(const struct hinic3_cmd_buf *cmd_buf,
+						 	u32 *indir_table, u16 indir_table_size)
+{
+	u32 i;
+	u16 *indir_tbl = NULL;
+
+	indir_tbl = (u16 *)cmd_buf->buf;
+	rte_mb();
+	for (i = 0; i < indir_table_size; i++) {
+		indir_table[i] = indir_tbl[i];
+	}
+}
+
+void hinic3_cmd_buf_to_rss_indir_table_htn(const struct hinic3_cmd_buf *cmd_buf,
+					   u32 *indir_table, u16 indir_table_size)
+{
+	if (IS_QPOOL_MODE())
+		hinic3_cmd_buf_to_rss_indir_table_htn_qpool(cmd_buf, indir_table, indir_table_size);
+	else
+		hinic3_cmd_buf_to_rss_indir_table_htn_normal(cmd_buf, indir_table, indir_table_size);
+
+}
 
 void hinic3_prepare_sq_ctxt_drop_and_prefetch_htn(struct hinic3_sq_ctxt *sq_ctxt)
 {
