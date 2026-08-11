@@ -253,6 +253,7 @@ struct hinic3_nic_dev {
 
 	u8 rss_key[HINIC3_RSS_KEY_SIZE];
 	u16 global_id;
+	u16 indir_table_size;
 	int fd;
 
 	unsigned long dev_status;
@@ -330,4 +331,7 @@ int hinic3_dev_rx_queue_intr_disable(struct rte_eth_dev *dev,
 				     uint16_t queue_id);
 void hinic3_dev_info_get(struct rte_eth_dev_info *info,
 			 struct hinic3_nic_dev *nic_dev);
+
+int hinic3_get_group_num_qpool(struct hinic3_nic_dev *nic_dev, u8 *num_tc);
+
 #endif /* _HINIC3_PMD_ETHDEV_H_ */

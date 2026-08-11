@@ -1205,7 +1205,26 @@ int hinic3_rss_set_hash_key(void *hwdev, u8 *key, u16 key_size)
 	return hinic3_rss_cfg_hash_key(hwdev, HINIC3_CMD_OP_SET, key, key_size);
 }
 
-static int hinic3_rss_get_indir_tbl_qpool(struct nic_rss_indirect_tbl *nic_indir_tbl, int fd)
+static int hinic3_rss_get_indir_tbl_qpool_htn(int fd, struct drv_cmd_rss_indir_tbl *cmd_indir_tbl, u32 *indir_table_size)
+{
+	struct msg_module msg_to_kernel = { 0 };
+	int err = 0;
+
+	fill_ioctl_msg(&msg_to_kernel, SEND_TO_BIFUR_DRIVER, GET_RSS_INDIR_TBL,
+		       sizeof(struct drv_cmd_rss_indir_tbl), sizeof(struct drv_cmd_rss_indir_tbl),
+		       cmd_indir_tbl, cmd_indir_tbl);
+	err = ioctl(fd, 0, &msg_to_kernel);
+	if (err < 0) {
+		PMD_DRV_LOG(ERR, "Get qpool indir tbl err: %d.", err);
+		return err;
+		}
+
+	*indir_table_size = cmd_indir_tbl->indir_table_size;
+
+	return err;
+}
+
+static int hinic3_rss_get_indir_tbl_qpool_stn(struct nic_rss_indirect_tbl *nic_indir_tbl, int fd)
 {
 	struct msg_module msg_to_kernel = {0};
 	int err;
@@ -1264,6 +1283,7 @@ int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table, u32 indir_table_size
 	struct hinic3_nic_dev *nic_dev = NULL;
 	struct hinic3_cmd_buf *cmd_buf = NULL;
 	struct nic_rss_indirect_tbl *nic_indir_tbl = NULL;
+	struct drv_cmd_rss_indir_tbl cmd_indir_tbl = { 0 };
 	u16 rss_temp_id, rss_node_id, rss_inst_id;
 	int err;
 	u8 cmd;
@@ -1280,18 +1300,24 @@ int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table, u32 indir_table_size
 	cmd_buf->size = sizeof(struct nic_rss_indirect_tbl);
 	nic_dev = ((struct hinic3_hwdev *)hwdev)->dev_handle;
 	if (IS_QPOOL_MODE()) {
-		nic_indir_tbl = (struct nic_rss_indirect_tbl *)cmd_buf->buf;
-		memset(nic_indir_tbl, 0, sizeof(struct nic_rss_indirect_tbl));
-		hinic3_mgmt_get_rss_id(hwdev, nic_dev->hwdev->qpool_qgrp_id, &rss_temp_id, &rss_node_id, &rss_inst_id);
-		nic_indir_tbl->dw0.bs.op_code = 1;
-		nic_indir_tbl->dw1.fdir_rss.rss_instance_id = rss_inst_id;
-		nic_indir_tbl->dw1.fdir_rss.rss_temp_id = rss_temp_id;
-		nic_indir_tbl->dw1.fdir_rss.rss_node_id = rss_node_id;
+		if (is_sp230_nic(nic_dev)) {
+			err = hinic3_rss_get_indir_tbl_qpool_htn(nic_dev->fd, &cmd_indir_tbl, &indir_table_size);
+			cmd_buf->buf = cmd_indir_tbl.rss_indir.entry;
+			nic_dev->indir_table_size = indir_table_size;
+		} else {
+			nic_indir_tbl = (struct nic_rss_indirect_tbl *)cmd_buf->buf;
+			memset(nic_indir_tbl, 0, sizeof(struct nic_rss_indirect_tbl));
+			hinic3_mgmt_get_rss_id(hwdev, nic_dev->hwdev->qpool_qgrp_id, &rss_temp_id, &rss_node_id, &rss_inst_id);
+			nic_indir_tbl->dw0.bs.op_code = 1;
+			nic_indir_tbl->dw1.fdir_rss.rss_instance_id = rss_inst_id;
+			nic_indir_tbl->dw1.fdir_rss.rss_temp_id = rss_temp_id;
+			nic_indir_tbl->dw1.fdir_rss.rss_node_id = rss_node_id;
 
-		nic_indir_tbl->dw0.value = cpu_to_be32(nic_indir_tbl->dw0.value);
-		nic_indir_tbl->dw1.value = cpu_to_be32(nic_indir_tbl->dw1.value);
+			nic_indir_tbl->dw0.value = cpu_to_be32(nic_indir_tbl->dw0.value);
+			nic_indir_tbl->dw1.value = cpu_to_be32(nic_indir_tbl->dw1.value);
 
-		err = hinic3_rss_get_indir_tbl_qpool(nic_indir_tbl, nic_dev->fd);
+			err = hinic3_rss_get_indir_tbl_qpool_stn(nic_indir_tbl, nic_dev->fd);
+		}
 	} else {
 		if (is_sp230_nic(nic_dev))
 			cmd = hinic3_prepare_cmd_buf_get_rss_indir_table_htn(nic_dev, cmd_buf);
@@ -1316,39 +1342,39 @@ int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table, u32 indir_table_size
 
 int hinic3_rss_set_indir_tbl_qpool(void *hwdev, const u32 *indir_table, u32 indir_table_size)
 {
-	struct drv_cmd_rss_indir_tbl cmd_indir_tbl = {0};
-	struct msg_module msg_to_kernel = {0};
+	struct hinic3_nic_dev * nic_dev = (struct hinic3_nic_dev *)(((struct hinic3_hwdev *)hwdev)->dev_handle);
+	struct drv_cmd_rss_indir_tbl cmd_indir_tbl = { 0 };
+	struct msg_module msg_to_kernel = { 0 };
 	struct nic_rss_indirect_tbl *indir_tbl = &(cmd_indir_tbl.rss_indir);
 	u32 i;
-	int err, fd;
+	int err, module;
 	int in_size = sizeof(struct drv_cmd_rss_indir_tbl);
 	int out_size = sizeof(struct drv_cmd_rss_indir_tbl);
 
 	if (!hwdev || !indir_table)
 		return -EINVAL;
 
-	struct rte_eth_dev * eth_dev = (struct rte_eth_dev *)(((struct hinic3_hwdev *)hwdev)->eth_dev);
-	if (eth_dev == NULL) {
-		PMD_DRV_LOG(ERR, "eth_dev is NULL");
-		return -EINVAL;
+	if (is_sp230_nic(nic_dev)) {
+		cmd_indir_tbl.func_id = hinic3_global_func_id(hwdev);
+		cmd_indir_tbl.pid = nic_dev->global_id;
+		module = SEND_TO_BIFUR_DRIVER;
+	} else {
+		indir_tbl->dw0.bs.qgrp_id = hinic3_global_func_id(nic_dev->hwdev);
+		module = SEND_TO_NIC_DRIVER;
 	}
-	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
-
-	indir_tbl->dw0.bs.qgrp_id = hinic3_global_func_id(nic_dev->hwdev);
 
 	for (i = 0; i < indir_table_size; i++)
 		indir_tbl->entry[i] = (u16)(*(indir_table + i));
 
 	rte_mb();
 
-	fd = nic_dev->fd;
-	fill_ioctl_msg(&msg_to_kernel, SEND_TO_NIC_DRIVER, SET_RSS_INDIR_TBL, in_size, out_size,
-		&cmd_indir_tbl, &cmd_indir_tbl);
+	fill_ioctl_msg(&msg_to_kernel, module, SET_RSS_INDIR_TBL, in_size, out_size,
+		       &cmd_indir_tbl, &cmd_indir_tbl);
 
-	err = ioctl(fd, 0, &msg_to_kernel);
+	err = ioctl(nic_dev->fd, 0, &msg_to_kernel);
 	if (err < 0) {
 		PMD_DRV_LOG(ERR, "Set qpool indir table error: %d.", err);
-		return -1;
+		return -EINVAL;
 	}
 	return err;
 }
@@ -1443,6 +1469,39 @@ static int hinic3_cmdq_set_rss_type_ioctl(struct hinic3_nic_dev *nic_dev, struct
 	hinic3_free_cmd_buf(cmd_buf);
 
 	return err;
+}
+
+#define HINIC3_MOD_OFFSET 8
+#define HINIC3_CMD_OFFSET 16
+#define HINIC3_BUFSIZE_BASE_UNIT 1024
+#define HINIC3_HTN_ELB_TABLE 21
+#define MPU_MSG_FORMATE(api_type, mod, cmd) ((api_type) | (mod) << HINIC3_MOD_OFFSET | (cmd) << HINIC3_CMD_OFFSET)
+
+int hinic3_compare_kernel_mbuf_size(int fd, int mbuf_size, void *hwdev)
+{
+	struct msg_module msg_to_kernel = { 0 };
+	struct nic_cmd_dfx_sm_table htn_tbl_info = { 0 };
+	u32 msg_formate = MPU_MSG_FORMATE(API_TYPE_MBOX, HINIC3_MOD_L2NIC, HINIC3_NIC_CMD_GET_SM_TABLE);
+	htn_tbl_info.tbl_type = HINIC3_HTN_ELB_TABLE;
+	htn_tbl_info.args.func_tbl_arg.func_id = hinic3_global_func_id(hwdev);
+	int err = 0;
+
+	fill_ioctl_msg(&msg_to_kernel, SEND_TO_MPU, msg_formate,
+		       sizeof(struct nic_cmd_dfx_sm_table), sizeof(struct nic_cmd_dfx_sm_table),
+		       &htn_tbl_info, &htn_tbl_info);
+	err = ioctl(fd, 0, &msg_to_kernel);
+	if (err < 0) {
+		PMD_DRV_LOG(ERR, "get kernel mbuf size error: %d.", err);
+		return -EINVAL;
+	}
+	struct func_table_entry *tbl_buf = (struct func_table_entry *)(htn_tbl_info.tbl_buf);
+	if (mbuf_size != tbl_buf->dw2.bs.rq_wqe_buffer_size * HINIC3_BUFSIZE_BASE_UNIT) {
+		PMD_DRV_LOG(ERR,
+			    "mbuf size should be %d to follow kernel",
+			    tbl_buf->dw2.bs.rq_wqe_buffer_size * HINIC3_BUFSIZE_BASE_UNIT);
+		return -EINVAL;
+	}
+	return 0;
 }
 
 static int hinic3_cmdq_set_rss_type(void *hwdev, struct hinic3_rss_type rss_type)
@@ -1679,8 +1738,6 @@ int hinic3_vf_get_default_cos(void *hwdev, u8 *cos_id)
 	return 0;
 }
 
-
-
 int hinic3_add_tcam_rule(void *hwdev, struct hinic3_tcam_cfg_rule *tcam_rule, u8 tcam_rule_type)
 {
 	struct hinic3_fdir_add_rule tcam_cmd;
@@ -1846,10 +1903,7 @@ int hinic3_set_fdir_tcam_rule_filter(void *hwdev, bool enable)
 
 	memset(&port_tcam_cmd, 0, sizeof(port_tcam_cmd));
 	port_tcam_cmd.func_id = hinic3_global_func_id(hwdev);
-	if (IS_QPOOL_MODE())
-		port_tcam_cmd.tcam_enable = 1;
-	else
-		port_tcam_cmd.tcam_enable = (u8)enable;
+	port_tcam_cmd.tcam_enable = (u8)enable;
 
 	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_ENABLE_TCAM,
 				     &port_tcam_cmd, sizeof(port_tcam_cmd),
@@ -1920,8 +1974,8 @@ int hinic3_set_rq_flush(void *hwdev, u16 q_id)
 		err = hinic3_set_rq_flush_qpool(rq_flush_msg, nic_dev->fd);
 	} else {
 		err = hinic3_cmdq_direct_resp(hwdev, HINIC3_MOD_L2NIC,
-					     HINIC3_UCODE_CMD_SET_RQ_FLUSH, cmd_buf,
-					     &out_param, 0);
+					      HINIC3_UCODE_CMD_SET_RQ_FLUSH, cmd_buf,
+					      &out_param, 0);
 	}
 
 	if ((err) || (out_param != 0)) {

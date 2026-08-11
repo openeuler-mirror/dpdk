@@ -69,6 +69,9 @@ u8 hinic3_prepare_cmd_buf_set_rss_indir_table_htn(struct hinic3_nic_dev *nic_dev
 u8 hinic3_prepare_cmd_buf_get_rss_indir_table_htn(struct hinic3_nic_dev *nic_dev,
 						  struct hinic3_cmd_buf *cmd_buf);
 
+int hinic3_cmd_modify_queue_ctx_htn(struct hinic3_nic_dev *nic_dev,
+				    struct hinic3_qp_ctxt_block_htn *ctxt_block,
+				    int qid);
 
 void hinic3_cmd_buf_to_rss_indir_table_htn(const struct hinic3_cmd_buf *cmd_buf,
 					   u32 *indir_table,

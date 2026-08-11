@@ -752,6 +752,14 @@ int hinic3_update_rss_config(struct rte_eth_dev *dev,
 		goto init_rss_fail;
 	}
 
+	if (IS_QPOOL_MODE() && is_sp230_nic(nic_dev)) {
+		err = hinic3_get_group_num_qpool(nic_dev, &num_tc);
+		if (err) {
+			PMD_DRV_LOG(ERR, "Get group num failed, err: %d", err);
+			goto init_rss_fail;
+		}
+	}
+
 	err = hinic3_rss_cfg(nic_dev->hwdev, HINIC3_RSS_ENABLE, num_tc, prio_tc);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Enable rss failed, err: %d", err);

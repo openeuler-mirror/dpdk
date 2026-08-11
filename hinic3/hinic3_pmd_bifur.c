@@ -501,8 +501,7 @@ hinic3_bifur_parse_sysfs_resource(const char *filename, struct rte_pci_device *d
 
 	for (i = 0; i < PCI_MAX_RESOURCE; i++) {
 		if (fgets(buf, sizeof(buf), f) == NULL) {
-			PMD_DRV_LOG(ERR,
-				    "Cannot read resource");
+			PMD_DRV_LOG(ERR, "Cannot read resource");
 			goto error;
 		}
 		if (hinic3_bifur_parse_one_sysfs_resource(buf, sizeof(buf), &phys_addr,
@@ -701,7 +700,6 @@ hinic3_bifur_work_pci_pre_probe(struct rte_pci_driver *dr, struct rte_pci_device
 	dev->device.driver = &dr->driver;
 	return 0;
 }
-
 
 enum MAPPED_DEV_OP_OODE {
 	DEV_ADD = 0x1,
