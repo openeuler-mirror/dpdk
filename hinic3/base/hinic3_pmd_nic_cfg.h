@@ -1923,8 +1923,6 @@ int hinic3_get_feature_from_hw(void *hwdev, u64 *s_feature, u16 size);
  */
 int hinic3_set_feature_to_hw(void *hwdev, u64 *s_feature, u16 size);
 
-int hinic3_set_fdir_ethertype_filter(void *hwdev, u8 pkt_type, struct rte_eth_ethertype_filter *ethertype_filter, u8 en);
-
 int hinic3_set_link_status_follow(void *hwdev, enum hinic3_link_follow_status status);
 int hinic3_sync_dcb_state(void *hwdev, u8 op_code, u8 state);
 int hinic3_sync_qos_map(void *hwdev, struct hinic3_dcb_config *dcb_cfg);
