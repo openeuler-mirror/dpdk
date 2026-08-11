@@ -1531,7 +1531,7 @@ int hinic3_set_rss_type(void *hwdev, struct hinic3_rss_type rss_type)
 	struct hinic3_nic_dev *nic_dev = ((struct hinic3_hwdev *)hwdev)->dev_handle;
 	int err;
 
-	if (IS_QPOOL_MODE())
+	if (IS_QPOOL_MODE() && !is_sp230_nic(nic_dev))
 		return hinic3_cmdq_set_rss_type_ioctl(nic_dev, rss_type);
 
 	err = hinic3_mgmt_set_rss_type(hwdev, rss_type);
@@ -1550,7 +1550,7 @@ int hinic3_get_rss_type(void *hwdev, struct hinic3_rss_type *rss_type)
 		return -EINVAL;
 
 	memset(&ctx_tbl, 0, sizeof(struct hinic3_rss_context_table));
-	if (IS_QPOOL_MODE())
+	if (IS_QPOOL_MODE() && !is_sp230_nic(((struct hinic3_hwdev *)hwdev)->dev_handle))
  		ctx_tbl.func_id = ((struct hinic3_hwdev *)hwdev)->qpool_qgrp_id;
  	else
 		ctx_tbl.func_id = hinic3_global_func_id(hwdev);
@@ -1584,7 +1584,7 @@ static int hinic3_rss_cfg_hash_engine(void *hwdev, u8 opcode, u8 *type)
 		return -EINVAL;
 
 	memset(&hash_type, 0, sizeof(struct hinic3_cmd_rss_engine_type));
-	if (IS_QPOOL_MODE())
+	if (IS_QPOOL_MODE() && !is_sp230_nic(((struct hinic3_hwdev *)hwdev)->dev_handle))
  		hash_type.func_id = ((struct hinic3_hwdev *)hwdev)->qpool_qgrp_id;
  	else
 		hash_type.func_id = hinic3_global_func_id(hwdev);
@@ -1679,37 +1679,7 @@ int hinic3_vf_get_default_cos(void *hwdev, u8 *cos_id)
 	return 0;
 }
 
-int hinic3_set_fdir_ethertype_filter(void *hwdev, u8 pkt_type, struct rte_eth_ethertype_filter *ethertype_filter, u8 en)
-{
-	struct hinic3_set_fdir_ethertype_rule ethertype_cmd;
-	u16 out_size = sizeof(ethertype_cmd);
-	int err;
 
-	if (!hwdev)
-		return -EINVAL;
-
-	memset(&ethertype_cmd, 0, sizeof(struct hinic3_set_fdir_ethertype_rule));
-	ethertype_cmd.func_id = hinic3_global_func_id(hwdev);
-	ethertype_cmd.pkt_type = pkt_type;
-	ethertype_cmd.pkt_type_en = en;
-	ethertype_cmd.qid = (u8)ethertype_filter->queue;
-	if (en == 0)
-		ethertype_cmd.flags = 0;
-	else
- 		ethertype_cmd.flags = (u8)ethertype_filter->flags;
-
-	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_SET_FDIR_STATUS,
-				     &ethertype_cmd, sizeof(ethertype_cmd),
-				     &ethertype_cmd, &out_size);
-	if (err || ethertype_cmd.head.status || !out_size) {
-		PMD_DRV_LOG(ERR,
-			    "set fdir ethertype rule failed, err: %d, status: 0x%x, out size: 0x%x func_id %d",
-			    err, ethertype_cmd.head.status, out_size, ethertype_cmd.func_id);
-		return -EIO;
-	}
-
-	return 0;
-}
 
 int hinic3_add_tcam_rule(void *hwdev, struct hinic3_tcam_cfg_rule *tcam_rule, u8 tcam_rule_type)
 {
@@ -1768,10 +1738,10 @@ int hinic3_del_tcam_rule(void *hwdev, u32 index, u8 tcam_rule_type)
 	}
 
 	memset(&tcam_cmd, 0, sizeof(struct hinic3_fdir_del_rule));
-	if (IS_QPOOL_MODE())
+	if (IS_QPOOL_MODE() && !is_sp230_nic(((struct hinic3_hwdev *)hwdev)->dev_handle))
  		tcam_cmd.func_id = ((struct hinic3_hwdev *)hwdev)->qpool_qgrp_id;
  	else
-	tcam_cmd.func_id = hinic3_global_func_id(hwdev);
+		tcam_cmd.func_id = hinic3_global_func_id(hwdev);
 	tcam_cmd.index_start = index;
 	tcam_cmd.index_num = 1;
 	tcam_cmd.type = tcam_rule_type;
@@ -1796,7 +1766,7 @@ static int hinic3_cfg_tcam_block(void *hwdev, u8 alloc_en, u16 *index)
 	int err;
 
 	memset(&tcam_block_info, 0, sizeof(struct hinic3_tcam_block));
-	if (IS_QPOOL_MODE())
+	if (IS_QPOOL_MODE() && !is_sp230_nic(((struct hinic3_hwdev *)hwdev)->dev_handle))
  		tcam_block_info.func_id = ((struct hinic3_hwdev *)hwdev)->qpool_qgrp_id;
  	else
 		tcam_block_info.func_id = hinic3_global_func_id(hwdev);
@@ -1843,7 +1813,7 @@ int hinic3_flush_tcam_rule(void *hwdev)
 		return -EINVAL;
 
 	memset(&tcam_flush, 0, sizeof(struct hinic3_flush_tcam_rules));
-	if (IS_QPOOL_MODE())
+	if (IS_QPOOL_MODE() && !is_sp230_nic(((struct hinic3_hwdev *)hwdev)->dev_handle))
  	 	tcam_flush.func_id = ((struct hinic3_hwdev*)hwdev)->qpool_qgrp_id;
  	else
 		tcam_flush.func_id = hinic3_global_func_id(hwdev);

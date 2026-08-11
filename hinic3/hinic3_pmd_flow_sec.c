@@ -1250,7 +1250,7 @@ hinic3_dynamic_lookup_sec_tcam_filter(struct rte_eth_dev *dev,
 
 	if (tmp == NULL) {
 		if (tcam_info->tcam_dynamic_info.dynamic_block_cnt >=
-			(HINIC3_TCAM_DYNAMIC_MAX_FILTERS /
+			(HINIC3_TCAM_DYNAMIC_MAX_FILTERS(nic_dev) /
 			block_capacity)) {
 			PMD_DRV_LOG(ERR, "Dynamic tcam block is full, alloc failed!");
 			goto failed;

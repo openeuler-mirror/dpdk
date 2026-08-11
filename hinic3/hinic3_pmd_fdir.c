@@ -15,7 +15,7 @@
 #include <rte_malloc.h>
 #include <rte_flow.h>
 #include <rte_flow_driver.h>
-
+#include "base/hinic3_pmd_cmd.h"
 #include "base/hinic3_compat.h"
 #include "base/hinic3_pmd_hwdev.h"
 #include "base/hinic3_pmd_hwif.h"
@@ -31,7 +31,10 @@
 
 #define HINIC3_UINT1_MAX          0x1
 #define HINIC3_UINT2_MAX          0x3
+#define HINIC3_UINT3_MAX          0x7
 #define HINIC3_UINT4_MAX          0xf
+#define HINIC3_UINT5_WIDTH        0x5
+#define HINIC3_UINT5_MAX          0x1f
 #define HINIC3_UINT15_MAX         0x7fff
 #define BIFUR_EN              0x2
 
@@ -127,28 +130,10 @@ static void hinic3_fdir_tcam_ipv4_init(struct hinic3_fdir_filter *rule,
 
 }
 
-static void hinic3_fdir_tcam_ipv6_init(struct hinic3_fdir_filter *rule,
-			struct hinic3_tcam_key *tcam_key, struct rte_eth_dev *dev)
+
+static inline void hinic3_fdir_ipv6_tcam_key_init_sip(struct hinic3_fdir_filter *rule,
+						      struct hinic3_tcam_key *tcam_key)
 {
-	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
-	struct rte_pci_device *pci_dev = NULL;
-	
-	pci_dev = RTE_ETH_DEV_TO_PCI(dev);
-	tcam_key->key_mask_ipv6.ip_type = HINIC3_UINT1_MAX;
-	tcam_key->key_info_ipv6.ip_type = HINIC3_FDIR_IP_TYPE_IPV6;
-
-	/* ipv6 bifur_flag*/
-	if ((pci_dev->id.device_id == HINIC3_DEV_ID_SP920 && IS_BIFUR_MODE())
-		|| hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev)) {
-		/* VF RSS flow table traffic distribution */
-		tcam_key->key_mask_ipv6.bifur_flag = HINIC3_UINT2_MAX;
-		tcam_key->key_info_ipv6.bifur_flag = BIFUR_EN;
-	} else {
-		/* FDIR flow table traffic distribution */
-		tcam_key->key_mask_ipv6.bifur_flag = 0;
-		tcam_key->key_info_ipv6.bifur_flag = 0;
-	}
-
 	tcam_key->key_mask_ipv6.sipv6_key0 =
 		HINIC3_32_UPPER_16_BITS(rule->key_mask.ipv6.src_ip[0]);
 	tcam_key->key_mask_ipv6.sipv6_key1 =
@@ -181,7 +166,11 @@ static void hinic3_fdir_tcam_ipv6_init(struct hinic3_fdir_filter *rule,
 		HINIC3_32_UPPER_16_BITS(rule->key_spec.ipv6.src_ip[0x3]);
 	tcam_key->key_info_ipv6.sipv6_key7 =
 		HINIC3_32_LOWER_16_BITS(rule->key_spec.ipv6.src_ip[0x3]);
+}
 
+static inline void hinic3_fdir_ipv6_tcam_key_init_dip(struct hinic3_fdir_filter *rule,
+						      struct hinic3_tcam_key *tcam_key)
+{
 	tcam_key->key_mask_ipv6.dipv6_key0 =
 		HINIC3_32_UPPER_16_BITS(rule->key_mask.ipv6.dst_ip[0]);
 	tcam_key->key_mask_ipv6.dipv6_key1 =
@@ -214,6 +203,39 @@ static void hinic3_fdir_tcam_ipv6_init(struct hinic3_fdir_filter *rule,
 		HINIC3_32_UPPER_16_BITS(rule->key_spec.ipv6.dst_ip[0x3]);
 	tcam_key->key_info_ipv6.dipv6_key7 =
 		HINIC3_32_LOWER_16_BITS(rule->key_spec.ipv6.dst_ip[0x3]);
+}
+
+static void hinic3_fdir_ipv6_tcam_key_init(struct hinic3_fdir_filter *rule,
+					   struct hinic3_tcam_key *tcam_key)
+{
+	hinic3_fdir_ipv6_tcam_key_init_sip(rule, tcam_key);
+	hinic3_fdir_ipv6_tcam_key_init_dip(rule, tcam_key);
+}
+
+static void hinic3_fdir_tcam_ipv6_init(struct hinic3_fdir_filter *rule,
+				       struct hinic3_tcam_key *tcam_key,
+				       struct rte_eth_dev *dev)
+{
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+	struct rte_pci_device *pci_dev = NULL;
+
+	pci_dev = RTE_ETH_DEV_TO_PCI(dev);
+	tcam_key->key_mask_ipv6.ip_type = HINIC3_UINT1_MAX;
+	tcam_key->key_info_ipv6.ip_type = HINIC3_FDIR_IP_TYPE_IPV6;
+
+	/* ipv6 bifur_flag*/
+	if ((pci_dev->id.device_id == HINIC3_DEV_ID_SP920 && IS_BIFUR_MODE()) ||
+	     hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev)) {
+		/* VF RSS flow table traffic distribution */
+		tcam_key->key_mask_ipv6.bifur_flag = HINIC3_UINT2_MAX;
+		tcam_key->key_info_ipv6.bifur_flag = BIFUR_EN;
+	} else {
+		/* FDIR flow table traffic distribution */
+		tcam_key->key_mask_ipv6.bifur_flag = 0;
+		tcam_key->key_info_ipv6.bifur_flag = 0;
+	}
+
+	hinic3_fdir_ipv6_tcam_key_init(rule, tcam_key);
 }
 
 static void hinic3_fdir_tcam_notunnel_init(struct rte_eth_dev *dev,
@@ -330,76 +352,6 @@ hinic3_fdir_tcam_vxlan_geneve_ipv6_init(struct hinic3_fdir_filter *rule,
 		HINIC3_32_LOWER_16_BITS(rule->key_spec.inner_ipv6.dst_ip[0x3]);
 }
 
-static void
-hinic3_fdir_tcam_outer_ipv6_init(struct hinic3_fdir_filter *rule,
-				 struct hinic3_tcam_key	   *tcam_key)
-{
-	tcam_key->key_mask_ipv6.sipv6_key0 =
-		HINIC3_32_UPPER_16_BITS(rule->key_mask.ipv6.src_ip[0]);
-	tcam_key->key_mask_ipv6.sipv6_key1 =
-		HINIC3_32_LOWER_16_BITS(rule->key_mask.ipv6.src_ip[0]);
-	tcam_key->key_mask_ipv6.sipv6_key2 =
-		HINIC3_32_UPPER_16_BITS(rule->key_mask.ipv6.src_ip[0x1]);
-	tcam_key->key_mask_ipv6.sipv6_key3 =
-		HINIC3_32_LOWER_16_BITS(rule->key_mask.ipv6.src_ip[0x1]);
-	tcam_key->key_mask_ipv6.sipv6_key4 =
-		HINIC3_32_UPPER_16_BITS(rule->key_mask.ipv6.src_ip[0x2]);
-	tcam_key->key_mask_ipv6.sipv6_key5 =
-		HINIC3_32_LOWER_16_BITS(rule->key_mask.ipv6.src_ip[0x2]);
-	tcam_key->key_mask_ipv6.sipv6_key6 =
-		HINIC3_32_UPPER_16_BITS(rule->key_mask.ipv6.src_ip[0x3]);
-	tcam_key->key_mask_ipv6.sipv6_key7 =
-		HINIC3_32_LOWER_16_BITS(rule->key_mask.ipv6.src_ip[0x3]);
-	tcam_key->key_info_ipv6.sipv6_key0 =
-		HINIC3_32_UPPER_16_BITS(rule->key_spec.ipv6.src_ip[0]);
-	tcam_key->key_info_ipv6.sipv6_key1 =
-		HINIC3_32_LOWER_16_BITS(rule->key_spec.ipv6.src_ip[0]);
-	tcam_key->key_info_ipv6.sipv6_key2 =
-		HINIC3_32_UPPER_16_BITS(rule->key_spec.ipv6.src_ip[0x1]);
-	tcam_key->key_info_ipv6.sipv6_key3 =
-		HINIC3_32_LOWER_16_BITS(rule->key_spec.ipv6.src_ip[0x1]);
-	tcam_key->key_info_ipv6.sipv6_key4 =
-		HINIC3_32_UPPER_16_BITS(rule->key_spec.ipv6.src_ip[0x2]);
-	tcam_key->key_info_ipv6.sipv6_key5 =
-		HINIC3_32_LOWER_16_BITS(rule->key_spec.ipv6.src_ip[0x2]);
-	tcam_key->key_info_ipv6.sipv6_key6 =
-		HINIC3_32_UPPER_16_BITS(rule->key_spec.ipv6.src_ip[0x3]);
-	tcam_key->key_info_ipv6.sipv6_key7 =
-		HINIC3_32_LOWER_16_BITS(rule->key_spec.ipv6.src_ip[0x3]);
-
-	tcam_key->key_mask_ipv6.dipv6_key0 =
-		HINIC3_32_UPPER_16_BITS(rule->key_mask.ipv6.dst_ip[0]);
-	tcam_key->key_mask_ipv6.dipv6_key1 =
-		HINIC3_32_LOWER_16_BITS(rule->key_mask.ipv6.dst_ip[0]);
-	tcam_key->key_mask_ipv6.dipv6_key2 =
-		HINIC3_32_UPPER_16_BITS(rule->key_mask.ipv6.dst_ip[0x1]);
-	tcam_key->key_mask_ipv6.dipv6_key3 =
-		HINIC3_32_LOWER_16_BITS(rule->key_mask.ipv6.dst_ip[0x1]);
-	tcam_key->key_mask_ipv6.dipv6_key4 =
-		HINIC3_32_UPPER_16_BITS(rule->key_mask.ipv6.dst_ip[0x2]);
-	tcam_key->key_mask_ipv6.dipv6_key5 =
-		HINIC3_32_LOWER_16_BITS(rule->key_mask.ipv6.dst_ip[0x2]);
-	tcam_key->key_mask_ipv6.dipv6_key6 =
-		HINIC3_32_UPPER_16_BITS(rule->key_mask.ipv6.dst_ip[0x3]);
-	tcam_key->key_mask_ipv6.dipv6_key7 =
-		HINIC3_32_LOWER_16_BITS(rule->key_mask.ipv6.dst_ip[0x3]);
-	tcam_key->key_info_ipv6.dipv6_key0 =
-		HINIC3_32_UPPER_16_BITS(rule->key_spec.ipv6.dst_ip[0]);
-	tcam_key->key_info_ipv6.dipv6_key1 =
-		HINIC3_32_LOWER_16_BITS(rule->key_spec.ipv6.dst_ip[0]);
-	tcam_key->key_info_ipv6.dipv6_key2 =
-		HINIC3_32_UPPER_16_BITS(rule->key_spec.ipv6.dst_ip[0x1]);
-	tcam_key->key_info_ipv6.dipv6_key3 =
-		HINIC3_32_LOWER_16_BITS(rule->key_spec.ipv6.dst_ip[0x1]);
-	tcam_key->key_info_ipv6.dipv6_key4 =
-		HINIC3_32_UPPER_16_BITS(rule->key_spec.ipv6.dst_ip[0x2]);
-	tcam_key->key_info_ipv6.dipv6_key5 =
-		HINIC3_32_LOWER_16_BITS(rule->key_spec.ipv6.dst_ip[0x2]);
-	tcam_key->key_info_ipv6.dipv6_key6 =
-		HINIC3_32_UPPER_16_BITS(rule->key_spec.ipv6.dst_ip[0x3]);
-	tcam_key->key_info_ipv6.dipv6_key7 =
-		HINIC3_32_LOWER_16_BITS(rule->key_spec.ipv6.dst_ip[0x3]);
-}
 
 static void
 hinic3_fdir_tcam_ipv6_vxlan_geneve_init(struct rte_eth_dev *	   dev,
@@ -441,7 +393,7 @@ hinic3_fdir_tcam_ipv6_vxlan_geneve_init(struct rte_eth_dev *	   dev,
 	tcam_key->key_info_ipv6.sport = rule->key_spec.src_port;
 
 	if (rule->ip_type == HINIC3_FDIR_IP_TYPE_ANY)
-		hinic3_fdir_tcam_outer_ipv6_init(rule, tcam_key);
+		hinic3_fdir_ipv6_tcam_key_init(rule, tcam_key);
 }
 
 static void
@@ -601,6 +553,266 @@ hinic3_fdir_tcam_info_init(struct rte_eth_dev          *dev,
 	tcam_key_calculate(tcam_key, fdir_tcam_rule, HINIC3_TCAM_FLOW_KEY_SIZE);
 }
 
+static void
+hinic3_fdir_tcam_key_set_ipv4_sip_dip(struct rte_eth_ipv4_flow *ipv4_mask,
+				      struct rte_eth_ipv4_flow *ipv4_spec,
+				      struct hinic3_tcam_key *tcam_key)
+{
+	tcam_key->key_mask_htn.sipv4_h =
+		HINIC3_32_UPPER_16_BITS(ipv4_mask->src_ip);
+	tcam_key->key_mask_htn.sipv4_l =
+		HINIC3_32_LOWER_16_BITS(ipv4_mask->src_ip);
+	tcam_key->key_info_htn.sipv4_h =
+		HINIC3_32_UPPER_16_BITS(ipv4_spec->src_ip);
+	tcam_key->key_info_htn.sipv4_l =
+		HINIC3_32_LOWER_16_BITS(ipv4_spec->src_ip);
+
+	tcam_key->key_mask_htn.dipv4_h =
+		HINIC3_32_UPPER_16_BITS(ipv4_mask->dst_ip);
+	tcam_key->key_mask_htn.dipv4_l =
+		HINIC3_32_LOWER_16_BITS(ipv4_mask->dst_ip);
+	tcam_key->key_info_htn.dipv4_h =
+		HINIC3_32_UPPER_16_BITS(ipv4_spec->dst_ip);
+	tcam_key->key_info_htn.dipv4_l =
+		HINIC3_32_LOWER_16_BITS(ipv4_spec->dst_ip);
+}
+
+static void
+hinic3_fdir_tcam_key_set_ipv6_sip(struct rte_eth_ipv6_flow *ipv6_mask,
+				  struct rte_eth_ipv6_flow *ipv6_spec,
+				  struct hinic3_tcam_key *tcam_key)
+{
+	tcam_key->key_mask_ipv6_htn.sipv6_key0 =
+		HINIC3_32_UPPER_16_BITS(ipv6_mask->src_ip[0]);
+	tcam_key->key_mask_ipv6_htn.sipv6_key1 =
+		HINIC3_32_LOWER_16_BITS(ipv6_mask->src_ip[0]);
+	tcam_key->key_mask_ipv6_htn.sipv6_key2 =
+		HINIC3_32_UPPER_16_BITS(ipv6_mask->src_ip[0x1]);
+	tcam_key->key_mask_ipv6_htn.sipv6_key3 =
+		HINIC3_32_LOWER_16_BITS(ipv6_mask->src_ip[0x1]);
+	tcam_key->key_mask_ipv6_htn.sipv6_key4 =
+		HINIC3_32_UPPER_16_BITS(ipv6_mask->src_ip[0x2]);
+	tcam_key->key_mask_ipv6_htn.sipv6_key5 =
+		HINIC3_32_LOWER_16_BITS(ipv6_mask->src_ip[0x2]);
+	tcam_key->key_mask_ipv6_htn.sipv6_key6 =
+		HINIC3_32_UPPER_16_BITS(ipv6_mask->src_ip[0x3]);
+	tcam_key->key_mask_ipv6_htn.sipv6_key7 =
+		HINIC3_32_LOWER_16_BITS(ipv6_mask->src_ip[0x3]);
+	tcam_key->key_info_ipv6_htn.sipv6_key0 =
+		HINIC3_32_UPPER_16_BITS(ipv6_spec->src_ip[0]);
+	tcam_key->key_info_ipv6_htn.sipv6_key1 =
+		HINIC3_32_LOWER_16_BITS(ipv6_spec->src_ip[0]);
+	tcam_key->key_info_ipv6_htn.sipv6_key2 =
+		HINIC3_32_UPPER_16_BITS(ipv6_spec->src_ip[0x1]);
+	tcam_key->key_info_ipv6_htn.sipv6_key3 =
+		HINIC3_32_LOWER_16_BITS(ipv6_spec->src_ip[0x1]);
+	tcam_key->key_info_ipv6_htn.sipv6_key4 =
+		HINIC3_32_UPPER_16_BITS(ipv6_spec->src_ip[0x2]);
+	tcam_key->key_info_ipv6_htn.sipv6_key5 =
+		HINIC3_32_LOWER_16_BITS(ipv6_spec->src_ip[0x2]);
+	tcam_key->key_info_ipv6_htn.sipv6_key6 =
+		HINIC3_32_UPPER_16_BITS(ipv6_spec->src_ip[0x3]);
+	tcam_key->key_info_ipv6_htn.sipv6_key7 =
+		HINIC3_32_LOWER_16_BITS(ipv6_spec->src_ip[0x3]);
+}
+
+static void
+hinic3_fdir_tcam_key_set_ipv6_dip(struct rte_eth_ipv6_flow *ipv6_mask,
+				  struct rte_eth_ipv6_flow *ipv6_spec,
+				  struct hinic3_tcam_key *tcam_key)
+{
+	tcam_key->key_mask_ipv6_htn.dipv6_key0 =
+		HINIC3_32_UPPER_16_BITS(ipv6_mask->dst_ip[0]);
+	tcam_key->key_mask_ipv6_htn.dipv6_key1 =
+		HINIC3_32_LOWER_16_BITS(ipv6_mask->dst_ip[0]);
+	tcam_key->key_mask_ipv6_htn.dipv6_key2 =
+		HINIC3_32_UPPER_16_BITS(ipv6_mask->dst_ip[0x1]);
+	tcam_key->key_mask_ipv6_htn.dipv6_key3 =
+		HINIC3_32_LOWER_16_BITS(ipv6_mask->dst_ip[0x1]);
+	tcam_key->key_mask_ipv6_htn.dipv6_key4 =
+		HINIC3_32_UPPER_16_BITS(ipv6_mask->dst_ip[0x2]);
+	tcam_key->key_mask_ipv6_htn.dipv6_key5 =
+		HINIC3_32_LOWER_16_BITS(ipv6_mask->dst_ip[0x2]);
+	tcam_key->key_mask_ipv6_htn.dipv6_key6 =
+		HINIC3_32_UPPER_16_BITS(ipv6_mask->dst_ip[0x3]);
+	tcam_key->key_mask_ipv6_htn.dipv6_key7 =
+		HINIC3_32_LOWER_16_BITS(ipv6_mask->dst_ip[0x3]);
+	tcam_key->key_info_ipv6_htn.dipv6_key0 =
+		HINIC3_32_UPPER_16_BITS(ipv6_spec->dst_ip[0]);
+	tcam_key->key_info_ipv6_htn.dipv6_key1 =
+		HINIC3_32_LOWER_16_BITS(ipv6_spec->dst_ip[0]);
+	tcam_key->key_info_ipv6_htn.dipv6_key2 =
+		HINIC3_32_UPPER_16_BITS(ipv6_spec->dst_ip[0x1]);
+	tcam_key->key_info_ipv6_htn.dipv6_key3 =
+		HINIC3_32_LOWER_16_BITS(ipv6_spec->dst_ip[0x1]);
+	tcam_key->key_info_ipv6_htn.dipv6_key4 =
+		HINIC3_32_UPPER_16_BITS(ipv6_spec->dst_ip[0x2]);
+	tcam_key->key_info_ipv6_htn.dipv6_key5 =
+		HINIC3_32_LOWER_16_BITS(ipv6_spec->dst_ip[0x2]);
+	tcam_key->key_info_ipv6_htn.dipv6_key6 =
+		HINIC3_32_UPPER_16_BITS(ipv6_spec->dst_ip[0x3]);
+	tcam_key->key_info_ipv6_htn.dipv6_key7 =
+		HINIC3_32_LOWER_16_BITS(ipv6_spec->dst_ip[0x3]);
+}
+
+static void
+hinic3_fdir_tcam_key_set_outer_ipv4_sip_dip(struct rte_eth_ipv4_flow *ipv4_mask,
+					    struct rte_eth_ipv4_flow *ipv4_spec,
+					    struct hinic3_tcam_key *tcam_key)
+{
+	tcam_key->key_mask_htn.outer_sipv4_h =
+		HINIC3_32_UPPER_16_BITS(ipv4_mask->src_ip);
+	tcam_key->key_mask_htn.outer_sipv4_l =
+		HINIC3_32_LOWER_16_BITS(ipv4_mask->src_ip);
+	tcam_key->key_info_htn.outer_sipv4_h =
+		HINIC3_32_UPPER_16_BITS(ipv4_spec->src_ip);
+	tcam_key->key_info_htn.outer_sipv4_l =
+		HINIC3_32_LOWER_16_BITS(ipv4_spec->src_ip);
+
+	tcam_key->key_mask_htn.outer_dipv4_h =
+		HINIC3_32_UPPER_16_BITS(ipv4_mask->dst_ip);
+	tcam_key->key_mask_htn.outer_dipv4_l =
+		HINIC3_32_LOWER_16_BITS(ipv4_mask->dst_ip);
+	tcam_key->key_info_htn.outer_dipv4_h =
+		HINIC3_32_UPPER_16_BITS(ipv4_spec->dst_ip);
+	tcam_key->key_info_htn.outer_dipv4_l =
+		HINIC3_32_LOWER_16_BITS(ipv4_spec->dst_ip);
+}
+
+static void
+hinic3_fdir_tcam_key_set_ipv4_info(struct hinic3_fdir_filter *rule,
+					       struct hinic3_tcam_key *tcam_key)
+{
+	tcam_key->key_mask_htn.ip_type = HINIC3_UINT2_MAX;
+	tcam_key->key_info_htn.ip_type = HINIC3_FDIR_IP_TYPE_IPV4;
+
+	hinic3_fdir_tcam_key_set_ipv4_sip_dip(&rule->key_mask.ipv4,
+					      &rule->key_spec.ipv4, tcam_key);
+}
+
+static void hinic3_fdir_tcam_key_set_ipv6_info(struct hinic3_fdir_filter *rule,
+					       struct hinic3_tcam_key *tcam_key)
+{
+	tcam_key->key_mask_ipv6_htn.ip_type = HINIC3_UINT2_MAX;
+	tcam_key->key_info_ipv6_htn.ip_type = HINIC3_FDIR_IP_TYPE_IPV6;
+
+	hinic3_fdir_tcam_key_set_ipv6_sip(&rule->key_mask.ipv6,
+					  &rule->key_spec.ipv6, tcam_key);
+	hinic3_fdir_tcam_key_set_ipv6_dip(&rule->key_mask.ipv6,
+					  &rule->key_spec.ipv6, tcam_key);
+}
+
+static void
+hinic3_fdir_tcam_notunnel_htn_init(struct hinic3_fdir_filter *rule,
+					       struct hinic3_tcam_key *tcam_key)
+{
+	tcam_key->key_mask_htn.tunnel_type = HINIC3_UINT3_MAX;
+	tcam_key->key_info_htn.tunnel_type = HINIC3_FDIR_TUNNEL_MODE_NORMAL;
+
+	if (rule->ip_type == HINIC3_FDIR_IP_TYPE_IPV4)
+		hinic3_fdir_tcam_key_set_ipv4_info(rule, tcam_key);
+	else if (rule->ip_type == HINIC3_FDIR_IP_TYPE_IPV6)
+		hinic3_fdir_tcam_key_set_ipv6_info(rule, tcam_key);
+}
+
+static void
+hinic3_fdir_tcam_key_set_outer_ipv4_info(struct hinic3_fdir_filter *rule,
+					 struct hinic3_tcam_key *tcam_key)
+{
+	tcam_key->key_mask_ipv6_htn.outer_ip_type = HINIC3_UINT1_MAX;
+	tcam_key->key_info_ipv6_htn.outer_ip_type = HINIC3_FDIR_IP_TYPE_IPV4;
+
+	hinic3_fdir_tcam_key_set_outer_ipv4_sip_dip(&rule->key_mask.ipv4,
+						    &rule->key_spec.ipv4, tcam_key);
+}
+
+static void
+hinic3_fdir_tcam_key_set_inner_ipv4_info(struct hinic3_fdir_filter *rule,
+						     struct hinic3_tcam_key *tcam_key)
+{
+	tcam_key->key_mask_htn.ip_type = HINIC3_UINT2_MAX;
+	tcam_key->key_info_htn.ip_type = HINIC3_FDIR_IP_TYPE_IPV4;
+
+	hinic3_fdir_tcam_key_set_ipv4_sip_dip(&rule->key_mask.inner_ipv4,
+					      &rule->key_spec.inner_ipv4, tcam_key);
+}
+
+static void
+hinic3_fdir_tcam_key_set_inner_ipv6_info(struct hinic3_fdir_filter *rule,
+						     struct hinic3_tcam_key *tcam_key)
+{
+	tcam_key->key_mask_vxlan_ipv6_htn.ip_type = HINIC3_UINT2_MAX;
+	tcam_key->key_info_vxlan_ipv6_htn.ip_type = HINIC3_FDIR_IP_TYPE_IPV6;
+
+	hinic3_fdir_tcam_key_set_ipv6_dip(&rule->key_mask.inner_ipv6,
+					  &rule->key_spec.inner_ipv6, tcam_key);
+}
+
+static void
+hinic3_fdir_tcam_tunnel_htn_init(struct hinic3_fdir_filter *rule,
+					    struct hinic3_tcam_key *tcam_key)
+{
+	tcam_key->key_mask_htn.tunnel_type = HINIC3_UINT3_MAX;
+	tcam_key->key_info_htn.tunnel_type = rule->tunnel_type;
+
+	tcam_key->key_mask_htn.vni_h =
+		HINIC3_32_UPPER_16_BITS(rule->key_mask.tunnel.tunnel_id);
+	tcam_key->key_mask_htn.vni_l =
+		HINIC3_32_LOWER_16_BITS(rule->key_mask.tunnel.tunnel_id);
+	tcam_key->key_info_htn.vni_h =
+		HINIC3_32_UPPER_16_BITS(rule->key_spec.tunnel.tunnel_id);
+	tcam_key->key_info_htn.vni_l =
+		HINIC3_32_LOWER_16_BITS(rule->key_spec.tunnel.tunnel_id);
+
+	if (rule->outer_ip_type == HINIC3_FDIR_IP_TYPE_IPV4)
+		hinic3_fdir_tcam_key_set_outer_ipv4_info(rule, tcam_key);
+
+	if (rule->ip_type == HINIC3_FDIR_IP_TYPE_IPV4)
+		hinic3_fdir_tcam_key_set_inner_ipv4_info(rule, tcam_key);
+	else if (rule->ip_type == HINIC3_FDIR_IP_TYPE_IPV6)
+		hinic3_fdir_tcam_key_set_inner_ipv6_info(rule, tcam_key);
+}
+
+void
+hinic3_fdir_tcam_info_htn_init(struct rte_eth_dev *dev,
+			       struct hinic3_fdir_filter *rule,
+			       struct hinic3_tcam_key *tcam_key,
+			       struct hinic3_tcam_cfg_rule *fdir_tcam_rule)
+{
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
+
+	tcam_key->key_mask_htn.function_id_h = HINIC3_UINT5_MAX;
+	tcam_key->key_mask_htn.function_id_l = HINIC3_UINT5_MAX;
+	tcam_key->key_info_htn.function_id_l =
+		hinic3_global_func_id(nic_dev->hwdev) & HINIC3_UINT5_MAX;
+	tcam_key->key_info_htn.function_id_h =
+		(hinic3_global_func_id(nic_dev->hwdev) >> HINIC3_UINT5_WIDTH) & HINIC3_UINT5_MAX;
+
+	tcam_key->key_mask_htn.ip_proto = rule->key_mask.proto;
+	tcam_key->key_info_htn.ip_proto = rule->key_spec.proto;
+
+	tcam_key->key_mask_htn.sport = rule->key_mask.src_port;
+	tcam_key->key_info_htn.sport = rule->key_spec.src_port;
+
+	tcam_key->key_mask_htn.dport = rule->key_mask.dst_port;
+	tcam_key->key_info_htn.dport = rule->key_spec.dst_port;
+	if (rule->tunnel_type == HINIC3_FDIR_TUNNEL_MODE_NORMAL)
+		hinic3_fdir_tcam_notunnel_htn_init(rule, tcam_key);
+	else
+		hinic3_fdir_tcam_tunnel_htn_init(rule, tcam_key);
+
+	if ((rule->action == RTE_FLOW_ACTION_TYPE_RSS)) {
+		fdir_tcam_rule->data.dw0.bs.qid = rule->rss_group_id;
+		fdir_tcam_rule->data.dw0.bs.flag = 1;
+		fdir_tcam_rule->data.dw1.queue_num = rule->queue_num;
+	} else {
+		fdir_tcam_rule->data.dw0.qid = rule->rq_index;
+		fdir_tcam_rule->data.dw1.queue_num = rule->queue_num;
+	}
+
+	tcam_key_calculate(tcam_key, fdir_tcam_rule, HINIC3_TCAM_FLOW_KEY_SIZE);
+}
+
 static void hinic3_fdir_tcam_key_get(struct rte_eth_dev *dev,
 				     struct hinic3_fdir_filter *rule,
 				     struct hinic3_tcam_key *tcam_key)
@@ -691,13 +903,10 @@ void hinic3_free_dynamic_block_resource(
 }
 
 static struct hinic3_tcam_dynamic_block *
-hinic3_dynamic_lookup_tcam_filter(struct rte_eth_dev *dev,
-		struct hinic3_tcam_cfg_rule *fdir_tcam_rule,
-		struct hinic3_tcam_info *tcam_info,
-		struct hinic3_tcam_filter *tcam_filter,
-		u16 *tcam_index)
+hinic3_dynamic_lookup_tcam_filter(struct hinic3_nic_dev *nic_dev,
+				  struct hinic3_tcam_info *tcam_info,
+				  u16 *tcam_index)
 {
-	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	u16 block_cnt = tcam_info->tcam_dynamic_info.dynamic_block_cnt;
 	struct hinic3_tcam_dynamic_block *dynamic_block_ptr = NULL;
 	struct hinic3_tcam_dynamic_block *tmp = NULL;
@@ -707,9 +916,12 @@ hinic3_dynamic_lookup_tcam_filter(struct rte_eth_dev *dev,
 	u16 index;
 	int err;
 
+	if ((hinic3_get_driver_feature(nic_dev) & NIC_F_HTN_FDIR) != 0)
+		rule_nums += nic_dev->ethertype_rule_nums;
+
 	if (rule_nums >= block_cnt * HINIC3_TCAM_DYNAMIC_BLOCK_SIZE) {
 		if (block_cnt >=
-			(HINIC3_TCAM_DYNAMIC_MAX_FILTERS /
+			(HINIC3_TCAM_DYNAMIC_MAX_FILTERS(nic_dev) /
 			HINIC3_TCAM_DYNAMIC_BLOCK_SIZE)) {
 			PMD_DRV_LOG(ERR, "Dynamic tcam block is full, alloc failed!");
 			goto failed;
@@ -755,13 +967,7 @@ hinic3_dynamic_lookup_tcam_filter(struct rte_eth_dev *dev,
 		goto look_up_failed;
 	}
 
-	tcam_filter->dynamic_block_id = tmp->dynamic_block_id;
-	tcam_filter->index = index;
 	*tcam_index = index;
-
-	fdir_tcam_rule->index =
-		HINIC3_PKT_TCAM_DYNAMIC_INDEX_START(tmp->dynamic_block_id) +
-			index;
 
 	return tmp;
 
@@ -778,6 +984,107 @@ failed:
 	return NULL;
 }
 
+int
+hinic3_set_fdir_ethertype_filter(void *hwdev, u8 pkt_type, void *filter, u8 en)
+{
+	struct hinic3_set_fdir_ethertype_rule ethertype_cmd;
+	struct hinic3_ethertype_filter *ethertype_filter = (struct hinic3_ethertype_filter *)filter;
+	u16 out_size = sizeof(ethertype_cmd);
+	u16 block_id;
+	u32 index = 0;
+	int err;
+
+	if (!hwdev)
+		return -EINVAL;
+	struct hinic3_nic_dev *nic_dev = (struct hinic3_nic_dev*)((struct hinic3_hwdev *)hwdev)->dev_handle;
+
+	if ((hinic3_get_driver_feature(nic_dev) & NIC_F_HTN_FDIR) != 0) {
+		if (en != 0) {
+			index = hinic3_tcam_alloc_index(nic_dev, &block_id);
+			if (index == HINIC3_TCAM_INVALID_INDEX)
+				return -ENOMEM;
+			index += HINIC3_PKT_TCAM_DYNAMIC_INDEX_START(block_id);
+		} else
+			index = ethertype_filter->tcam_index[pkt_type];
+	}
+
+	memset(&ethertype_cmd, 0, sizeof(struct hinic3_set_fdir_ethertype_rule));
+	ethertype_cmd.func_id = hinic3_global_func_id(hwdev);
+	ethertype_cmd.pkt_type = pkt_type;
+	ethertype_cmd.pkt_type_en = en;
+	ethertype_cmd.index = index;
+	ethertype_cmd.qid = (u8)ethertype_filter->queue;
+	if (en == 0)
+		ethertype_cmd.flags = 0;
+	else
+ 		ethertype_cmd.flags = (u8)ethertype_filter->flags;
+
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_SET_FDIR_STATUS,
+				     &ethertype_cmd, sizeof(ethertype_cmd),
+				     &ethertype_cmd, &out_size);
+	if (err || ethertype_cmd.head.status || !out_size) {
+		PMD_DRV_LOG(ERR,
+			    "set fdir ethertype rule failed, err: %d, status: 0x%x, out size: 0x%x, func_id %d",
+			    err, ethertype_cmd.head.status, out_size, ethertype_cmd.func_id);
+		return -EIO;
+	}
+	if ((hinic3_get_driver_feature(nic_dev) & NIC_F_HTN_FDIR) != 0) {
+		if (en == 0) {
+			hinic3_tcam_index_free(nic_dev, HINIC3_TCAM_GET_INDEX_IN_BLOCK(index),
+					       HINIC3_TCAM_GET_DYNAMIC_BLOCK_INDEX(index));
+		} else {
+			ethertype_filter->tcam_index[pkt_type] = index;
+		}
+	}
+
+	return 0;
+}
+
+u16 hinic3_tcam_alloc_index(void *dev, u16 *block_id)
+{
+	struct hinic3_nic_dev *nic_dev = (struct hinic3_nic_dev *)dev;
+	struct hinic3_tcam_info *tcam_info = HINIC3_DEV_PRIVATE_TO_TCAM_INFO(nic_dev);
+	struct hinic3_tcam_dynamic_block *tmp = NULL;
+	u16 index = 0;
+
+	tmp = hinic3_dynamic_lookup_tcam_filter(nic_dev, tcam_info, &index);
+	if (tmp == NULL) {
+		PMD_DRV_LOG(ERR, "Dynamic lookup tcam filter failed!");
+		return HINIC3_TCAM_INVALID_INDEX;
+	}
+
+	tmp->dynamic_index[index] = 1;
+	tmp->dynamic_index_cnt++;
+
+	*block_id = tmp->dynamic_block_id;
+
+	return index;
+}
+
+void hinic3_tcam_index_free(void *dev, u16 index, u16 block_id)
+{
+	struct hinic3_nic_dev *nic_dev = (struct hinic3_nic_dev *)dev;
+	struct hinic3_tcam_info *tcam_info = HINIC3_DEV_PRIVATE_TO_TCAM_INFO(nic_dev);
+	struct hinic3_tcam_dynamic_block *tmp = NULL;
+
+	TAILQ_FOREACH(tmp, &tcam_info->tcam_dynamic_info.tcam_dynamic_list, entries) {
+			if (tmp->dynamic_block_id == block_id)
+				break;
+	}
+
+	if (tmp == NULL || tmp->dynamic_block_id != block_id) {
+		PMD_DRV_LOG(ERR, "Fdir filter del dynamic lookup for block failed!");
+		return;
+	}
+
+	tmp->dynamic_index[index] = 0;
+	tmp->dynamic_index_cnt--;
+	if (tmp->dynamic_index_cnt ==0) {
+		(void)hinic3_free_tcam_block(nic_dev->hwdev, &block_id);
+		hinic3_free_dynamic_block_resource(tcam_info, tmp);
+	}
+}
+
 static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
 				  struct hinic3_tcam_key *tcam_key,
 				  struct hinic3_tcam_cfg_rule *fdir_tcam_rule)
@@ -785,49 +1092,31 @@ static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
 	struct hinic3_tcam_info *tcam_info =
 		HINIC3_DEV_PRIVATE_TO_TCAM_INFO(dev->data->dev_private);
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
-	struct hinic3_tcam_dynamic_block *dynamic_block_ptr = NULL;
-	struct hinic3_tcam_dynamic_block *tmp = NULL;
 	struct hinic3_tcam_filter *tcam_filter;
-	u16 tcam_block_index = 0;
-	u16 index = 0;
+	u8 tcam_rule_type = 0;
 	u8 bifur_en = 0;
-	u8 tcam_rule_type;
 	int err;
 
-	tcam_filter = rte_zmalloc("hinic3_fdir_filter", sizeof(struct hinic3_tcam_filter), 0);
+	tcam_filter = rte_zmalloc("hinic3_fdir_filter",
+				  sizeof(struct hinic3_tcam_filter), 0);
 	if (tcam_filter == NULL)
 		return -ENOMEM;
 	(void)rte_memcpy(&tcam_filter->tcam_key,
 			 tcam_key, sizeof(struct hinic3_tcam_key));
 	tcam_filter->queue = (u16)(fdir_tcam_rule->data.dw0.qid);
+	tcam_filter->index = hinic3_tcam_alloc_index(nic_dev, &tcam_filter->dynamic_block_id);
 
-	if (nic_dev->tcam_rule_nums == 0) {
-		err = hinic3_alloc_tcam_block(nic_dev->hwdev,
-					&tcam_block_index);
-		if (err) {
-			PMD_DRV_LOG(ERR, "Fdir filter tcam alloc block failed!");
-			goto failed;
-		}
+	if (tcam_filter->index == HINIC3_TCAM_INVALID_INDEX)
+		goto failed;
 
-		dynamic_block_ptr =
-			hinic3_alloc_dynamic_block_resource(tcam_info, tcam_block_index, 0, false);
-		if (dynamic_block_ptr == NULL) {
-			PMD_DRV_LOG(ERR, "Fdir filter alloc dynamic first block memory failed!");
-			goto alloc_block_failed;
-		}
-	}
-
-	tmp = hinic3_dynamic_lookup_tcam_filter(dev,
-		fdir_tcam_rule, tcam_info, tcam_filter, &index);
-	if (tmp == NULL) {
-		PMD_DRV_LOG(ERR, "Dynamic lookup tcam filter failed!");
-		goto lookup_tcam_index_failed;
-	}
+	fdir_tcam_rule->index = HINIC3_PKT_TCAM_DYNAMIC_INDEX_START(tcam_filter->dynamic_block_id) +
+								    tcam_filter->index;
 
 	if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, 0, 0) != 0) 
 		PMD_DRV_LOG(WARNING, "hinic3 get port table bifur enable status failed."); 
 
-	if (IS_QPOOL_MODE() || fdir_tcam_rule->data.dw1.bs.action != 0 || ((IS_NORMAL_MODE() && bifur_en) && is_sp560_nic(nic_dev)))
+	if (!is_sp230_nic(nic_dev) &&
+	    (IS_QPOOL_MODE() || fdir_tcam_rule->data.dw1.bs.action != 0 || ((IS_NORMAL_MODE() && bifur_en) && is_sp560_nic(nic_dev))))
  	 	tcam_rule_type = TCAM_RULE_Q_GROUP_TYPE;
  	else
  	 	tcam_rule_type = TCAM_RULE_FDIR_TYPE;
@@ -845,32 +1134,21 @@ static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
 	}
 	TAILQ_INSERT_TAIL(&tcam_info->tcam_list, tcam_filter, entries);
 
-	tmp->dynamic_index[index] = 1;
-	tmp->dynamic_index_cnt++;
-
 	nic_dev->tcam_rule_nums++;
 
-	PMD_DRV_LOG(INFO, "Add fdir tcam rule, function_id: 0x%x, "
+	PMD_DRV_LOG(INFO, "Add fdir tcam rule succeed, function_id: 0x%x, "
 		    "tcam_block_id: %d, local_index: %d, global_index: %d, queue: %u, "
-		    "tcam_rule_nums: %d succeed",
+		    "tcam_rule_nums: %d",
 		    hinic3_global_func_id(nic_dev->hwdev),
-		    tcam_filter->dynamic_block_id, index, fdir_tcam_rule->index,
+		    tcam_filter->dynamic_block_id, tcam_filter->index, fdir_tcam_rule->index,
 		    fdir_tcam_rule->data.dw0.qid, nic_dev->tcam_rule_nums);
-
 	return 0;
 
 enable_failed:
 	(void)hinic3_del_tcam_rule(nic_dev->hwdev, fdir_tcam_rule->index, TCAM_RULE_FDIR_TYPE);
 
 add_tcam_rules_failed:
-lookup_tcam_index_failed:
-	if (nic_dev->tcam_rule_nums == 0 && dynamic_block_ptr != NULL)
-		hinic3_free_dynamic_block_resource(tcam_info,
-			dynamic_block_ptr);
-
-alloc_block_failed:
-	if (nic_dev->tcam_rule_nums == 0)
-		(void)hinic3_free_tcam_block(nic_dev->hwdev, &tcam_block_index);
+	hinic3_tcam_index_free(nic_dev, tcam_filter->index, tcam_filter->dynamic_block_id);
 
 failed:
 	rte_free(tcam_filter);
@@ -906,21 +1184,16 @@ static int hinic3_del_dynamic_tcam_filter(struct rte_eth_dev *dev,
 		return -EFAULT;
 	}
 
-	PMD_DRV_LOG(INFO, "Del fdir_tcam_dynamic_rule function_id: 0x%x, "
+	PMD_DRV_LOG(INFO, "Del fdir_tcam_dynamic_rule succeed, function_id: 0x%x, "
 		    "tcam_block_id: %d, local_index: %d, global_index: %d, "
-		    "local_rules_nums: %d, global_rule_nums: %d succeed",
+		    "local_rules_nums: %d, global_rule_nums: %d",
 		    hinic3_global_func_id(nic_dev->hwdev), dynamic_block_id,
 		    tcam_filter->index, index, tmp->dynamic_index_cnt - 1,
 		    nic_dev->tcam_rule_nums - 1);
 
-	tmp->dynamic_index[tcam_filter->index] = 0;
-	tmp->dynamic_index_cnt--;
-	nic_dev->tcam_rule_nums--;
-	if (tmp->dynamic_index_cnt == 0) {
-		(void)hinic3_free_tcam_block(nic_dev->hwdev, &dynamic_block_id);
+	hinic3_tcam_index_free(nic_dev, tcam_filter->index, tmp->dynamic_block_id);
 
-		hinic3_free_dynamic_block_resource(tcam_info, tmp);
-	}
+	nic_dev->tcam_rule_nums--;
 
 	if (!(nic_dev->ethertype_rule_nums + nic_dev->tcam_rule_nums))
 		(void)hinic3_set_fdir_tcam_rule_filter(nic_dev->hwdev, false);
@@ -952,6 +1225,7 @@ int hinic3_flow_add_del_fdir_filter(struct rte_eth_dev *dev,
 				    struct hinic3_fdir_filter *fdir_filter,
 				    bool add)
 {
+	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_tcam_info *tcam_info =
 		HINIC3_DEV_PRIVATE_TO_TCAM_INFO(dev->data->dev_private);
 	struct hinic3_tcam_filter *tcam_filter;
@@ -962,8 +1236,10 @@ int hinic3_flow_add_del_fdir_filter(struct rte_eth_dev *dev,
 	memset(&fdir_tcam_rule, 0, sizeof(struct hinic3_tcam_cfg_rule));
 	memset((void *)&tcam_key, 0, sizeof(struct hinic3_tcam_key));
 
-	hinic3_fdir_tcam_info_init(dev, fdir_filter,
-			&tcam_key, &fdir_tcam_rule);
+	if ((hinic3_get_driver_feature(nic_dev) & NIC_F_HTN_FDIR) == 0)
+		hinic3_fdir_tcam_info_init(dev, fdir_filter, &tcam_key, &fdir_tcam_rule);
+	else
+		hinic3_fdir_tcam_info_htn_init(dev, fdir_filter, &tcam_key, &fdir_tcam_rule);
 
 	if (add) {
 		tcam_filter = hinic3_tcam_filter_lookup(&tcam_info->tcam_list, &tcam_key,
@@ -1076,7 +1352,8 @@ void hinic3_free_fdir_filter(struct rte_eth_dev *dev)
 	(void)hinic3_flush_tcam_rule(nic_dev->hwdev);
 }
 
-static int hinic3_flow_set_arp_filter(struct rte_eth_dev *dev, struct rte_eth_ethertype_filter *ethertype_filter,
+static int hinic3_flow_set_arp_filter(struct rte_eth_dev *dev,
+				      struct hinic3_ethertype_filter *ethertype_filter,
 				      bool add)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
@@ -1112,7 +1389,7 @@ set_arp_req_failed:
 }
 
 static int hinic3_flow_set_slow_filter(struct rte_eth_dev *dev,
-				       struct rte_eth_ethertype_filter *ethertype_filter,
+				       struct hinic3_ethertype_filter *ethertype_filter,
 				       bool add)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
@@ -1139,7 +1416,7 @@ set_arp_oam_failed:
 }
 
 static int hinic3_flow_set_lldp_filter(struct rte_eth_dev *dev,
-				       struct rte_eth_ethertype_filter *ethertype_filter,
+				       struct hinic3_ethertype_filter *ethertype_filter,
 				       bool add)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
@@ -1165,9 +1442,10 @@ set_arp_cdcp_failed:
 	return ret;
 }
 
-static int hinic3_flow_add_del_ethertype_filter_rule(struct rte_eth_dev *dev,
-						     struct rte_eth_ethertype_filter *ethertype_filter,
-						     bool add)
+static int
+hinic3_flow_add_del_ethertype_filter_rule(struct rte_eth_dev *dev,
+					  struct hinic3_ethertype_filter *ethertype_filter,
+					  bool add)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_ethertype_filter_list *ethertype_list = &nic_dev->filter_ethertype_list;
@@ -1212,7 +1490,7 @@ static int hinic3_flow_add_del_ethertype_filter_rule(struct rte_eth_dev *dev,
 	}
 }
 
-static int hinic3_flow_ethertype_rule_nums(struct rte_eth_ethertype_filter *ethertype_filter)
+static int hinic3_flow_ethertype_rule_nums(struct hinic3_ethertype_filter *ethertype_filter)
 {
 	switch (ethertype_filter->ether_type) {
 	case RTE_ETHER_TYPE_ARP:
@@ -1236,7 +1514,7 @@ static int hinic3_flow_ethertype_rule_nums(struct rte_eth_ethertype_filter *ethe
 }
 
 int hinic3_flow_add_del_ethertype_filter(struct rte_eth_dev *dev,
-					 struct rte_eth_ethertype_filter *ethertype_filter,
+					 struct hinic3_ethertype_filter *ethertype_filter,
 					 bool add)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);

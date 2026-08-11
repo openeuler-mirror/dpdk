@@ -10,12 +10,22 @@
 #define HINIC3_TCAM_DYNAMIC_BLOCK_SIZE  16
 #define HINIC3_640_TCAM_DYNAMIC_BLOCK_SIZE  8
 #define HINIC3_TCAM_KEY_WIDTH_INVALID 0xFF
-
-#define HINIC3_TCAM_DYNAMIC_MAX_FILTERS 2048
+#define HINIC3_TCAM_DYNAMIC_MAX_FILTERS(nic_dev) \
+	(is_sp230_nic(nic_dev) ? HINIC3_TCAM_DYNAMIC_MAX_FILTERS_HTN : HINIC3_TCAM_DYNAMIC_MAX_FILTERS_STN)
+#define HINIC3_TCAM_DYNAMIC_MAX_FILTERS_STN 2048
+#define HINIC3_TCAM_DYNAMIC_MAX_FILTERS_HTN 1024
 #define HINIC3_SEC_TCAM_DYNAMIC_MAX_FILTERS 4096
 
 #define HINIC3_PKT_TCAM_DYNAMIC_INDEX_START(block_index)  \
-		(HINIC3_TCAM_DYNAMIC_BLOCK_SIZE * (block_index))
+	(HINIC3_TCAM_DYNAMIC_BLOCK_SIZE * (block_index))
+
+#define HINIC3_TCAM_GET_DYNAMIC_BLOCK_INDEX(index) \
+		((index) / HINIC3_TCAM_DYNAMIC_BLOCK_SIZE)
+
+#define HINIC3_TCAM_GET_INDEX_IN_BLOCK(index) \
+		((index) % HINIC3_TCAM_DYNAMIC_BLOCK_SIZE)
+
+#define HINIC3_TCAM_INVALID_INDEX 0xFFFF
 
 #define HINIC3_RSS_QUEUE_BUF 128
 
@@ -60,8 +70,9 @@ struct hinic3_fdir_filter {
 	uint8_t outer_ip_type; /* outer ip type */
 	uint8_t tunnel_type;
  	uint8_t action;
- 	uint32_t level;
+	uint32_t level;
 	uint16_t q_grp_id;
+	uint16_t rss_group_id;
 	struct hinic3_fdir_rule_key key_mask;
 	struct hinic3_fdir_rule_key key_spec;
 	uint32_t rq_index; /* queue assigned when matched */
@@ -99,7 +110,7 @@ struct hinic3_ethertype_filter {
 struct hinic3_filter_t {
 	u16  filter_rule_nums;
 	enum rte_filter_type filter_type;
-	struct rte_eth_ethertype_filter ethertype_filter;
+	struct hinic3_ethertype_filter ethertype_filter;
 	struct hinic3_fdir_filter fdir_filter;
 	struct hinic3_sec_fdir_filter sec_fdir_filter;
 	struct hinic3_rss_template_entry *template_entry;
@@ -1496,10 +1507,21 @@ struct hinic3_tcam_info {
 #define HINIC3_QUEUE_MAX          16
 #endif
 
+/* 256-entry RSS indir table split into 8 groups; group0 for func RSS */
+#define HINIC3_RSS_INDIR_GROUP_NUM	8
+#define HINIC3_RSS_INDIR_GROUP_SIZE_PF	(HINIC3_RSS_INDIR_SIZE / HINIC3_RSS_INDIR_GROUP_NUM)
+/* The actual size of VF RSS indir is 128 which should be considered under grouping conditions */
+#define HINIC3_RSS_INDIR_SIZE_VF 128
+#define HINIC3_RSS_INDIR_GROUP_SIZE_VF	(HINIC3_RSS_INDIR_SIZE_VF / HINIC3_RSS_INDIR_GROUP_NUM)
+
+#define HINIC3_RSS_FUNC_GROUP_ID	0
+#define HINIC3_FLOW_RSS_GROUP_MAX	(HINIC3_RSS_INDIR_GROUP_NUM - 1)
+
 /* RSS template entry structure for managing RSS templates */
 struct hinic3_rss_template_entry {
 	TAILQ_ENTRY(hinic3_rss_template_entry) node;
 	u64 types;
+	u16 rss_group_id;		/* Indir group id: 1-7 for flow rss */
 	u16 q_grp_id;					/* Queue group ID */
 	u16 queue_num;					/* Number of queues */
 	u16 queues[HINIC3_QUEUE_MAX];	/* Queue list */
@@ -1518,17 +1540,25 @@ int hinic3_flow_add_del_fdir_filter(struct rte_eth_dev *dev,
 				    struct hinic3_fdir_filter *fdir_filter,
 				    bool add);
 int hinic3_flow_add_del_ethertype_filter(struct rte_eth_dev *dev,
-					 struct rte_eth_ethertype_filter *ethertype_filter,
+					 struct hinic3_ethertype_filter *ethertype_filter,
 					 bool add);
 void
 hinic3_fdir_tcam_action_init(struct rte_eth_dev *dev,
 			    const struct hinic3_fdir_filter *rule,
 			    struct hinic3_tcam_cfg_rule *fdir_tcam_rule);
+void
+hinic3_fdir_tcam_info_htn_init(struct rte_eth_dev *dev, struct hinic3_fdir_filter *rule,
+				    struct hinic3_tcam_key *tcam_key,
+				    struct hinic3_tcam_cfg_rule *fdir_tcam_rule);
+u16 hinic3_tcam_alloc_index(void *dev, u16 *block_id);
+void hinic3_tcam_index_free(void *dev, u16 index, u16 block_id);
 void tcam_key_calculate(struct hinic3_tcam_key *tcam_key, void *fdir_tcam_rule, u8 key_len);
 
 void hinic3_free_fdir_filter(struct rte_eth_dev *dev);
 int hinic3_enable_rxq_fdir_filter(struct rte_eth_dev *dev, u32 queue_id, u32 able);
 int hinic3_flow_parse_attr(const struct rte_flow_attr *attr, struct rte_flow_error *error);
+
+int hinic3_set_fdir_ethertype_filter(void *hwdev, u8 pkt_type, void *filter, u8 en);
 
 int hinic3_flow_query_fdir_filter(struct rte_eth_dev *dev, struct hinic3_fdir_filter *fdir_filter,
 				  __rte_unused u64 *hits, __rte_unused u64 *bytes_count);
