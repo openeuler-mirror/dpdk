@@ -717,7 +717,7 @@ hinic3_vf_tx_queue_setup(struct rte_eth_dev *dev, uint16_t idx, uint16_t desc,
 {
     int ret = hinic3_vf_tx_queue_setup_check(dev, idx, desc);
     if (ret != 0)
-        return 0;
+        return ret;
 
     struct rte_eth_dev_data *data = dev->data;
     struct hinic3_vf_dev *vf_dev = hinic3_ethdev_get_vf_private(dev);

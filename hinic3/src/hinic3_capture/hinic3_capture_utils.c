@@ -132,7 +132,7 @@ int pcap_port_info_get_by_name(const char *port_name, struct pcap_port_t *port_i
     char name[PCAP_MAX_PORT_COMBINE_NAME] = {0};
 
     ret = snprintf(name, PCAP_MAX_PORT_COMBINE_NAME - 1, "%s%s", HINIC3_ETH_VDEV_DRV_NAME, port_name);
-    if (ret <= 0 || strlen(port_name) > PCAP_MAX_PORT_NAME)
+    if (ret <= 0 || strlen(port_name) >= PCAP_MAX_PORT_NAME)
     {
         HINIC3_LOG(ERR, CAPTURE, "The port name is misspelled!");
         return -1;
