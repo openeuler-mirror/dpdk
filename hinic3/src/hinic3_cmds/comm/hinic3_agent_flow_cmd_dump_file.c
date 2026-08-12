@@ -92,7 +92,8 @@ hinic3_agent_parse_output_file_path(struct hinic3_dump_all_flows_mgmt_t *m, cons
         return -1;
     }
 
-    int ret = hinic3_check_output_file_directory(filename, absolute_path, sizeof(absolute_path), ds);
+    int ret = hinic3_check_output_file_directory(hinic3_get_default_directory(), filename,
+        absolute_path, sizeof(absolute_path), ds);
     if (ret != 0) {
         m->file = NULL;
         hinic3_ds_put_format(ds, HINIC3_UI_FILE_OPEN_FAILED_STRING, HINIC3_UI_LEADING_SIGN_ERROR, filename);

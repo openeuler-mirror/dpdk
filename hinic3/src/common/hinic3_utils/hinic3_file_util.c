@@ -27,7 +27,7 @@
 #define HINIC3_FILE_SIZE_KB 1024
 #define HINIC3_FILE_SIZE_MB (HINIC3_FILE_SIZE_KB * HINIC3_FILE_SIZE_KB)
 
-static int hinic3_get_absolute_file_path(const char *file_name, char *absolute_path, int len)
+int hinic3_get_absolute_file_path(const char *path, const char *file_name, char *absolute_path, int len)
 {
     int ret;
 
@@ -36,7 +36,11 @@ static int hinic3_get_absolute_file_path(const char *file_name, char *absolute_p
         return -1;
     }
 
-    ret = snprintf(absolute_path, len, "%s%s", HINIC3_FILE_DIRECTORY_PATH, file_name);
+    if (path[strlen(path) - 1] == '/') {
+        ret = snprintf(absolute_path, len, "%s%s", path, file_name);
+    } else {
+        ret = snprintf(absolute_path, len, "%s/%s", path, file_name);
+    }
     if (ret <= 0) {
         HINIC3_LOG(ERR, AGENT, "get absolute path failed, err is %d!", ret);
         return -1;
@@ -54,12 +58,12 @@ static bool hinic3_check_directory_existence(const char *path)
         return false;
     }
 
-    // 获取文件状态
+    // 检查路径是否可访问
     if (stat(path, &info) != 0) {
         return false;
     }
 
-    // 检查是否目录
+    // 检查是否为目录类型
     return (info.st_mode & S_IFDIR) ? true : false;
 }
 
@@ -128,7 +132,7 @@ static int hinic3_check_directory(const char *path)
     return 0;
 }
 
-uint64_t hinic3_get_default_file_directory_size(bool *is_obtained)
+uint64_t hinic3_get_directory_size(const char *path, bool *is_obtained)
 {
     char cmd[HINIC3_FILE_USAGE_CMD_LEN];
     char result[HINIC3_FILE_USAGE_RESULT_LEN] = {0};
@@ -137,16 +141,16 @@ uint64_t hinic3_get_default_file_directory_size(bool *is_obtained)
     uint64_t real_size = 0;
     int ret;
 
-    ret = snprintf(cmd, HINIC3_FILE_USAGE_CMD_LEN, "du -BM %s | cut -f1", HINIC3_FILE_DIRECTORY_PATH);
+    ret = snprintf(cmd, HINIC3_FILE_USAGE_CMD_LEN, "du -BM -s %s | cut -f1", path);
     if (ret <= 0) {
-        HINIC3_LOG(ERR, AGENT, "get directory path failed, path: %s!", HINIC3_FILE_DIRECTORY_PATH);
+        HINIC3_LOG(ERR, AGENT, "get directory path failed, path: %s!", path);
         *is_obtained = false;
         return 0;
     }
 
     file = popen(cmd, "r");
     if (file == NULL) {
-        HINIC3_LOG(ERR, AGENT, "open directory size failed, path: %s!", HINIC3_FILE_DIRECTORY_PATH);
+        HINIC3_LOG(ERR, AGENT, "open directory size failed, path: %s!", path);
         *is_obtained = false;
         return 0;
     }
@@ -154,7 +158,7 @@ uint64_t hinic3_get_default_file_directory_size(bool *is_obtained)
     while (fgets(result, HINIC3_FILE_USAGE_RESULT_LEN, file) != NULL) {
         real_size = strtoul(result, &endptr, STR_TO_DEC_NUM);
         if (endptr == NULL || *endptr != 'M') {
-            HINIC3_LOG(ERR, AGENT, "convert directory size failed, path: %s!", HINIC3_FILE_DIRECTORY_PATH);
+            HINIC3_LOG(ERR, AGENT, "convert directory size failed, path: %s!", path);
             pclose(file);
             *is_obtained = false;
             return 0;
@@ -184,7 +188,7 @@ static bool hinic3_is_directory_reach_limit(void)
         return true;
     }
 
-    real_size = hinic3_get_default_file_directory_size(&is_obtained);
+    real_size = hinic3_get_directory_size(HINIC3_FILE_DIRECTORY_PATH, &is_obtained);
     if (is_obtained == false) {
         HINIC3_LOG(ERR, AGENT, "get directory real size fail, path: %s!", HINIC3_FILE_DIRECTORY_PATH);
         return true;
@@ -197,25 +201,49 @@ static bool hinic3_is_directory_reach_limit(void)
     return false;
 }
 
-int hinic3_check_output_file_directory(const char *filename, char *absolute_path, unsigned int path_len, struct ds *ds)
+static bool hinic3_is_path_under_default_directory(const char *path)
+{
+    size_t default_len = strlen(HINIC3_FILE_DIRECTORY_PATH);
+
+    /* HINIC3_FILE_DIRECTORY_PATH 以 '/' 结尾，如 "/var/log/dpak/dpak_ovs_data/" */
+    /* 精确匹配默认目录（带尾部 '/'） */
+    if (strcmp(path, HINIC3_FILE_DIRECTORY_PATH) == 0)
+        return true;
+
+    /* 精确匹配默认目录（不带尾部 '/'） */
+    if (strlen(path) == default_len - 1 &&
+        strncmp(path, HINIC3_FILE_DIRECTORY_PATH, default_len - 1) == 0)
+        return true;
+
+    /* 子目录：path 以 "/var/log/dpak/dpak_ovs_data/" 开头 */
+    if (strncmp(path, HINIC3_FILE_DIRECTORY_PATH, default_len) == 0)
+        return true;
+
+    return false;
+}
+
+int hinic3_check_output_file_directory(const char *path, const char *filename,
+    char *absolute_path, unsigned int path_len, struct ds *ds)
 {
     int ret;
     uint64_t dir_size;
     bool is_obtained = false;
 
-    if (filename == NULL || absolute_path == NULL || ds == NULL || path_len == 0 || path_len > PATH_MAX) {
+    if (path == NULL || filename == NULL || absolute_path == NULL || ds == NULL ||
+        path_len == 0 || path_len > PATH_MAX) {
         HINIC3_LOG(ERR, AGENT, "input param is invalid!");
         return -1;
     }
 
-    ret = hinic3_get_absolute_file_path(filename, absolute_path, path_len);
+    ret = hinic3_get_absolute_file_path(path, filename, absolute_path, path_len);
     if (ret != 0) {
         hinic3_ds_put_format(ds, HINIC3_UI_FILE_GET_ABSOLUTE_PATH_FAIL_STRING, HINIC3_UI_LEADING_SIGN_ERROR, filename);
         return -1;
     }
 
+    /* 子目录共享默认目录的磁盘配额，配额检查仍基于 HINIC3_FILE_DIRECTORY_PATH */
     if (hinic3_is_directory_reach_limit()) {
-        dir_size = hinic3_get_default_file_directory_size(&is_obtained);
+        dir_size = hinic3_get_directory_size(HINIC3_FILE_DIRECTORY_PATH, &is_obtained);
         if (is_obtained == false) {
             hinic3_ds_put_format(ds, "%sGet directory real size fail, path: %s.\n", HINIC3_UI_LEADING_SIGN_FAILURE,
                 HINIC3_FILE_DIRECTORY_PATH);
@@ -303,6 +331,82 @@ int hinic3_agent_chmod_output_file_path(const char *resolve_path)
     if (ret != 0) {
         HINIC3_LOG(ERR, AGENT, "chmod fail, errno: %d!", errno);
     }
+
+    return ret;
+}
+
+static int hinic3_mkdir_if_not_exist(const char *path)
+{
+    if (mkdir(path, HINIC3_FILE_INNER_PRIVILEGE) != 0) {
+        if (errno != EEXIST)
+            return -1;
+    }
+    return 0;
+}
+
+static int hinic3_create_output_directory(const char *path)
+{
+    char path_copy[PATH_MAX];
+    int ret = snprintf(path_copy, sizeof(path_copy), "%s", path);
+    if (ret <= 0) {
+        HINIC3_LOG(ERR, AGENT, "Create output dir copy path failed, path: %s!", path);
+        return -1;
+    }
+
+    for (char *p = path_copy + 1; *p != '\0'; p++) {
+        if (*p != '/')
+            continue;
+        *p = '\0';
+        if (access(path_copy, F_OK) != 0) {
+            if (hinic3_mkdir_if_not_exist(path_copy) != 0) {
+                *p = '/';
+                return -1;
+            }
+        }
+        *p = '/';
+    }
+
+    if (access(path_copy, F_OK) != 0)
+        return hinic3_mkdir_if_not_exist(path_copy);
+
+    return 0;
+}
+
+int hinic3_build_output_absolute_path(const char *path, const char *filename,
+    char *absolute_path, unsigned int path_len, struct ds *ds)
+{
+    int ret;
+    char resolve_path[PATH_MAX];
+
+    if (path == NULL || filename == NULL || absolute_path == NULL ||
+        ds == NULL || path_len == 0 || path_len > PATH_MAX) {
+        HINIC3_LOG(ERR, AGENT, "input param is invalid!");
+        return -1;
+    }
+
+    /* 目录不存在时自动创建 */
+    if (hinic3_check_directory_existence(path) == false) {
+        ret = hinic3_create_output_directory(path);
+        if (ret != 0) {
+            hinic3_ds_put_format(ds, "%sfailed to create directory: %s\n",
+                HINIC3_UI_LEADING_SIGN_ERROR, path);
+            return -1;
+        }
+    }
+
+    if (hinic3_is_path_under_default_directory(path))
+        return hinic3_check_output_file_directory(path, filename, absolute_path, path_len, ds);
+
+    ret = hinic3_get_absolute_file_path(path, filename, absolute_path, path_len);
+    if (ret != 0) {
+        hinic3_ds_put_format(ds, HINIC3_UI_FILE_GET_ABSOLUTE_PATH_FAIL_STRING,
+            HINIC3_UI_LEADING_SIGN_ERROR, filename);
+        return -1;
+    }
+
+    ret = hinic3_check_file_realpath(absolute_path, resolve_path, ds);
+    if (ret != 0)
+        return -1;
 
     return ret;
 }
