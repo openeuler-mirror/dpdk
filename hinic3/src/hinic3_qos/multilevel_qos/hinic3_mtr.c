@@ -919,6 +919,7 @@ static int hinic3_remove_port_qos(uint32_t meter_id, uint16_t vport_id)
     if (meter->type != QOS_TYPE_FUNC_LIMIT) {
         hinic3_meter_list_unlock();
         HINIC3_LOG(ERR, QOS, "Multi meter: meter type error.");
+        return -1;
     }
 
     ret = hinic3_port_qos_limit_set(vport_id, meter->dir, meter->profile->profile.packet_mode, &qos_value);
