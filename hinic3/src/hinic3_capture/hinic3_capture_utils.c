@@ -192,13 +192,6 @@ pcap_task_stop_reply_format(struct pcap_task_t *task, struct ds *ds)
 {
     const char *tmp_str = NULL;
     struct pcap_stats_t *stats = &task->stats;
-    char full_path[PCAP_MAX_FILE_NAME];
-
-    if (task->key.output_path[strlen(task->key.output_path) - 1] == '/') {
-        snprintf(full_path, sizeof(full_path), "%s%s", task->key.output_path, task->key.filename);
-    } else {
-        snprintf(full_path, sizeof(full_path), "%s/%s", task->key.output_path, task->key.filename);
-    }
 
     hinic3_ds_put_format(ds, "%2sstopped pcap id:  %u \n", HINIC3_UI_INDENT_SPACE, task->pcap_id);
     tmp_str = task->wr_fail_flag ? "true" : "false";
@@ -210,7 +203,7 @@ pcap_task_stop_reply_format(struct pcap_task_t *task, struct ds *ds)
                          HINIC3_UI_INDENT_SPACE, (unsigned long long)stats->soft_drop_cnt);
     hinic3_ds_put_format(ds, "%2swrite-success:    %s\n",
                          HINIC3_UI_INDENT_SPACE, tmp_str);
-    hinic3_ds_put_format(ds, "%2soutput path:      %s\n", HINIC3_UI_INDENT_SPACE, full_path);
+    hinic3_ds_put_format(ds, "%2soutput path:      %s\n", HINIC3_UI_INDENT_SPACE, task->key.absolute_path);
 
     hinic3_ds_put_format(ds, "%2shardware card:\n", HINIC3_UI_INDENT_SPACE);
     hinic3_ds_put_format(ds, "%4scaptured:       %llu\n",
@@ -573,18 +566,12 @@ pcap_task_resource_create(struct pcap_task_t *task)
 {
     int ret;
     struct pcap_key_t *task_key = &task->key;
-    char full_path[PCAP_MAX_FILE_NAME];
 
     rte_spinlock_init(&task->lock);
 
     HINIC3_LOG(INFO, CAPTURE, "pcap_task_resource_create output_path=%s, filename=%s",
         task_key->output_path, task_key->filename);
-    if (task_key->output_path[strlen(task_key->output_path) - 1] == '/') {
-        snprintf(full_path, sizeof(full_path), "%s%s", task_key->output_path, task_key->filename);
-    } else {
-        snprintf(full_path, sizeof(full_path), "%s/%s", task_key->output_path, task_key->filename);
-    }
-    task->save_file = pcap_file_open(full_path, "wb");
+    task->save_file = pcap_file_open(task_key->absolute_path, "wb");
     if (!task->save_file)
         return -1;
 

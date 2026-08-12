@@ -53,8 +53,6 @@
 #define PCAP_DEF_PKT_CNT                   8000
 #define PCAP_MAX_PKT_CNT                   1000000
 
-#define PCAP_DEF_OUTPUT_PATH               "/var/log/dpak/dpak_ovs_data/"
-
 #define PCAP_MAX_VLAN_NUM                  4096
 #define PCAP_MAX_VLAN                      4095
 #define PCAP_MAX_VNI                       0xFFFFFF

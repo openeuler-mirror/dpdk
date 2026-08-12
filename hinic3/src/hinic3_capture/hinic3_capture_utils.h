@@ -18,7 +18,7 @@
 #include "hinic3_message.h"
 #include "hinic3_ds.h"
 
-#define PCAP_MAX_FILE_NAME          256
+#define PCAP_MAX_FILE_NAME          1024
 #define PCAP_MAX_RING_NAME          32
 #define PCAP_MAX_PORT_NAME          32
 #define PCAP_MAX_PORT_COMBINE_NAME  64
@@ -136,6 +136,7 @@ struct pcap_key_t {
     uint64_t count_total;
     char filename[PCAP_MAX_FILE_NAME];
     char output_path[PCAP_MAX_FILE_NAME];
+    char absolute_path[PCAP_MAX_FILE_NAME];
     uint32_t ip_type;
     struct pcap_ip_t sip;
     struct pcap_ip_t dip;

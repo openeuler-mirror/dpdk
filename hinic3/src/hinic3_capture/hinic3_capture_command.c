@@ -39,7 +39,7 @@
 "                                          -vxlan_inner | -vlan INTEGER<0-4095> | -sport INTEGER<0-65535> |\n"       \
 "                                          -dport INTEGER<0-65535> | -vxlan_vni INTEGER<0-16777215> |\n"             \
 "                                          -P ENUM<in,out,inout> | -c INTEGER<1-1000000> | \n"                       \
-"                                          -n INTEGER<1-4294967295> | -o ] * |\n"                                    \
+"                                          -n INTEGER<1-4294967295> | -o <path> ] * |\n"                             \
 "                                          stop { <portname> | -pcap_id <id> } |\n"                                  \
 "                                          show { all | -pcap_id <id> } |\n"                                         \
 "                                          { -h | --help } }\n\n"                                                    \
@@ -106,7 +106,7 @@ static struct pcap_cmd_t g_cap_main_command = { "hwoff/capture-probe",
                                                 "-vxlan_inner | -vlan INTEGER<0-4095> | "
                                                 "-sport INTEGER<0-65535> | -dport INTEGER<0-65535> | "
                                                 "-vxlan_vni INTEGER<0-16777215> | -P ENUM<in,out,intout> | "
-                                                "-c INTEGER<1-1000000> | -n INTEGER<1-4294967295> | -o ] * | "
+                                                "-c INTEGER<1-1000000> | -n INTEGER<1-4294967295> | -o <path> ] * | "
                                                 "stop { <portname> | -pcap_id <id> } | "
                                                 "show { all | -pcap_id <id> } | "
                                                 "{ -h | --help } }",
@@ -708,7 +708,7 @@ pcap_unix_cmd_register(void)
             0, PCAP_CMD_ENABLE_MAX_PARAM, pcap_cmd_enable_capture, NULL);
     } else {
         hinic3_command_register("hwoff/enable-capture-probe",
-            "[ [ -p ENUM<limited-capture,fully-capture> | -c ENUM<high,low> ] * | -q | { -h | --help } ]",
+            "[ [ -p ENUM<only-header,limited-capture,fully-capture> | -c ENUM<high,low> ] * | -q | { -h | --help } ]",
             0, ARGC, pcap_cmd_enable_capture, NULL);
     }
     hinic3_command_register("hwoff/disable-capture-probe", "", 0, 0, pcap_cmd_disable_capture, NULL);
