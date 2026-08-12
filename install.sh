@@ -648,7 +648,7 @@ run_test() {
 		fi
 		test_bin="$build_dir/app/test"
 		export LD_LIBRARY_PATH="$PWD/$build_dir/lib:$LD_LIBRARY_PATH"
-		tests=("hinic3_basic_autotest" "hinic3_hairpin_autotest" "hinic3_rx_autotest")
+		tests=("hinic3_basic_autotest" "hinic3_hairpin_autotest" "hinic3_rx_autotest" "hinic3_tx_autotest")
 	else
 		# dpdk>=20 使用 meson 构建
 		if [ -f "$build_dir/app/dpdk-test" ]; then
@@ -659,7 +659,7 @@ run_test() {
 			echo "错误: dpdk-test 不存在，请先执行 build"
 			exit 1
 		fi
-		tests=("hinic3_basic_autotest" "hinic3_hairpin_autotest" "hinic3_rx_autotest")
+		tests=("hinic3_basic_autotest" "hinic3_hairpin_autotest" "hinic3_rx_autotest" "hinic3_tx_autotest")
 	fi
 
 	echo ""

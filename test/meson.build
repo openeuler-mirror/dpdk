@@ -10,6 +10,7 @@ sources += files(
     'test_hinic3_basic.c',
     'test_hinic3_hairpin.c',
     'test_hinic3_rx.c',
+    'test_hinic3_tx.c',
 )
 
 deps += ['ethdev', 'net_hinic3']
