@@ -16,6 +16,7 @@
 #include <rte_ip.h>
 #include <rte_tcp.h>
 #include <rte_udp.h>
+#include <rte_sctp.h>
 
 #include "../test.h"
 #include <rte_test.h>
@@ -326,6 +327,59 @@ create_udp_mbuf(uint16_t data_len, uint64_t ol_flags)
 	udp = (struct rte_udp_hdr *)(pkt + l2_len + l3_len);
 	udp->src_port = rte_cpu_to_be_16(12345);
 	udp->dst_port = rte_cpu_to_be_16(53);
+
+	mbuf->ol_flags = ol_flags;
+	mbuf->l2_len = l2_len;
+	mbuf->l3_len = l3_len;
+	mbuf->l4_len = l4_len;
+	mbuf->nb_segs = 1;
+	mbuf->pkt_len = data_len;
+	mbuf->data_len = data_len;
+
+	return mbuf;
+}
+
+/* Helper: create a simple mbuf with Ethernet + IPv4 + SCTP payload */
+static struct rte_mbuf *
+create_sctp_mbuf(uint16_t data_len, uint64_t ol_flags)
+{
+	struct rte_mbuf *mbuf;
+	struct rte_ether_hdr *eth;
+	struct rte_ipv4_hdr *ipv4;
+	struct rte_sctp_hdr *sctp;
+	uint8_t *pkt;
+	uint16_t l2_len = sizeof(struct rte_ether_hdr);
+	uint16_t l3_len = sizeof(struct rte_ipv4_hdr);
+	uint16_t l4_len = sizeof(struct rte_sctp_hdr);
+	uint16_t hdr_len = l2_len + l3_len + l4_len;
+
+	mbuf = rte_pktmbuf_alloc(g_mp);
+	if (!mbuf)
+		return NULL;
+
+	if (data_len < hdr_len)
+		data_len = hdr_len;
+
+	pkt = (uint8_t *)rte_pktmbuf_append(mbuf, data_len);
+	if (!pkt) {
+		rte_pktmbuf_free(mbuf);
+		return NULL;
+	}
+	memset(pkt, 0, data_len);
+
+	eth = (struct rte_ether_hdr *)pkt;
+	eth->ether_type = rte_cpu_to_be_16(RTE_ETHER_TYPE_IPV4);
+
+	ipv4 = (struct rte_ipv4_hdr *)(pkt + l2_len);
+	ipv4->version_ihl = RTE_IPV4_VHL_DEF;
+	ipv4->total_length = rte_cpu_to_be_16(data_len - l2_len);
+	ipv4->next_proto_id = IPPROTO_SCTP;
+	ipv4->src_addr = rte_cpu_to_be_32(RTE_IPV4(10, 0, 0, 1));
+	ipv4->dst_addr = rte_cpu_to_be_32(RTE_IPV4(10, 0, 0, 2));
+
+	sctp = (struct rte_sctp_hdr *)(pkt + l2_len + l3_len);
+	sctp->src_port = rte_cpu_to_be_16(12345);
+	sctp->dst_port = rte_cpu_to_be_16(80);
 
 	mbuf->ol_flags = ol_flags;
 	mbuf->l2_len = l2_len;
@@ -665,9 +719,9 @@ test_xmit_pkts_sctp_cksum(void)
 	g_txq->owner = 1;
 	*g_ci_vaddr = 0;
 
-	pkt = create_simple_mbuf(128,
-				 HINIC3_PKT_TX_IP_CKSUM |
-				 HINIC3_PKT_TX_SCTP_CKSUM);
+	pkt = create_sctp_mbuf(128,
+			       HINIC3_PKT_TX_IP_CKSUM |
+			       HINIC3_PKT_TX_SCTP_CKSUM);
 	RTE_TEST_ASSERT_NOT_NULL(pkt, "failed to create mbuf");
 	tx_pkts[0] = pkt;
 
@@ -702,6 +756,8 @@ static int
 test_tx_done_cleanup_with_pkts(void)
 {
 	struct rte_mbuf *pkt;
+	struct rte_mbuf *tx_pkts[1];
+	u16 nb_tx;
 	int ret;
 
 	g_txq->cons_idx = 0;
@@ -713,11 +769,9 @@ test_tx_done_cleanup_with_pkts(void)
 	pkt = create_simple_mbuf(128, 0);
 	RTE_TEST_ASSERT_NOT_NULL(pkt, "failed to create mbuf");
 
-	{
-		struct rte_mbuf *tx_pkts[1] = {pkt};
-		u16 nb_tx = hinic3_xmit_pkts(g_txq, tx_pkts, 1);
-		RTE_TEST_ASSERT_EQUAL(nb_tx, 1, "should transmit 1 packet");
-	}
+	tx_pkts[0] = pkt;
+	nb_tx = hinic3_xmit_pkts(g_txq, tx_pkts, 1);
+	RTE_TEST_ASSERT_EQUAL(nb_tx, 1, "should transmit 1 packet");
 
 	/* Simulate HW completing the packet by advancing CI */
 	*g_ci_vaddr = rte_cpu_to_be_16(g_txq->prod_idx);
@@ -735,6 +789,9 @@ static int
 test_free_txq_mbufs(void)
 {
 	struct rte_mbuf *pkt;
+	struct rte_mbuf *tx_pkts[1];
+	u16 nb_tx;
+	int i;
 
 	g_txq->cons_idx = 0;
 	g_txq->prod_idx = 0;
@@ -744,22 +801,17 @@ test_free_txq_mbufs(void)
 	pkt = create_simple_mbuf(128, 0);
 	RTE_TEST_ASSERT_NOT_NULL(pkt, "failed to create mbuf");
 
-	{
-		struct rte_mbuf *tx_pkts[1] = {pkt};
-		u16 nb_tx = hinic3_xmit_pkts(g_txq, tx_pkts, 1);
-		RTE_TEST_ASSERT_EQUAL(nb_tx, 1, "should transmit 1 packet");
-	}
+	tx_pkts[0] = pkt;
+	nb_tx = hinic3_xmit_pkts(g_txq, tx_pkts, 1);
+	RTE_TEST_ASSERT_EQUAL(nb_tx, 1, "should transmit 1 packet");
 
 	/* Free mbufs - should free the mbuf in tx_info */
 	hinic3_free_txq_mbufs(g_txq);
 
 	/* Verify all tx_info mbufs are freed */
-	{
-		int i;
-		for (i = 0; i < TEST_TXQ_DEPTH; i++) {
-			RTE_TEST_ASSERT_NULL(g_tx_info[i].mbuf,
-					     "tx_info[%d].mbuf should be NULL after free", i);
-		}
+	for (i = 0; i < TEST_TXQ_DEPTH; i++) {
+		RTE_TEST_ASSERT_NULL(g_tx_info[i].mbuf,
+				     "tx_info[%d].mbuf should be NULL after free", i);
 	}
 
 	return TEST_SUCCESS;
@@ -771,6 +823,9 @@ static int
 test_free_all_txq_mbufs(void)
 {
 	struct rte_mbuf *pkt;
+	struct rte_mbuf *tx_pkts[1];
+	u16 nb_tx;
+	int i;
 
 	g_txq->cons_idx = 0;
 	g_txq->prod_idx = 0;
@@ -780,21 +835,16 @@ test_free_all_txq_mbufs(void)
 	pkt = create_simple_mbuf(128, 0);
 	RTE_TEST_ASSERT_NOT_NULL(pkt, "failed to create mbuf");
 
-	{
-		struct rte_mbuf *tx_pkts[1] = {pkt};
-		u16 nb_tx = hinic3_xmit_pkts(g_txq, tx_pkts, 1);
-		RTE_TEST_ASSERT_EQUAL(nb_tx, 1, "should transmit 1 packet");
-	}
+	tx_pkts[0] = pkt;
+	nb_tx = hinic3_xmit_pkts(g_txq, tx_pkts, 1);
+	RTE_TEST_ASSERT_EQUAL(nb_tx, 1, "should transmit 1 packet");
 
 	hinic3_free_all_txq_mbufs(g_nic_dev);
 
 	/* Verify all tx_info mbufs are freed */
-	{
-		int i;
-		for (i = 0; i < TEST_TXQ_DEPTH; i++) {
-			RTE_TEST_ASSERT_NULL(g_tx_info[i].mbuf,
-					     "tx_info[%d].mbuf should be NULL after free_all", i);
-		}
+	for (i = 0; i < TEST_TXQ_DEPTH; i++) {
+		RTE_TEST_ASSERT_NULL(g_tx_info[i].mbuf,
+				     "tx_info[%d].mbuf should be NULL after free_all", i);
 	}
 
 	return TEST_SUCCESS;
