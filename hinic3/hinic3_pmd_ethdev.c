@@ -2391,9 +2391,6 @@ static int hinic3_dev_start_qpool(struct rte_eth_dev *eth_dev)
 	if (err)
 		return err;
 
-	err = hinic3_get_kernel_addr(eth_dev);
-	if (err)
-		return err;
 	/* reset rx and tx queue */
 	hinic3_reset_rx_queue(eth_dev);
 	hinic3_reset_tx_queue(eth_dev);
@@ -5291,6 +5288,10 @@ static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev)
 		PMD_DRV_LOG(ERR, "Failed to create ptype_table.");
 		goto init_rx_ptype_table_fail;
 	}
+
+	err = hinic3_get_kernel_addr(eth_dev);
+	if (err)
+		return err;
 
 	tcam_info = &nic_dev->tcam;
 	memset(tcam_info, 0, sizeof(struct hinic3_tcam_info));
