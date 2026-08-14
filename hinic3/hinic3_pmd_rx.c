@@ -1263,9 +1263,11 @@ int hinic3_start_all_rqs(struct rte_eth_dev *eth_dev)
 		if (nic_dev->vec_allowed) {
 			for (j = 0; j < HINIC3_DEFAULT_RX_BURST; j++) {
 				mbuf = rte_mbuf_raw_alloc(rxq->mb_pool);
-				if (unlikely(mbuf == NULL))
+				if (unlikely(mbuf == NULL)) {
+					PMD_DRV_LOG(ERR, "Fail to alloc mbuf for rxq %u, qid = %u",
+						i, rxq->q_id);
 					return -ENOMEM;
-
+				}
 				rxq->rx_info[rxq->q_depth + j].mbuf = mbuf;
 			}
 		}

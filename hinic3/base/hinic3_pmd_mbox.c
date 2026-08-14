@@ -1340,9 +1340,8 @@ mutex_init_msg_send_fail:
 	(void)hinic3_mutex_destroy(&func_to_func->mbox_send_mutex);
 mutex_init_mbox_send_fail:
 	rte_free(save_mbox);
-	hwdev->func_to_func = NULL;
-
 alloc_save_mbox_err:
+	hwdev->func_to_func = NULL;
 	rte_free(func_to_func);
 	return err;
 }
