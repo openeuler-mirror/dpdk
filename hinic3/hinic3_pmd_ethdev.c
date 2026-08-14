@@ -402,7 +402,7 @@ is_sp560_nic(struct hinic3_nic_dev *nic_dev)
 	}
 }
 
-static inline bool
+bool
 is_sp230_pci_dev(struct rte_pci_device *pci_dev)
 {
 	switch (pci_dev->id.device_id) {
@@ -5465,7 +5465,7 @@ static int hinic3_pci_probe(struct rte_pci_driver *pci_drv,
 		 pci_dev->addr.function);
 	}
 
-	ret = hinic3_qinfo_type_init(dev_file);
+	ret = hinic3_qinfo_type_init(dev_file, pci_dev);
 	if (ret != 0) {
 		PMD_DRV_LOG(ERR, "Qinfo type init failed: %d, unable to know mode used.", ret);
 		return ret;

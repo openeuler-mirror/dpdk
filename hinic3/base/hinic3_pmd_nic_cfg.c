@@ -2790,7 +2790,7 @@ int hinic3_get_fec_mode(struct hinic3_hwdev *hwdev, u8 *advertised_fec, u8 *supp
 	return 0;
 }
 
-int hinic3_qinfo_type_init(const char *dev_file)
+int hinic3_qinfo_type_init(const char *dev_file, struct rte_pci_device *pci_dev)
 {
 	if (access(dev_file, F_OK) == 0) {
 		PMD_DRV_LOG(INFO, "The current loading mode of the PMD driver is queue qpool mode.");
@@ -2798,7 +2798,7 @@ int hinic3_qinfo_type_init(const char *dev_file)
 		return 0;
 	}
 
-	if (access(BIFUR_GDEV_PATH, F_OK) == 0) {
+	if (access(BIFUR_GDEV_PATH, F_OK) == 0 && (!is_sp230_pci_dev(pci_dev))) {
 		PMD_DRV_LOG(INFO, "The current loading mode of the PMD driver is traffic bifur mode.");
 		g_qinfo_type = HINIC3_QINFO_TYPE_BIFUR;
 	    	return 0;

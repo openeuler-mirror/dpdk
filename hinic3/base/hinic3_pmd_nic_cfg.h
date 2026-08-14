@@ -1963,7 +1963,7 @@ int hinic3_set_fec_mode(struct hinic3_hwdev *hwdev, u8 fecparam);
 
 int hinic3_get_fec_mode(struct hinic3_hwdev *hwdev, u8 *advertised_fec, u8 *supported_fec);
 
-int hinic3_qinfo_type_init(const char *dev_file);
+int hinic3_qinfo_type_init(const char *dev_file, struct rte_pci_device *pci_dev);
 
 int hinic3_indir_set_qid_mmap(u16 q_id, u16 local_qid);
 
