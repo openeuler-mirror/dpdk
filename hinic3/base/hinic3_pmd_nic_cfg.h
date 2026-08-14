@@ -746,63 +746,6 @@ struct mag_port_wire_info {
     u32 speed_ability;
 };
 
-enum mt_api_ype {
-	API_TYPE_MBOX = 1,
-	API_TYPE_API_CHAIN_BYPASS,
-	API_TYPE_API_CHAIN_TO_MPU,
-	API_TYPE_CLP,
-};
-
-#define DFX_SM_TBL_BUF_MAX 768
-struct func_tbl_arg {
-	u32 func_id;
-};
-
-typedef union {
-	struct func_tbl_arg func_tbl_arg;
-	u32 args[4];
-} sm_tbl_args;
-
-struct nic_cmd_dfx_sm_table {
-	struct mgmt_msg_head msg_head;
-	u32 tbl_type;
-	sm_tbl_args args;
-	u8 tbl_buf[DFX_SM_TBL_BUF_MAX];
-};
-
-struct func_table_entry {
-	u32 dw0;
-	u32 dw1;
-
-	union {
-		struct {
-#if (RTE_BYTE_ORDER == RTE_BIG_ENDIAN)
-			u32 nic_rx_mode : 5;
-			u32 cfg_qp_num : 8;
-			u32 round_bit : 1;
-			u32 rq_wqe_buffer_size : 4;
-			u32 all_multi_chain_en : 1;
-			u32 vlan_mode : 1;
-			u32 fdir_en : 1;
-			u32 base_qid : 11;
-#else
-			u32 base_qid : 11;
-			u32 fdir_en : 1;
-			u32 vlan_mode : 1;
-			u32 all_multi_chain_en : 1;
-			u32 rq_wqe_buffer_size : 4;
-			u32 round_bit : 1;
-			u32 cfg_qp_num : 8;
-			u32 nic_rx_mode : 5;
-#endif
-		} bs;
-		u32 value;
-	}dw2;
-
-	u32 dw3;
-	u32 dw4;
-};
-
 struct mag_port_adapt_info {
     struct param_head head;
 
@@ -2025,8 +1968,6 @@ int hinic3_qinfo_type_init(const char *dev_file);
 int hinic3_indir_set_qid_mmap(u16 q_id, u16 local_qid);
 
 void hinic3_clear_qid_mmap(u16 q_id);
-
-int hinic3_compare_kernel_mbuf_size(int fd, int mbuf_size, void *hwdev);
 
 /**
 * Get service feature driver supported

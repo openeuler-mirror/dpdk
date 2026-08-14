@@ -63,6 +63,11 @@
 
 #define RQ_WQE_TYPE_PATH "/sys/module/hinic5/parameters/rq_wqe_type"
 
+#define GET_RQ_BUF_SZ_PATH(nic_dev) \
+	(is_sp620_nic(nic_dev) ? RQ_BUF_SZ_PATH_NIC3 : RQ_BUF_SZ_PATH_NIC5)
+#define RQ_BUF_SZ_PATH_NIC5 "/sys/module/hinic5/parameters/rx_buff"
+#define RQ_BUF_SZ_PATH_NIC3 "/sys/module/hinic3/parameters/rx_buff"
+
 /*
  * Vlan_id is a 12 bit number. The VFTA array is actually a 4096 bit array,
  * 128 of 32bit elements. 2^5 = 32. The val of lower 5 bits specifies the bit
@@ -1093,6 +1098,21 @@ static int hinic3_release_user_queue(struct hinic3_nic_dev *nic_dev, int queue_i
 }
 
 static int
+hinic3_compare_kernel_mbuf_size(struct hinic3_nic_dev *nic_dev, u16 mbuf_size)
+{
+	unsigned long rx_buf_sz;
+
+	if (hinic3_parse_sysfs_value(GET_RQ_BUF_SZ_PATH(nic_dev), &rx_buf_sz) != 0)
+		return -EINVAL;
+
+	if (mbuf_size != rx_buf_sz * 1024) {
+		PMD_DRV_LOG(ERR, "mbuf size should be %d to follow kernel", rx_buf_sz * 1024);
+		return -EINVAL;
+	}
+	return 0;
+}
+
+static int
 hinic3_rx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_rxq *rxq,
 			   uint16_t qid, unsigned int socket_id)
 {
@@ -1117,11 +1137,11 @@ hinic3_rx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_rxq *rxq,
 				if (err < 0)
 				goto alloc_template_fail;
 			}
-		} else {
-			err = hinic3_compare_kernel_mbuf_size(nic_dev->fd, rxq->buf_len, nic_dev->hwdev);
-			if (err)
-				goto mbuf_size_err;
 		}
+		err = hinic3_compare_kernel_mbuf_size(nic_dev, rxq->buf_len);
+		if (err)
+			goto mbuf_size_err;
+
 		/* Get user queue */
 		err = hinic3_get_rx_user_queue(nic_dev, rxq);
 		if (err < 0)
