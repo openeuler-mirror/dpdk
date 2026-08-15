@@ -3651,7 +3651,7 @@ hinic3_dev_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 				  txq->txq_stats.off_errs);
 	}
 
-	if (IS_QPOOL_MODE()) {
+	if (IS_QPOOL_MODE() || (HINIC3_IS_VF(nic_dev->hwdev) && is_sp230_nic(nic_dev))) {
 		q_num = (nic_dev->num_rqs < HINIC3_QUEUE_STAT_CNTRS) ?
 			nic_dev->num_rqs : HINIC3_QUEUE_STAT_CNTRS;
 
