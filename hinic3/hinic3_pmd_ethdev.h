@@ -209,12 +209,14 @@ struct hinic3_ptype_table {
 
 struct hinic3_nic_common_dev_config {
 	unsigned int rx_empty_threshold;
+	unsigned int rx_empty_loop;	/* max empty CQE spin count; 0 = no limit */
 	unsigned int tx_free_loop;
 	unsigned int tx_pending_limit; /* TX CI coalescing parameter pending_limit. */
 	unsigned int tx_coalescing_time; /* TX CI coalescing parameter coalescing_time. */
 	unsigned int rx_cqe_compact_en; /* cqe mode, 0 -- separate cqe, 1 -- compact cqe. */
 	unsigned int rx_cqe_coalesce_num; /* RX CQE parameter coalesce_num. */
 	unsigned int rx_cqe_timer_loop; /* RX CQE parameter time_loop. */
+	unsigned int rx_dma_align; /* RX DMA buffer alignment (0/64/128/256/512). 0 disables. */
 };
 
 struct hinic3_nic_dev {

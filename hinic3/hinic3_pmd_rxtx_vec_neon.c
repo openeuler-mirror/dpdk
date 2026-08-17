@@ -44,6 +44,7 @@ static int hinic3_rearm_rxq_mbuf_vec_neon(struct hinic3_rxq *rxq)
         struct rte_mbuf **rearm_mbufs;
         u32 i, free_wqebbs, rearm_wqebbs, exp_wqebbs;
         rte_iova_t dma_addr;
+        rte_iova_t align_dma_addr;
         u16 pi;
         struct hinic3_nic_dev *nic_dev = rxq->nic_dev;
 
@@ -70,12 +71,21 @@ static int hinic3_rearm_rxq_mbuf_vec_neon(struct hinic3_rxq *rxq)
         /* Rearm rx mbuf */
         rq_wqe = NIC_WQE_ADDR(rxq, pi);
         for (i = 0; i < rearm_wqebbs; i++) {
-                rearm_mbufs[i]->data_off = RTE_PKTMBUF_HEADROOM;
+                dma_addr = rte_mbuf_data_iova_default(rearm_mbufs[i]);
+                /* Keep consistent with the normal path: fold the alignment
+                 * offset into data_off when alignment is enabled so the vec
+                 * RX path data address matches the DMA start address. */
+                if (rxq->rx_dma_align) {
+                        align_dma_addr = RTE_ALIGN(dma_addr, rxq->rx_dma_align);
+                        rearm_mbufs[i]->data_off = (u16)(RTE_PKTMBUF_HEADROOM +
+                                (align_dma_addr - dma_addr));
+                        dma_addr = align_dma_addr;
+                } else {
+                        rearm_mbufs[i]->data_off = RTE_PKTMBUF_HEADROOM;
+                }
                 rearm_mbufs[i]->port = rxq->port_id;
                 rearm_mbufs[i]->ol_flags = 0;
                 rx_cqe[i].status = 0;
-
-                dma_addr = rte_mbuf_data_iova_default(rearm_mbufs[i]);
 
                 /* Fill buffer address only */
                 if (rxq->wqe_type == HINIC3_EXTEND_RQ_WQE) {

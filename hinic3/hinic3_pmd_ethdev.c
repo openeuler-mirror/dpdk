@@ -1299,7 +1299,7 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_rxq *rxq = NULL;
 	u16 rq_depth, rx_free_thresh, vec_len;
-	u32 buf_size;
+	u32 buf_size, data_room, buf_room, max_frame_len;
 	int err;
 
 	if (!IS_QPOOL_MODE()) {
@@ -1381,17 +1381,49 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	rxq->rxinfo_align_end = rxq->q_depth - rxq->rx_free_thresh;
 	rxq->port_id = dev->data->port_id;
 	rxq->wait_time_cycle = HINIC3_RX_WAIT_CYCLE_THRESH;
+	rxq->rx_dma_align = nic_dev->config.rx_dma_align;
+	rxq->rx_empty_loop = nic_dev->config.rx_empty_loop;
 
-	/* If buf_len used for function table, need to translated */
-	err = hinic3_convert_rx_buf_size(
-				rte_pktmbuf_data_room_size(rxq->mb_pool) -
-				RTE_PKTMBUF_HEADROOM, &buf_size);
+	/*
+	 * If buf_len used for function table, need to translated.
+	 *
+	 * When rx_dma_align is enabled, rearm folds up to (rx_dma_align - 1)
+	 * bytes of alignment offset into data_off, so the negotiated buf_len
+	 * must stay large enough to hold the maximum frame even after
+	 * reserving that margin.
+	 */
+	data_room = (u32)rte_pktmbuf_data_room_size(rxq->mb_pool);
+	max_frame_len = HINIC3_MAX_RX_PKT_LEN(dev->data->dev_conf.rxmode);
+	buf_room = data_room - RTE_PKTMBUF_HEADROOM;
+	if (rxq->rx_dma_align &&
+	    buf_room >= (rxq->rx_dma_align - 1) + max_frame_len)
+		buf_room -= rxq->rx_dma_align - 1;
+	else if (rxq->rx_dma_align) {
+		PMD_DRV_LOG(WARNING,
+			    "rxq%u: mbuf data_room %u cannot hold the max "
+			    "frame length %u with %u-byte DMA alignment; "
+			    "alignment disabled.",
+			    qid, data_room, max_frame_len, rxq->rx_dma_align);
+		rxq->rx_dma_align = 0;
+	}
+
+	err = hinic3_convert_rx_buf_size(buf_room, &buf_size);
 	if (err) {
 		PMD_DRV_LOG(ERR, "Adjust buf size failed, dev_name: %s",
 			    dev->data->name);
 		goto adjust_bufsize_fail;
 	}
 
+	if (buf_size < max_frame_len)
+		PMD_DRV_LOG(WARNING,
+			    "rxq%u: mbuf data_room %u cannot hold the max frame "
+			    "length %u in one buffer (buf_len %u); such frames "
+			    "will be received via scattered RX.",
+			    qid, data_room, max_frame_len, buf_size);
+
+	PMD_DRV_LOG(INFO, "rxq%u: data_room: %u, rx_buff_len: %u, "
+		    "max_frame_len: %u, rx_dma_align: %u",
+		    qid, data_room, buf_size, max_frame_len, rxq->rx_dma_align);
 	if (nic_dev->config.rx_cqe_compact_en) {
 		/* Default rx wqe type set to compact wqe if NIC supports compact rx CQE */
 		rxq->wqe_type = HINIC3_COMPACT_RQ_WQE;
@@ -5079,6 +5111,21 @@ hinic3_nic_common_args_check_handler(const char *key, const char *val, void *opa
 		config->rx_cqe_coalesce_num = tmp / HINIC3_CI_PENDING_LIMIT_UNIT;
 	else if (strcmp(key, "rx_cqe_timer_loop") == 0)
 		config->rx_cqe_timer_loop = tmp / HINIC3_CI_COALESCING_TIME_UNIT;
+	else if (strcmp(key, "rx_dma_align") == 0) {
+		if (!hinic3_rx_dma_align_is_valid(tmp)) {
+			PMD_DRV_LOG(ERR,
+				    "rx_dma_align=%lu is invalid; "
+				    "must be 0, 64, 128, 256 or 512.", tmp);
+			return -EINVAL;
+		}
+		config->rx_dma_align = tmp;
+	}
+	else if (strcmp(key, "rx_empty_loop") == 0)
+		config->rx_empty_loop = (unsigned int)tmp;
+	else {
+		PMD_DRV_LOG(ERR, "Unknown parameter: %s", key);
+		return -EINVAL;
+	}
 
 	return 0;
 }
@@ -5099,6 +5146,8 @@ hinic3_nic_common_config_get(struct rte_pci_device *pci_dev,
 	config->rx_cqe_compact_en = HINIC3_RX_CQE_COMPACT_EN;
 	config->rx_cqe_coalesce_num = HINIC3_RX_CQE_COALESCE_NUM;
 	config->rx_cqe_timer_loop = HINIC3_RX_CQE_TIMER_LOOP;
+	config->rx_dma_align = 0;	/* disabled by default */
+	config->rx_empty_loop = 0;	/* disabled by default */
 
 	if (eal_dev->devargs == NULL)
 		return 0;
@@ -5116,9 +5165,10 @@ hinic3_nic_common_config_get(struct rte_pci_device *pci_dev,
 	rte_kvargs_free(kvlist);
 
 	PMD_DRV_LOG(
-		INFO, "tx_pending_limit:%upkt, tx_coalescing_time:%uus, rx_cqe_coalesce_num:%upkt, rx_cqe_timer_loop:%uus.",
+		INFO, "tx_pending_limit:%upkt, tx_coalescing_time:%uus, rx_cqe_coalesce_num:%upkt, rx_cqe_timer_loop:%uus, rx_dma_align:%u, rx_empty_loop:%u.",
 		config->tx_pending_limit * HINIC3_CI_PENDING_LIMIT_UNIT, config->tx_coalescing_time * HINIC3_CI_COALESCING_TIME_UNIT,
-		config->rx_cqe_coalesce_num * HINIC3_CI_PENDING_LIMIT_UNIT, config->rx_cqe_timer_loop * HINIC3_CI_COALESCING_TIME_UNIT);
+		config->rx_cqe_coalesce_num * HINIC3_CI_PENDING_LIMIT_UNIT, config->rx_cqe_timer_loop * HINIC3_CI_COALESCING_TIME_UNIT,
+		config->rx_dma_align, config->rx_empty_loop);
 	return ret;
 }
 
