@@ -452,20 +452,6 @@ pcap_key_host_parse(struct pcap_key_t *cap_key, const char *key_name, const char
     return 0;
 }
 
-static void
-pcap_normalize_path_slashes(char *path, size_t path_size)
-{
-    size_t i, j;
-
-    for (i = 0, j = 0; path[i] != '\0' && j < path_size - 1; i++) {
-        if (path[i] == '/' && path[i + 1] == '/') {
-            continue;
-        }
-        path[j++] = path[i];
-    }
-    path[j] = '\0';
-}
-
 static int
 pcap_validate_output_path_format(const char *key_name, const char *value, struct ds *ds)
 {
@@ -508,9 +494,11 @@ static int pcap_key_output_parse(struct pcap_key_t *cap_key, const char *key_nam
     if (pcap_validate_output_path_format(key_name, value, ds) != 0)
         return -1;
 
-    snprintf(path_copy, sizeof(path_copy), "%s", value);
-
-    pcap_normalize_path_slashes(path_copy, sizeof(path_copy));
+    if (hinic3_normalize_path_lexical(value, path_copy, sizeof(path_copy)) != 0) {
+        hinic3_ds_put_format(ds, "%sfailed to normalize output path: %s\n",
+            HINIC3_UI_LEADING_SIGN_ERROR, value);
+        return -1;
+    }
 
     protected_path = pcap_check_protected_path(path_copy);
     if (protected_path != NULL) {

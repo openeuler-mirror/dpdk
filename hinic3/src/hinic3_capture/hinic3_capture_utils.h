@@ -38,9 +38,9 @@
 #define PCAP_PID_KI                 0.1
 
 #define PCAP_CMD_MIN_PARAM          1
-#define PCAP_CMD_MAX_PARAM          32
+#define PCAP_CMD_MAX_PARAM          36
 #define PCAP_CMD_START_MIN_PARAM    3
-#define PCAP_CMD_START_MAX_PARAM    31
+#define PCAP_CMD_START_MAX_PARAM    35
 #define PCAP_CMD_STOP_MIN_PARAM     1
 #define PCAP_CMD_STOP_MAX_PARAM     2
 #define PCAP_CMD_SHOW_MIN_PARAM     1
