@@ -2860,11 +2860,12 @@ hinic3_fillout_indir_tbl_by_rss_group(struct hinic3_nic_dev *nic_dev,
 	queue_num = template_entry->queue_num;
 	queue_idx = 0;
 
+	rss_indir_group_size = HINIC3_IS_VF(nic_dev->hwdev) ?
+				HINIC3_RSS_INDIR_GROUP_SIZE_VF :
+				HINIC3_RSS_INDIR_GROUP_SIZE_PF;
+
 	/* fillout indir table used queue list */
 	for (i = 0; i < rss_indir_group_size; i++) {
-		rss_indir_group_size = HINIC3_IS_VF(nic_dev->hwdev) ?
-			       HINIC3_RSS_INDIR_GROUP_SIZE_VF :
-			       HINIC3_RSS_INDIR_GROUP_SIZE_PF;
 		start_idx = template_entry->rss_group_id * rss_indir_group_size;
 		indir[start_idx + i] = template_entry->queues[queue_idx];
 		queue_idx = (queue_idx + 1) % queue_num;

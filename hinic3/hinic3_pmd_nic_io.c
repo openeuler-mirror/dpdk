@@ -354,7 +354,7 @@ static int init_rq_ctxts(struct hinic3_nic_dev *nic_dev)
 			err = hinic3_cmdq_direct_resp(nic_dev->hwdev, HINIC3_MOD_L2NIC, cmd, cmd_buf, &out_param, 0);
 		else
 			if (is_sp230_nic(nic_dev))
-				err = hinic3_cmd_modify_queue_ctx_htn(nic_dev, cmd_buf->buf, nic_dev->txqs[q_id]->local_qid);
+				err = hinic3_cmd_modify_queue_ctx_htn(nic_dev, cmd_buf->buf, nic_dev->rxqs[q_id]->local_qid);
 			else
 				err = hinic3_cmd_modify_queue_ctx_stn(nic_dev, cmd_buf->buf);
 		if (err || out_param != 0) {
