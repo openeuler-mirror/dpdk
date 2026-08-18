@@ -658,6 +658,7 @@ hinic3_updata_netdev_hwpt_flavor(void)
     ret = hinic3_get_used_port_info(&dev_used_list);
     if (ret != 0) {
         HINIC3_LOG(ERR, VPORT, "hinic3_get_used_port_info err, ret is %d", ret);
+        hinic3_destroy_used_port_info(&dev_used_list);
         return NULL;
     }
     /* 清空全局链表，重新获取设备信息 */
@@ -665,6 +666,7 @@ hinic3_updata_netdev_hwpt_flavor(void)
     ret = hinic3_smart_vf_flavor_add();
     if (ret != 0) {
         HINIC3_LOG(ERR, VPORT, "hinic3_smart_vf_flavor_add err, ret is %d", ret);
+        hinic3_destroy_used_port_info(&dev_used_list);
         return NULL;
     }
     /* 更新设备信息 */
