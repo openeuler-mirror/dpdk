@@ -1326,6 +1326,7 @@ hinic3_rx_get_compact_cqe_info(struct hinic3_rxq *rxq,
 	cqe_info->pkt_len = HINIC3_RQ_COMPACT_CQE_STATUS_GET(dw0, PKT_LEN);
 	cqe_info->ts_flag = HINIC3_RQ_COMPACT_CQE_STATUS_GET(dw0, TS_FLAG);
 	cqe_info->ptype = HINIC3_RQ_COMPACT_CQE_STATUS_GET(dw0, PTYPE);
+	cqe_info->rss_type = 1;
 	cqe_info->rss_hash_value = dw1;
 	switch (cqe_info->csum_err) {
 	case HINIC3_RX_COMPACT_CSUM_OTHER_ERROR:

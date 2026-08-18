@@ -325,7 +325,7 @@ extern const struct rte_flow_ops hinic3_flow_ops;
 bool is_sp230_nic(struct hinic3_nic_dev *nic_dev);
 bool is_sp620_nic(struct hinic3_nic_dev *nic_dev);
 bool is_sp560_nic(struct hinic3_nic_dev *nic_dev);
-
+bool is_sp230_pci_dev(struct rte_pci_device *pci_dev);
 int hinic3_dev_rx_queue_intr_enable(struct rte_eth_dev *dev, uint16_t queue_id);
 int hinic3_dev_rx_queue_intr_disable(struct rte_eth_dev *dev,
 				     uint16_t queue_id);

@@ -63,6 +63,11 @@
 
 #define RQ_WQE_TYPE_PATH "/sys/module/hinic5/parameters/rq_wqe_type"
 
+#define GET_RQ_BUF_SZ_PATH(nic_dev) \
+	(is_sp620_nic(nic_dev) ? RQ_BUF_SZ_PATH_NIC3 : RQ_BUF_SZ_PATH_NIC5)
+#define RQ_BUF_SZ_PATH_NIC5 "/sys/module/hinic5/parameters/rx_buff"
+#define RQ_BUF_SZ_PATH_NIC3 "/sys/module/hinic3/parameters/rx_buff"
+
 /*
  * Vlan_id is a 12 bit number. The VFTA array is actually a 4096 bit array,
  * 128 of 32bit elements. 2^5 = 32. The val of lower 5 bits specifies the bit
@@ -397,7 +402,7 @@ is_sp560_nic(struct hinic3_nic_dev *nic_dev)
 	}
 }
 
-static inline bool
+bool
 is_sp230_pci_dev(struct rte_pci_device *pci_dev)
 {
 	switch (pci_dev->id.device_id) {
@@ -1093,6 +1098,21 @@ static int hinic3_release_user_queue(struct hinic3_nic_dev *nic_dev, int queue_i
 }
 
 static int
+hinic3_compare_kernel_mbuf_size(struct hinic3_nic_dev *nic_dev, u16 mbuf_size)
+{
+	unsigned long rx_buf_sz;
+
+	if (hinic3_parse_sysfs_value(GET_RQ_BUF_SZ_PATH(nic_dev), &rx_buf_sz) != 0)
+		return -EINVAL;
+
+	if (mbuf_size != rx_buf_sz * 1024) {
+		PMD_DRV_LOG(ERR, "mbuf size should be %d to follow kernel", rx_buf_sz * 1024);
+		return -EINVAL;
+	}
+	return 0;
+}
+
+static int
 hinic3_rx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_rxq *rxq,
 			   uint16_t qid, unsigned int socket_id)
 {
@@ -1117,11 +1137,11 @@ hinic3_rx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_rxq *rxq,
 				if (err < 0)
 				goto alloc_template_fail;
 			}
-		} else {
-			err = hinic3_compare_kernel_mbuf_size(nic_dev->fd, rxq->buf_len, nic_dev->hwdev);
-			if (err)
-				goto mbuf_size_err;
 		}
+		err = hinic3_compare_kernel_mbuf_size(nic_dev, rxq->buf_len);
+		if (err)
+			goto mbuf_size_err;
+
 		/* Get user queue */
 		err = hinic3_get_rx_user_queue(nic_dev, rxq);
 		if (err < 0)
@@ -2208,7 +2228,7 @@ static int hinic3_init_rxq_intr(struct rte_eth_dev *dev)
 	intr_handle = dev->intr_handle;
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 
-	if (is_sp230_nic(nic_dev) && !dev->data->dev_conf.intr_conf.rxq)
+	if (!is_sp230_nic(nic_dev) && !dev->data->dev_conf.intr_conf.rxq)
 		return 0;
 
 	if (!rte_intr_cap_multiple(intr_handle)) {
@@ -3631,7 +3651,7 @@ hinic3_dev_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 				  txq->txq_stats.off_errs);
 	}
 
-	if (IS_QPOOL_MODE()) {
+	if (IS_QPOOL_MODE() || (HINIC3_IS_VF(nic_dev->hwdev) && is_sp230_nic(nic_dev))) {
 		q_num = (nic_dev->num_rqs < HINIC3_QUEUE_STAT_CNTRS) ?
 			nic_dev->num_rqs : HINIC3_QUEUE_STAT_CNTRS;
 
@@ -5445,7 +5465,7 @@ static int hinic3_pci_probe(struct rte_pci_driver *pci_drv,
 		 pci_dev->addr.function);
 	}
 
-	ret = hinic3_qinfo_type_init(dev_file);
+	ret = hinic3_qinfo_type_init(dev_file, pci_dev);
 	if (ret != 0) {
 		PMD_DRV_LOG(ERR, "Qinfo type init failed: %d, unable to know mode used.", ret);
 		return ret;
