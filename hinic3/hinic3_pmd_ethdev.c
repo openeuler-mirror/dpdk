@@ -2228,7 +2228,7 @@ static int hinic3_init_rxq_intr(struct rte_eth_dev *dev)
 	intr_handle = dev->intr_handle;
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 
-	if (is_sp230_nic(nic_dev) && !dev->data->dev_conf.intr_conf.rxq)
+	if (!is_sp230_nic(nic_dev) && !dev->data->dev_conf.intr_conf.rxq)
 		return 0;
 
 	if (!rte_intr_cap_multiple(intr_handle)) {
