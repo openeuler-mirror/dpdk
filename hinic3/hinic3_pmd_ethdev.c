@@ -5471,6 +5471,10 @@ static int hinic3_dev_init(struct rte_eth_dev *eth_dev)
 	} else {
 		eth_dev->rx_pkt_burst = hinic3_recv_pkts_compact_cqe;
 		eth_dev->tx_pkt_burst = hinic3_xmit_pkts_compact_cqe;
+#ifdef RTE_ARCH_ARM
+		if (nic_dev->vec_allowed == 1)
+			eth_dev->rx_pkt_burst = hinic3_recv_pkts_compact_cqe_vec;
+#endif
 	}
 
 	return err;
