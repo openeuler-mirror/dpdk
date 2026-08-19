@@ -10,6 +10,7 @@
 #include "hinic3_ds.h"
 
 const char *hinic3_get_default_directory(void);
+int hinic3_normalize_path_lexical(const char *path, char *normalized, size_t len);
 int hinic3_get_absolute_file_path(const char *path, const char *file_name, char *absolute_path, int len);
 int hinic3_check_output_file_directory(const char *path, const char *filename,
     char *absolute_path, unsigned int path_len, struct ds *ds);

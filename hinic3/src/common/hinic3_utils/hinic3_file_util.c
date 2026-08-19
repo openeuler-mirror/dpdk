@@ -372,11 +372,91 @@ static int hinic3_create_output_directory(const char *path)
     return 0;
 }
 
+int hinic3_normalize_path_lexical(const char *path, char *normalized, size_t len)
+{
+    const char *p;
+    char *out = normalized;
+
+    if (path == NULL || path[0] != '/' || normalized == NULL || len < 2) {
+        HINIC3_LOG(ERR, AGENT, "invalid argument, path: %s!", path ? path : "NULL");
+        return -1;
+    }
+
+    *out++ = '/';
+    p = path + 1;
+    while (*p != '\0') {
+        while (*p == '/')
+            p++;
+        if (*p == '\0')
+            break;
+
+        const char *start = p;
+        while (*p != '\0' && *p != '/')
+            p++;
+        size_t comp_len = (size_t)(p - start);
+
+        if (comp_len == 1 && start[0] == '.')
+            continue;
+
+        if (comp_len == 2 && start[0] == '.' && start[1] == '.') {
+            if (out > normalized + 1) {
+                out--;
+                while (out > normalized + 1 && *(out - 1) != '/')
+                    out--;
+            }
+            continue;
+        }
+
+        if ((size_t)(out - normalized) + comp_len + 1 > len)
+            return -1;
+        memcpy(out, start, comp_len);
+        out += comp_len;
+        *out++ = '/';
+    }
+
+    if (out > normalized + 1)
+        out--;
+    *out = '\0';
+    return 0;
+}
+
+static int hinic3_resolve_directory_path(const char *path,
+    char *normalized_path, struct ds *ds)
+{
+    char clean_path[PATH_MAX];
+
+    /* 词法规范化：纯字符串解析 ".", ".."，不依赖文件系统 */
+    if (hinic3_normalize_path_lexical(path, clean_path, sizeof(clean_path)) != 0) {
+        hinic3_ds_put_format(ds, "%sfailed to normalize directory path: %s!\n",
+            HINIC3_UI_LEADING_SIGN_ERROR, path);
+        return -1;
+    }
+
+    /* 目录不存在时自动创建 */
+    if (hinic3_check_directory_existence(clean_path) == false) {
+        if (hinic3_create_output_directory(clean_path) != 0) {
+            hinic3_ds_put_format(ds, "%sfailed to create directory: %s!\n",
+                HINIC3_UI_LEADING_SIGN_ERROR, clean_path);
+            return -1;
+        }
+    }
+
+    /* realpath 规范化：解析符号链接等文件系统层面语义 */
+    if (realpath(clean_path, normalized_path) == NULL) {
+        hinic3_ds_put_format(ds, "%sfailed to resolve directory: %s!\n",
+            HINIC3_UI_LEADING_SIGN_ERROR, clean_path);
+        return -1;
+    }
+
+    return 0;
+}
+
 int hinic3_build_output_absolute_path(const char *path, const char *filename,
     char *absolute_path, unsigned int path_len, struct ds *ds)
 {
     int ret;
     char resolve_path[PATH_MAX];
+    char normalized_path[PATH_MAX];
 
     if (path == NULL || filename == NULL || absolute_path == NULL ||
         ds == NULL || path_len == 0 || path_len > PATH_MAX) {
@@ -384,20 +464,16 @@ int hinic3_build_output_absolute_path(const char *path, const char *filename,
         return -1;
     }
 
-    /* 目录不存在时自动创建 */
-    if (hinic3_check_directory_existence(path) == false) {
-        ret = hinic3_create_output_directory(path);
-        if (ret != 0) {
-            hinic3_ds_put_format(ds, "%sfailed to create directory: %s\n",
-                HINIC3_UI_LEADING_SIGN_ERROR, path);
-            return -1;
-        }
-    }
+    /* 检查存在性 + 规范化（不存在则先创建再规范化） */
+    if (hinic3_resolve_directory_path(path, normalized_path, ds) != 0)
+        return -1;
 
-    if (hinic3_is_path_under_default_directory(path))
-        return hinic3_check_output_file_directory(path, filename, absolute_path, path_len, ds);
+    /* 基于规范化路径判断是否默认目录 */
+    if (hinic3_is_path_under_default_directory(normalized_path))
+        return hinic3_check_output_file_directory(normalized_path, filename, absolute_path, path_len, ds);
 
-    ret = hinic3_get_absolute_file_path(path, filename, absolute_path, path_len);
+    /* 拼接绝对路径 + realpath 校验 */
+    ret = hinic3_get_absolute_file_path(normalized_path, filename, absolute_path, path_len);
     if (ret != 0) {
         hinic3_ds_put_format(ds, HINIC3_UI_FILE_GET_ABSOLUTE_PATH_FAIL_STRING,
             HINIC3_UI_LEADING_SIGN_ERROR, filename);
