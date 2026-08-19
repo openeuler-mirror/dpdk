@@ -417,7 +417,8 @@ int parse_mac(const char *mac, struct eth_address *output_mac)
     }
 
     if (success_len != HINIC3_ETH_ADDR_LEN) {
-        if (success_len == ARRAY_SIZE(output_mac->be16) && g_mac_format[i].mac_fmt == HINIC3_MAC_HYPHEN_SHORT_FMT) {
+        if (success_len == ARRAY_SIZE(output_mac->be16) && i < ARRAY_SIZE(g_mac_format) &&
+            g_mac_format[i].mac_fmt == HINIC3_MAC_HYPHEN_SHORT_FMT) {
             return 0;
         }
         return -EINVAL;
