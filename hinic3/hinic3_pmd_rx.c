@@ -528,6 +528,7 @@ static int hinic3_rearm_rxq_mbuf(struct hinic3_rxq *rxq)
 	struct rte_mbuf **rearm_mbufs;
 	u32 i, free_wqebbs, rearm_wqebbs, exp_wqebbs;
 	rte_iova_t dma_addr;
+	rte_iova_t align_dma_addr;
 	u16 pi;
 	struct hinic3_nic_dev *nic_dev = rxq->nic_dev;
 
@@ -554,6 +555,14 @@ static int hinic3_rearm_rxq_mbuf(struct hinic3_rxq *rxq)
 	rq_wqe = NIC_WQE_ADDR(rxq, pi);
 	for (i = 0; i < rearm_wqebbs; i++) {
 		dma_addr = rte_mbuf_data_iova_default(rearm_mbufs[i]);
+		if (rxq->rx_dma_align) {
+			align_dma_addr = RTE_ALIGN(dma_addr, rxq->rx_dma_align);
+			rearm_mbufs[i]->data_off = (u16)(RTE_PKTMBUF_HEADROOM +
+				(align_dma_addr - dma_addr));
+			dma_addr = align_dma_addr;
+		} else {
+			rearm_mbufs[i]->data_off = RTE_PKTMBUF_HEADROOM;
+		}
 
 		/* Fill buffer address only */
 		if (rxq->wqe_type == HINIC3_EXTEND_RQ_WQE) {
@@ -1367,14 +1376,21 @@ hinic3_rx_integrated_cqe_done(struct hinic3_rxq *rxq, volatile struct hinic3_rq_
 		return false;
 
 	rxm = rxq->rx_info[sw_ci].mbuf;
+	/*
+	 * In compact CQE mode the CQE is integrated at the head of the packet
+	 * buffer, at the DMA start address. rearm has set mbuf->data_off to
+	 * the offset of the DMA start address relative to buf (HEADROOM when
+	 * alignment is disabled, HEADROOM + alignment offset when enabled),
+	 * so the CQE virtual address is buf_addr + data_off.
+	 */
 #ifdef DPDK_21_11
-	*rx_cqe = (struct hinic3_rq_cqe *)rte_mbuf_data_addr_default(rxm);
+	*rx_cqe = (struct hinic3_rq_cqe *)(rte_mbuf_buf_addr(rxm, rxm->pool) + rxm->data_off);
 #else
 	#ifdef __GNUC__
 		#pragma GCC diagnostic push
 		#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 	#endif
-	*rx_cqe = (struct hinic3_rq_cqe *)(rte_mbuf_buf_addr(rxm, rxm->pool) + RTE_PKTMBUF_HEADROOM);
+	*rx_cqe = (struct hinic3_rq_cqe *)(rte_mbuf_buf_addr(rxm, rxm->pool) + rxm->data_off);
 #endif
 
 	return true;
@@ -1469,7 +1485,13 @@ u16 hinic3_recv_pkts_compact_cqe(void *rx_queue, struct rte_mbuf **rx_pkts, u16 
 			hinic3_update_rq_local_ci(rxq, 1);
 		}
 
-		rxm->data_off = RTE_PKTMBUF_HEADROOM + cqe_info.data_offset;
+		/*
+		 * data_off was already set by rearm to the offset of the DMA
+		 * start address relative to buf. Add the integrated CQE
+		 * length so data_off points past the CQE to the packet
+		 * payload.
+		 */
+		rxm->data_off += cqe_info.data_offset;
 		rxm->port = rxq->port_id;
 
 		/* 4. Rx checksum offload. */
@@ -1530,7 +1552,8 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 	u16 sw_ci, rx_buf_len, wqebb_cnt = 0, pkts = 0;
 	u32 status, pkt_len, vlan_len, offload_type, pkt_type, lro_num;
 	u64 rx_bytes = 0;
-	u32 hash_value ;
+	u32 hash_value = 0;
+	u32 empty_nb = 0;
 	const struct hinic3_ptype_table * const ptype_tbl = nic_dev->ptype_tbl;
 
 #ifdef HINIC3_XSTAT_PROF_RX
@@ -1549,7 +1572,9 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 		status = hinic3_hw_cpu32((u32)(__atomic_load_n(&rx_cqe->status, __ATOMIC_ACQUIRE)));
 		if (!HINIC3_GET_RX_DONE(status)) {
 			rxq->rxq_stats.empty++;
-			break;
+			if (empty_nb++ >= rxq->rx_empty_loop)
+				break;
+			continue;
 		}
 
 		vlan_len = hinic3_hw_cpu32(rx_cqe->vlan_len);
@@ -1590,7 +1615,13 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
 			wqebb_cnt++;
 		}
 
-		rxm->data_off = RTE_PKTMBUF_HEADROOM;
+		/*
+		 * data_off was already set by rearm to the offset of the DMA
+		 * start address relative to buf (HEADROOM + alignment offset
+		 * when alignment is enabled, HEADROOM when disabled). The packet
+		 * data starts at buf + data_off, so no further adjustment is
+		 * needed.
+		 */
 		rxm->port = rxq->port_id;
 
 		/* 4. Rx checksum offload */
