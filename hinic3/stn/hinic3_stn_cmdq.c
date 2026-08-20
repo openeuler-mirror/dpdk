@@ -9,6 +9,7 @@
 #include "hinic3_pmd_mbox.h"
 #include "hinic3_pmd_nic_cfg.h"
 #include "hinic3_pmd_hwif.h"
+#include "hinic3_pmd_hwdev.h"
 #include "hinic3_stn_cmdq.h"
 #include "hinic3_pmd_rx.h"
 
@@ -186,14 +187,14 @@ static struct hinic3_indir_tbl_qid_lqid *hinic3_find_by_local_qid(u16 local_qid)
 	return NULL;
 }
 
-void hinic3_cmd_buf_to_rss_indir_table_stn(const struct hinic3_cmd_buf *cmd_buf, u32 *indir_table, u16 indir_table_size)
+void hinic3_cmd_buf_to_rss_indir_table_stn(struct hinic3_hwdev *hwdev, const struct hinic3_cmd_buf *cmd_buf, u32 *indir_table, u16 indir_table_size)
 {
 	u32 i;
 	u16 *indir_tbl = NULL;
 	struct hinic3_indir_tbl_qid_lqid *entry = NULL;
 	indir_tbl = (u16 *)cmd_buf->buf;
 
-	if (IS_QPOOL_MODE()) {
+	if (IS_QPOOL_MODE(hwdev)) {
 		for (i = 0; i < indir_table_size; i++) {
 			entry = hinic3_find_by_local_qid(*(indir_tbl + i));
 			indir_table[i] = entry ? entry->q_id : 0xFFF;

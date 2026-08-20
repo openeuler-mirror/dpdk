@@ -177,7 +177,7 @@ struct hinic3_cmd_buf *hinic3_alloc_cmd_buf(void *hwdev)
 		return NULL;
 	}
 
-	if (!IS_QPOOL_MODE()) {
+	if (!IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev)) {
 		cmd_buf->mbuf = rte_pktmbuf_alloc(cmdqs->cmd_buf_pool);
 		if (!cmd_buf->mbuf) {
 			PMD_DRV_LOG(ERR, "Allocate cmd from the pool failed");

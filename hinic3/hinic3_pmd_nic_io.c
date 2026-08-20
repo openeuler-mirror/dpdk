@@ -300,7 +300,7 @@ static int init_sq_ctxts(struct hinic3_nic_dev *nic_dev)
 			cmd = hinic3_prepare_cmd_buf_qp_context_multi_store_stn(nic_dev, cmd_buf,
 					HINIC3_QP_CTXT_TYPE_SQ, q_id, max_ctxts);
 		rte_mb();
-		if (!IS_QPOOL_MODE())
+		if (!IS_QPOOL_MODE(nic_dev->hwdev))
 			err = hinic3_cmdq_direct_resp(nic_dev->hwdev, HINIC3_MOD_L2NIC, cmd, cmd_buf, &out_param, 0);
 		else
 			if (is_sp230_nic(nic_dev))
@@ -350,7 +350,7 @@ static int init_rq_ctxts(struct hinic3_nic_dev *nic_dev)
 					HINIC3_QP_CTXT_TYPE_RQ, q_id, max_ctxts);
 
 		rte_mb();
-		if (!IS_QPOOL_MODE())
+		if (!IS_QPOOL_MODE(nic_dev->hwdev))
 			err = hinic3_cmdq_direct_resp(nic_dev->hwdev, HINIC3_MOD_L2NIC, cmd, cmd_buf, &out_param, 0);
 		else
 			if (is_sp230_nic(nic_dev))
@@ -468,7 +468,7 @@ int hinic3_init_rq_cqe_ctxts(struct hinic3_nic_dev *nic_dev)
 
 		cqe_ctx.cqe_type = (rxq->wqe_type == HINIC3_COMPACT_RQ_WQE);
 		cqe_ctx.msix_entry_idx = rxq->msix_entry_idx;
-		if(IS_QPOOL_MODE())
+		if(IS_QPOOL_MODE(nic_dev->hwdev))
 			cqe_ctx.rq_id = rxq->local_qid;
 		else
 			cqe_ctx.rq_id = q_id;
@@ -516,7 +516,7 @@ int hinic3_init_qp_ctxts(void *dev)
 		PMD_DRV_LOG(ERR, "Init RQ ctxts failed");
 		return err;
 	}
-	if (!IS_QPOOL_MODE()) {
+	if (!IS_QPOOL_MODE(nic_dev->hwdev)) {
 		err = clean_qp_offload_ctxt(nic_dev);
 		if (err) {
 			PMD_DRV_LOG(ERR, "Clean qp offload ctxts failed");

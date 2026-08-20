@@ -696,7 +696,7 @@ int hinic3_refill_indir_rqid(struct hinic3_rxq *rxq)
 	/* build indir tbl according to the number of rss queue */
 	hinic3_fill_indir_tbl(nic_dev, indir_tbl);
 
-	if (IS_QPOOL_MODE())
+	if (IS_QPOOL_MODE(nic_dev->hwdev))
 		err = hinic3_rss_set_indir_tbl_qpool(nic_dev->hwdev, indir_tbl, HINIC3_RSS_INDIR_SIZE);
 	else
 		err = hinic3_rss_set_indir_tbl(nic_dev->hwdev, indir_tbl, HINIC3_RSS_INDIR_SIZE);
@@ -772,7 +772,7 @@ int hinic3_update_rss_config(struct rte_eth_dev *dev,
 		goto init_rss_fail;
 	}
 
-	if (IS_QPOOL_MODE() && is_sp230_nic(nic_dev)) {
+	if (IS_QPOOL_MODE(nic_dev->hwdev) && is_sp230_nic(nic_dev)) {
 		err = hinic3_get_group_num_qpool(nic_dev, &num_tc);
 		if (err) {
 			PMD_DRV_LOG(ERR, "Get group num failed, err: %d", err);
@@ -1292,7 +1292,7 @@ int hinic3_start_all_rqs(struct rte_eth_dev *eth_dev)
 			}
 		}
 		
-		if (!IS_QPOOL_MODE())
+		if (!IS_QPOOL_MODE(nic_dev->hwdev))
 			hinic3_dev_rx_queue_intr_enable(eth_dev, rxq->q_id);
 		eth_dev->data->rx_queue_state[i] = RTE_ETH_QUEUE_STATE_STARTED;
 	}

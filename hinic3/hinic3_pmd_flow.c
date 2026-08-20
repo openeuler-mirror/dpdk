@@ -1381,7 +1381,7 @@ hinic3_flow_set_normal_rss_action_config(struct rte_eth_dev *dev,
 	u32 j;
 	u16 q_grp_id = 0;
 
-	if (IS_QPOOL_MODE())
+	if (IS_QPOOL_MODE(nic_dev->hwdev))
  		return hinic3_flow_set_normal_rss_action_config_qpool(nic_dev, act_r, act, error, template_entry_out);
 
 	/* Traverse the existing RSS template list to check if there is already a matching queue configureation */
@@ -1612,7 +1612,7 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 		(const struct rte_flow_action_queue *)act->conf;
 		filter->fdir_filter.rq_index = act_q->index;
 
-		if ((IS_BIFUR_MODE() && bifur_en) || (IS_NORMAL_MODE() && bifur_en))
+		if ((IS_BIFUR_MODE(nic_dev->hwdev) && bifur_en) || (IS_NORMAL_MODE(nic_dev->hwdev) && bifur_en))
 			filter->fdir_filter.queue_num = 1;
 
 		if (act_q->index >= dev->data->nb_rx_queues) {
@@ -1638,9 +1638,9 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 			return -rte_errno;
 		}
 		act_r = (const struct rte_flow_action_rss *)act->conf;
-		if (IS_BIFUR_MODE() ||
-		   (IS_NORMAL_MODE() && bifur_en) ||
-		   (IS_QPOOL_MODE() && is_sp230_nic(nic_dev))) {
+		if (IS_BIFUR_MODE(nic_dev->hwdev) ||
+		   (IS_NORMAL_MODE(nic_dev->hwdev) && bifur_en) ||
+		   (IS_QPOOL_MODE(nic_dev->hwdev) && is_sp230_nic(nic_dev))) {
 			for (i = 0; i < HINIC3_QUEUE_MAX; i++) {
 		 		rte_bit_relaxed_clear32(i, &filter->fdir_filter.rq_index);
 		 	}
@@ -1985,7 +1985,7 @@ hinic3_flow_parse_fdir_pattern(__rte_unused struct rte_eth_dev *dev,
 			if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, 0, 0) != 0)
 				PMD_DRV_LOG(WARNING, "hinic3 get port table bifur enable status failed.");
 
-			if ((IS_BIFUR_MODE() && bifur_en) || (IS_NORMAL_MODE() && bifur_en)) {
+			if ((IS_BIFUR_MODE(nic_dev->hwdev) && bifur_en) || (IS_NORMAL_MODE(nic_dev->hwdev) && bifur_en)) {
 				err = hinic3_flow_fdir_eth(flow_item, filter, error);
 				if (err != 0)
 					return -rte_errno;
@@ -2794,7 +2794,7 @@ hinic3_fillout_indir_tbl_by_rss_template(struct hinic3_nic_dev *nic_dev,
 	queue_idx = 0;
 
 	/* fillout indir table used queue list */
-	if (IS_QPOOL_MODE()) {
+	if (IS_QPOOL_MODE(nic_dev->hwdev)) {
  		for (i = 0; i < HINIC3_RSS_INDIR_SIZE; i++) {
  			indir[i] = i % nic_dev->num_rqs;
  		}
@@ -2832,8 +2832,8 @@ static void hinic3_flow_release_rss_template(struct hinic3_nic_dev *nic_dev,
 	if (ret != 0)
 		PMD_DRV_LOG(ERR, "Failed to free q_grp_id: %u, ret: %d", q_grp_id, ret);
 
-	if (!IS_QPOOL_MODE())
- 	  	TAILQ_REMOVE(&nic_dev->rss_template_list, template_entry, node);
+	if (!IS_QPOOL_MODE(nic_dev->hwdev))
+	  	TAILQ_REMOVE(&nic_dev->rss_template_list, template_entry, node);
 
 	rte_free(template_entry);
 	PMD_DRV_LOG(INFO, "RSS template q_grp_id: %u deleted and removed from list", q_grp_id);
@@ -2976,7 +2976,7 @@ hinic3_flow_create(struct rte_eth_dev          *dev,
 		} else {
 			if (template_entry->ref_count == 1) {
 				hinic3_fillout_indir_tbl_by_rss_template(nic_dev, template_entry, indirtbl);
-				if (IS_QPOOL_MODE())
+				if (IS_QPOOL_MODE(nic_dev->hwdev))
 					ret = hinic3_rss_set_indir_tbl_qpool(nic_dev->hwdev, indirtbl, HINIC3_RSS_INDIR_SIZE);
 				else
 					ret = hinic3_rss_queue_set_indir_tbl(nic_dev->hwdev, indirtbl, HINIC3_RSS_INDIR_SIZE, template_entry->q_grp_id);

@@ -42,7 +42,7 @@ int hinic3_msg_to_mgmt_sync(void *hwdev, enum hinic3_mod_type mod, u16 cmd,
 	if (!hwdev)
 		return -EINVAL;
 
-	if (IS_QPOOL_MODE())
+	if (IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev))
 		err = hinic3_send_mbox_to_kernel(hwdev, mod, cmd, buf_in, in_size,
 						 buf_out, out_size, timeout);
 	else

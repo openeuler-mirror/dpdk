@@ -6,6 +6,7 @@
 #define _HINIC3_STN_CMDQ_H_
 
 #include "hinic3_pmd_nic_io.h"
+#include "hinic3_pmd_hwdev.h"
 #include "base/hinic3_pmd_cmdq.h"
 
 struct hinic3_rxq;
@@ -62,7 +63,8 @@ u8 hinic3_prepare_cmd_buf_set_rss_indir_table_stn(struct hinic3_nic_dev *nic_dev
 u8 hinic3_prepare_cmd_buf_get_rss_indir_table_stn(struct hinic3_nic_dev *nic_dev,
 						  struct hinic3_cmd_buf *cmd_buf);
 
-void hinic3_cmd_buf_to_rss_indir_table_stn(const struct hinic3_cmd_buf *cmd_buf,
+void hinic3_cmd_buf_to_rss_indir_table_stn(struct hinic3_hwdev *hwdev,
+					   const struct hinic3_cmd_buf *cmd_buf,
 					   u32 *indir_table,
 					   u16 indir_table_size);
 

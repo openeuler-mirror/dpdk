@@ -6,6 +6,7 @@
 #define _HINIC3_HTN_CMDQ_H_
 
 #include "hinic3_pmd_nic_io.h"
+#include "hinic3_pmd_hwdev.h"
 
 struct hinic3_qp_ctxt_header_htn {
 	u32 rsvd[2];
@@ -73,7 +74,8 @@ int hinic3_cmd_modify_queue_ctx_htn(struct hinic3_nic_dev *nic_dev,
 				    struct hinic3_qp_ctxt_block_htn *ctxt_block,
 				    int qid);
 
-void hinic3_cmd_buf_to_rss_indir_table_htn(const struct hinic3_cmd_buf *cmd_buf,
+void hinic3_cmd_buf_to_rss_indir_table_htn(struct hinic3_hwdev *hwdev,
+					   const struct hinic3_cmd_buf *cmd_buf,
 					   u32 *indir_table,
 					   u16 indir_table_size);
 
