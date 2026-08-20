@@ -154,6 +154,7 @@ struct hinic3_hwdev {
 	u64 features[HINIC3_MAX_FEATURE_QWORD];
 	struct rte_mempool *cmd_buf_pool;
 	u16 qpool_qgrp_id;
+	int qinfo_type;
 };
 
 bool hinic3_is_vfio_iommu_enable(const struct rte_eth_dev *rte_dev);

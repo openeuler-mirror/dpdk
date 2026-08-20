@@ -99,7 +99,7 @@ static void hinic3_fdir_tcam_ipv4_init(struct hinic3_fdir_filter *rule,
 	tcam_key->key_mask.ip_type = HINIC3_UINT1_MAX;
 	tcam_key->key_info.ip_type = HINIC3_FDIR_IP_TYPE_IPV4;
 
-	if ((pci_dev->id.device_id == HINIC3_DEV_ID_SP920 && IS_BIFUR_MODE()) ||
+	if ((pci_dev->id.device_id == HINIC3_DEV_ID_SP920 && IS_BIFUR_MODE(nic_dev->hwdev)) ||
 	     hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev)) {
 		/* VF RSS flow table traffic distribution */
 		tcam_key->key_mask.bifur_flag = HINIC3_UINT2_MAX;
@@ -223,7 +223,7 @@ static void hinic3_fdir_tcam_ipv6_init(struct hinic3_fdir_filter *rule,
 	tcam_key->key_info_ipv6.ip_type = HINIC3_FDIR_IP_TYPE_IPV6;
 
 	/* ipv6 bifur_flag*/
-	if ((pci_dev->id.device_id == HINIC3_DEV_ID_SP920 && IS_BIFUR_MODE()) ||
+	if ((pci_dev->id.device_id == HINIC3_DEV_ID_SP920 && IS_BIFUR_MODE(nic_dev->hwdev)) ||
 	     hinic3_bifur_is_shared_dev(nic_dev->hwdev->pci_dev)) {
 		/* VF RSS flow table traffic distribution */
 		tcam_key->key_mask_ipv6.bifur_flag = HINIC3_UINT2_MAX;
@@ -486,8 +486,8 @@ hinic3_fdir_tcam_action_init(struct rte_eth_dev *dev,
 	if (hinic3_get_bifur_enable(nic_dev->hwdev, &bifur_en, 0, 0) != 0)
 		PMD_DRV_LOG(WARNING, "hinic3 get port table bifur enable status failed.");
 
-	if (IS_QPOOL_MODE()) {
- 	    	fdir_tcam_rule->data.dw0.q_grp.rss_level = rule->level;
+	if (IS_QPOOL_MODE(nic_dev->hwdev)) {
+	    	fdir_tcam_rule->data.dw0.q_grp.rss_level = rule->level;
  		switch (rule->action) {
  		case RTE_FLOW_ACTION_TYPE_QUEUE:
  			fdir_tcam_rule->data.dw1.bs.action = HINIC3_ACTION_QUEUE;
@@ -501,7 +501,7 @@ hinic3_fdir_tcam_action_init(struct rte_eth_dev *dev,
  		default:
  			break;
  		}
- 	} else if ((IS_NORMAL_MODE() && bifur_en) || (IS_BIFUR_MODE() && bifur_en)) {
+ 	} else if ((IS_NORMAL_MODE(nic_dev->hwdev) && bifur_en) || (IS_BIFUR_MODE(nic_dev->hwdev) && bifur_en)) {
 		/** vf diver || traffic bifur */
 		fdir_tcam_rule->data.dw1.queue_num = rule->queue_num;
 	} else {
@@ -1116,7 +1116,7 @@ static int hinic3_add_tcam_filter(struct rte_eth_dev *dev,
 		PMD_DRV_LOG(WARNING, "hinic3 get port table bifur enable status failed."); 
 
 	if (!is_sp230_nic(nic_dev) &&
-	    (IS_QPOOL_MODE() || fdir_tcam_rule->data.dw1.bs.action != 0 || ((IS_NORMAL_MODE() && bifur_en) && is_sp560_nic(nic_dev))))
+	    (IS_QPOOL_MODE(nic_dev->hwdev) || fdir_tcam_rule->data.dw1.bs.action != 0 || ((IS_NORMAL_MODE(nic_dev->hwdev) && bifur_en) && is_sp560_nic(nic_dev))))
  	 	tcam_rule_type = TCAM_RULE_Q_GROUP_TYPE;
  	else
  	 	tcam_rule_type = TCAM_RULE_FDIR_TYPE;

@@ -762,7 +762,7 @@ int hinic3_init_hwif(void *dev)
 	hwdev = (struct hinic3_hwdev *)dev;
 	hwdev->hwif = hwif;
 
-	if (IS_QPOOL_MODE())
+	if (IS_QPOOL_MODE(hwdev))
 		err = hinic3_mmap_bar_addr(hwdev);
 	else
 		err = hinic3_get_bar_addr(hwdev);
@@ -789,7 +789,7 @@ int hinic3_init_hwif(void *dev)
 		goto hwif_ready_err;
 	}
 
-	if (IS_QPOOL_MODE()) {
+	if (IS_QPOOL_MODE(hwdev)) {
 		if (!HINIC3_IS_VF(hwdev))
 			get_mpf(hwif);
 	} else {
@@ -813,7 +813,7 @@ int hinic3_init_hwif(void *dev)
 	return 0;
 
 hwif_ready_err:
-	if (IS_QPOOL_MODE())
+	if (IS_QPOOL_MODE(hwdev))
 		hinic3_unmmap_bar_addr(hwdev);
 bar_addr_err:
 	rte_free(hwdev->hwif);
@@ -831,7 +831,7 @@ bar_addr_err:
 void hinic3_free_hwif(void *dev)
 {
 	struct hinic3_hwdev *hwdev = (struct hinic3_hwdev *)dev;
-	if (IS_QPOOL_MODE())
+	if (IS_QPOOL_MODE(hwdev))
 		hinic3_unmmap_bar_addr(hwdev);
 	rte_free(hwdev->hwif);
 }

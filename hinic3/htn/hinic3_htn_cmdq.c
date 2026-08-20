@@ -210,10 +210,11 @@ static void hinic3_cmd_buf_to_rss_indir_table_htn_qpool(const struct hinic3_cmd_
 	}
 }
 
-void hinic3_cmd_buf_to_rss_indir_table_htn(const struct hinic3_cmd_buf *cmd_buf,
+void hinic3_cmd_buf_to_rss_indir_table_htn(struct hinic3_hwdev *hwdev,
+					   const struct hinic3_cmd_buf *cmd_buf,
 					   u32 *indir_table, u16 indir_table_size)
 {
-	if (IS_QPOOL_MODE())
+	if (IS_QPOOL_MODE(hwdev))
 		hinic3_cmd_buf_to_rss_indir_table_htn_qpool(cmd_buf, indir_table, indir_table_size);
 	else
 		hinic3_cmd_buf_to_rss_indir_table_htn_normal(cmd_buf, indir_table, indir_table_size);

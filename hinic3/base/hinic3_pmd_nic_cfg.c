@@ -26,8 +26,6 @@
 #include "stn/hinic3_stn_cmdq.h"
 #include "hinic3_pmd_bifur.h"
 
-int g_qinfo_type = HINIC3_QINFO_TYPE_NORMAL;
-
 struct vf_msg_handler {
 	u16 cmd;
 };
@@ -80,7 +78,7 @@ int l2nic_msg_to_mgmt_sync(void *hwdev, u16 cmd, void *buf_in, u16 in_size,
 		}
 	}
 
-	if (!IS_QPOOL_MODE() && cmd_to_pf) {
+	if (!IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev) && cmd_to_pf) {
 		return hinic3_mbox_to_pf(hwdev, HINIC3_MOD_L2NIC, cmd,
 					 buf_in, in_size,
 					 buf_out, out_size, 0);
@@ -156,12 +154,12 @@ int hinic3_set_mac(void *hwdev, const u8 *mac_addr, u16 vlan_id, u16 func_id)
 	if (!hwdev || !mac_addr)
 		return -EINVAL;
 
-	if (IS_QPOOL_MODE()) {
+	if (IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev)) {
 	    PMD_DRV_LOG(WARNING, "Qpool mode not support set mac.");
 		return 0;
 	}
 
- 	if (IS_BIFUR_MODE()) {
+ 	if (IS_BIFUR_MODE((struct hinic3_hwdev *)hwdev)) {
 	if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
 		PMD_DRV_LOG(WARNING, "Share mode vf do not support change mac");
 		return 0;
@@ -210,12 +208,12 @@ int hinic3_del_mac(void *hwdev, const u8 *mac_addr, u16 vlan_id, u16 func_id)
 	if (!hwdev || !mac_addr)
 		return -EINVAL;
 
-	if (IS_QPOOL_MODE()) {
+	if (IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev)) {
 		PMD_DRV_LOG(WARNING, "Qpool mode do not support del mac.");
 		return 0;
 	}
 
- 	if (IS_BIFUR_MODE()) {
+ 	if (IS_BIFUR_MODE((struct hinic3_hwdev *)hwdev)) {
 	if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
 		PMD_DRV_LOG(WARNING, "Share mode vf do not support change mac");
 		return 0;
@@ -259,7 +257,7 @@ int hinic3_update_mac(void *hwdev, u8 *old_mac, u8 *new_mac, u16 vlan_id,
 	if (!hwdev || !old_mac || !new_mac)
 		return -EINVAL;
 
- 	if (IS_BIFUR_MODE()) {
+ 	if (IS_BIFUR_MODE((struct hinic3_hwdev *)hwdev)) {
 	if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
 		PMD_DRV_LOG(WARNING, "Share mode vf do not support change mac");
 		return 0;
@@ -309,7 +307,7 @@ int hinic3_get_default_mac(void *hwdev, u8 *mac_addr, int ether_len)
 	if (!hwdev || !mac_addr)
 		return -EINVAL;
 
- 	if (IS_BIFUR_MODE()) {
+ 	if (IS_BIFUR_MODE((struct hinic3_hwdev *)hwdev)) {
 		if (hinic3_bifur_is_shared_dev(((struct hinic3_hwdev *)hwdev)->pci_dev)) {
 			return hinic3_bifur_get_default_mac(((struct hinic3_hwdev *)hwdev)->pci_dev,
 							    mac_addr);
@@ -339,7 +337,7 @@ static int hinic3_config_vlan(void *hwdev, u8 opcode, u16 vlan_id, u16 func_id)
 	u16 out_size = sizeof(vlan_info);
 	int err;
 
-	if (IS_QPOOL_MODE()) {
+	if (IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev)) {
 		PMD_DRV_LOG(WARNING, "Qpool mode not support config vlan.");
 		return 0;
 	}
@@ -443,7 +441,7 @@ int hinic3_set_vport_enable(void *hwdev, bool enable)
 	if (!hwdev)
 		return -EINVAL;
 
-	if (IS_QPOOL_MODE()) {
+	if (IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev)) {
 		PMD_DRV_LOG(WARNING, "Qpool not support set vport enable");
 		return 0;
 	}
@@ -876,7 +874,7 @@ static int hinic3_vf_func_free(void *hwdev)
 	int err;
 
 	/** vf not init qpool mode */
-	if (IS_QPOOL_MODE())
+	if (IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev))
  	 	return 0;
 
 	if (hinic3_func_type(hwdev) != TYPE_VF)
@@ -921,7 +919,7 @@ int hinic3_set_rx_mode(void *hwdev, u32 enable)
 	if (!hwdev)
 		return -EINVAL;
 
-	if (IS_QPOOL_MODE()) {
+	if (IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev)) {
  	  	PMD_DRV_LOG(WARNING, "Qpool mode not support set rx mode.");
 		return 0;
 	}
@@ -950,7 +948,7 @@ int hinic3_set_rx_vlan_offload(void *hwdev, u8 en)
 	if (!hwdev)
 		return -EINVAL;
 
-	if (IS_QPOOL_MODE()) {
+	if (IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev)) {
 		PMD_DRV_LOG(WARNING, "Qpool mode not support set rx vlan offload.");
 		return 0;
 	}
@@ -979,7 +977,7 @@ int hinic3_set_vlan_fliter(void *hwdev, u32 vlan_filter_ctrl)
 	if (!hwdev)
 		return -EINVAL;
 
-	if (IS_QPOOL_MODE()) {
+	if (IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev)) {
 		PMD_DRV_LOG(WARNING, "Qpool mode support set vlan filter.");
 		return 0;
 	}
@@ -1009,7 +1007,7 @@ static int hinic3_set_rx_lro(void *hwdev, u8 ipv4_en, u8 ipv6_en,
 	if (!hwdev)
 		return -EINVAL;
 
-	if (IS_QPOOL_MODE()) {
+	if (IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev)) {
 		PMD_DRV_LOG(WARNING, "Qpool mode not support set rx lro.");
 		return 0;
 	}
@@ -1042,7 +1040,7 @@ static int hinic3_set_rx_lro_timer(void *hwdev, u32 timer_value)
 	if (!hwdev)
 		return -EINVAL;
 
-	if (IS_QPOOL_MODE()) {
+	if (IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev)) {
 		PMD_DRV_LOG(WARNING, "Qpool not support set lro timer.");
 		return 0;
 	}
@@ -1102,7 +1100,7 @@ int hinic3_rss_template_alloc(void *hwdev, u16 q_grp_id)
 	if (!hwdev)
 		return -EINVAL;
 
-	if (IS_QPOOL_MODE())
+	if (IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev))
 		return 0;
 
 	memset(&template_mgmt, 0, sizeof(struct hinic3_rss_template_mgmt));
@@ -1139,7 +1137,7 @@ int hinic3_rss_template_free(void *hwdev, u16 q_grp_id)
 	if (!hwdev)
 		return -EINVAL;
 
-	if (IS_QPOOL_MODE())
+	if (IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev))
  	  	return 0;
 
 	memset(&template_mgmt, 0, sizeof(struct hinic3_rss_template_mgmt));
@@ -1172,7 +1170,7 @@ static int hinic3_rss_cfg_hash_key(void *hwdev, u8 opcode, u8 *key, u16 key_size
 		return -EINVAL;
 
 	memset(&hash_key, 0, sizeof(struct hinic3_cmd_rss_hash_key));
-	if (IS_QPOOL_MODE())
+	if (IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev))
  	  	hash_key.func_id = ((struct hinic3_hwdev *)hwdev)->qpool_qgrp_id;
  	else
 		hash_key.func_id = hinic3_global_func_id(hwdev);
@@ -1299,7 +1297,7 @@ int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table, u32 indir_table_size
 
 	cmd_buf->size = sizeof(struct nic_rss_indirect_tbl);
 	nic_dev = ((struct hinic3_hwdev *)hwdev)->dev_handle;
-	if (IS_QPOOL_MODE()) {
+	if (IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev)) {
 		if (is_sp230_nic(nic_dev)) {
 			err = hinic3_rss_get_indir_tbl_qpool_htn(nic_dev->fd, &cmd_indir_tbl, &indir_table_size);
 			cmd_buf->buf = cmd_indir_tbl.rss_indir.entry;
@@ -1332,9 +1330,9 @@ int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table, u32 indir_table_size
 	}
 
 	if (is_sp230_nic(nic_dev)) 
-		hinic3_cmd_buf_to_rss_indir_table_htn(cmd_buf, indir_table, indir_table_size);
+		hinic3_cmd_buf_to_rss_indir_table_htn((struct hinic3_hwdev *)hwdev, cmd_buf, indir_table, indir_table_size);
 	else
-		hinic3_cmd_buf_to_rss_indir_table_stn(cmd_buf, indir_table, indir_table_size);
+		hinic3_cmd_buf_to_rss_indir_table_stn((struct hinic3_hwdev *)hwdev, cmd_buf, indir_table, indir_table_size);
 
 	hinic3_free_cmd_buf(cmd_buf);
 	return 0;
@@ -1557,7 +1555,7 @@ int hinic3_set_rss_type(void *hwdev, struct hinic3_rss_type rss_type)
 	struct hinic3_nic_dev *nic_dev = ((struct hinic3_hwdev *)hwdev)->dev_handle;
 	int err;
 
-	if (IS_QPOOL_MODE() && !is_sp230_nic(nic_dev))
+	if (IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev) && !is_sp230_nic(nic_dev))
 		return hinic3_cmdq_set_rss_type_ioctl(nic_dev, rss_type);
 
 	err = hinic3_mgmt_set_rss_type(hwdev, rss_type);
@@ -1576,7 +1574,7 @@ int hinic3_get_rss_type(void *hwdev, struct hinic3_rss_type *rss_type)
 		return -EINVAL;
 
 	memset(&ctx_tbl, 0, sizeof(struct hinic3_rss_context_table));
-	if (IS_QPOOL_MODE() && !is_sp230_nic(((struct hinic3_hwdev *)hwdev)->dev_handle))
+	if (IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev) && !is_sp230_nic(((struct hinic3_hwdev *)hwdev)->dev_handle))
  		ctx_tbl.func_id = ((struct hinic3_hwdev *)hwdev)->qpool_qgrp_id;
  	else
 		ctx_tbl.func_id = hinic3_global_func_id(hwdev);
@@ -1610,7 +1608,7 @@ static int hinic3_rss_cfg_hash_engine(void *hwdev, u8 opcode, u8 *type)
 		return -EINVAL;
 
 	memset(&hash_type, 0, sizeof(struct hinic3_cmd_rss_engine_type));
-	if (IS_QPOOL_MODE() && !is_sp230_nic(((struct hinic3_hwdev *)hwdev)->dev_handle))
+	if (IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev) && !is_sp230_nic(((struct hinic3_hwdev *)hwdev)->dev_handle))
  		hash_type.func_id = ((struct hinic3_hwdev *)hwdev)->qpool_qgrp_id;
  	else
 		hash_type.func_id = hinic3_global_func_id(hwdev);
@@ -1662,7 +1660,7 @@ int hinic3_rss_cfg(void *hwdev, u8 rss_en, u8 tc_num, u8 *prio_tc)
 	if (!hwdev || !prio_tc || (tc_num & (tc_num - 1)))
 		return -EINVAL;
 
-	if (IS_QPOOL_MODE())
+	if (IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev))
  	  	return 0;
 
 	memset(&rss_cfg, 0, sizeof(struct hinic3_cmd_rss_config));
@@ -1762,7 +1760,7 @@ int hinic3_del_tcam_rule(void *hwdev, u32 index, u8 tcam_rule_type)
 	}
 
 	memset(&tcam_cmd, 0, sizeof(struct hinic3_fdir_del_rule));
-	if (IS_QPOOL_MODE() && !is_sp230_nic(((struct hinic3_hwdev *)hwdev)->dev_handle))
+	if (IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev) && !is_sp230_nic(((struct hinic3_hwdev *)hwdev)->dev_handle))
  		tcam_cmd.func_id = ((struct hinic3_hwdev *)hwdev)->qpool_qgrp_id;
  	else
 		tcam_cmd.func_id = hinic3_global_func_id(hwdev);
@@ -1790,7 +1788,7 @@ static int hinic3_cfg_tcam_block(void *hwdev, u8 alloc_en, u16 *index)
 	int err;
 
 	memset(&tcam_block_info, 0, sizeof(struct hinic3_tcam_block));
-	if (IS_QPOOL_MODE() && !is_sp230_nic(((struct hinic3_hwdev *)hwdev)->dev_handle))
+	if (IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev) && !is_sp230_nic(((struct hinic3_hwdev *)hwdev)->dev_handle))
  		tcam_block_info.func_id = ((struct hinic3_hwdev *)hwdev)->qpool_qgrp_id;
  	else
 		tcam_block_info.func_id = hinic3_global_func_id(hwdev);
@@ -1837,7 +1835,7 @@ int hinic3_flush_tcam_rule(void *hwdev)
 		return -EINVAL;
 
 	memset(&tcam_flush, 0, sizeof(struct hinic3_flush_tcam_rules));
-	if (IS_QPOOL_MODE() && !is_sp230_nic(((struct hinic3_hwdev *)hwdev)->dev_handle))
+	if (IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev) && !is_sp230_nic(((struct hinic3_hwdev *)hwdev)->dev_handle))
  	 	tcam_flush.func_id = ((struct hinic3_hwdev*)hwdev)->qpool_qgrp_id;
  	else
 		tcam_flush.func_id = hinic3_global_func_id(hwdev);
@@ -1935,7 +1933,7 @@ int hinic3_set_rq_flush(void *hwdev, u16 q_id)
 	rte_mb();
 	rq_flush_msg->value = cpu_to_be32(rq_flush_msg->value);
 
-	if (IS_QPOOL_MODE()) {
+	if (IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev)) {
 		out_param = 0;
 		nic_dev = ((struct hinic3_hwdev *)hwdev)->dev_handle;
 		err = hinic3_set_rq_flush_qpool(rq_flush_msg, nic_dev->fd);
@@ -1961,7 +1959,7 @@ static int _mag_msg_to_mgmt_sync(void *hwdev, u16 cmd, void *buf_in,
 {
 	u32 i, cmd_cnt = ARRAY_LEN(vf_mag_cmd_handler);
 
-	if (!IS_QPOOL_MODE() && hinic3_func_type(hwdev) == TYPE_VF) {
+	if (!IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev) && hinic3_func_type(hwdev) == TYPE_VF) {
 		for (i = 0; i < cmd_cnt; i++) {
 			if (cmd == vf_mag_cmd_handler[i].cmd)
 				return hinic3_mbox_to_pf(hwdev, HINIC3_MOD_HILINK,
@@ -1991,7 +1989,7 @@ int hinic3_set_link_status_follow(void *hwdev, enum hinic3_link_follow_status st
 		return -EINVAL;
 
 
-	if (IS_QPOOL_MODE()) {
+	if (IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev)) {
  	  	PMD_DRV_LOG(WARNING, "Qpool mode not support set link status flow.");
  	 	return 0;
  	}
@@ -2294,7 +2292,7 @@ hinic3_cmdq_set_rss_queue_type(void *hwdev, struct hinic3_rss_type rss_type, u16
 	rte_mb();
 	ctx_tbl->ctx = cpu_to_be32(ctx);
 
-	if (IS_QPOOL_MODE()) {
+	if (IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev)) {
 		nic_dev = ((struct hinic3_hwdev *)hwdev)->dev_handle;
 		ctx_tbl->q_grp_id = nic_dev->hwdev->qpool_qgrp_id;
 		ctx_tbl->cmd_type = NIC_RSS_CONTEXT_CMD_RSS_QUEUE;
@@ -2329,7 +2327,7 @@ hinic3_mgmt_cfg_qgrp_id(void *hwdev, u8 opcode, u16 *q_grp_id)
 	if (!hwdev)
 		return -EINVAL;
 
-	if (IS_QPOOL_MODE())
+	if (IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev))
  	  	return 0;
 
 	memset(&msg_extend, 0, sizeof(msg_extend));
@@ -2790,24 +2788,15 @@ int hinic3_get_fec_mode(struct hinic3_hwdev *hwdev, u8 *advertised_fec, u8 *supp
 	return 0;
 }
 
-int hinic3_qinfo_type_init(const char *dev_file, struct rte_pci_device *pci_dev)
+int hinic3_qinfo_type_detect(const char *dev_file, struct rte_pci_device *pci_dev)
 {
-	if (access(dev_file, F_OK) == 0) {
-		PMD_DRV_LOG(INFO, "The current loading mode of the PMD driver is queue qpool mode.");
-		g_qinfo_type = HINIC3_QINFO_TYPE_QPOOL;
-		return 0;
-	}
+	if (access(dev_file, F_OK) == 0)
+		return HINIC3_QINFO_TYPE_QPOOL;
 
-	if (access(BIFUR_GDEV_PATH, F_OK) == 0 && (!is_sp230_pci_dev(pci_dev))) {
-		PMD_DRV_LOG(INFO, "The current loading mode of the PMD driver is traffic bifur mode.");
-		g_qinfo_type = HINIC3_QINFO_TYPE_BIFUR;
-	    	return 0;
-	}
+	if (access(BIFUR_GDEV_PATH, F_OK) == 0 && (!is_sp230_pci_dev(pci_dev)))
+		return HINIC3_QINFO_TYPE_BIFUR;
 
-	PMD_DRV_LOG(INFO, "The current loading mode of the PMD driver is normal mode.");
-	g_qinfo_type = HINIC3_QINFO_TYPE_NORMAL;
-
-	return 0;
+	return HINIC3_QINFO_TYPE_NORMAL;
 }
 
 u64 hinic3_get_driver_feature(void *dev)
