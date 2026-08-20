@@ -254,6 +254,15 @@ enum hinic3_compact_cqe_csum_err_type {
 #define HINIC3_RX_DMA_ALIGN_MIN		64
 #define HINIC3_RX_DMA_ALIGN_MAX		512
 
+/*
+ * sp560 NIC: in integrated compact CQE mode the 16-byte CQE is written by
+ * the hardware at the DMA start address before the packet data. When DMA
+ * alignment is enabled, shift the WQE DMA address back by this CQE size so
+ * the packet data lands on the aligned boundary and the CQE occupies the
+ * headroom space.
+ */
+#define HINIC3_RX_DMA_ALIGN_CQE_OFFSET	16
+
 /* Check whether @align is one of the supported alignment values (or 0). */
 static inline bool hinic3_rx_dma_align_is_valid(u32 align)
 {
@@ -530,6 +539,8 @@ int hinic3_stop_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq);
 int hinic3_start_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq);
 
 u16 hinic3_recv_pkts_compact_cqe(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts);
+
+u16 hinic3_recv_pkts_compact_cqe_vec(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts);
 
 u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts);
 

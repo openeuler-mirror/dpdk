@@ -578,6 +578,17 @@ static int hinic3_rearm_rxq_mbuf(struct hinic3_rxq *rxq)
 			rq_wqe->normal_wqe.buf_lo_addr =
 				hinic3_hw_be32(lower_32_bits(dma_addr));
 		} else {
+			/*
+			 * sp560 NIC with DMA alignment enabled: the hardware
+			 * writes the 16-byte compact CQE at the DMA start
+			 * address before the packet data. Shift the WQE DMA
+			 * address back by the CQE size so the packet data
+			 * itself lands on the aligned boundary; data_off keeps
+			 * pointing at the aligned address and the CQE occupies
+			 * the headroom space.
+			 */
+			if (is_sp560_nic(nic_dev) && rxq->rx_dma_align)
+				dma_addr -= HINIC3_RX_DMA_ALIGN_CQE_OFFSET;
 			rq_wqe->compact_wqe.buf_hi_addr =
 				hinic3_hw_be32(upper_32_bits(dma_addr));
 			rq_wqe->compact_wqe.buf_lo_addr =
@@ -1361,7 +1372,7 @@ static bool
 hinic3_rx_integrated_cqe_done(struct hinic3_rxq *rxq, volatile struct hinic3_rq_cqe **rx_cqe)
 {
 	struct rte_mbuf *rxm = NULL;
-	uint16_t sw_ci, hw_ci;
+	uint16_t sw_ci, hw_ci, cqe_off;
 
 	sw_ci = hinic3_get_rq_local_ci(rxq);
 
@@ -1382,15 +1393,24 @@ hinic3_rx_integrated_cqe_done(struct hinic3_rxq *rxq, volatile struct hinic3_rq_
 	 * the offset of the DMA start address relative to buf (HEADROOM when
 	 * alignment is disabled, HEADROOM + alignment offset when enabled),
 	 * so the CQE virtual address is buf_addr + data_off.
+	 *
+	 * On sp560 NIC with DMA alignment enabled, the WQE DMA address is
+	 * shifted HINIC3_RX_DMA_ALIGN_CQE_OFFSET bytes below the aligned
+	 * address while data_off still points at the aligned address, so the
+	 * CQE is at buf_addr + data_off - HINIC3_RX_DMA_ALIGN_CQE_OFFSET.
 	 */
+	cqe_off = rxm->data_off;
+	if (is_sp560_nic(rxq->nic_dev) && rxq->rx_dma_align)
+		cqe_off -= HINIC3_RX_DMA_ALIGN_CQE_OFFSET;
+
 #ifdef DPDK_21_11
-	*rx_cqe = (struct hinic3_rq_cqe *)(rte_mbuf_buf_addr(rxm, rxm->pool) + rxm->data_off);
+	*rx_cqe = (struct hinic3_rq_cqe *)(rte_mbuf_buf_addr(rxm, rxm->pool) + cqe_off);
 #else
 	#ifdef __GNUC__
 		#pragma GCC diagnostic push
 		#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 	#endif
-	*rx_cqe = (struct hinic3_rq_cqe *)(rte_mbuf_buf_addr(rxm, rxm->pool) + rxm->data_off);
+	*rx_cqe = (struct hinic3_rq_cqe *)(rte_mbuf_buf_addr(rxm, rxm->pool) + cqe_off);
 #endif
 
 	return true;
@@ -1490,8 +1510,13 @@ u16 hinic3_recv_pkts_compact_cqe(void *rx_queue, struct rte_mbuf **rx_pkts, u16 
 		 * start address relative to buf. Add the integrated CQE
 		 * length so data_off points past the CQE to the packet
 		 * payload.
+		 *
+		 * On sp560 NIC with DMA alignment enabled, rearm keeps data_off
+		 * at the aligned address where the packet data already starts,
+		 * so the CQE length must not be added again.
 		 */
-		rxm->data_off += cqe_info.data_offset;
+		if (!is_sp560_nic(rxq->nic_dev) || !rxq->rx_dma_align)
+			rxm->data_off += cqe_info.data_offset;
 		rxm->port = rxq->port_id;
 
 		/* 4. Rx checksum offload. */
