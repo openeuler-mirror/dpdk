@@ -1296,12 +1296,12 @@ static int hinic3_flow_set_normal_rss_action_config_qpool(struct hinic3_nic_dev 
 			ret = hinic3_cmdq_set_rss_queue_type(nic_dev->hwdev, nic_dev->rss_type, 0,  0);
 		} else {
 			struct hinic3_rss_type rss_type = {0};
-			rss_type.ipv4 = (act_r->types & (ETH_RSS_IPV4 | ETH_RSS_FRAG_IPV4)) ? 1 : 0;
-			rss_type.tcp_ipv4 = (act_r->types & ETH_RSS_NONFRAG_IPV4_TCP) ? 1 : 0;
-			rss_type.ipv6 = (act_r->types & (ETH_RSS_IPV6 | ETH_RSS_FRAG_IPV6)) ? 1 : 0;
-			rss_type.tcp_ipv6 = (act_r->types & ETH_RSS_NONFRAG_IPV6_TCP) ? 1 : 0;
-			rss_type.udp_ipv4 = (act_r->types & ETH_RSS_NONFRAG_IPV4_UDP) ? 1 : 0;
-			rss_type.udp_ipv6 = (act_r->types & ETH_RSS_NONFRAG_IPV6_UDP) ? 1 : 0;
+			rss_type.ipv4 = (act_r->types & (RTE_ETH_RSS_IPV4 | RTE_ETH_RSS_FRAG_IPV4)) ? 1 : 0;
+			rss_type.tcp_ipv4 = (act_r->types & RTE_ETH_RSS_NONFRAG_IPV4_TCP) ? 1 : 0;
+			rss_type.ipv6 = (act_r->types & (RTE_ETH_RSS_IPV6 | RTE_ETH_RSS_FRAG_IPV6)) ? 1 : 0;
+			rss_type.tcp_ipv6 = (act_r->types & RTE_ETH_RSS_NONFRAG_IPV6_TCP) ? 1 : 0;
+			rss_type.udp_ipv4 = (act_r->types & RTE_ETH_RSS_NONFRAG_IPV4_UDP) ? 1 : 0;
+			rss_type.udp_ipv6 = (act_r->types & RTE_ETH_RSS_NONFRAG_IPV6_UDP) ? 1 : 0;
 			ret = hinic3_cmdq_set_rss_queue_type(nic_dev->hwdev, rss_type, 0, 1);
 	}
 
@@ -1443,12 +1443,12 @@ hinic3_flow_set_normal_rss_action_config(struct rte_eth_dev *dev,
 			ret = hinic3_cmdq_set_rss_queue_type(nic_dev->hwdev, nic_dev->rss_type, q_grp_id, HINIC3_RSS_ENABLE);
 		} else {
 			struct hinic3_rss_type rss_type = {0};
-			rss_type.ipv4 = (act_r->types & (ETH_RSS_IPV4 | ETH_RSS_FRAG_IPV4)) ? 1 : 0;
-			rss_type.tcp_ipv4 = (act_r->types & ETH_RSS_NONFRAG_IPV4_TCP) ? 1 : 0;
-			rss_type.ipv6 = (act_r->types & (ETH_RSS_IPV6 | ETH_RSS_FRAG_IPV6)) ? 1 : 0;
-			rss_type.tcp_ipv6 = (act_r->types & ETH_RSS_NONFRAG_IPV6_TCP) ? 1 : 0;
-			rss_type.udp_ipv4 = (act_r->types & ETH_RSS_NONFRAG_IPV4_UDP) ? 1 : 0;
-			rss_type.udp_ipv6 = (act_r->types & ETH_RSS_NONFRAG_IPV6_UDP) ? 1 : 0;
+			rss_type.ipv4 = (act_r->types & (RTE_ETH_RSS_IPV4 | RTE_ETH_RSS_FRAG_IPV4)) ? 1 : 0;
+			rss_type.tcp_ipv4 = (act_r->types & RTE_ETH_RSS_NONFRAG_IPV4_TCP) ? 1 : 0;
+			rss_type.ipv6 = (act_r->types & (RTE_ETH_RSS_IPV6 | RTE_ETH_RSS_FRAG_IPV6)) ? 1 : 0;
+			rss_type.tcp_ipv6 = (act_r->types & RTE_ETH_RSS_NONFRAG_IPV6_TCP) ? 1 : 0;
+			rss_type.udp_ipv4 = (act_r->types & RTE_ETH_RSS_NONFRAG_IPV4_UDP) ? 1 : 0;
+			rss_type.udp_ipv6 = (act_r->types & RTE_ETH_RSS_NONFRAG_IPV6_UDP) ? 1 : 0;
 			ret = hinic3_cmdq_set_rss_queue_type(nic_dev->hwdev, rss_type, q_grp_id, HINIC3_RSS_ENABLE);
 		}
 

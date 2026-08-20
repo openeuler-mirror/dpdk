@@ -1561,16 +1561,16 @@ hinic3_tx_burst_mode_get(struct rte_eth_dev *dev,
 
 	snprintf(mode->info, sizeof(mode->info),
 		"Scalar%s%s%s%s%s",
- 		(tx_offloads & DEV_TX_OFFLOAD_MULTI_SEGS) ? " + MULTI" : "",
-		(tx_offloads & (DEV_TX_OFFLOAD_TCP_TSO |
-				DEV_TX_OFFLOAD_VXLAN_TNL_TSO)) ? " + TSO" : "",
-		(tx_offloads & (DEV_TX_OFFLOAD_IPV4_CKSUM |
-				DEV_TX_OFFLOAD_UDP_CKSUM |
-				DEV_TX_OFFLOAD_TCP_CKSUM |
-				DEV_TX_OFFLOAD_SCTP_CKSUM |
-				DEV_TX_OFFLOAD_OUTER_IPV4_CKSUM)) ? " + CKSUM" : "",
-		(tx_offloads & DEV_TX_OFFLOAD_VLAN_INSERT) ? " + VLAN" : "",
-		(tx_offloads & DEV_TX_OFFLOAD_QINQ_INSERT) ? " + QINQ" : "");
+ 		(tx_offloads & RTE_ETH_TX_OFFLOAD_MULTI_SEGS) ? " + MULTI" : "",
+		(tx_offloads & (RTE_ETH_TX_OFFLOAD_TCP_TSO |
+				RTE_ETH_TX_OFFLOAD_VXLAN_TNL_TSO)) ? " + TSO" : "",
+		(tx_offloads & (RTE_ETH_TX_OFFLOAD_IPV4_CKSUM |
+				RTE_ETH_TX_OFFLOAD_UDP_CKSUM |
+				RTE_ETH_TX_OFFLOAD_TCP_CKSUM |
+				RTE_ETH_TX_OFFLOAD_SCTP_CKSUM |
+				RTE_ETH_TX_OFFLOAD_OUTER_IPV4_CKSUM)) ? " + CKSUM" : "",
+		(tx_offloads & RTE_ETH_TX_OFFLOAD_VLAN_INSERT) ? " + VLAN" : "",
+		(tx_offloads & RTE_ETH_TX_OFFLOAD_QINQ_INSERT) ? " + QINQ" : "");
 
 	return 0;
 }

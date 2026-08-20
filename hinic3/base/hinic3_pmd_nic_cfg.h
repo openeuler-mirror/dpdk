@@ -68,8 +68,33 @@
 #define HINIC3_RSS_DISABLE		0x00
 #define HINIC3_INVALID_QID_BASE       0xffff
 
-#ifndef ETH_SPEED_NUM_200G
-#define ETH_SPEED_NUM_200G    200000 /* < 200 Gbps */
+#ifndef RTE_ETH_SPEED_NUM_200G
+#define RTE_ETH_SPEED_NUM_200G    200000 /* < 200 Gbps */
+#endif
+
+#ifndef RTE_ETH_SPEED_NUM_400G
+#define RTE_ETH_SPEED_NUM_400G    400000 /* < 400 Gbps */
+#endif
+
+#ifndef RTE_ETH_SPEED_NUM_800G
+#define RTE_ETH_SPEED_NUM_800G    800000 /* < 800 Gbps */
+#endif
+
+/* Speed capability bitmaps used by rte_eth_dev_info.speed_capa.
+ * DPDK < 23.11 does not define the 400G capability, DPDK < 21.11 does not
+ * define the 200G one either. The bit positions follow the RTE_ETH_LINK_SPEED_*
+ * numbering (400G = bit 16, 200G = bit 15) used since DPDK 21.11.
+ */
+#ifndef RTE_ETH_LINK_SPEED_200G
+#define RTE_ETH_LINK_SPEED_200G    (1U << 15) /* < 200 Gbps */
+#endif
+
+#ifndef RTE_ETH_LINK_SPEED_400G
+#define RTE_ETH_LINK_SPEED_400G    (1U << 16) /* < 400 Gbps */
+#endif
+
+#ifndef RTE_ETH_LINK_SPEED_800G
+#define RTE_ETH_LINK_SPEED_800G    (1U << 17) /* < 800 Gbps */
 #endif
 
 #define NIC_VF_DCB_COS_MAX 0x4
@@ -244,6 +269,8 @@ enum nic_speed_level {
 	LINK_SPEED_50GB,
 	LINK_SPEED_100GB,
 	LINK_SPEED_200GB,
+	LINK_SPEED_400GB,
+	LINK_SPEED_800GB,
 	LINK_SPEED_LEVELS,
 };
 
@@ -298,6 +325,8 @@ enum mag_cmd_port_speed {
     PORT_SPEED_50GB = 7,
     PORT_SPEED_100GB = 8,
     PORT_SPEED_200GB = 9,
+    PORT_SPEED_400GB = 10,
+    PORT_SPEED_800GB = 11,
     PORT_SPEED_UNKNOWN
 };
 

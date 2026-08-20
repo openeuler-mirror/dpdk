@@ -552,12 +552,12 @@ static int hinic3_dev_configure(struct rte_eth_dev *dev)
 	if (!IS_QPOOL_MODE())
 		nic_dev->mtu_size = (u16)HINIC3_PKTLEN_TO_MTU(HINIC3_MAX_RX_PKT_LEN(dev->data->dev_conf.rxmode));
 
-	if (dev->data->dev_conf.rxmode.mq_mode & ETH_MQ_RX_RSS_FLAG)
-		dev->data->dev_conf.rxmode.offloads |= DEV_RX_OFFLOAD_RSS_HASH;
+	if (dev->data->dev_conf.rxmode.mq_mode & RTE_ETH_MQ_RX_RSS_FLAG)
+		dev->data->dev_conf.rxmode.offloads |= RTE_ETH_RX_OFFLOAD_RSS_HASH;
 
 	if (!nic_dev->hinic3_offload_initialized) {
-		dev->data->dev_conf.rxmode.offloads |= DEV_RX_OFFLOAD_SCATTER;
-		dev->data->dev_conf.txmode.offloads |= DEV_TX_OFFLOAD_MULTI_SEGS;
+		dev->data->dev_conf.rxmode.offloads |= RTE_ETH_RX_OFFLOAD_SCATTER;
+		dev->data->dev_conf.txmode.offloads |= RTE_ETH_TX_OFFLOAD_MULTI_SEGS;
 		nic_dev->hinic3_offload_initialized = true;
 	}
 
@@ -567,7 +567,7 @@ static int hinic3_dev_configure(struct rte_eth_dev *dev)
 	if (!IS_QPOOL_MODE())
 		hinic3_free_fdir_filter(dev);
 
-	if (dev->data->dev_conf.txmode.mq_mode == ETH_MQ_TX_DCB) {
+	if (dev->data->dev_conf.txmode.mq_mode == RTE_ETH_MQ_TX_DCB) {
 		int err;
 		u8 cos_num = hinic3_get_dev_user_cos_num(nic_dev);
 		err = hinic3_setup_cos(nic_dev, cos_num);
@@ -588,10 +588,10 @@ static int hinic3_dev_configure(struct rte_eth_dev *dev)
 
 static void hinic3_dev_tnl_tso_support(struct rte_eth_dev_info *info, struct hinic3_nic_dev *nic_dev) {
 	if (HINIC3_SUPPORT_GENEVE_OFFLOAD(nic_dev)) {
-		info->tx_offload_capa |= DEV_TX_OFFLOAD_GENEVE_TNL_TSO;
+		info->tx_offload_capa |= RTE_ETH_TX_OFFLOAD_GENEVE_TNL_TSO;
 	}
 	if (HINIC3_SUPPORT_IPXIP_OFFLOAD(nic_dev)) {
-		info->tx_offload_capa |= DEV_TX_OFFLOAD_IPIP_TNL_TSO;
+		info->tx_offload_capa |= RTE_ETH_TX_OFFLOAD_IPIP_TNL_TSO;
 	}
 }
 
@@ -613,32 +613,32 @@ void hinic3_dev_info_get(struct rte_eth_dev_info *info, struct hinic3_nic_dev *n
 	info->max_lro_pkt_size = HINIC3_MAX_LRO_SIZE;
 
 	info->rx_queue_offload_capa = 0;
-	info->rx_offload_capa = DEV_RX_OFFLOAD_VLAN_STRIP |
-				DEV_RX_OFFLOAD_IPV4_CKSUM |
-				DEV_RX_OFFLOAD_UDP_CKSUM |
-				DEV_RX_OFFLOAD_TCP_CKSUM |
-				DEV_RX_OFFLOAD_SCTP_CKSUM |
-				DEV_RX_OFFLOAD_VLAN_FILTER |
-				DEV_RX_OFFLOAD_SCATTER |
+	info->rx_offload_capa = RTE_ETH_RX_OFFLOAD_VLAN_STRIP |
+				RTE_ETH_RX_OFFLOAD_IPV4_CKSUM |
+				RTE_ETH_RX_OFFLOAD_UDP_CKSUM |
+				RTE_ETH_RX_OFFLOAD_TCP_CKSUM |
+				RTE_ETH_RX_OFFLOAD_SCTP_CKSUM |
+				RTE_ETH_RX_OFFLOAD_VLAN_FILTER |
+				RTE_ETH_RX_OFFLOAD_SCATTER |
 #ifndef DPDK_21_11
-				DEV_RX_OFFLOAD_JUMBO_FRAME |
+				RTE_ETH_RX_OFFLOAD_JUMBO_FRAME |
 #endif
-				DEV_RX_OFFLOAD_TCP_LRO |
-				DEV_RX_OFFLOAD_RSS_HASH |
-				DEV_RX_OFFLOAD_QINQ_STRIP;
+				RTE_ETH_RX_OFFLOAD_TCP_LRO |
+				RTE_ETH_RX_OFFLOAD_RSS_HASH |
+				RTE_ETH_RX_OFFLOAD_QINQ_STRIP;
 
 	info->tx_queue_offload_capa = 0;
-	info->tx_offload_capa = DEV_TX_OFFLOAD_VLAN_INSERT |
-				DEV_TX_OFFLOAD_IPV4_CKSUM |
-				DEV_TX_OFFLOAD_UDP_CKSUM |
-				DEV_TX_OFFLOAD_TCP_CKSUM |
-				DEV_TX_OFFLOAD_SCTP_CKSUM |
-				DEV_TX_OFFLOAD_OUTER_IPV4_CKSUM |
-				DEV_TX_OFFLOAD_OUTER_UDP_CKSUM |
-				DEV_TX_OFFLOAD_VXLAN_TNL_TSO |
-				DEV_TX_OFFLOAD_TCP_TSO |
-				DEV_TX_OFFLOAD_MULTI_SEGS |
-				DEV_TX_OFFLOAD_QINQ_INSERT;
+	info->tx_offload_capa = RTE_ETH_TX_OFFLOAD_VLAN_INSERT |
+				RTE_ETH_TX_OFFLOAD_IPV4_CKSUM |
+				RTE_ETH_TX_OFFLOAD_UDP_CKSUM |
+				RTE_ETH_TX_OFFLOAD_TCP_CKSUM |
+				RTE_ETH_TX_OFFLOAD_SCTP_CKSUM |
+				RTE_ETH_TX_OFFLOAD_OUTER_IPV4_CKSUM |
+				RTE_ETH_TX_OFFLOAD_OUTER_UDP_CKSUM |
+				RTE_ETH_TX_OFFLOAD_VXLAN_TNL_TSO |
+				RTE_ETH_TX_OFFLOAD_TCP_TSO |
+				RTE_ETH_TX_OFFLOAD_MULTI_SEGS |
+				RTE_ETH_TX_OFFLOAD_QINQ_INSERT;
 
 	if (!is_sp620_nic(nic_dev))
 		hinic3_dev_tnl_tso_support(info, nic_dev);
@@ -855,7 +855,7 @@ static int hinic3_dev_set_link_up(struct rte_eth_dev *dev)
 	if(!is_sp230_nic(nic_dev) && HINIC3_IS_VF(nic_dev->hwdev)) {
 		link = dev->data->dev_link;
 		link.link_status = nic_dev->hwdev->link_status & nic_dev->hwdev->vf_valid_status;
-		if (link.link_status == ETH_LINK_DOWN) {
+		if (link.link_status == RTE_ETH_LINK_DOWN) {
 			PMD_DRV_LOG(ERR,
 				"Set VF link up failed, dev_name: %s, port_id: %d, link_status: %d, vf_valid_status: %d",
 				nic_dev->dev_name, dev->data->port_id,
@@ -940,10 +940,10 @@ static int hinic3_link_update(struct rte_eth_dev *dev, int wait_to_complete)
 		/* Get link status information from hardware */
 		ret = hinic3_get_link_state(nic_dev->hwdev, &link_state);
 		if (ret) {
-			link.link_status = ETH_LINK_DOWN;
-			link.link_speed = ETH_SPEED_NUM_NONE;
-			link.link_duplex = ETH_LINK_HALF_DUPLEX;
-			link.link_autoneg = ETH_LINK_FIXED;
+			link.link_status = RTE_ETH_LINK_DOWN;
+			link.link_speed = RTE_ETH_SPEED_NUM_NONE;
+			link.link_duplex = RTE_ETH_LINK_HALF_DUPLEX;
+			link.link_autoneg = RTE_ETH_LINK_FIXED;
 			goto out;
 		}
 
@@ -1539,7 +1539,7 @@ hinic3_tx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_txq *txq,
 	txq->queue_buf_vaddr = sq_mz->addr;
 	txq->sq_head_addr = (u64)txq->queue_buf_vaddr;
 	txq->sq_bot_sge_addr = txq->sq_head_addr + queue_buf_size;
-	txq->multi_segs = (dev->data->dev_conf.txmode.offloads & DEV_TX_OFFLOAD_MULTI_SEGS) ? true : false;
+	txq->multi_segs = (dev->data->dev_conf.txmode.offloads & RTE_ETH_TX_OFFLOAD_MULTI_SEGS) ? true : false;
 
 	err = hinic3_alloc_db_addr(hwdev, &db_addr, HINIC3_DB_TYPE_SQ);
 	if (err) {
@@ -2013,7 +2013,7 @@ static int hinic3_set_lro(struct hinic3_nic_dev *nic_dev, struct rte_eth_conf *d
 	int err;
 
 	/* Config lro */
-	lro_en = dev_conf->rxmode.offloads & DEV_RX_OFFLOAD_TCP_LRO ?
+	lro_en = dev_conf->rxmode.offloads & RTE_ETH_RX_OFFLOAD_TCP_LRO ?
 		 true : false;
 	max_lro_size = (int)(dev_conf->rxmode.max_lro_pkt_size);
 	lro_max_pkt_len = max_lro_size / HINIC3_LRO_UNIT_WQE_SIZE ?
@@ -2038,7 +2038,7 @@ static int hinic3_set_vlan(struct rte_eth_dev *dev, struct rte_eth_conf *dev_con
 	int err;
 
 	/* Config vlan filter */
-	vlan_filter = dev_conf->rxmode.offloads & DEV_RX_OFFLOAD_VLAN_FILTER ?
+	vlan_filter = dev_conf->rxmode.offloads & RTE_ETH_RX_OFFLOAD_VLAN_FILTER ?
 		      true : false;
 
 	err = hinic3_set_vlan_fliter(nic_dev->hwdev, vlan_filter);
@@ -2049,7 +2049,7 @@ static int hinic3_set_vlan(struct rte_eth_dev *dev, struct rte_eth_conf *dev_con
 	}
 
 	/* Config vlan stripping */
-	vlan_strip = dev_conf->rxmode.offloads & DEV_RX_OFFLOAD_VLAN_STRIP ?
+	vlan_strip = dev_conf->rxmode.offloads & RTE_ETH_RX_OFFLOAD_VLAN_STRIP ?
 		     true : false;
 
 	err = hinic3_set_rx_vlan_offload(nic_dev->hwdev, vlan_strip);
@@ -2078,7 +2078,7 @@ static int hinic3_set_rxtx_configure(struct rte_eth_dev *dev)
 	nic_dev->rx_mode = HINIC3_DEFAULT_RX_MODE;
 
 	/* Config rx checksum offload */
-	if (dev_conf->rxmode.offloads & DEV_RX_OFFLOAD_CHECKSUM)
+	if (dev_conf->rxmode.offloads & RTE_ETH_RX_OFFLOAD_CHECKSUM)
 		nic_dev->rx_csum_en = HINIC3_DEFAULT_RX_CSUM_OFFLOAD;
 
 	err = hinic3_set_lro(nic_dev, dev_conf);
@@ -2087,7 +2087,7 @@ static int hinic3_set_rxtx_configure(struct rte_eth_dev *dev)
 		return err;
 	}
 	/* Config RSS */
-	if ((dev_conf->rxmode.mq_mode & ETH_MQ_RX_RSS_FLAG) &&
+	if ((dev_conf->rxmode.mq_mode & RTE_ETH_MQ_RX_RSS_FLAG) &&
 		nic_dev->num_rqs > 1) {
 		rss_conf = &(dev_conf->rx_adv_conf.rss_conf);
 		err = hinic3_update_rss_config(dev, rss_conf);
@@ -2465,7 +2465,7 @@ static int hinic3_dev_start_qpool(struct rte_eth_dev *eth_dev)
 	}
 
 	/* Add scatter support if scatter mode should be enabled */
-	if (eth_dev->data->dev_conf.rxmode.offloads & DEV_RX_OFFLOAD_SCATTER)
+	if (eth_dev->data->dev_conf.rxmode.offloads & RTE_ETH_RX_OFFLOAD_SCATTER)
 		eth_dev->data->scattered_rx = true;
 	else
 		eth_dev->data->scattered_rx = false;
@@ -2572,7 +2572,7 @@ static int hinic3_dev_start(struct rte_eth_dev *eth_dev)
 	hinic3_reset_rx_queue(eth_dev);
 	hinic3_reset_tx_queue(eth_dev);
 
-	nic_dev->lro_en = (eth_dev->data->dev_conf.rxmode.offloads & DEV_RX_OFFLOAD_TCP_LRO) &&
+	nic_dev->lro_en = (eth_dev->data->dev_conf.rxmode.offloads & RTE_ETH_RX_OFFLOAD_TCP_LRO) &&
 			  (nic_dev->feature_cap & NIC_F_LRO);
 	PMD_DRV_LOG(DEBUG, "lro is %d.", nic_dev->lro_en);
 
@@ -2602,7 +2602,7 @@ static int hinic3_dev_start(struct rte_eth_dev *eth_dev)
 	}
 
 	/* Add scatter support if scatter mode should be enabled */
-	if (eth_dev->data->dev_conf.rxmode.offloads & DEV_RX_OFFLOAD_SCATTER)
+	if (eth_dev->data->dev_conf.rxmode.offloads & RTE_ETH_RX_OFFLOAD_SCATTER)
 		eth_dev->data->scattered_rx = true;
 	else
 		eth_dev->data->scattered_rx = false;
@@ -3059,8 +3059,8 @@ static int hinic3_vlan_offload_set(struct rte_eth_dev *dev, int mask)
 	int err;
 
 	/* Enable or disable VLAN filter */
-	if (mask & ETH_VLAN_FILTER_MASK) {
-		on = (rxmode->offloads & DEV_RX_OFFLOAD_VLAN_FILTER) ?
+	if (mask & RTE_ETH_VLAN_FILTER_MASK) {
+		on = (rxmode->offloads & RTE_ETH_RX_OFFLOAD_VLAN_FILTER) ?
 			true : false;
 		err = hinic3_set_vlan_fliter(nic_dev->hwdev, on);
 		if (err) {
@@ -3076,8 +3076,8 @@ static int hinic3_vlan_offload_set(struct rte_eth_dev *dev, int mask)
 	}
 
 	/* Enable or disable VLAN stripping */
-	if (mask & ETH_VLAN_STRIP_MASK) {
-		on = (rxmode->offloads & DEV_RX_OFFLOAD_VLAN_STRIP) ?
+	if (mask & RTE_ETH_VLAN_STRIP_MASK) {
+		on = (rxmode->offloads & RTE_ETH_RX_OFFLOAD_VLAN_STRIP) ?
 		     true : false;
 		err = hinic3_set_rx_vlan_offload(nic_dev->hwdev, on);
 		if (err) {
@@ -3302,13 +3302,13 @@ static int hinic3_dev_flow_ctrl_get(struct rte_eth_dev *dev,
 	fc_conf->autoneg = nic_pause.auto_neg;
 
 	if (nic_pause.tx_pause && nic_pause.rx_pause)
-		fc_conf->mode = RTE_FC_FULL;
+		fc_conf->mode = RTE_ETH_FC_FULL;
 	else if (nic_pause.tx_pause)
-		fc_conf->mode = RTE_FC_TX_PAUSE;
+		fc_conf->mode = RTE_ETH_FC_TX_PAUSE;
 	else if (nic_pause.rx_pause)
-		fc_conf->mode = RTE_FC_RX_PAUSE;
+		fc_conf->mode = RTE_ETH_FC_RX_PAUSE;
 	else
-		fc_conf->mode = RTE_FC_NONE;
+		fc_conf->mode = RTE_ETH_FC_NONE;
 
 	(void)hinic3_mutex_unlock(&nic_dev->pause_mutuex);
 	return 0;
@@ -3331,12 +3331,12 @@ static int hinic3_dev_flow_ctrl_set(struct rte_eth_dev *dev,
 		return err;
 
 	memset(&nic_pause, 0, sizeof(nic_pause));
-	if (((fc_conf->mode & RTE_FC_FULL) == RTE_FC_FULL) ||
-	    (fc_conf->mode & RTE_FC_TX_PAUSE))
+	if (((fc_conf->mode & RTE_ETH_FC_FULL) == RTE_ETH_FC_FULL) ||
+	    (fc_conf->mode & RTE_ETH_FC_TX_PAUSE))
 		nic_pause.tx_pause = true;
 
-	if (((fc_conf->mode & RTE_FC_FULL) == RTE_FC_FULL) ||
-	    (fc_conf->mode & RTE_FC_RX_PAUSE))
+	if (((fc_conf->mode & RTE_ETH_FC_FULL) == RTE_ETH_FC_FULL) ||
+	    (fc_conf->mode & RTE_ETH_FC_RX_PAUSE))
 		nic_pause.rx_pause = true;
 
 	err = hinic3_set_pause_info(nic_dev->hwdev, nic_pause);
@@ -3401,14 +3401,14 @@ static int hinic3_rss_hash_update(struct rte_eth_dev *dev,
 		       (size_t)rss_conf->rss_key_len);
 	}
 
-	rss_type.ipv4 = (rss_hf & (ETH_RSS_IPV4 | ETH_RSS_FRAG_IPV4 |
-		ETH_RSS_NONFRAG_IPV4_OTHER)) ? 1 : 0;
-	rss_type.tcp_ipv4 = (rss_hf & ETH_RSS_NONFRAG_IPV4_TCP) ? 1 : 0;
-	rss_type.ipv6 = (rss_hf & (ETH_RSS_IPV6 | ETH_RSS_FRAG_IPV6 |
-		ETH_RSS_NONFRAG_IPV6_OTHER)) ? 1 : 0;
-	rss_type.tcp_ipv6 = (rss_hf & ETH_RSS_NONFRAG_IPV6_TCP) ? 1 : 0;
-	rss_type.udp_ipv4 = (rss_hf & ETH_RSS_NONFRAG_IPV4_UDP) ? 1 : 0;
-	rss_type.udp_ipv6 = (rss_hf & ETH_RSS_NONFRAG_IPV6_UDP) ? 1 : 0;
+	rss_type.ipv4 = (rss_hf & (RTE_ETH_RSS_IPV4 | RTE_ETH_RSS_FRAG_IPV4 |
+		RTE_ETH_RSS_NONFRAG_IPV4_OTHER)) ? 1 : 0;
+	rss_type.tcp_ipv4 = (rss_hf & RTE_ETH_RSS_NONFRAG_IPV4_TCP) ? 1 : 0;
+	rss_type.ipv6 = (rss_hf & (RTE_ETH_RSS_IPV6 | RTE_ETH_RSS_FRAG_IPV6 |
+		RTE_ETH_RSS_NONFRAG_IPV6_OTHER)) ? 1 : 0;
+	rss_type.tcp_ipv6 = (rss_hf & RTE_ETH_RSS_NONFRAG_IPV6_TCP) ? 1 : 0;
+	rss_type.udp_ipv4 = (rss_hf & RTE_ETH_RSS_NONFRAG_IPV4_UDP) ? 1 : 0;
+	rss_type.udp_ipv6 = (rss_hf & RTE_ETH_RSS_NONFRAG_IPV6_UDP) ? 1 : 0;
 
 	err = hinic3_set_rss_type(nic_dev->hwdev, rss_type);
 	if (err)
@@ -3461,14 +3461,14 @@ static int hinic3_rss_conf_get(struct rte_eth_dev *dev,
 		return err;
 
 	rss_conf->rss_hf = 0;
-	rss_conf->rss_hf |=  rss_type.ipv4 ? (ETH_RSS_IPV4 |
-		ETH_RSS_FRAG_IPV4 | ETH_RSS_NONFRAG_IPV4_OTHER) : 0;
-	rss_conf->rss_hf |=  rss_type.tcp_ipv4 ? ETH_RSS_NONFRAG_IPV4_TCP : 0;
-	rss_conf->rss_hf |=  rss_type.ipv6 ? (ETH_RSS_IPV6 |
-		ETH_RSS_FRAG_IPV6 | ETH_RSS_NONFRAG_IPV6_OTHER) : 0;
-	rss_conf->rss_hf |=  rss_type.tcp_ipv6 ? ETH_RSS_NONFRAG_IPV6_TCP : 0;
-	rss_conf->rss_hf |=  rss_type.udp_ipv4 ? ETH_RSS_NONFRAG_IPV4_UDP : 0;
-	rss_conf->rss_hf |=  rss_type.udp_ipv6 ? ETH_RSS_NONFRAG_IPV6_UDP : 0;
+	rss_conf->rss_hf |=  rss_type.ipv4 ? (RTE_ETH_RSS_IPV4 |
+		RTE_ETH_RSS_FRAG_IPV4 | RTE_ETH_RSS_NONFRAG_IPV4_OTHER) : 0;
+	rss_conf->rss_hf |=  rss_type.tcp_ipv4 ? RTE_ETH_RSS_NONFRAG_IPV4_TCP : 0;
+	rss_conf->rss_hf |=  rss_type.ipv6 ? (RTE_ETH_RSS_IPV6 |
+		RTE_ETH_RSS_FRAG_IPV6 | RTE_ETH_RSS_NONFRAG_IPV6_OTHER) : 0;
+	rss_conf->rss_hf |=  rss_type.tcp_ipv6 ? RTE_ETH_RSS_NONFRAG_IPV6_TCP : 0;
+	rss_conf->rss_hf |=  rss_type.udp_ipv4 ? RTE_ETH_RSS_NONFRAG_IPV4_UDP : 0;
+	rss_conf->rss_hf |=  rss_type.udp_ipv6 ? RTE_ETH_RSS_NONFRAG_IPV6_UDP : 0;
 
 	return 0;
 }
@@ -3515,8 +3515,8 @@ static int hinic3_rss_reta_query(struct rte_eth_dev *dev,
 	}
 
 	for (i = 0; i < reta_size; i++) {
-		idx = i / RTE_RETA_GROUP_SIZE;
-		shift = i % RTE_RETA_GROUP_SIZE;
+		idx = i / RTE_ETH_RETA_GROUP_SIZE;
+		shift = i % RTE_ETH_RETA_GROUP_SIZE;
 		if (reta_conf[idx].mask & (1ULL << shift))
 			reta_conf[idx].reta[shift] = (uint16_t)indirtbl[i];
 	}
@@ -3574,8 +3574,8 @@ static int hinic3_rss_reta_update(struct rte_eth_dev *dev,
 
 	/* Update RSS reta table */
 	for (i = 0; i < reta_size; i++) {
-		idx = i / RTE_RETA_GROUP_SIZE;
-		shift = i % RTE_RETA_GROUP_SIZE;
+		idx = i / RTE_ETH_RETA_GROUP_SIZE;
+		shift = i % RTE_ETH_RETA_GROUP_SIZE;
 		if (reta_conf[idx].mask & (1ULL << shift))
 			indirtbl[i] = reta_conf[idx].reta[shift];
 	}
@@ -4414,7 +4414,7 @@ static int hinic3_fec_capability_get(struct rte_eth_dev *dev,
 	speed_fec_capa->speed = nic_dev->hwdev->speed;
 	speed_fec_capa->capa = (u32)supported_fec;
 
-	if (speed_fec_capa->speed == ETH_SPEED_NUM_NONE ||
+	if (speed_fec_capa->speed == RTE_ETH_SPEED_NUM_NONE ||
 		speed_fec_capa->capa == 0)
 		return -ENOTSUP;
 

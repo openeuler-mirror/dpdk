@@ -1235,11 +1235,11 @@ test_tx_burst_mode_get(void)
 	eth_dev.data = &eth_data;
 
 	/* Set txmode offloads */
-	eth_data.dev_conf.txmode.offloads = DEV_TX_OFFLOAD_MULTI_SEGS |
-					    DEV_TX_OFFLOAD_IPV4_CKSUM |
-					    DEV_TX_OFFLOAD_UDP_CKSUM |
-					    DEV_TX_OFFLOAD_TCP_CKSUM |
-					    DEV_TX_OFFLOAD_VLAN_INSERT;
+	eth_data.dev_conf.txmode.offloads = RTE_ETH_TX_OFFLOAD_MULTI_SEGS |
+					    RTE_ETH_TX_OFFLOAD_IPV4_CKSUM |
+					    RTE_ETH_TX_OFFLOAD_UDP_CKSUM |
+					    RTE_ETH_TX_OFFLOAD_TCP_CKSUM |
+					    RTE_ETH_TX_OFFLOAD_VLAN_INSERT;
 
 	ret = hinic3_tx_burst_mode_get(&eth_dev, 0, &mode);
 
