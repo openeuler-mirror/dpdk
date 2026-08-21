@@ -596,7 +596,7 @@ hinic3_get_dcb_info(struct rte_eth_dev *dev, struct rte_eth_dcb_info *dcb_info)
 
 	nic_dev->dcb->dcb_on = 1;
 
-	if ((u32)mq_mode & ETH_MQ_RX_DCB_FLAG)
+	if ((u32)mq_mode & RTE_ETH_MQ_RX_DCB_FLAG)
 		dcb_info->nb_tcs =
 			dev->data->dev_conf.rx_adv_conf.dcb_rx_conf.nb_tcs;
 	else

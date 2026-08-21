@@ -13,8 +13,11 @@
 
 static const char *g_hw_to_char_fec[HILINK_FEC_MAX_TYPE] = {"not set", "rsfec", "basefec",
 					  		    "nofec", "llrsfec"};
-static const char *g_hw_to_speed_info[PORT_SPEED_UNKNOWN] = {"not set", "10MB", "100MB", "1GB", "10GB",
-					   		     "25GB", "40GB", "50GB", "100GB", "200GB"};
+static const char *g_hw_to_speed_info[PORT_SPEED_UNKNOWN] = {
+	"not set", "10MB", "100MB", "1GB", "10GB",
+	"25GB", "40GB", "50GB", "100GB", "200GB",
+	"400GB", "800GB"
+};
 static const char *g_hw_to_an_state_info[PORT_CFG_AN_OFF + 1] = {"not set", "on", "off"};
 
 struct port_type_table {
@@ -25,28 +28,40 @@ struct port_type_table {
 void get_port_info(struct hinic3_hwdev *hwdev, u8 link_state,
 		   struct rte_eth_link *link)
 {
-	uint32_t port_speed[LINK_SPEED_LEVELS] = {ETH_SPEED_NUM_NONE, ETH_SPEED_NUM_10M,
-					ETH_SPEED_NUM_100M, ETH_SPEED_NUM_1G,
-					ETH_SPEED_NUM_10G, ETH_SPEED_NUM_25G,
-					ETH_SPEED_NUM_40G, ETH_SPEED_NUM_50G,
-					ETH_SPEED_NUM_100G, ETH_SPEED_NUM_200G};
+	uint32_t port_speed[LINK_SPEED_LEVELS] = {RTE_ETH_SPEED_NUM_NONE, RTE_ETH_SPEED_NUM_10M,
+					RTE_ETH_SPEED_NUM_100M, RTE_ETH_SPEED_NUM_1G,
+					RTE_ETH_SPEED_NUM_10G, RTE_ETH_SPEED_NUM_25G,
+					RTE_ETH_SPEED_NUM_40G, RTE_ETH_SPEED_NUM_50G,
+					RTE_ETH_SPEED_NUM_100G, RTE_ETH_SPEED_NUM_200G,
+					RTE_ETH_SPEED_NUM_400G, RTE_ETH_SPEED_NUM_800G};
 	struct nic_port_info port_info = {0};
 	int err;
 
 	if (!link_state) {
-		link->link_status = ETH_LINK_DOWN;
-		link->link_speed = ETH_SPEED_NUM_NONE;
-		link->link_duplex = ETH_LINK_HALF_DUPLEX;
-		link->link_autoneg = ETH_LINK_FIXED;
+		link->link_status = RTE_ETH_LINK_DOWN;
+		link->link_speed = RTE_ETH_SPEED_NUM_NONE;
+		link->link_duplex = RTE_ETH_LINK_HALF_DUPLEX;
+		link->link_autoneg = RTE_ETH_LINK_FIXED;
 	} else {
-		link->link_status = ETH_LINK_UP;
+		link->link_status = RTE_ETH_LINK_UP;
 
 		err = hinic3_get_port_info(hwdev, &port_info);
 		if (err) {
-			link->link_speed = ETH_SPEED_NUM_NONE;
-			link->link_duplex = ETH_LINK_FULL_DUPLEX;
-			link->link_autoneg = ETH_LINK_FIXED;
+			PMD_DRV_LOG(WARNING,
+				"Get port info failed, err: %d, link speed unknown",
+				err);
+
+			link->link_speed = RTE_ETH_SPEED_NUM_NONE;
+			link->link_duplex = RTE_ETH_LINK_FULL_DUPLEX;
+			link->link_autoneg = RTE_ETH_LINK_FIXED;
 		} else {
+			if (port_info.speed >= LINK_SPEED_LEVELS) {
+				PMD_DRV_LOG(WARNING,
+					"Invalid port speed %u reported by firmware, reset to %u",
+					port_info.speed,
+					port_info.speed % LINK_SPEED_LEVELS);
+			}
+
 			link->link_speed = port_speed[port_info.speed %
 						LINK_SPEED_LEVELS];
 			link->link_duplex = port_info.duplex;
@@ -253,7 +268,7 @@ static void print_port_info(void *hwdev, struct mag_cmd_event_port_info *port_in
 
 	print_link_info(port_info);
 
-	if (type == ETH_LINK_UP)
+	if (type == RTE_ETH_LINK_UP)
 		return;
 
 	PMD_DRV_LOG(INFO, "Function %d link down msg:\n", hinic3_global_func_id(hwdev));
@@ -292,7 +307,7 @@ static void port_info_event_printf(void *hwdev, void *buf_in,
 	struct hinic3_nic_dev *nic_dev = ((struct hinic3_hwdev *)hwdev)->dev_handle;
 
 	if (is_sp620_nic(nic_dev)) {
-		if (type < ETH_LINK_DOWN || type > ETH_LINK_UP) {
+		if (type < RTE_ETH_LINK_DOWN || type > RTE_ETH_LINK_UP) {
 			PMD_DRV_LOG(ERR, "Invalid hilink info report, type: %d\n", type);
 			return;
 		}
