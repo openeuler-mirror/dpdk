@@ -15,7 +15,12 @@ DPDK_VERSION_FLAGS[25]="-DDPDK_20_11 -DDPDK_21_11 -DDPDK_22_11 -DDPDK_24_11 -DDP
 
 # 获取指定版本的编译标志
 get_version_flags() {
-	echo ${DPDK_VERSION_FLAGS[$DPDK_MAJOR]}
+	local flags="${DPDK_VERSION_FLAGS[$DPDK_MAJOR]}"
+	if [ -z "$flags" ]; then
+		echo "警告：未适配 DPDK $DPDK_MAJOR 版本，使用最新版本编译标志" >&2
+		flags=${DPDK_VERSION_FLAGS[25]}
+	fi
+	echo $flags
 }
 
 # 向文件添加内容（如果不存在）

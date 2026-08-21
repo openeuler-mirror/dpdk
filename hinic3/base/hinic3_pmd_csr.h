@@ -27,9 +27,9 @@
 #define HINIC3_DEV_ID_BP3_620    0x9020
 #define HINIC3_DEV_ID_VF_BP3_620 0x9001
 
-#define PCI_VENDOR_ID_BP4        0x1f3f
-#define HINIC3_DEV_ID_BP4_230    0x9020
-#define HINIC3_DEV_ID_VF_BP4_230 0x9001
+#define PCI_VENDOR_ID_BP4			0x2036
+#define HINIC3_DEV_ID_BP4_230		0x0610
+#define HINIC3_DEV_ID_VF_BP4_230	0x0619
 
 /*
  * Bit30/bit31 for bar index flag
