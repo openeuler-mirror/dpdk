@@ -436,6 +436,7 @@ is_sp230_pci_dev(struct rte_pci_device *pci_dev)
 	case HINIC3_DEV_ID_SP230:
 	case HINIC3_DEV_ID_VF_SP230:
 	case HINIC3_DEV_ID_VF_SP230_OLD:
+	case HINIC3_DEV_ID_BP4_230:
 	case HINIC3_DEV_ID_VF_BP4_230:
 		return true;
 	default:
