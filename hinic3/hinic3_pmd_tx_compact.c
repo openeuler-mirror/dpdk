@@ -945,7 +945,7 @@ hinic3_non_tso_pkt_pre_process(struct rte_mbuf *mbuf,
 			       struct hinic3_wqe_info *wqe_info,
 			       u16 non_tso_max_pkt_len)
 {
-	u16 i, copy_mbuf_num, non_tso_packet, total_len = 0;
+	u16 i, copy_mbuf_num, total_len = 0;
 	struct rte_mbuf *mbuf_pkt = mbuf;
 
 	if (likely(HINIC3_NONTSO_SEG_NUM_VALID(mbuf->nb_segs)))

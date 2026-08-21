@@ -1106,7 +1106,7 @@ hinic3_compare_kernel_mbuf_size(struct hinic3_nic_dev *nic_dev, u16 mbuf_size)
 		return -EINVAL;
 
 	if (mbuf_size != rx_buf_sz * 1024) {
-		PMD_DRV_LOG(ERR, "mbuf size should be %d to follow kernel", rx_buf_sz * 1024);
+		PMD_DRV_LOG(ERR, "mbuf size should be %lu to follow kernel", rx_buf_sz * 1024);
 		return -EINVAL;
 	}
 	return 0;
@@ -1298,7 +1298,7 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
 	struct hinic3_rxq *rxq = NULL;
-	u16 rq_depth, rx_free_thresh, vec_len;
+	u16 rq_depth, rx_free_thresh;
 	u32 buf_size, data_room, buf_room, max_frame_len;
 	int err;
 
