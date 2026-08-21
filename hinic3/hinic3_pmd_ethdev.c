@@ -3,6 +3,7 @@
  */
 
 #include <fcntl.h>
+#include <limits.h>
 #include <poll.h>
 #include <stdlib.h>
 #include <sys/ioctl.h>
@@ -60,13 +61,6 @@
 #define HINIC3_RX_WAIT_CYCLE_THRESH	150
 #define HINIC3_DEFAULT_COS_MASK_BITMAP	0xff
 #define HINIC3_FEC_CAPA_NUM_PER_SPEED	1
-
-#define RQ_WQE_TYPE_PATH "/sys/module/hinic5/parameters/rq_wqe_type"
-
-#define GET_RQ_BUF_SZ_PATH(nic_dev) \
-	(is_sp620_nic(nic_dev) ? RQ_BUF_SZ_PATH_NIC3 : RQ_BUF_SZ_PATH_NIC5)
-#define RQ_BUF_SZ_PATH_NIC5 "/sys/module/hinic5/parameters/rx_buff"
-#define RQ_BUF_SZ_PATH_NIC3 "/sys/module/hinic3/parameters/rx_buff"
 
 /*
  * Vlan_id is a 12 bit number. The VFTA array is actually a 4096 bit array,
@@ -360,6 +354,39 @@ static void hinic3_deinit_mac_addr(struct rte_eth_dev *eth_dev);
 static int hinic3_copy_mempool_init(struct hinic3_nic_dev *nic_dev);
 
 static void hinic3_copy_mempool_uninit(struct hinic3_nic_dev *nic_dev);
+
+/*
+ * Try to read sysfs parameter from kernel module.
+ * SP620 NIC uses "hinic3" kernel driver, other NICs (e.g. BP/SP560/SP230)
+ * use "hinic5" kernel driver.
+ * The module name could be either "driver_name" or "driver_name_nic".
+ * Returns 0 on success, -1 on failure.
+ */
+static int
+hinic3_read_module_param(struct hinic3_nic_dev *nic_dev, const char *param_name,
+			 unsigned long *val)
+{
+	const char *driver_name = is_sp620_nic(nic_dev) ?
+				  HINIC3_DRIVER_NAME : "hinic5";
+	char path[PATH_MAX];
+	int ret;
+
+	snprintf(path, sizeof(path), "/sys/module/%s/parameters/%s",
+		 driver_name, param_name);
+	ret = hinic3_parse_sysfs_value(path, val);
+	if (ret == 0)
+		return 0;
+
+	snprintf(path, sizeof(path), "/sys/module/%s_nic/parameters/%s",
+		 driver_name, param_name);
+	ret = hinic3_parse_sysfs_value(path, val);
+	if (ret == 0)
+		return 0;
+
+	PMD_DRV_LOG(ERR, "Failed to read parameter %s from module %s or %s_nic",
+		    param_name, driver_name, driver_name);
+	return -1;
+}
 
 bool
 is_sp620_nic(struct hinic3_nic_dev *nic_dev)
@@ -1102,7 +1129,7 @@ hinic3_compare_kernel_mbuf_size(struct hinic3_nic_dev *nic_dev, u16 mbuf_size)
 {
 	unsigned long rx_buf_sz;
 
-	if (hinic3_parse_sysfs_value(GET_RQ_BUF_SZ_PATH(nic_dev), &rx_buf_sz) != 0)
+	if (hinic3_read_module_param(nic_dev, "rx_buff", &rx_buf_sz) != 0)
 		return -EINVAL;
 
 	if (mbuf_size != rx_buf_sz * 1024) {
@@ -4923,7 +4950,7 @@ static int hinic3_func_init(struct rte_eth_dev *eth_dev)
 	}
 
 	if (!is_sp620_nic(nic_dev)) {
-		if (hinic3_parse_sysfs_value(RQ_WQE_TYPE_PATH, &compact_cqe) != 0) {
+		if (hinic3_read_module_param(nic_dev, "rq_wqe_type", &compact_cqe) != 0) {
 			err = -EINVAL;
 			goto get_cap_fail;
 		}
@@ -5317,7 +5344,7 @@ static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev)
 	}
 
 	if (!is_sp620_nic(nic_dev)) {
-		if (hinic3_parse_sysfs_value(RQ_WQE_TYPE_PATH, &compact_cqe) != 0)
+		if (hinic3_read_module_param(nic_dev, "rq_wqe_type", &compact_cqe) != 0)
 			goto get_cap_fail;
 
 		if (compact_cqe == 1)

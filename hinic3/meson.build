@@ -43,6 +43,12 @@ elif dpdk_version.substring(0,2) == '25'
 	cflags += ['-DDPDK_22_11']
 	cflags += ['-DDPDK_24_11']
 	cflags += ['-DDPDK_25_11']
+else
+	cflags += ['-DDPDK_20_11']
+	cflags += ['-DDPDK_21_11']
+	cflags += ['-DDPDK_22_11']
+	cflags += ['-DDPDK_24_11']
+	cflags += ['-DDPDK_25_11']
 endif
 
 subdir('base')
