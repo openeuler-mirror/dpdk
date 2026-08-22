@@ -88,7 +88,7 @@ hinic3_pmd_mml_lib(const char *buf_in, uint32_t in_size, char *buf_out, uint32_t
 	int argc;
 	int err = -UDA_EINVAL;
 
-	if (!buf_in || !in_size) {
+	if (!buf_in || !in_size || in_size > max_buf_out_len) {
 		PMD_DRV_LOG(ERR, "Invalid param, buf_in: %d, in_size: 0x%x\n", !!buf_in, in_size);
 		return err;
 	}

@@ -697,54 +697,6 @@ run_test() {
 	return $failed
 }
 
-replace() {
-	pmd_name=$1
-
-	# 保存到 tmp 目录
-	mkdir -p $SCRIPT_DIR/tmp
-	tmp_file="$SCRIPT_DIR/tmp/pmd_name.txt"
-	echo "$pmd_name" >"$tmp_file"
-
-	stashed=0
-	# 判断工作区是否有未提交的更改（包括暂存区和未跟踪文件）
-	stash_changes
-
-	# driver_name
-	sed -i "s/^\(#define[[:space:]]*HINIC3_DRIVER_NAME[[:space:]]*\).*/\1\"$pmd_name\"/" \
-		"./drivers/net/hinic3/base/hinic3_compat.h"
-
-	# move driver dir
-	if [ -d "drivers/net/$pmd_name" ]; then
-		echo "error: drivers/net/$pmd_name already exists"
-		exit 1
-	fi
-	mv drivers/net/hinic3 drivers/net/$pmd_name
-
-	# 替换驱动目录中的构建文件引用
-	sed -i "s/'hinic3'/'$pmd_name'/" ./drivers/net/meson.build
-	sed -i "s/hinic3/$pmd_name/g" ./drivers/net/Makefile
-
-	# 替换测试目录中的hinic3引用
-	if [ -d "app/test/test_hinic3" ]; then
-		sed -i "s/hinic3/$pmd_name/g" app/test/test_hinic3/meson.build
-		sed -i "s/hinic3/$pmd_name/g" app/test/test_hinic3/Makefile
-		sed -i "s/'hinic3'/'$pmd_name'/" ./app/test/meson.build
-		sed -i "s/test_hinic3/test_$pmd_name/g" ./app/test/meson.build
-		sed -i "s/hinic3/$pmd_name/g" ./app/test/Makefile
-	fi
-
-	# 添加 BPNIC 并提交
-	git add .
-	if ! git diff --cached --quiet || ! git diff --quiet; then
-		git commit -m "drivers/net: support $pmd_name"
-	else
-		echo "No changes to commit"
-	fi
-
-	# 如果之前 stash 了，恢复
-	restore_changes
-}
-
 build() {
 	# 检查 meson
 	if command -v meson >/dev/null 2>&1; then
@@ -862,9 +814,6 @@ help() {
    安装 test-pmd csumonly.c :
    $0 <dpdk路径> install test
 
-   BP卡适配安装
-   $0 <dpdk路径> replace xxnic
-
    编译 release 版本:
    $0 <dpdk路径> build
 
@@ -961,8 +910,6 @@ elif [ "$ACTION" == "install" ] && [ "$4" == "bifur" ] && { [ "$3" == "--force" 
 	install bifur "--force"
 elif [ "$ACTION" == "install" ]; then
 	install
-elif [ "$ACTION" == "replace" ]; then
-	replace $3
 elif [ "$ACTION" == "build" ] && [ "$3" == "generic" ]; then
 	build release generic
 elif [ "$ACTION" == "build" ]; then

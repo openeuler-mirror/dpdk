@@ -37,7 +37,7 @@ hinic3_dbg_get_rq_info(void *hwdev, uint16_t q_id,
 	rq_info->hw_pi = (u16)cpu_to_be16(*(rxq->pi_virt_addr));
 	rq_info->ci = rxq->cons_idx & rxq->q_mask;
 	rq_info->sw_pi = rxq->prod_idx & rxq->q_mask;
-	rq_info->wqebb_size = HINIC3_SQ_WQEBB_SIZE;
+	rq_info->wqebb_size = BIT(rxq->wqebb_shift);
 	rq_info->q_depth = rxq->q_depth;
 	rq_info->buf_len = rxq->buf_len;
 	rq_info->ci_wqe_page_addr = rxq->queue_buf_vaddr;
@@ -139,6 +139,8 @@ hinic3_dbg_get_rq_wqe_info(void *dev, u16 q_id, u16 idx, u16 wqebb_cnt, u8 *wqe,
 	struct hinic3_rxq *rxq = NULL;
 	void *src_wqe = NULL;
 	u32 offset;
+	u32 copy_len;
+	u16 buf_size = *wqe_size;
 
 	if (q_id >= nic_dev->num_rqs) {
 		PMD_DRV_LOG(ERR, "Inputting rx queue id is larger than actual rx queue number, qid: %d, num_rqs: %d\n",
@@ -151,12 +153,19 @@ hinic3_dbg_get_rq_wqe_info(void *dev, u16 q_id, u16 idx, u16 wqebb_cnt, u8 *wqe,
 		return -EFAULT;
 	}
 
+	copy_len = (u32)wqebb_cnt << rxq->wqebb_shift;
+	if (copy_len > buf_size) {
+		PMD_DRV_LOG(ERR, "RQ WQE copy len %u exceeds buf size %u\n",
+			    copy_len, buf_size);
+		return -EINVAL;
+	}
+
 	src_wqe = (void *)rxq->queue_buf_vaddr;
 	offset = (u32)idx << rxq->wqebb_shift;
 
 	(void)memcpy((void *)wqe, (void *)((u8 *)src_wqe + offset),
-		     (size_t)((u32)wqebb_cnt << rxq->wqebb_shift));
+		     (size_t)copy_len);
 
-	*wqe_size = (u16)((u32)wqebb_cnt << rxq->wqebb_shift);
+	*wqe_size = (u16)copy_len;
 	return 0;
 }
