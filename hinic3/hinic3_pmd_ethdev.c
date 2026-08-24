@@ -3441,7 +3441,7 @@ static int hinic3_rss_hash_update(struct rte_eth_dev *dev,
 	err = hinic3_set_rss_type(nic_dev->hwdev, rss_type);
 	if (err)
 		PMD_DRV_LOG(ERR, "Set RSS type failed");
-
+	nic_dev->rss_type = rss_type;
 	return err;
 }
 

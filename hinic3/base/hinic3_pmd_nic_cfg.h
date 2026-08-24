@@ -148,14 +148,19 @@ enum hinic3_qinfo_type {
 #define IS_QPOOL_MODE(hwdev) ((hwdev)->qinfo_type == HINIC3_QINFO_TYPE_QPOOL)
 
 struct hinic3_rss_type {
-	u8 tcp_ipv6_ext;
-	u8 ipv6_ext;
-	u8 tcp_ipv6;
-	u8 ipv6;
-	u8 tcp_ipv4;
-	u8 ipv4;
-	u8 udp_ipv6;
-	u8 udp_ipv4;
+	union {
+		struct {
+			u8 tcp_ipv6_ext;
+			u8 ipv6_ext;
+			u8 tcp_ipv6;
+			u8 ipv6;
+			u8 tcp_ipv4;
+			u8 ipv4;
+			u8 udp_ipv6;
+			u8 udp_ipv4;
+		};
+		uint64_t val;
+	};
 };
 
 enum hinic3_rss_hash_type {
