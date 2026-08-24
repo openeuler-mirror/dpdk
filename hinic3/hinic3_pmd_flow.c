@@ -1673,7 +1673,6 @@ hinic3_flow_parse_action(struct rte_eth_dev	      *dev,
 							   "Current rss not support level");
 					return -rte_errno;
 				}
-			} else {
 				if (act_r->queue_num > 32) {
 					rte_flow_error_set(error, EINVAL, HINIC3_FLOW_ERROR_TYPE_ACTION, act,
 							   "Invalid rss queue num, queue num exceed 32");
