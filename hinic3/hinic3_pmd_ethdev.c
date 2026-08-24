@@ -1873,7 +1873,7 @@ static int hinic3_dev_rx_queue_start(__rte_unused struct rte_eth_dev *dev,
 		dev->data->rx_queue_state[rq_id] = RTE_ETH_QUEUE_STATE_STARTED;
 	}
 
-	if (!IS_QPOOL_MODE(nic_dev->hwdev) || !is_sp230_nic(nic_dev)) {
+	if (!IS_QPOOL_MODE(nic_dev->hwdev) && !is_sp230_nic(nic_dev)) {
  		rc = hinic3_enable_rxq_fdir_filter(dev, (u32)rq_id, (u32)true);
  		if (rc) {
  			PMD_DRV_LOG(ERR, "Failed to enable rq : %d fdir filter.", rq_id);
@@ -1904,7 +1904,7 @@ static int hinic3_dev_rx_queue_stop(__rte_unused struct rte_eth_dev *dev,
 		dev->data->rx_queue_state[rq_id] = RTE_ETH_QUEUE_STATE_STOPPED;
 	}
 
-	if (!IS_QPOOL_MODE(nic_dev->hwdev) || !is_sp230_nic(nic_dev)) {
+	if (!IS_QPOOL_MODE(nic_dev->hwdev) && !is_sp230_nic(nic_dev)) {
  		rc = hinic3_enable_rxq_fdir_filter(dev, (u32)rq_id, (u32)false);
  		if (rc) {
  			PMD_DRV_LOG(ERR, "Failed to disable rq : %d fdir filter.", rq_id);
