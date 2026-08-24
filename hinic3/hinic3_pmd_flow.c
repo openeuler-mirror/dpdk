@@ -2957,20 +2957,20 @@ hinic3_flow_create(struct rte_eth_dev          *dev,
 					HINIC3_RSS_INDIR_GROUP_NUM);
 			if (ret) {
 				PMD_DRV_LOG(ERR, "Set rss indir group num failed");
-				goto free_flow;
+				goto free_fdir_filter;
 			}
 			if (template_entry->ref_count == 1) {
 				ret = hinic3_rss_get_indir_tbl(nic_dev->hwdev, indirtbl, HINIC3_RSS_INDIR_SIZE);
 				if (ret) {
 					PMD_DRV_LOG(ERR, "Get rss indir table failed");
-					goto free_flow;
+					goto free_fdir_filter;
 				}
 
 				hinic3_fillout_indir_tbl_by_rss_group(nic_dev, template_entry, indirtbl);
 				ret = hinic3_rss_set_indir_tbl(nic_dev->hwdev, indirtbl, HINIC3_RSS_INDIR_SIZE);
 				if (ret) {
 					PMD_DRV_LOG(ERR, "Set rss queue indir tbl failed");
-					goto free_flow;
+					goto free_fdir_filter;
 				}
 			}
 		} else {
@@ -2983,16 +2983,7 @@ hinic3_flow_create(struct rte_eth_dev          *dev,
 
 				if (ret) {
 					PMD_DRV_LOG(ERR, "Set rss queue indir tbl failed");
-					TAILQ_REMOVE(&nic_dev->filter_fdir_rule_list, flow, node);
-					if (filter_rules->is_sec_fdir) {
-						(void)hinic3_flow_add_del_sec_fdir_filter(dev,
-								&filter_rules->sec_fdir_filter,
-								&filter_rules->fdir_filter, false);
-					} else {
-						(void)hinic3_flow_add_del_fdir_filter(dev,
-								&filter_rules->fdir_filter, false);
-					}
-					goto free_flow;
+					goto free_fdir_filter;
 				}
 			}
 		}
@@ -3007,7 +2998,16 @@ hinic3_flow_create(struct rte_eth_dev          *dev,
 		goto free_flow;
 	}
 	return flow;
-
+free_fdir_filter:
+	TAILQ_REMOVE(&nic_dev->filter_fdir_rule_list, flow, node);
+	if (filter_rules->is_sec_fdir) {
+		(void)hinic3_flow_add_del_sec_fdir_filter(dev,
+							  &filter_rules->sec_fdir_filter,
+							  &filter_rules->fdir_filter, false);
+	} else {
+		(void)hinic3_flow_add_del_fdir_filter(dev,
+						      &filter_rules->fdir_filter, false);
+	}
 free_flow:
 	if (filter_rules && filter_rules->template_entry != NULL)
 		hinic3_flow_release_rss_template(nic_dev, filter_rules->template_entry);

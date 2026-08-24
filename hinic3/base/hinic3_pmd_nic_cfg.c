@@ -1212,10 +1212,10 @@ static int hinic3_rss_get_indir_tbl_qpool_htn(int fd, struct drv_cmd_rss_indir_t
 		       sizeof(struct drv_cmd_rss_indir_tbl), sizeof(struct drv_cmd_rss_indir_tbl),
 		       cmd_indir_tbl, cmd_indir_tbl);
 	err = ioctl(fd, 0, &msg_to_kernel);
-	if (err < 0) {
+	if (err < 0 || cmd_indir_tbl->indir_table_size > HINIC3_RSS_INDIR_SIZE) {
 		PMD_DRV_LOG(ERR, "Get qpool indir tbl err: %d.", err);
 		return err;
-		}
+	}
 
 	*indir_table_size = cmd_indir_tbl->indir_table_size;
 
