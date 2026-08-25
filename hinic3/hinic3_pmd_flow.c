@@ -67,7 +67,7 @@ rte_bit_relaxed_clear32(unsigned int nr, volatile uint32_t *addr)
 #include "base/hinic3_pmd_csr.h"
 #include "hinic3_pmd_bifur.h"
 
-#define HINIC3_QUEUE_MAX          16
+#define HINIC3_QUEUE_MAX          64
 #define HINIC3_QUEUE_ALLOW_NUM    32
 
 #define HINIC3_UINT8_MAX          0xff
