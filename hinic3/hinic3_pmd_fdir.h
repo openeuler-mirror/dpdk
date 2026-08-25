@@ -1504,7 +1504,7 @@ struct hinic3_tcam_info {
 #define RTE_ETHER_TYPE_ECP 0x8940
 
 #ifndef HINIC3_QUEUE_MAX
-#define HINIC3_QUEUE_MAX          16
+#define HINIC3_QUEUE_MAX          64
 #endif
 
 /* 256-entry RSS indir table split into 8 groups; group0 for func RSS */
