@@ -79,11 +79,15 @@ static int hinic3_rearm_rxq_mbuf_vec_neon(struct hinic3_rxq *rxq)
         rq_wqe = NIC_WQE_ADDR(rxq, pi);
         for (i = 0; i < rearm_wqebbs; i++) {
                 dma_addr = rte_mbuf_data_iova_default(rearm_mbufs[i]);
-                /* Keep consistent with the normal path: fold the alignment
-                 * offset into data_off when alignment is enabled so the vec
-                 * RX path data address matches the DMA start address. */
+                /* Keep consistent with the normal path: fold the DMA offset
+                 * into data_off when enabled so the vec RX path data address
+                 * matches the DMA start address. Direct-offset mode shifts by
+                 * exactly rx_dma_align bytes, alignment mode rounds up. */
                 if (rxq->rx_dma_align) {
-                        align_dma_addr = RTE_ALIGN(dma_addr, rxq->rx_dma_align);
+                        if (hinic3_rx_dma_align_is_offset(rxq->rx_dma_align))
+                                align_dma_addr = dma_addr + rxq->rx_dma_align;
+                        else
+                                align_dma_addr = RTE_ALIGN(dma_addr, rxq->rx_dma_align);
                         rearm_mbufs[i]->data_off = (u16)(RTE_PKTMBUF_HEADROOM +
                                 (align_dma_addr - dma_addr));
                         dma_addr = align_dma_addr;

@@ -556,7 +556,10 @@ static int hinic3_rearm_rxq_mbuf(struct hinic3_rxq *rxq)
 	for (i = 0; i < rearm_wqebbs; i++) {
 		dma_addr = rte_mbuf_data_iova_default(rearm_mbufs[i]);
 		if (rxq->rx_dma_align) {
-			align_dma_addr = RTE_ALIGN(dma_addr, rxq->rx_dma_align);
+			if (hinic3_rx_dma_align_is_offset(rxq->rx_dma_align))
+				align_dma_addr = dma_addr + rxq->rx_dma_align;
+			else
+				align_dma_addr = RTE_ALIGN(dma_addr, rxq->rx_dma_align);
 			rearm_mbufs[i]->data_off = (u16)(RTE_PKTMBUF_HEADROOM +
 				(align_dma_addr - dma_addr));
 			dma_addr = align_dma_addr;

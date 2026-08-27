@@ -1415,24 +1415,29 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	/*
 	 * If buf_len used for function table, need to translated.
 	 *
-	 * When rx_dma_align is enabled, rearm folds up to (rx_dma_align - 1)
-	 * bytes of alignment offset into data_off, so the negotiated buf_len
-	 * must stay large enough to hold the maximum frame even after
-	 * reserving that margin.
+	 * When rx_dma_align is enabled, rearm folds the DMA offset into
+	 * data_off: up to (rx_dma_align - 1) bytes in alignment mode, exactly
+	 * rx_dma_align bytes in direct-offset mode. The negotiated buf_len must
+	 * stay large enough to hold the maximum frame even after reserving that
+	 * margin.
 	 */
 	data_room = (u32)rte_pktmbuf_data_room_size(rxq->mb_pool);
 	max_frame_len = HINIC3_MAX_RX_PKT_LEN(dev->data->dev_conf.rxmode);
 	buf_room = data_room - RTE_PKTMBUF_HEADROOM;
-	if (rxq->rx_dma_align &&
-	    buf_room >= (rxq->rx_dma_align - 1) + max_frame_len)
-		buf_room -= rxq->rx_dma_align - 1;
-	else if (rxq->rx_dma_align) {
-		PMD_DRV_LOG(WARNING,
-			    "rxq%u: mbuf data_room %u cannot hold the max "
-			    "frame length %u with %u-byte DMA alignment; "
-			    "alignment disabled.",
-			    qid, data_room, max_frame_len, rxq->rx_dma_align);
-		rxq->rx_dma_align = 0;
+	if (rxq->rx_dma_align) {
+		u32 align_margin = hinic3_rx_dma_align_is_offset(rxq->rx_dma_align) ?
+				   rxq->rx_dma_align : rxq->rx_dma_align - 1;
+
+		if (buf_room >= align_margin + max_frame_len)
+			buf_room -= align_margin;
+		else {
+			PMD_DRV_LOG(WARNING,
+				    "rxq%u: mbuf data_room %u cannot hold the max "
+				    "frame length %u with rx_dma_align=%u; "
+				    "rx_dma_align disabled.",
+				    qid, data_room, max_frame_len, rxq->rx_dma_align);
+			rxq->rx_dma_align = 0;
+		}
 	}
 
 	err = hinic3_convert_rx_buf_size(buf_room, &buf_size);
@@ -1449,9 +1454,11 @@ static int hinic3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 			    "will be received via scattered RX.",
 			    qid, data_room, max_frame_len, buf_size);
 
-	PMD_DRV_LOG(INFO, "rxq%u: data_room: %u, rx_buff_len: %u, "
-		    "max_frame_len: %u, rx_dma_align: %u",
-		    qid, data_room, buf_size, max_frame_len, rxq->rx_dma_align);
+	/* rx_dma_align is device-wide; log it once with the first queue. */
+	if (qid == 0)
+		PMD_DRV_LOG(INFO, "rxq%u: data_room: %u, rx_buff_len: %u, "
+			    "max_frame_len: %u, rx_dma_align: %u",
+			    qid, data_room, buf_size, max_frame_len, rxq->rx_dma_align);
 	if (nic_dev->config.rx_cqe_compact_en) {
 		/* Default rx wqe type set to compact wqe if NIC supports compact rx CQE */
 		rxq->wqe_type = HINIC3_COMPACT_RQ_WQE;
@@ -5146,7 +5153,8 @@ hinic3_nic_common_args_check_handler(const char *key, const char *val, void *opa
 		if (!hinic3_rx_dma_align_is_valid(tmp)) {
 			PMD_DRV_LOG(ERR,
 				    "rx_dma_align=%lu is invalid; "
-				    "must be 0, 64, 128, 256 or 512.", tmp);
+				    "must be 0, 1-15 (direct offset), "
+				    "64, 128, 256 or 512.", tmp);
 			return -EINVAL;
 		}
 		config->rx_dma_align = tmp;
