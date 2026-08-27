@@ -216,7 +216,7 @@ struct hinic3_nic_common_dev_config {
 	unsigned int rx_cqe_compact_en; /* cqe mode, 0 -- separate cqe, 1 -- compact cqe. */
 	unsigned int rx_cqe_coalesce_num; /* RX CQE parameter coalesce_num. */
 	unsigned int rx_cqe_timer_loop; /* RX CQE parameter time_loop. */
-	unsigned int rx_dma_align; /* RX DMA buffer alignment (0/64/128/256/512). 0 disables. */
+	unsigned int rx_dma_align; /* RX DMA align (0/64/128/256/512) or direct offset (1-15). 0 disables. */
 };
 
 struct hinic3_nic_dev {

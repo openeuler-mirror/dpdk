@@ -238,7 +238,7 @@ enum hinic3_compact_cqe_csum_err_type {
 #define HINIC3_DEFAULT_RX_BURST 64
 
 /*
- * RX DMA buffer alignment.
+ * RX DMA buffer alignment / offset.
  *
  * The hardware DMA engine may require RX packet write addresses to be aligned
  * to a power-of-2 boundary. When rx_dma_align is enabled (via the
@@ -247,10 +247,16 @@ enum hinic3_compact_cqe_csum_err_type {
  * (aligned) DMA start address. Supported alignment values: 64, 128, 256, 512.
  * A value of 0 disables alignment.
  *
+ * Values 1..HINIC3_RX_DMA_ALIGN_OFFSET_MAX select a direct offset instead of
+ * alignment: the DMA start address is shifted forward by exactly <N> bytes
+ * (align_dma_addr = dma_addr + <N>), used for PCIe burst experiments.
+ *
  * With alignment enabled, each mbuf can waste up to (rx_dma_align - 1) bytes
- * of data room. hinic3_rx_queue_setup reserves this margin while computing
- * buf_len, so the DMA write range can never cross the data room boundary.
+ * of data room; in offset mode it wastes exactly rx_dma_align bytes.
+ * hinic3_rx_queue_setup reserves this margin while computing buf_len, so the
+ * DMA write range can never cross the data room boundary.
  */
+#define HINIC3_RX_DMA_ALIGN_OFFSET_MAX	15
 #define HINIC3_RX_DMA_ALIGN_MIN		64
 #define HINIC3_RX_DMA_ALIGN_MAX		512
 
@@ -263,11 +269,17 @@ enum hinic3_compact_cqe_csum_err_type {
  */
 #define HINIC3_RX_DMA_ALIGN_CQE_OFFSET	16
 
-/* Check whether @align is one of the supported alignment values (or 0). */
+/* True if @align selects direct-offset mode (1..15) instead of alignment. */
+static inline bool hinic3_rx_dma_align_is_offset(u32 align)
+{
+	return align != 0 && align <= HINIC3_RX_DMA_ALIGN_OFFSET_MAX;
+}
+
+/* Check whether @align is a supported offset or alignment value (or 0). */
 static inline bool hinic3_rx_dma_align_is_valid(u32 align)
 {
-	return align == 0 || align == 64 || align == 128 ||
-	       align == 256 || align == 512;
+	return align == 0 || hinic3_rx_dma_align_is_offset(align) ||
+	       align == 64 || align == 128 || align == 256 || align == 512;
 }
 
 /* keep same with IPSU_METADATA_L3_TP_E */
@@ -466,7 +478,7 @@ struct hinic3_rxq {
 	u16 port_id;
 	u8  is_scattered_rx;
 	u8  dp_intr_en;
-	u32 rx_dma_align;	/* 0 = disabled; else 64/128/256/512 */
+	u32 rx_dma_align;	/* 0 = disabled; 1-15 = direct offset; else 64/128/256/512 */
 	u32 rx_empty_loop;	/* max empty CQE spin count; 0 converted to UINT32_MAX */
 
 	u16 hw_cons_idx;
