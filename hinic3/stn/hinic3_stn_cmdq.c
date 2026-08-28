@@ -175,18 +175,6 @@ u8 hinic3_prepare_cmd_buf_get_rss_indir_table_stn(struct hinic3_nic_dev *nic_dev
 	return HINIC3_UCODE_CMD_GET_RSS_INDIR_TABLE;
 }
 
-static struct hinic3_indir_tbl_qid_lqid *hinic3_find_by_local_qid(u16 local_qid)
-{
-	struct hinic3_indir_tbl_qid_lqid *entry = NULL;
-
-	TAILQ_FOREACH(entry, &g_qid_lqid_list, entries) {
-		if (entry->local_qid == local_qid)
-			return entry;
-	}
-
-	return NULL;
-}
-
 void hinic3_cmd_buf_to_rss_indir_table_stn(struct hinic3_hwdev *hwdev, const struct hinic3_cmd_buf *cmd_buf, u32 *indir_table, u16 indir_table_size)
 {
 	u32 i;

@@ -1782,7 +1782,7 @@ static void hinic3_rx_queue_release(struct rte_eth_dev *dev, uint16_t queue_id)
 			goto release_resources;
 		}
 
-		if (nic_dev->hwdev->qpool_qgrp_id != 0) {
+		if (rxq->q_id == 0 && nic_dev->hwdev->qpool_qgrp_id != 0) {
 			err = hinic3_release_template(nic_dev);
 			if (err < 0) {
 				PMD_DRV_LOG(WARNING, "NIC device queue release template err, err = %d", err);

@@ -1983,6 +1983,8 @@ int hinic3_fdir_sec_tcam_block_free(void *hwdev, u8 key_width, u16 *index);
 int hinic3_fdir_add_sec_tcam_rule(void *hwdev, struct hinic3_ext_tcam_cfg_rule *tcam_rule,
 				  u8 tcam_rule_type, u8 key_width);
 
+struct hinic3_indir_tbl_qid_lqid *hinic3_find_by_local_qid(u16 local_qid);
+
 int hinic3_fdir_set_fdir_sec_tcam_rule_filter(void *hwdev, bool enable);
 
 int hinic3_fdir_del_sec_tcam_rule(void *hwdev, u32 index, u8 tcam_rule_type,

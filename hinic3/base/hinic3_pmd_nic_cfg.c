@@ -1276,6 +1276,18 @@ void hinic3_clear_qid_mmap(u16 q_id)
 	}
 }
 
+struct hinic3_indir_tbl_qid_lqid *hinic3_find_by_local_qid(u16 local_qid)
+{
+	struct hinic3_indir_tbl_qid_lqid *entry = NULL;
+
+	TAILQ_FOREACH(entry, &g_qid_lqid_list, entries) {
+		if (entry->local_qid == local_qid)
+			return entry;
+	}
+
+	return NULL;
+}
+
 int hinic3_rss_get_indir_tbl(void *hwdev, u32 *indir_table, u32 indir_table_size)
 {
 	struct hinic3_nic_dev *nic_dev = NULL;
