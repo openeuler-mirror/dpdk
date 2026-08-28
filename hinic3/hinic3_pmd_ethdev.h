@@ -248,6 +248,7 @@ struct hinic3_nic_dev {
 
 	pthread_mutex_t rx_mode_mutex;
 
+	u32 cos_mask;
 	u32 default_cos;
 	u32 rx_csum_en;
 
