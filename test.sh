@@ -2,41 +2,43 @@
 set -e
 
 DPDK_DIR=..
-NIC_PCI="0000:01:00.0"
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 
-# 可选：第一个入参作为 NIC_PCI
-if [[ -n "$1" ]]; then
-	NIC_PCI="$1"
+if [ "$DISABLE_TESTPMD_CMD" != "1" ]; then
+	NIC_PCI="0000:01:00.0"
+
+	# 可选：第一个入参作为 NIC_PCI
+	if [[ -n "$1" ]]; then
+		NIC_PCI="$1"
+	fi
+
+	# 检测 vendor/device id
+	vendor=$(lspci -n -s "$NIC_PCI" | awk '{print $3}' | cut -d: -f1)
+	device=$(lspci -n -s "$NIC_PCI" | awk '{print $3}' | cut -d: -f2)
+
+	if [[ -z "$vendor" || -z "$device" ]]; then
+		echo "    未找到 PCI 设备 $NIC_PCI"
+		exit 1
+	fi
+
+	echo "* Vendor ID: $vendor"
+	echo "* Device ID: $device"
+
+	if [[ "$vendor" != "19e5" || "$device" != "0222" ]]; then
+		echo "仅支持SP670 PF"
+		exit 1
+	fi
+
+	# 内核/驱动准备
+	modprobe vfio enable_unsafe_noiommu_mode=1
+	modprobe vfio-pci
+	echo 1 >/sys/module/vfio/parameters/enable_unsafe_noiommu_mode
+	dpdk-devbind.py -b vfio-pci $NIC_PCI
+
+	echo never >/sys/kernel/mm/transparent_hugepage/enabled
+	dpdk-hugepages.py -s
 fi
-
-# 检测 vendor/device id
-vendor=$(lspci -n -s "$NIC_PCI" | awk '{print $3}' | cut -d: -f1)
-device=$(lspci -n -s "$NIC_PCI" | awk '{print $3}' | cut -d: -f2)
-
-if [[ -z "$vendor" || -z "$device" ]]; then
-	echo "    未找到 PCI 设备 $NIC_PCI"
-	exit 1
-fi
-
-echo "* Vendor ID: $vendor"
-echo "* Device ID: $device"
-
-if [[ "$vendor" != "19e5" || "$device" != "0222" ]]; then
-	echo "仅支持SP670 PF"
-	exit 1
-fi
-
-# 内核/驱动准备
-modprobe vfio enable_unsafe_noiommu_mode=1
-modprobe vfio-pci
-echo 1 >/sys/module/vfio/parameters/enable_unsafe_noiommu_mode
-dpdk-devbind.py -b vfio-pci $NIC_PCI
-
-echo never >/sys/kernel/mm/transparent_hugepage/enabled
-dpdk-hugepages.py -s
-
 # 要测试的版本列表 (压缩包名)
 VERSIONS=(
 	"dpdk-19.11.14.tar.xz"
@@ -61,7 +63,7 @@ for pkg in "${VERSIONS[@]}"; do
 
 	# 编译
 	export DISABLE_DPDK19_WNO_ERROR=1
-	sh "$SCRIPT_DIR/install.sh" "$stable_dir" install bifur
+	sh "$SCRIPT_DIR/install.sh" "$stable_dir" install
 	sh "$SCRIPT_DIR/install.sh" "$stable_dir" build
 
 	if [ "$DISABLE_TESTPMD_CMD" = "1" ]; then

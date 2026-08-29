@@ -6,6 +6,7 @@ SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 # 适配低版本 meson
 # DPDK版本对应的编译标志
 declare -A DPDK_VERSION_FLAGS
+DPDK_VERSION_FLAGS[19]=""
 DPDK_VERSION_FLAGS[20]="-DDPDK_20_11"
 DPDK_VERSION_FLAGS[21]="-DDPDK_20_11 -DDPDK_21_11"
 DPDK_VERSION_FLAGS[22]="-DDPDK_20_11 -DDPDK_21_11 -DDPDK_22_11"
@@ -71,7 +72,6 @@ adapt_driver_build() {
 	# 添加当前版本对应的编译标志
 	for flag in $(get_version_flags); do
 		add_cflags_to_meson "$meson_file" "$flag"
-		add_cflags_to_makefile "$make_file" "$flag"
 	done
 }
 
