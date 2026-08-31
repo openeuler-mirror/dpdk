@@ -740,6 +740,11 @@ hinic3_agent_process_dump_option(int index, int argc, const char *argv[], struct
             return hinic3_agent_get_flows_cnt(argc, ds);
         }
     case HELP_OPT:
+        if (argc != 2) {
+            hinic3_ds_put_format(ds, "%sToo many parameters, please input -h or --help to get help info!\n",
+                HINIC3_UI_LEADING_SIGN_ERROR);
+            return -1;
+        }
         hinic3_agent_dump_flows_help(ds);
         break;
 

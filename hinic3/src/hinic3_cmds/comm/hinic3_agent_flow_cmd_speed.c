@@ -465,6 +465,12 @@ hinic3_speed_task_cmd(struct unixctl_conn *conn, int argc, const char *argv[], v
     }
 
     if ((strcmp("-h", sub_cmd_name) == 0) || (strcmp("--help", sub_cmd_name) == 0)) {
+        if (work_argc != 1) {
+            hinic3_command_reply_error(conn,
+                "Error: Too many parameters, please input -h or --help to get help info!\n");
+            *(int *)aux = -1;
+            return;
+        }
         *(int *)aux = hinic3_speed_task_cmd_help(conn, work_argc, work_argv);
         return;
     }
