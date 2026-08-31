@@ -147,6 +147,6 @@ end:
 void
 unixctl_hinic3_cmd_error_stats_register(void)
 {
-    hinic3_command_register("hwoff/show-error-stats", "", 1, 2,
+    hinic3_command_register("hwoff/show-error-stats", "{ -l ENUM<all,error,warning> | { -h | --help } }", 1, 2,
         hinic3_flow_agent_error_stats_cmd, NULL);
 }
