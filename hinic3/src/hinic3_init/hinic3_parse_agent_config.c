@@ -228,13 +228,21 @@ static int hinic3_parse_virtio_queue_depth(struct rte_cfgfile *rte_file)
         return -1;
     }
 
-    virtio_queue_depth = (uint16_t)strtoul(queue_depth_str, &end_ptr, STR_TO_DEC_NUM);
+    unsigned long value = strtoul(queue_depth_str, &end_ptr, STR_TO_DEC_NUM);
+    if (end_ptr == NULL || *end_ptr != '\0' || value > UINT16_MAX) {
+        HINIC3_LOG(ERR, AGENT,
+            "virtio_queue_depth value %s is invalid!\n", queue_depth_str);
+        return -1;
+    }
+
+    virtio_queue_depth = (uint16_t)value;
+
     if (end_ptr == NULL || *end_ptr != '\0') {
         HINIC3_LOG(ERR, AGENT,
                     "virtio_queue_depth %u is invalid, use default value 1024!\n", virtio_queue_depth);
         return -1;
     }
-
+    
     if (virtio_queue_depth < HINIC3_PORT_MIN_QUEUE_DEPTH ||
                         virtio_queue_depth > HINIC3_PORT_MAX_QUEUE_DEPTH) {
         HINIC3_LOG(INFO, AGENT,
@@ -258,9 +266,14 @@ static void hinic3_parse_config_num(struct rte_cfgfile *rte_file, uint32_t mod_i
         return;
     }
 
-    config_num = (uint32_t)strtoul(config_num_str, &end_ptr, STR_TO_DEC_NUM);
-    if (end_ptr == NULL || *end_ptr != '\0' || (config_num < g_num_table[mod_id].min_num) ||
-        (config_num > g_num_table[mod_id].max_num)) {
+    unsigned long value = strtoul(config_num_str, &end_ptr, STR_TO_DEC_NUM);
+    if (end_ptr == NULL || *end_ptr != '\0' || value > UINT32_MAX) {
+        HINIC3_LOG(INFO, AGENT, "%s %s is invalid, use default value %u.", g_num_table[mod_id].name, config_num_str,
+            *g_num_table[mod_id].num);
+        return;
+    }
+    config_num = (uint32_t)value;
+    if ((config_num < g_num_table[mod_id].min_num) || (config_num > g_num_table[mod_id].max_num)) {
         HINIC3_LOG(INFO, AGENT, "%s %u is invalid, use default value %u.", g_num_table[mod_id].name, config_num,
             *g_num_table[mod_id].num);
         return;
