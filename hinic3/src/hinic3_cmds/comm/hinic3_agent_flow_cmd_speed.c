@@ -441,6 +441,10 @@ hinic3_speed_task_cmd(struct unixctl_conn *conn, int argc, const char *argv[], v
     const char **work_argv = argv + 1;
     const char *sub_cmd_name = NULL;
 
+    enum {
+        HINIC3_SPEED_TASK_HELP_ARGC = 1 
+    };
+
     work_argc = argc - 1;
     sub_cmd_name = work_argv[0];
 
@@ -465,9 +469,9 @@ hinic3_speed_task_cmd(struct unixctl_conn *conn, int argc, const char *argv[], v
     }
 
     if ((strcmp("-h", sub_cmd_name) == 0) || (strcmp("--help", sub_cmd_name) == 0)) {
-        if (work_argc != 1) {
-            hinic3_command_reply_error(conn,
-                "Error: Too many parameters, please input -h or --help to get help info!\n");
+        if (work_argc != HINIC3_SPEED_TASK_HELP_ARGC) {
+            hinic3_command_reply_error(conn, HINIC3_UI_LEADING_SIGN_ERROR
+                HINIC3_UI_ERROR_TOO_MANY_PARAMETER ", please type -h or --help for help.\n");
             *(int *)aux = -1;
             return;
         }
