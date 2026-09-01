@@ -859,10 +859,6 @@ static int hinic3_dev_set_link_up(struct rte_eth_dev *dev)
  		return -EAGAIN;
  	}
 
-	if (HINIC3_FUNC_TYPE(nic_dev->hwdev) == TYPE_VF && is_sp230_nic(nic_dev)) {
- 		PMD_DRV_LOG(WARNING, "sp230 not support set vf link up.");
- 		return -EAGAIN;
-	}
 	/* Vport enable will set function valid in mpu.
 	   So dev start status need to be checked before vport enable.*/
 	if (hinic3_get_bit(HINIC3_DEV_START, &nic_dev->dev_status)) {
@@ -881,7 +877,7 @@ static int hinic3_dev_set_link_up(struct rte_eth_dev *dev)
 		return err;
 	}
 
-	if(!is_sp230_nic(nic_dev) && HINIC3_IS_VF(nic_dev->hwdev)) {
+	if(HINIC3_IS_VF(nic_dev->hwdev)) {
 		link = dev->data->dev_link;
 		link.link_status = nic_dev->hwdev->link_status & nic_dev->hwdev->vf_valid_status;
 		if (link.link_status == RTE_ETH_LINK_DOWN) {
@@ -933,7 +929,7 @@ static int hinic3_dev_set_link_down(struct rte_eth_dev *dev)
 		return err;
 	}
 
-	if(!is_sp230_nic(nic_dev) && HINIC3_IS_VF(nic_dev->hwdev)) {
+	if(HINIC3_IS_VF(nic_dev->hwdev)) {
 		link = dev->data->dev_link;
 		link.link_status = nic_dev->hwdev->link_status & nic_dev->hwdev->vf_valid_status;
 
@@ -985,7 +981,7 @@ static int hinic3_link_update(struct rte_eth_dev *dev, int wait_to_complete)
 	} while (rep_cnt--);
 
 out:
-	if(!is_sp230_nic(nic_dev) && HINIC3_IS_VF(nic_dev->hwdev) && !IS_QPOOL_MODE(nic_dev->hwdev)) {
+	if(HINIC3_IS_VF(nic_dev->hwdev) && !IS_QPOOL_MODE(nic_dev->hwdev)) {
 		nic_dev->hwdev->link_status = link.link_status;
 		link.link_status = nic_dev->hwdev->link_status & nic_dev->hwdev->vf_valid_status;
 	}
