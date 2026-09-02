@@ -56,9 +56,6 @@ hinic3_dbg_get_rx_cqe_info(void *hwdev, uint16_t q_id, uint16_t idx, void *buf_o
 	struct hinic3_hwdev *dev = (struct hinic3_hwdev *)hwdev;
 	struct hinic3_nic_dev *nic_dev = (struct hinic3_nic_dev *)dev->dev_handle;
 
-	if (!nic_dev->rxqs[q_id])
-		return -EFAULT;
-
 	if (q_id >= nic_dev->num_rqs || idx >= nic_dev->rxqs[q_id]->q_depth)
 		return -EFAULT;
 
