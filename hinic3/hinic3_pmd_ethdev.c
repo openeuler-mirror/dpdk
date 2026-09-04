@@ -1571,7 +1571,20 @@ hinic3_tx_queue_dma_create(struct rte_eth_dev *dev, struct hinic3_txq *txq,
 	txq->queue_buf_vaddr = sq_mz->addr;
 	txq->sq_head_addr = (u64)txq->queue_buf_vaddr;
 	txq->sq_bot_sge_addr = txq->sq_head_addr + queue_buf_size;
-	txq->multi_segs = (dev->data->dev_conf.txmode.offloads & RTE_ETH_TX_OFFLOAD_MULTI_SEGS) ? true : false;
+
+	/* TSO requires multi-segment SGE path: when any TSO offload is
+	 * enabled, force multi_segs=true regardless of MULTI_SEGS flag.
+	 */
+	txq->multi_segs = (dev->data->dev_conf.txmode.offloads &
+			   (RTE_ETH_TX_OFFLOAD_MULTI_SEGS |
+			    RTE_ETH_TX_OFFLOAD_TCP_TSO |
+			    RTE_ETH_TX_OFFLOAD_UDP_TSO |
+			    RTE_ETH_TX_OFFLOAD_VXLAN_TNL_TSO |
+			    RTE_ETH_TX_OFFLOAD_GRE_TNL_TSO |
+			    RTE_ETH_TX_OFFLOAD_IPIP_TNL_TSO |
+			    RTE_ETH_TX_OFFLOAD_GENEVE_TNL_TSO |
+			    RTE_ETH_TX_OFFLOAD_UDP_TNL_TSO |
+			    RTE_ETH_TX_OFFLOAD_IP_TNL_TSO)) ? true : false;
 
 	err = hinic3_alloc_db_addr(hwdev, &db_addr, HINIC3_DB_TYPE_SQ);
 	if (err) {
