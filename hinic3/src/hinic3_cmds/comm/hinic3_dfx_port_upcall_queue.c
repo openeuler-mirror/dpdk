@@ -596,6 +596,9 @@ hinic3_dump_ports_queue_info_options(struct ds *ds, int argc, const char *argv[]
 {
     int ret = 0;
     int option_val = hinic3_dump_queue_info_check_option(ds, argc, argv[1]);
+    if (option_val == -1) {
+        return -1;
+    }
     switch (option_val) {
         case HINIC3_DUMP_PORT_QUEUE_HELP_OPT:
             hinic3_dump_ports_queue_info_help(ds);
