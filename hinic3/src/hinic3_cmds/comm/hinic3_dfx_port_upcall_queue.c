@@ -440,6 +440,8 @@ hinic3_dump_queue_info_check_option(struct ds *ds, int argc, const char *name)
             return dump_queue_cmd_opts[idx].val;
         }
     }
+    hinic3_ds_put_format(ds, "%s", HINIC3_UI_LEADING_SIGN_ERROR
+        HINIC3_UI_ERROR_WRONG_PARAMETER HINIC3_COMMAND_HELP_INFO);
     return -1;
 }
 
@@ -596,6 +598,9 @@ hinic3_dump_ports_queue_info_options(struct ds *ds, int argc, const char *argv[]
 {
     int ret = 0;
     int option_val = hinic3_dump_queue_info_check_option(ds, argc, argv[1]);
+    if (option_val == -1) {
+        return -1;
+    }
     switch (option_val) {
         case HINIC3_DUMP_PORT_QUEUE_HELP_OPT:
             hinic3_dump_ports_queue_info_help(ds);
