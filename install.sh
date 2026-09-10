@@ -548,6 +548,11 @@ install_dpdk_test() {
 
 	# 根据DPDK版本选择构建系统
 	if [ "$DPDK_MAJOR" -eq 19 ]; then
+		# DPDK 19 共享库模式下跳过测试安装（与 DPDK>=20 meson 方式一致）
+		if grep -q "CONFIG_RTE_BUILD_SHARED_LIB=y" "./config/common_base" 2>/dev/null; then
+			echo "共享库模式下跳过 hinic3 单元测试安装，测试仅支持静态库模式（CONFIG_RTE_BUILD_SHARED_LIB=n）"
+			return
+		fi
 		# DPDK 19 使用 Makefile 构建
 		local dpdk_makefile="app/test/Makefile"
 		add_test_sources "$dpdk_makefile" "makefile"
