@@ -2211,7 +2211,8 @@ hinic3_get_bifur_enable(void *hwdev, u8 *bifur_en, u8 *iso_en, u8 *bifur_type)
 	u16 out_size = sizeof(bifur_cmd);
 	int err;
 
-	if (is_sp230_nic(((struct hinic3_hwdev *)hwdev)->dev_handle))
+	if (is_sp230_nic(((struct hinic3_hwdev *)hwdev)->dev_handle) ||
+	    IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev))
 		return 0;
 
 	if (!hwdev)
