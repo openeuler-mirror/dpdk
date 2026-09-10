@@ -62,7 +62,7 @@ for pkg in "${VERSIONS[@]}"; do
 	tar -xf $pkg
 
 	# 编译
-	export DISABLE_DPDK19_WNO_ERROR=1
+	export DISABLE_WNO_ERROR=1
 	sh "$SCRIPT_DIR/install.sh" "$stable_dir" install
 	sh "$SCRIPT_DIR/install.sh" "$stable_dir" build
 

@@ -758,7 +758,7 @@ build() {
 
 		extra_cflags=""
 		# 默认忽略告警，保证 dpdk=19 在一些 GCC 版本下能顺利编译
-		if [ -z "$DISABLE_DPDK19_WNO_ERROR" ]; then
+		if [ -z "$DISABLE_WNO_ERROR" ]; then
 			extra_cflags="-Wno-error"
 		fi
 
@@ -779,11 +779,16 @@ build() {
 	else
 		echo "执行 Meson 构建方式"
 		rm -rf $build_dir
+		extra_cflags=""
+		# 默认忽略告警，保证 dpdk=19 在一些 GCC 版本下能顺利编译
+		if [ -n "$DISABLE_WNO_ERROR" ]; then
+			extra_cflags="-Dwerror=true"
+		fi
 		# dpdk>=21
-		meson_flags="-Ddisable_drivers=true -Denable_drivers=mempool/ring,net/hns3,net/${pmd_name}"
+		meson_flags="-Ddisable_drivers=true -Denable_drivers=mempool/ring,net/hns3,net/${pmd_name} ${extra_cflags}"
 		# dpdk=20
 		if [ "$DPDK_MAJOR" -eq 20 ]; then
-			meson_flags="-Ddisable_drivers=net/cnxk,net/mlx4,net/mlx5,common/mlx5,regex/mlx5,vdpa/mlx5,crypto/*"
+			meson_flags="-Ddisable_drivers=net/cnxk,net/mlx4,net/mlx5,common/mlx5,regex/mlx5,vdpa/mlx5,crypto/* ${extra_cflags}"
 		fi
 		# 如果指定 generic
 		if [[ "$build_target" == "generic" ]]; then
