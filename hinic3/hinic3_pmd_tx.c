@@ -99,16 +99,6 @@ static inline u16 hinic3_get_sq_hw_ci(struct hinic3_txq *sq)
 	return MASKED_QUEUE_IDX(sq, hinic3_hw_cpu16(*(sq->ci_vaddr_base)));
 }
 
-static inline u16 hinic3_get_and_update_sq_owner(struct hinic3_txq *sq, u16 curr_pi, u16 wqebb_cnt)
-{
-	u16 owner = sq->owner;
-
-	if (unlikely(curr_pi + wqebb_cnt >= sq->q_depth))
-		sq->owner = !sq->owner;
-
-	return owner;
-}
-
 static void *hinic3_get_sq_wqe(struct hinic3_txq *sq,
 			       struct hinic3_wqe_info *wqe_info)
 {

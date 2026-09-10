@@ -442,7 +442,7 @@ struct hinic3_txq {
 	u8 tx_wqe_compact_task;
 	u8 is_sp620_nic;
 	u16 tx_free_loop;
-	u16 non_tso_max_pkt_len;
+	u32 non_tso_max_pkt_len;
 
 	struct hinic3_txq_stats txq_stats;
 #ifdef HINIC3_XSTAT_PROF_TX

@@ -669,8 +669,7 @@ void hinic3_dev_info_get(struct rte_eth_dev_info *info, struct hinic3_nic_dev *n
 				RTE_ETH_TX_OFFLOAD_MULTI_SEGS |
 				RTE_ETH_TX_OFFLOAD_QINQ_INSERT;
 
-	if (!is_sp620_nic(nic_dev))
-		hinic3_dev_tnl_tso_support(info, nic_dev);
+	hinic3_dev_tnl_tso_support(info, nic_dev);
 	info->hash_key_size = HINIC3_RSS_KEY_SIZE;
 	info->reta_size = HINIC3_RSS_INDIR_SIZE;
 	info->flow_type_rss_offloads = HINIC3_RSS_OFFLOAD_ALL;
@@ -1730,11 +1729,8 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	txq->tx_wqe_compact_task = HINIC3_SUPPORT_TX_WQE_COMPACT_TASK(nic_dev);
 
 	err = hinic3_tx_queue_dma_create(dev, txq, qid, socket_id);
-	if (err) {
-		nic_dev->txqs[qid] = NULL;
-		rte_free(txq);
+	if (err)
 		return -ENOMEM;
-	}
 
 	/* Record txq pointer in rte_eth tx_queues */
 	dev->data->tx_queues[qid] = txq;
@@ -2045,8 +2041,9 @@ static int hinic3_set_lro(struct hinic3_nic_dev *nic_dev, struct rte_eth_conf *d
 	int err;
 
 	/* Config lro */
-	lro_en = dev_conf->rxmode.offloads & RTE_ETH_RX_OFFLOAD_TCP_LRO ?
-		 true : false;
+	lro_en = (dev_conf->rxmode.offloads & RTE_ETH_RX_OFFLOAD_TCP_LRO) &&
+			  (nic_dev->feature_cap & NIC_F_LRO);
+	PMD_DRV_LOG(DEBUG, "lro is %d.", lro_en);
 	max_lro_size = (int)(dev_conf->rxmode.max_lro_pkt_size);
 	lro_max_pkt_len = max_lro_size / HINIC3_LRO_UNIT_WQE_SIZE ?
 		      max_lro_size / HINIC3_LRO_UNIT_WQE_SIZE : 1;
@@ -2604,10 +2601,6 @@ static int hinic3_dev_start(struct rte_eth_dev *eth_dev)
 	hinic3_reset_rx_queue(eth_dev);
 	hinic3_reset_tx_queue(eth_dev);
 
-	nic_dev->lro_en = (eth_dev->data->dev_conf.rxmode.offloads & RTE_ETH_RX_OFFLOAD_TCP_LRO) &&
-			  (nic_dev->feature_cap & NIC_F_LRO);
-	PMD_DRV_LOG(DEBUG, "lro is %d.", nic_dev->lro_en);
-
 	/* Init txq and rxq context */
 	err = hinic3_init_qp_ctxts(nic_dev);
 	if (err) {
@@ -2903,6 +2896,11 @@ static void hinic3_dev_release(struct rte_eth_dev *eth_dev)
 	nic_dev->hwdev = NULL;
 	rte_free(nic_dev->ptype_tbl);
 	nic_dev->ptype_tbl = NULL;
+	hinic3_tm_conf_uninit(eth_dev);
+	rte_free(nic_dev->ets);
+	nic_dev->ets = NULL;
+	rte_free(nic_dev->dcb);
+	nic_dev->dcb = NULL;
 }
 
 /**
@@ -5417,8 +5415,10 @@ static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev)
 	}
 
 	err = hinic3_get_kernel_addr(eth_dev);
-	if (err)
-		return err;
+	if (err) {
+		PMD_DRV_LOG(ERR, "Get kernel addr failed.");
+		goto get_kernel_addr_fail;
+	}
 
 	tcam_info = &nic_dev->tcam;
 	memset(tcam_info, 0, sizeof(struct hinic3_tcam_info));
@@ -5451,6 +5451,7 @@ static int hinic3_func_init_qpool(struct rte_eth_dev *eth_dev)
 	return 0;
 
 dcb_init_fail:
+get_kernel_addr_fail:
 init_rx_ptype_table_fail:
 	(void)rte_intr_callback_unregister(PCI_DEV_TO_INTR_HANDLE(pci_dev),
 					   hinic3_dev_interrupt_handler_qpool,

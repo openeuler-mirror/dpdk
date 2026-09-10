@@ -158,7 +158,7 @@ u8 hinic3_prepare_cmd_buf_set_rss_indir_table_stn(struct hinic3_nic_dev *nic_dev
 		indir_tbl->entry[i] = (u16)(*(indir_table + i));
 	}
 	rte_mb();
-	size = sizeof(indir_tbl->entry) / sizeof(u32);
+	size = (size_t)sizeof(indir_tbl->entry) / sizeof(u32);
 	temp = (u32 *)indir_tbl->entry;
 	for (i = 0; i < size; i++)
 		temp[i] = cpu_to_be32(temp[i]);

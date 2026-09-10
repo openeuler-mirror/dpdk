@@ -52,6 +52,7 @@ hinic3_tm_conf_init(struct rte_eth_dev *dev)
 	TAILQ_INIT(&tm_conf->cos_list);
 	TAILQ_INIT(&tm_conf->queue_list);
 	tm_conf->nb_tc_node = 0;
+	tm_conf->nb_cos_node = 0;
 	tm_conf->nb_queue_node = 0;
 
 	tm_conf->committed = false;
@@ -110,7 +111,6 @@ hinic3_tm_conf_uninit(struct rte_eth_dev *dev)
 	tm_conf->nb_leaf_nodes_max = 0;
 	tm_conf->nb_nodes_max = 0;
 	tm_conf->nb_shaper_profile_max = 0;
-	rte_free(ets);
 }
 
 static inline uint64_t

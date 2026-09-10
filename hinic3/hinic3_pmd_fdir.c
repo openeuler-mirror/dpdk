@@ -93,9 +93,7 @@ static void hinic3_fdir_tcam_ipv4_init(struct hinic3_fdir_filter *rule,
 				       struct rte_eth_dev *dev)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
-	struct rte_pci_device *pci_dev = NULL;
-
-	pci_dev = RTE_ETH_DEV_TO_PCI(dev);
+	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(dev);
 	tcam_key->key_mask.ip_type = HINIC3_UINT1_MAX;
 	tcam_key->key_info.ip_type = HINIC3_FDIR_IP_TYPE_IPV4;
 
@@ -216,9 +214,7 @@ static void hinic3_fdir_tcam_ipv6_init(struct hinic3_fdir_filter *rule,
 				       struct rte_eth_dev *dev)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
-	struct rte_pci_device *pci_dev = NULL;
-
-	pci_dev = RTE_ETH_DEV_TO_PCI(dev);
+	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(dev);
 	tcam_key->key_mask_ipv6.ip_type = HINIC3_UINT1_MAX;
 	tcam_key->key_info_ipv6.ip_type = HINIC3_FDIR_IP_TYPE_IPV6;
 
@@ -799,7 +795,7 @@ hinic3_fdir_tcam_info_htn_init(struct rte_eth_dev *dev,
 	else
 		hinic3_fdir_tcam_tunnel_htn_init(rule, tcam_key);
 
-	if ((rule->action == RTE_FLOW_ACTION_TYPE_RSS)) {
+	if (rule->action == RTE_FLOW_ACTION_TYPE_RSS) {
 		fdir_tcam_rule->data.dw0.bs.qid = rule->rss_group_id;
 		fdir_tcam_rule->data.dw0.bs.flag = 1;
 		fdir_tcam_rule->data.dw1.queue_num = rule->queue_num;

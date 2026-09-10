@@ -106,6 +106,11 @@ extern int hinic3_logtype;
 #define hinic3_hw_cpu16(val) be16_to_cpu(val)
 #endif
 
+#ifndef __rte_format_printf
+#define __rte_format_printf(format_index, first_arg) \
+    __attribute__((format(printf, format_index, first_arg)))
+#endif
+
 #define ARRAY_LEN(arr) ((int)(sizeof(arr) / sizeof((arr)[0])))
 
 static inline void hinic3_hw_be32_len(void *data, int len)
