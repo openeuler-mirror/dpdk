@@ -44,10 +44,10 @@ VERSIONS=(
 	"dpdk-19.11.14.tar.xz"
 	"dpdk-20.11.10.tar.xz"
 	"dpdk-21.11.9.tar.xz"
-	"dpdk-22.11.9.tar.xz"
-	"dpdk-23.11.5.tar.xz"
-	"dpdk-24.11.3.tar.xz"
-	"dpdk-25.11.tar.xz"
+	"dpdk-22.11.11.tar.xz"
+	"dpdk-23.11.7.tar.xz"
+	"dpdk-24.11.7.tar.xz"
+	"dpdk-25.11.3.tar.xz"
 )
 
 cd "$DPDK_DIR"
