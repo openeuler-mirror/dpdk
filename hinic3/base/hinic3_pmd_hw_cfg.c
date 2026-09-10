@@ -55,8 +55,7 @@ static void parse_l2nic_res_cap(struct service_cap *cap,
 	nic_cap->max_sqs = dev_cap->nic_max_sq_id + 1;
 	nic_cap->max_rqs = dev_cap->nic_max_rq_id + 1;
 
-	PMD_DRV_LOG(INFO, "L2nic resource capbility, max_sqs: 0x%x, "
-		    "max_rqs: 0x%x",
+	PMD_DRV_LOG(INFO, "L2nic resource capability, max_sqs: 0x%x, max_rqs: 0x%x",
 		    nic_cap->max_sqs, nic_cap->max_rqs);
 }
 

@@ -197,11 +197,6 @@ static int hinic3_xmit_mbuf_cleanup(struct hinic3_txq *txq, u32 free_cnt)
 	return i;
 }
 
-static inline void hinic3_tx_free_mbuf_force(struct hinic3_txq *txq __rte_unused, struct rte_mbuf *m)
-{
-	rte_pktmbuf_free(m);
-}
-
 static void hinic3_get_ipv4_len_proto(const void *hdr, uint16_t *hdr_len, uint8_t *proto)
 {
 	const struct rte_ipv4_hdr *ipv4_hdr = (const struct rte_ipv4_hdr *)hdr;
@@ -943,7 +938,7 @@ copy:
 static int
 hinic3_non_tso_pkt_pre_process(struct rte_mbuf *mbuf,
 			       struct hinic3_wqe_info *wqe_info,
-			       u16 non_tso_max_pkt_len)
+			       u32 non_tso_max_pkt_len)
 {
 	u16 i, copy_mbuf_num, total_len = 0;
 	struct rte_mbuf *mbuf_pkt = mbuf;
@@ -975,7 +970,7 @@ hinic3_non_tso_pkt_pre_process(struct rte_mbuf *mbuf,
 static int
 hinic3_get_tx_offload_compact_cqe(struct rte_mbuf *mbuf,
 				  struct hinic3_wqe_info *wqe_info,
-				  u16 non_tso_max_pkt_len)
+				  u32 non_tso_max_pkt_len)
 {
 	uint64_t ol_flags = mbuf->ol_flags;
 	uint16_t inner_l3_offset = 0;

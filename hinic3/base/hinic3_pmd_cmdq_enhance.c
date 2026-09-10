@@ -56,7 +56,6 @@ hinic3_enhance_cmdq_init_queue_ctxt(struct hinic3_cmdq *cmdq)
 		ENHANCED_CMDQ_SET(start_ci, CTXT3_PFT_CI);
 
 	/* Third part 16B */
-	cmdq_first_block_paddr = cmdq_first_block_paddr;
 	pfn = WQ_BLOCK_PFN(cmdq_first_block_paddr);
 
 	ctxt_info->ci_cla_addr = ENHANCED_CMDQ_SET(pfn, CTXT4_CI_CLA_ADDR);

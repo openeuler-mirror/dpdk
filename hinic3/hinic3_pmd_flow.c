@@ -3083,8 +3083,13 @@ hinic3_flow_destroy(struct rte_eth_dev *dev, struct rte_flow *flow,
 		break;
 
 	case RTE_ETH_FILTER_FDIR:
-		ret = hinic3_flow_add_del_fdir_filter(dev,
-				&rules->fdir_filter, false);
+		if (rules->is_sec_fdir)
+			ret = hinic3_flow_add_del_sec_fdir_filter(dev,
+					&rules->sec_fdir_filter,
+					&rules->fdir_filter, false);
+		else
+			ret = hinic3_flow_add_del_fdir_filter(dev,
+					&rules->fdir_filter, false);
 		if (!ret)
 			TAILQ_REMOVE(&nic_dev->filter_fdir_rule_list, flow, node);
 
@@ -3128,8 +3133,13 @@ hinic3_flow_flush_fdir_filter(struct rte_eth_dev *dev)
 		if (flow == NULL)
 			break;
 		filter_rules = (struct hinic3_filter_t *)flow->rule;
-		ret = hinic3_flow_add_del_fdir_filter(dev,
-				&filter_rules->fdir_filter, false);
+		if (filter_rules->is_sec_fdir)
+			ret = hinic3_flow_add_del_sec_fdir_filter(dev,
+					&filter_rules->sec_fdir_filter,
+					&filter_rules->fdir_filter, false);
+		else
+			ret = hinic3_flow_add_del_fdir_filter(dev,
+					&filter_rules->fdir_filter, false);
 		if (ret)
 			return ret;
 

@@ -308,6 +308,7 @@ string_toui(const char *nptr, int base, uint32_t *value)
 #define UDA_FALSE 0
 
 static inline void
+__rte_format_printf(3, 4)
 hinic3_pmd_mml_log(char *show_str, int *show_len, const char *fmt, ...)
 {
 	va_list args;

@@ -231,7 +231,7 @@ struct hinic3_tcam_key_mem_htn {
 	u32 rsvd0 : 16;
 	u32 ip_proto : 8;
 	u32 tunnel_type : 3;
-	u32 function_id_h: 5;
+	u32 function_id_h : 5;
 
 	u32 function_id_l : 5;
 	u32 ip_type : 2;
@@ -295,7 +295,7 @@ struct hinic3_tcam_key_mem_htn {
 	u32 rsvd8 : 16;
 
 	u32 sport : 16;
-	u32 dipv4_l :16;
+	u32 dipv4_l : 16;
 
 	u32 rsvd9 : 16;
 	u32 dport : 16;

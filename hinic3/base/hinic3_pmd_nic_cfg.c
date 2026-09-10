@@ -1082,7 +1082,7 @@ int hinic3_set_rx_lro_state(void *hwdev, bool lro_en, u32 lro_timer,
 		return err;
 
 	/* We don't set LRO timer for VF or lro is disable*/
-	if (hinic3_func_type(hwdev) == TYPE_VF || (lro_en == false))
+	if ((hinic3_func_type(hwdev) == TYPE_VF) || (lro_en == false))
 		return 0;
 
 	PMD_DRV_LOG(INFO, "Set LRO timer to %u", lro_timer);
@@ -2435,7 +2435,7 @@ hinic3_rss_queue_set_indir_tbl(void *hwdev, const u32 *indir_table, u32 indir_ta
 		indir_tbl->entry[i] = (u16)(*(indir_table + i));
 
 	rte_mb();
-	size = sizeof(indir_tbl->entry) / sizeof(u32);
+	size = (size_t)sizeof(indir_tbl->entry) / sizeof(u32);
 	temp = (u32 *)indir_tbl->entry;
 	for (i = 0; i < size; i++)
 		temp[i] = cpu_to_be32(temp[i]);

@@ -10,6 +10,7 @@
 #define ADDR_HI_BIT 32
 
 static int
+__rte_format_printf(3, 4)
 hinic3_pmd_mml_log_ret(char *show_str, int *show_len, const char *fmt, ...)
 {
 	va_list args;

@@ -308,11 +308,13 @@ static inline u16 hinic3_get_rq_hw_ci(struct hinic3_rxq *rxq)
  * @param[in] pi
  *   Receive queue pi to update
  */
+#ifdef HINIC3_RQ_DB
 static inline void hinic3_update_rq_hw_pi(struct hinic3_rxq *rxq, u16 pi)
 {
 	*rxq->pi_virt_addr =
 		(u16)cpu_to_be16((pi & rxq->q_mask) << rxq->wqe_type);
 }
+#endif
 
 int hinic3_rx_fill_wqe(struct hinic3_rxq *rxq)
 {
@@ -989,7 +991,6 @@ static void
 hinic3_dump_cqe_status(struct hinic3_rxq *rxq)
 {
 	volatile struct hinic3_rq_cqe *rx_cqe;
-	struct hinic3_rq_ci_wb rq_ci;
 	u16 sw_ci, sw_pi, hw_ci;
 	u32 head_ci, head_done;
 	u16 avail_pkts = 0;
@@ -1000,8 +1001,7 @@ hinic3_dump_cqe_status(struct hinic3_rxq *rxq)
 	if (rxq->wqe_type == HINIC3_COMPACT_RQ_WQE) {
 		sw_ci = hinic3_get_rq_local_ci(rxq);
 		sw_pi = hinic3_get_rq_local_pi(rxq);
-		rq_ci.dw1.value = hinic3_hw_cpu32(__atomic_load_n(&rxq->rq_ci->dw1.value, __ATOMIC_ACQUIRE));
-		hw_ci = rq_ci.dw1.bs.hw_ci;
+		hw_ci = hinic3_get_rq_hw_ci(rxq);
 		PMD_DRV_LOG(ERR,
 			"Poll rq empty timeout, eth_dev:%s, queue_idx:%d, mbuf_left:%d, sw_pi:%d, sw_ci:%d, hw_ci:%d",
 			rxq->nic_dev->dev_name, rxq->q_id,
