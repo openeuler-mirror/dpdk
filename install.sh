@@ -6,6 +6,7 @@ SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 # 适配低版本 meson
 # DPDK版本对应的编译标志
 declare -A DPDK_VERSION_FLAGS
+DPDK_VERSION_FLAGS[19]=""
 DPDK_VERSION_FLAGS[20]="-DDPDK_20_11"
 DPDK_VERSION_FLAGS[21]="-DDPDK_20_11 -DDPDK_21_11"
 DPDK_VERSION_FLAGS[22]="-DDPDK_20_11 -DDPDK_21_11 -DDPDK_22_11"
@@ -71,7 +72,6 @@ adapt_driver_build() {
 	# 添加当前版本对应的编译标志
 	for flag in $(get_version_flags); do
 		add_cflags_to_meson "$meson_file" "$flag"
-		add_cflags_to_makefile "$make_file" "$flag"
 	done
 }
 
@@ -548,6 +548,11 @@ install_dpdk_test() {
 
 	# 根据DPDK版本选择构建系统
 	if [ "$DPDK_MAJOR" -eq 19 ]; then
+		# DPDK 19 共享库模式下跳过测试安装（与 DPDK>=20 meson 方式一致）
+		if grep -q "CONFIG_RTE_BUILD_SHARED_LIB=y" "./config/common_base" 2>/dev/null; then
+			echo "共享库模式下跳过 hinic3 单元测试安装，测试仅支持静态库模式（CONFIG_RTE_BUILD_SHARED_LIB=n）"
+			return
+		fi
 		# DPDK 19 使用 Makefile 构建
 		local dpdk_makefile="app/test/Makefile"
 		add_test_sources "$dpdk_makefile" "makefile"
@@ -753,7 +758,7 @@ build() {
 
 		extra_cflags=""
 		# 默认忽略告警，保证 dpdk=19 在一些 GCC 版本下能顺利编译
-		if [ -z "$DISABLE_DPDK19_WNO_ERROR" ]; then
+		if [ -z "$DISABLE_WNO_ERROR" ]; then
 			extra_cflags="-Wno-error"
 		fi
 
@@ -774,11 +779,16 @@ build() {
 	else
 		echo "执行 Meson 构建方式"
 		rm -rf $build_dir
+		extra_cflags=""
+		# 默认忽略告警，保证 dpdk=19 在一些 GCC 版本下能顺利编译
+		if [ -n "$DISABLE_WNO_ERROR" ]; then
+			extra_cflags="-Dwerror=true"
+		fi
 		# dpdk>=21
-		meson_flags="-Ddisable_drivers=true -Denable_drivers=mempool/ring,net/hns3,net/${pmd_name}"
+		meson_flags="-Ddisable_drivers=true -Denable_drivers=mempool/ring,net/hns3,net/${pmd_name} ${extra_cflags}"
 		# dpdk=20
 		if [ "$DPDK_MAJOR" -eq 20 ]; then
-			meson_flags="-Ddisable_drivers=net/cnxk,net/mlx4,net/mlx5,common/mlx5,regex/mlx5,vdpa/mlx5,crypto/*"
+			meson_flags="-Ddisable_drivers=net/cnxk,net/mlx4,net/mlx5,common/mlx5,regex/mlx5,vdpa/mlx5,crypto/* ${extra_cflags}"
 		fi
 		# 如果指定 generic
 		if [[ "$build_target" == "generic" ]]; then

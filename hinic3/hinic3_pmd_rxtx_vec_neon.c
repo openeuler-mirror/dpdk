@@ -342,7 +342,11 @@ hinic3_recv_burst_compact_cqe_vec(struct hinic3_rxq *rxq,
                 /* order the status dword (holds RXDONE and pkt_len) after the
                  * first load, so observing a fresh completion also guarantees
                  * fresh data (i40e/iavf acquire + reload pattern) */
+#ifdef DPDK_20_11
                 rte_atomic_thread_fence(__ATOMIC_ACQUIRE);
+#else
+                __atomic_thread_fence(__ATOMIC_ACQUIRE);
+#endif
                 cqe0 = vreinterpretq_u8_u32(vld1q_lane_u32(
                                 (uint32_t *)hinic3_vec_compact_cqe_addr(
                                         rx_pkts[pos + 0]),
