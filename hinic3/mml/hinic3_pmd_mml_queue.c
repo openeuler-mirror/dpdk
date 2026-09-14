@@ -54,13 +54,13 @@ static void
 rx_show_wqe(major_cmd_t *self, nic_rq_wqe *wqe)
 {
 	hinic3_pmd_mml_log(self->show_str, &self->show_len, "Rx buffer section information:\n");
-	hinic3_pmd_mml_log(self->show_str, &self->show_len, "buf_addr:0x%llx\n",
+	hinic3_pmd_mml_log(self->show_str, &self->show_len, "buf_addr:0x%lx\n",
 			   (((uint64_t)wqe->buf_desc.pkt_buf_addr_high) << ADDR_HI_BIT) | wqe->buf_desc.pkt_buf_addr_low);
 	hinic3_pmd_mml_log(self->show_str, &self->show_len, "buf_len:%u\n", wqe->buf_desc.len);
 	hinic3_pmd_mml_log(self->show_str, &self->show_len, "rsvd0:%u\n", wqe->rsvd0);
 
 	hinic3_pmd_mml_log(self->show_str, &self->show_len, "Cqe buffer section information:\n");
-	hinic3_pmd_mml_log(self->show_str, &self->show_len, "buf_hi:0x%llx\n",
+	hinic3_pmd_mml_log(self->show_str, &self->show_len, "buf_hi:0x%lx\n",
 			   (((uint64_t)wqe->cqe_sect.pkt_buf_addr_high) << ADDR_HI_BIT) | wqe->cqe_sect.pkt_buf_addr_low);
 	hinic3_pmd_mml_log(self->show_str, &self->show_len, "buf_len:%u\n", wqe->cqe_sect.len);
 	hinic3_pmd_mml_log(self->show_str, &self->show_len, "rsvd1:%u\n", wqe->rsvd1);
