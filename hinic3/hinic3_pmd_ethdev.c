@@ -9,6 +9,7 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 
+#include <rte_eal.h>
 #include <rte_pci.h>
 #include <rte_bus_pci.h>
 #include <rte_kvargs.h>
@@ -5612,6 +5613,15 @@ static int hinic3_pci_probe(struct rte_pci_driver *pci_drv,
 		if (ret != 0 || bifur_action == BIFUR_DONE) {
 			PMD_DRV_LOG(ERR, "Bifur pre probe failed: %d", ret);
 			return ret;
+		}
+	} else if (qinfo_type == HINIC3_QINFO_TYPE_QPOOL) {
+		/* Queue pool mode only works with IOVA as PA. */
+		if (rte_eal_iova_mode() != RTE_IOVA_PA) {
+			PMD_DRV_LOG(ERR, "Queue pool mode requires IOVA mode 'PA', "
+				    "but the current mode is '%s'; please start the "
+				    "application with --iova-mode=pa",
+				    rte_eal_iova_mode() == RTE_IOVA_VA ? "VA" : "DC");
+			return -EINVAL;
 		}
 	}
 
