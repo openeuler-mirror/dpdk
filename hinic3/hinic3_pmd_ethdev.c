@@ -2508,10 +2508,19 @@ static int hinic3_dev_start_qpool(struct rte_eth_dev *eth_dev)
 	}
 
 	/* Add scatter support if scatter mode should be enabled */
-	if (eth_dev->data->dev_conf.rxmode.offloads & RTE_ETH_RX_OFFLOAD_SCATTER)
+	if (eth_dev->data->dev_conf.rxmode.offloads & RTE_ETH_RX_OFFLOAD_SCATTER) {
 		eth_dev->data->scattered_rx = true;
-	else
+	} else {
 		eth_dev->data->scattered_rx = false;
+		if ((nic_dev->mtu_size + HINIC3_ETH_OVERHEAD - RTE_ETHER_CRC_LEN) > nic_dev->rx_buff_len) {
+			err = -EINVAL;
+			PMD_DRV_LOG(ERR,
+				    "no enough rx buff space(%d) to contain the max packet size with out crc(%d)",
+				    nic_dev->rx_buff_len,
+				    nic_dev->mtu_size + HINIC3_ETH_OVERHEAD - RTE_ETHER_CRC_LEN);
+			goto scatter_mtu_conflict;
+		}
+	}
 
 	err = hinic3_start_all_rqs(eth_dev);
 	if (err) {
@@ -2531,6 +2540,7 @@ static int hinic3_dev_start_qpool(struct rte_eth_dev *eth_dev)
 	return 0;
 
 start_rqs_fail:
+scatter_mtu_conflict:
 	/* Flush tx && rx chip resources in case of setting vport fake fail */
 	(void)hinic3_flush_qps_res(nic_dev->hwdev);
 	rte_delay_ms(DEV_START_DELAY_MS);
@@ -2641,10 +2651,19 @@ static int hinic3_dev_start(struct rte_eth_dev *eth_dev)
 	}
 
 	/* Add scatter support if scatter mode should be enabled */
-	if (eth_dev->data->dev_conf.rxmode.offloads & RTE_ETH_RX_OFFLOAD_SCATTER)
+	if (eth_dev->data->dev_conf.rxmode.offloads & RTE_ETH_RX_OFFLOAD_SCATTER) {
 		eth_dev->data->scattered_rx = true;
-	else
+	} else {
 		eth_dev->data->scattered_rx = false;
+		if ((nic_dev->mtu_size + HINIC3_ETH_OVERHEAD - RTE_ETHER_CRC_LEN) > nic_dev->rx_buff_len) {
+			err = -EINVAL;
+			PMD_DRV_LOG(ERR,
+				    "no enough rx buff space(%d) to contain the max packet size with out crc(%d)",
+				    nic_dev->rx_buff_len,
+				    nic_dev->mtu_size + HINIC3_ETH_OVERHEAD - RTE_ETHER_CRC_LEN);
+			goto scatter_mtu_conflict;
+		}
+	}	
 
 	/* enable dev interrupt */
 	hinic3_enable_interrupt(eth_dev);
@@ -2700,7 +2719,7 @@ en_vport_fail:
 	}
 start_rqs_fail:
 	hinic3_remove_rxtx_configure(eth_dev);
-
+scatter_mtu_conflict:
 set_rxtx_config_fail:
 set_mtu_fail:
 	hinic3_free_qp_ctxts(nic_dev->hwdev);
@@ -2985,7 +3004,7 @@ static int hinic3_dev_reset(__rte_unused struct rte_eth_dev *dev)
 static int hinic3_dev_set_mtu(struct rte_eth_dev *dev, uint16_t mtu)
 {
 	struct hinic3_nic_dev *nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(dev);
-	uint32_t frame_size = mtu + HINIC3_ETH_OVERHEAD;
+	uint32_t frame_size = mtu + HINIC3_ETH_OVERHEAD - RTE_ETHER_CRC_LEN;
 	int err = 0;
 
 	if (IS_QPOOL_MODE(nic_dev->hwdev)) {
