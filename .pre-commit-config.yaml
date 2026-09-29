@@ -1,0 +1,60 @@
+# pre-commit 配置
+# 提交前自动执行：通用文件规范检查 + C/C++ 代码格式化(clang-format) + C/C++ 静态分析(clang-tidy)
+#
+# 使用方式：
+#   pip install pre-commit
+#   pre-commit install
+#   pre-commit run --all-files        # 首次可全量跑一遍
+# 临时跳过（不推荐）：git commit --no-verify
+#
+# 说明：
+#   1. clang-format 通过 --style=file 读取仓库根目录的 .clang-format（Linux 内核风格，
+#      DPDK 编码规范即以此为基础）。因现有代码并非 clang-format 统一格式化产物
+#      （DPDK 无官方 .clang-format），直接阻塞会给每个改动文件引入整篇重排，
+#      故暂设为 manual 阶段，待全量格式化后再纳入默认检查。手动验证方式：
+#        pre-commit run --hook-stage manual clang-format --files <files>
+#   2. clang-tidy 依赖编译数据库 compile_commands.json，而该库由 DPDK 构建现场生成，
+#      因此在仓库内没有稳定的相对路径，暂设为 manual 阶段（不阻塞提交/CI），
+#      待 Linux/CI 验证通过后再纳入默认检查。软链 build 由 ci_scripts/pre_commit_pr.sh
+#      依据环境变量 DPDK_BUILD_DIR 自动创建（CI 需导出该变量指向 DPDK 构建目录），
+#      手动验证方式（Linux/CI，DPDK 已 build）：
+#        pre-commit run --hook-stage manual clang-tidy --files <files>
+fail_fast: false
+
+repos:
+  # ==================== 通用基础检查（所有语言） ====================
+  # - repo: https://github.com/pre-commit/pre-commit-hooks
+  - repo: https://gitcode.com/gh_mirrors/pr/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace          # 删除行尾多余空白
+      - id: end-of-file-fixer            # 保证文件末尾仅有一个换行
+      - id: check-yaml                   # 校验 YAML 语法
+      - id: check-json                   # 校验 JSON 语法
+      - id: check-xml                   # 校验 XML 语法
+      - id: check-merge-conflict        # 检查残留的合并冲突标记
+      - id: check-added-large-files     # 拦截超大文件
+        # args: [--maxkb=2048]
+      - id: detect-private-key           # 检测私钥泄露
+
+  - repo: https://gitcode.com/gh_mirrors/de/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+
+  # ==================== C/C++ 代码格式化 ====================
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v22.1.8
+    hooks:
+      - id: clang-format
+        stages: [manual]                 # 手动阶段，待全量格式化后再开启阻塞
+        types_or: [c, c++]
+        args: ["--style=file"]           # 读取仓库根目录 .clang-format
+
+  # ==================== C/C++ 静态分析 ====================
+  - repo: https://github.com/cpp-linter/cpp-linter-hooks
+    rev: v1.1.3
+    hooks:
+      - id: clang-tidy
+        stages: [manual]                 # 手动阶段，需 DPDK 构建出 compile_commands.json
+        args: ["--version=21", "-p=build"]  # -p 指向含 compile_commands.json 的构建目录
