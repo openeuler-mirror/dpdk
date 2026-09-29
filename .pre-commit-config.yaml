@@ -6,19 +6,6 @@
 #   pre-commit install
 #   pre-commit run --all-files        # 首次可全量跑一遍
 # 临时跳过（不推荐）：git commit --no-verify
-#
-# 说明：
-#   1. clang-format 通过 --style=file 读取仓库根目录的 .clang-format（Linux 内核风格，
-#      DPDK 编码规范即以此为基础）。因现有代码并非 clang-format 统一格式化产物
-#      （DPDK 无官方 .clang-format），直接阻塞会给每个改动文件引入整篇重排，
-#      故暂设为 manual 阶段，待全量格式化后再纳入默认检查。手动验证方式：
-#        pre-commit run --hook-stage manual clang-format --files <files>
-#   2. clang-tidy 依赖编译数据库 compile_commands.json，而该库由 DPDK 构建现场生成，
-#      因此在仓库内没有稳定的相对路径，暂设为 manual 阶段（不阻塞提交/CI），
-#      待 Linux/CI 验证通过后再纳入默认检查。软链 build 由 ci_scripts/pre_commit_pr.sh
-#      依据环境变量 DPDK_BUILD_DIR 自动创建（CI 需导出该变量指向 DPDK 构建目录），
-#      手动验证方式（Linux/CI，DPDK 已 build）：
-#        pre-commit run --hook-stage manual clang-tidy --files <files>
 fail_fast: false
 
 repos:
