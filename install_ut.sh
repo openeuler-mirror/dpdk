@@ -11,21 +11,154 @@ unset HINIC3_SOURCED
 # 保存原函数用于覆盖
 eval "$(declare -f adapt_driver_build | sed 's/^adapt_driver_build/_adapt_driver_build_base/')"
 eval "$(declare -f install | sed 's/^install/_install_base/')"
+eval "$(declare -f build | sed 's/^build/_build_base/')"
+eval "$(declare -f clean_config_files | sed 's/^clean_config_files/_clean_config_files_base/')"
 
-# 覆盖 adapt_driver_build：在原逻辑基础上添加 UT 标志
+# 覆盖 clean_config_files：在原清理基础上增加 UT 专属清理（--wrap）
+clean_config_files() {
+	_clean_config_files_base
+
+	local config_files=(
+		"drivers/net/meson.build"
+		"drivers/net/Makefile"
+		"app/test/meson.build"
+		"app/test/Makefile"
+	)
+
+	# 清理 UT 写入的 --wrap 行（不含 hinic3 标记，需单独清理）
+	for file in "${config_files[@]}"; do
+		if [ -f "$file" ]; then
+			sed -i "/wrap=/d" "$file"
+		fi
+	done
+}
+
+# 覆盖 adapt_driver_build：在原逻辑基础上添加 UT 编译标志
 adapt_driver_build() {
 	_adapt_driver_build_base
 
 	local meson_file="./drivers/net/hinic3/meson.build"
 	local make_file="./drivers/net/hinic3/Makefile"
 
-	# 防止 static 函数被内联
+	# 防止 static 函数被内联（objcopy 无法提升被内联消除的符号）
 	add_cflags_to_meson "$meson_file" "-fno-inline"
 	add_cflags_to_makefile "$make_file" "-fno-inline"
+}
 
-	# 单元测试模式：将 HINIC3_STATIC 宏展开为空，使 static 符号全局可见
-	add_cflags_to_meson "$meson_file" "-DHINIC3_UT"
-	add_cflags_to_makefile "$make_file" "-DHINIC3_UT"
+# 提升驱动 .o 文件中的 static 符号为全局可见，供单元测试直接引用
+# 使用 objcopy --globalize-symbol，无需修改驱动源码
+globalize_static_symbols() {
+	local build_dir="$1"
+
+	# 需要提升的 static 符号（均在 hinic3_pmd_ethdev.c 中定义）
+	local symbols="hinic3_pmd_ops hinic3_pmd_vf_ops hinic3_xstats_calc_num hinic3_find_vlan_filter hinic3_store_vlan_filter"
+
+	# 构建 objcopy 参数
+	local globalize_args=""
+	for sym in $symbols; do
+		globalize_args="$globalize_args --globalize-symbol=$sym"
+	done
+
+	# 查找 hinic3_pmd_ethdev 编译产物
+	local obj_file=""
+	obj_file=$(find "$build_dir/drivers" -name "*hinic3_pmd_ethdev*.o" 2>/dev/null | head -1)
+
+	if [ -z "$obj_file" ]; then
+		echo "警告: 未找到 hinic3_pmd_ethdev.o，跳过符号提升"
+		return
+	fi
+
+	echo "提升 static 符号为全局可见: $obj_file"
+
+	# 保存原始 mtime，objcopy 后恢复，防止 ninja 检测到变化而重新编译
+	local ref_file=$(mktemp)
+	touch -r "$obj_file" "$ref_file"
+
+	objcopy $globalize_args "$obj_file"
+
+	# 恢复原始 mtime
+	touch -r "$ref_file" "$obj_file"
+	rm -f "$ref_file"
+
+	# 删除 .a 归档文件，强制 ninja/make 重新归档（使用已 globalize 的 .o）
+	local pmd_name="hinic3"
+	local tmp_name_file="$SCRIPT_DIR/tmp/pmd_name.txt"
+	[ -f "$tmp_name_file" ] && pmd_name=$(cat "$tmp_name_file")
+
+	rm -f "$build_dir/drivers/libtmp_rte_net_${pmd_name}.a" \
+	      "$build_dir/drivers/librte_net_${pmd_name}.a"
+
+	if [ "$DPDK_MAJOR" -eq 19 ]; then
+		# DPDK 19 Makefile: 库名为 librte_pmd_<name>.a，位于 lib/ 目录
+		rm -f "$build_dir/lib/librte_pmd_${pmd_name}.a"
+	else
+		if [ -f "$build_dir/.ninja_log" ]; then
+			sed -i "/libtmp_rte_net_${pmd_name}\.a$/d; /librte_net_${pmd_name}\.a$/d" \
+				"$build_dir/.ninja_log"
+		fi
+	fi
+
+	# 重新构建以使用修改后的 .o 文件重新归档和链接
+	echo "重新归档和链接..."
+	if [ "$DPDK_MAJOR" -eq 19 ]; then
+		make install T="$build_dir" -j
+	else
+		ninja -C "$build_dir"
+	fi
+}
+
+# 覆盖 build：先编译驱动 .o 提升 static 符号，再完整编译链接
+build() {
+	if [ "$DPDK_MAJOR" -eq 19 ]; then
+		# DPDK 19: Makefile 模式，保持原有逻辑
+		set +e
+		_build_base "$@"
+		set -e
+		globalize_static_symbols "$build_dir"
+		return
+	fi
+
+	# DPDK >= 20: 先只编译 hinic3_pmd_ethdev.c.o，提升 static 符号后再完整编译
+	# 避免首次链接失败产生 FAILED 信息
+
+	# 阶段 1: Meson 配置（临时覆盖 ninja 为 no-op，仅执行 meson setup）
+	# version 检查正常通过，编译命令被跳过
+	ninja() {
+		[ "$1" == "--version" ] && { command ninja "$@"; return; }
+		return 0
+	}
+	# ls 等命令会失败（产物尚未生成），用 set +e 容忍
+	set +e
+	_build_base "$@" > /dev/null 2>&1
+	set -e
+	unset -f ninja
+
+	# 阶段 2: 只编译 hinic3_pmd_ethdev.c.o（不触发链接）
+	local ethdev_target=""
+	ethdev_target=$(grep "^build .*hinic3_pmd_ethdev.*\.o:" "$build_dir/build.ninja" 2>/dev/null | head -1 | sed 's/^build //; s/:.*//')
+
+	if [ -n "$ethdev_target" ]; then
+		echo "编译 $ethdev_target ..."
+		command ninja -C "$build_dir" "$ethdev_target"
+	else
+		echo "未找到 hinic3_pmd_ethdev 目标，执行完整编译..."
+		set +e
+		command ninja -C "$build_dir"
+		set -e
+	fi
+
+	# 阶段 3: 提升 static 符号可见性并完整编译链接
+	globalize_static_symbols "$build_dir"
+
+	# 显示构建产物
+	echo ""
+	ls -lh $build_dir/drivers/librte_net_${pmd_name}.so
+	ls -lh $build_dir/drivers/librte_net_${pmd_name}.a
+	ls -lh $build_dir/app/*testpmd
+	echo ""
+	echo "Use your device's PCI address in place of <BDF> and run:"
+	echo ""
+	echo "$DPDK_PATH/$build_dir/app/dpdk-testpmd -v -a 0000:01:00.0 -l 0-8 -- --nb-cores=8 --rxq=8 --txq=8 -i -a"
 }
 
 # 覆盖 install：在原安装基础上添加测试安装
@@ -134,10 +267,10 @@ register_test_subdir() {
 		echo "添加 test_hinic3 子目录到 meson.build (dpdk_test 定义之前)..."
 		# 插入 subdir 调用，在 dpdk_test 定义前执行 test_hinic3/meson.build
 		# test_hinic3/meson.build 中 ldflags += [...] 会修改共享的 ldflags 变量
+		# 原生 dpdk_test = executable(...) 已有 link_args: ldflags，无需额外插入
 		sed -i "/^dpdk_test = executable/i # hinic3 PMD tests\nhinic3_includes = include_directories('../../drivers/net/hinic3', '../../drivers/net/hinic3/base')\nsubdir('test_hinic3')\n" "$parent_file"
-		# dpdk_test = executable(...) 缺少 include_directories 和 link_args 关键字，一并补充
-		# 使用 ldflags 而非 hinic3_link_args，与 DPDK 23+ 的 link_args: ldflags 保持一致
-		sed -i "/^[[:space:]]*test_sources,$/a\\        include_directories: hinic3_includes,\n        link_args: ldflags," "$parent_file"
+		# 补充 include_directories 关键字（原生 executable 缺少 hinic3 头文件路径）
+		sed -i "/^[[:space:]]*test_sources,$/a\\        include_directories: hinic3_includes," "$parent_file"
 	else
 		echo "添加 test_hinic3 子目录到 meson.build (文件末尾)..."
 		echo "" >> "$parent_file"
@@ -167,6 +300,7 @@ adapt_test_build() {
 
 	# 抑制 mock 函数（__wrap_*）的编译告警
 	echo "cflags += ['-Wno-missing-prototypes']" >> "$test_build_file"
+	echo "cflags += ['-Wno-missing-declarations']" >> "$test_build_file"
 	echo "cflags += ['-Wno-unused-parameter']" >> "$test_build_file"
 }
 
@@ -305,14 +439,21 @@ run_gcov() {
 		build_dir=$([ "$arch" = "aarch64" ] && echo "arm64-armv8a-linuxapp-gcc" || echo "x86_64-native-linux-gcc")
 		rm -rf "$build_dir"
 		make config T="$build_dir"
+		set +e
 		make install T="$build_dir" EXTRA_CFLAGS="-O0 -g --coverage -DRTE_ENABLE_ASSERT -Wno-error" -j
+		set -e
 	else
 		rm -rf "$build_dir"
 		local meson_flags="-Ddisable_drivers=true -Denable_drivers=mempool/ring,net/hns3,net/${pmd_name}"
 		[ "$DPDK_MAJOR" -eq 20 ] && meson_flags="-Ddisable_drivers=net/cnxk,net/mlx4,net/mlx5,common/mlx5,regex/mlx5,vdpa/mlx5,crypto/*"
 		meson "$build_dir" $meson_flags -Dbuildtype=debug -Db_coverage=true -Dwerror=false
+		set +e
 		ninja -C "$build_dir"
+		set -e
 	fi
+
+	# 提升 static 符号可见性并重新链接
+	globalize_static_symbols "$build_dir"
 
 	local lcov_filtered="$gcov_output_dir/coverage_filtered.info"
 

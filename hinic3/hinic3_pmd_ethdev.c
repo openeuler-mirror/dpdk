@@ -320,7 +320,7 @@ static const struct hinic3_xstats_name_off hinic3_txq_stats_strings[] = {
 #define HINIC3_TXQ_XSTATS_NUM (sizeof(hinic3_txq_stats_strings) / \
 		sizeof(hinic3_txq_stats_strings[0]))
 
-HINIC3_STATIC int hinic3_xstats_calc_num(struct hinic3_nic_dev *nic_dev)
+static int hinic3_xstats_calc_num(struct hinic3_nic_dev *nic_dev)
 {
 	if (HINIC3_IS_VF(nic_dev->hwdev)) {
 		return (HINIC3_VPORT_XSTATS_NUM +
@@ -2173,7 +2173,7 @@ static void hinic3_remove_rxtx_configure(struct rte_eth_dev *dev)
 	}
 }
 
-HINIC3_STATIC bool hinic3_find_vlan_filter(struct hinic3_nic_dev *nic_dev,
+static bool hinic3_find_vlan_filter(struct hinic3_nic_dev *nic_dev,
 				    uint16_t vlan_id)
 {
 	u32 vid_idx, vid_bit;
@@ -2184,7 +2184,7 @@ HINIC3_STATIC bool hinic3_find_vlan_filter(struct hinic3_nic_dev *nic_dev,
 	return (nic_dev->vfta[vid_idx] & vid_bit) ? true : false;
 }
 
-HINIC3_STATIC void hinic3_store_vlan_filter(struct hinic3_nic_dev *nic_dev,
+static void hinic3_store_vlan_filter(struct hinic3_nic_dev *nic_dev,
 					u16 vlan_id, bool on)
 {
 	u32 vid_idx, vid_bit;
@@ -4486,7 +4486,7 @@ static int hinic3_fec_capability_get(struct rte_eth_dev *dev,
 
 #endif
 
-HINIC3_STATIC const struct eth_dev_ops hinic3_pmd_ops = {
+static const struct eth_dev_ops hinic3_pmd_ops = {
 	.dev_configure                 = hinic3_dev_configure,
 	.dev_infos_get                 = hinic3_dev_infos_get,
 	.dev_supported_ptypes_get      = hinic3_dev_supported_ptypes_get,
@@ -4565,7 +4565,7 @@ HINIC3_STATIC const struct eth_dev_ops hinic3_pmd_ops = {
 #endif
 };
 
-HINIC3_STATIC const struct eth_dev_ops hinic3_pmd_vf_ops = {
+static const struct eth_dev_ops hinic3_pmd_vf_ops = {
 	.dev_configure                 = hinic3_dev_configure,
 	.dev_infos_get                 = hinic3_dev_infos_get,
 	.dev_supported_ptypes_get      = hinic3_dev_supported_ptypes_get,

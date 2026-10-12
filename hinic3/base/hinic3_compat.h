@@ -5,13 +5,6 @@
 #ifndef _HINIC3_COMPAT_H_
 #define _HINIC3_COMPAT_H_
 
-/* 单元测试时将 static 符号提升为全局可见，便于测试直接引用 */
-#ifdef HINIC3_UT
-#define HINIC3_STATIC
-#else
-#define HINIC3_STATIC static
-#endif
-
 #include <stdint.h>
 #include <stdbool.h>
 #include <sys/time.h>

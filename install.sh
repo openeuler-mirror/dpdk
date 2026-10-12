@@ -237,6 +237,11 @@ config_dpdk_19() {
 		sed -i "/CONFIG_RTE_LIBRTE_HINIC_PMD/a_LDLIBS-\$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += -lrte_pmd_hinic3" \
 			./mk/rte.app.mk
 	fi
+
+	echo "修改 CONFIG_RTE_BUILD_SHARED_LIB 为 y 用于生成动态库"
+	if grep -q "CONFIG_RTE_BUILD_SHARED_LIB=n" "./config/common_base"; then
+		sed -i "s/CONFIG_RTE_BUILD_SHARED_LIB=n/CONFIG_RTE_BUILD_SHARED_LIB=y/g" ./config/common_base
+	fi
 }
 
 # 清理旧的安装文件
@@ -260,14 +265,9 @@ clean_config_files() {
 	
 	for file in "${config_files[@]}"; do
 		if [ -f "$file" ]; then
-			sed -i "/hinic3/d; /wrap=/d" "$file"
+			sed -i "/hinic3/d" "$file"
 		fi
 	done
-
-	# 清理 dpdk_test = executable(...) 中插入的 link_args: ldflags（不含 hinic3 标记，需单独清理）
-	if [ -f "app/test/meson.build" ]; then
-		sed -i "/link_args: ldflags,/d" "app/test/meson.build"
-	fi
 }
 
 # 向DPDK的meson.build添加驱动子目录

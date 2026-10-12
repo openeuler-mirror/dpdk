@@ -137,4 +137,11 @@ bool hinic3_find_vlan_filter(struct hinic3_nic_dev *nic_dev, uint16_t vlan_id);
 void hinic3_store_vlan_filter(struct hinic3_nic_dev *nic_dev, u16 vlan_id,
 			      bool on);
 
+/* TCAM wrap function declarations (defined as __wrap_* in mock.c,
+ * called via --wrap linker redirection) */
+void tcam_translate_key_y_local(u8 *key_y, u8 *src_input, u8 *mask, u8 len);
+void tcam_translate_key_x_local(u8 *key_x, u8 *key_y, u8 *mask, u8 len);
+void tcam_key_calculate_local(struct hinic3_tcam_key *tcam_key,
+			      void *fdir_tcam_rule, u8 key_len);
+
 #endif /* _TEST_HINIC3_MOCK_H_ */
