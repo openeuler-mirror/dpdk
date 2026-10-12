@@ -3,6 +3,9 @@
  * Unit tests for hinic3_pmd_rx.c - testing through public interfaces
  */
 
+/* Match driver's endianness convention (driver meson.build defines HW_CONVERT_ENDIAN) */
+#define HW_CONVERT_ENDIAN
+
 #include <rte_common.h>
 #include <rte_ethdev.h>
 #ifdef DPDK_21_11
@@ -22,6 +25,7 @@
 #include "hinic3_pmd_nic_io.h"
 #include "hinic3_pmd_ethdev.h"
 #include "hinic3_pmd_rx.h"
+#include "test_hinic3_mock.h"
 
 #define TEST_RXQ_DEPTH 64
 #define TEST_RXQ_MASK  (TEST_RXQ_DEPTH - 1)
@@ -44,12 +48,41 @@
 	((((vlan_tag) & RQ_CQE_SGE_VLAN_MASK) << RQ_CQE_SGE_VLAN_SHIFT) | \
 	(((pkt_len) & RQ_CQE_SGE_LEN_MASK) << RQ_CQE_SGE_LEN_SHIFT))
 
+
+/* Build compact CQE dw0 (status) for integrated CQE */
+#define MAKE_COMPACT_CQE_DW0(rxdone, cqe_type, vlan_en, \
+			     pkt_fmt, ip_type, cqe_len, csum_err, \
+			     pkt_type, pkt_len) \
+	((((rxdone) & 1U) << RQ_COMPACT_CQE_STATUS_RXDONE_SHIFT) | \
+	 (((cqe_type) & 1U) << RQ_COMPACT_CQE_STATUS_CQE_TYPE_SHIFT) | \
+	 (((vlan_en) & 1U) << RQ_COMPACT_CQE_STATUS_VLAN_EN_SHIFT) | \
+	 (((pkt_fmt) & RQ_COMPACT_CQE_STATUS_PKT_FORMAT_MASK) << RQ_COMPACT_CQE_STATUS_PKT_FORMAT_SHIFT) | \
+	 (((ip_type) & 1U) << RQ_COMPACT_CQE_STATUS_IP_TYPE_SHIFT) | \
+	 (((cqe_len) & 1U) << RQ_COMPACT_CQE_STATUS_CQE_LEN_SHIFT) | \
+	 (((csum_err) & RQ_COMPACT_CQE_STATUS_CSUM_ERR_MASK) << RQ_COMPACT_CQE_STATUS_CSUM_ERR_SHIFT) | \
+	 (((pkt_type) & RQ_COMPACT_CQE_STATUS_PKT_TYPE_MASK) << RQ_COMPACT_CQE_STATUS_PKT_TYPE_SHIFT) | \
+	 ((pkt_len) & RQ_COMPACT_CQE_STATUS_PKT_LEN_MASK))
+
+/* Build compact CQE dw2 (offload) with vlan tag and lro num */
+#define MAKE_COMPACT_CQE_DW2(lro_num, vlan_tag) \
+	((((lro_num) & RQ_COMPACT_CQE_OFFLOAD_NUM_LRO_MASK) << RQ_COMPACT_CQE_OFFLOAD_NUM_LRO_SHIFT) | \
+	 (((vlan_tag) & RQ_COMPACT_CQE_OFFLOAD_VLAN_MASK) << RQ_COMPACT_CQE_OFFLOAD_VLAN_SHIFT))
+
 static struct rte_mempool *g_mp;
 static struct hinic3_nic_dev *g_nic_dev;
 static struct hinic3_rxq *g_rxq;
 static struct hinic3_rx_info *g_rx_info;
 static struct hinic3_rq_cqe *g_rx_cqe;
 static int g_orig_log_level;
+
+/* Globals for compact CQE tests */
+static struct hinic3_rq_ci_wb *g_rq_ci;
+
+/* Globals for free_all_rxq_mbufs test */
+static struct hinic3_rxq *g_rxq2;
+static struct hinic3_rx_info *g_rx_info2;
+static struct hinic3_rq_cqe *g_rx_cqe2;
+static struct hinic3_rxq **g_rxqs_arr;
 
 static int
 rx_suite_setup(void)
@@ -666,6 +699,678 @@ test_add_remove_add_cycle(void)
     return TEST_SUCCESS;
 }
 
+/* ================================================================
+ * Section A: Additional hinic3_recv_pkts scenarios
+ * ================================================================ */
+
+/* ====== hinic3_recv_pkts: UDP checksum error ====== */
+
+static int
+test_recv_pkts_udp_csum_error(void)
+{
+    struct rte_mbuf *rx_pkts[TEST_PKT_NUM];
+    u32 status, vlan_len, offload_type;
+    u16 count;
+
+    g_rxq->cons_idx = 0;
+    g_rxq->rxq_stats.empty = 0;
+
+    status = MAKE_CQE_STATUS(HINIC3_RX_CSUM_UDP_CSUM_ERR, 0, 1);
+    vlan_len = MAKE_CQE_VLAN_LEN(64, 0);
+    offload_type = MAKE_CQE_OFFLOAD(
+        (IPSU_METADATA_FMT_NO_ENC << RQ_CQE_OFFOLAD_TYPE_PKT_FORMAT_SHIFT) |
+        (IPSU_METADATA_L3_TP_IPV4 << RQ_CQE_OFFOLAD_TYPE_IP_TYPE_SHIFT) |
+        (IPSU_PKT_TYPE_UDP << RQ_CQE_OFFOLAD_TYPE_PKT_TYPE_SHIFT),
+        0, 0);
+
+    fill_cqe_slot(0, status, vlan_len, offload_type, 0);
+
+    count = hinic3_recv_pkts(g_rxq, rx_pkts, 1);
+
+    RTE_TEST_ASSERT_EQUAL(count, 1, "should receive packet even with csum error");
+    RTE_TEST_ASSERT((rx_pkts[0]->ol_flags & HINIC3_PKT_RX_L4_CKSUM_BAD) != 0,
+                    "should have L4_CKSUM_BAD for UDP csum error");
+
+    g_rx_cqe[0].status = 0;
+    return TEST_SUCCESS;
+}
+
+/* ====== hinic3_recv_pkts: SCTP checksum error ====== */
+
+static int
+test_recv_pkts_sctp_csum_error(void)
+{
+    struct rte_mbuf *rx_pkts[TEST_PKT_NUM];
+    u32 status, vlan_len, offload_type;
+    u16 count;
+
+    g_rxq->cons_idx = 0;
+    g_rxq->rxq_stats.empty = 0;
+
+    status = MAKE_CQE_STATUS(HINIC3_RX_CSUM_SCTP_CRC_ERR, 0, 1);
+    vlan_len = MAKE_CQE_VLAN_LEN(64, 0);
+    offload_type = MAKE_CQE_OFFLOAD(
+        (IPSU_METADATA_FMT_NO_ENC << RQ_CQE_OFFOLAD_TYPE_PKT_FORMAT_SHIFT) |
+        (IPSU_METADATA_L3_TP_IPV4 << RQ_CQE_OFFOLAD_TYPE_IP_TYPE_SHIFT) |
+        (IPSU_PKT_TYPE_SCTP << RQ_CQE_OFFOLAD_TYPE_PKT_TYPE_SHIFT),
+        0, 0);
+
+    fill_cqe_slot(0, status, vlan_len, offload_type, 0);
+
+    count = hinic3_recv_pkts(g_rxq, rx_pkts, 1);
+
+    RTE_TEST_ASSERT_EQUAL(count, 1, "should receive packet even with csum error");
+    RTE_TEST_ASSERT((rx_pkts[0]->ol_flags & HINIC3_PKT_RX_L4_CKSUM_BAD) != 0,
+                    "should have L4_CKSUM_BAD for SCTP csum error");
+
+    g_rx_cqe[0].status = 0;
+    return TEST_SUCCESS;
+}
+
+/* ====== hinic3_recv_pkts: no RSS ====== */
+
+static int
+test_recv_pkts_no_rss(void)
+{
+    struct rte_mbuf *rx_pkts[TEST_PKT_NUM];
+    u32 status, vlan_len, offload_type;
+    u16 count;
+
+    g_rxq->cons_idx = 0;
+    g_rxq->rxq_stats.empty = 0;
+
+    status = MAKE_CQE_STATUS(0, 0, 1);
+    vlan_len = MAKE_CQE_VLAN_LEN(64, 0);
+    offload_type = MAKE_CQE_OFFLOAD(
+        (IPSU_METADATA_FMT_NO_ENC << RQ_CQE_OFFOLAD_TYPE_PKT_FORMAT_SHIFT) |
+        (IPSU_METADATA_L3_TP_IPV4 << RQ_CQE_OFFOLAD_TYPE_IP_TYPE_SHIFT) |
+        (IPSU_PKT_TYPE_TCP << RQ_CQE_OFFOLAD_TYPE_PKT_TYPE_SHIFT),
+        0, 0);
+
+    fill_cqe_slot(0, status, vlan_len, offload_type, 0);
+
+    count = hinic3_recv_pkts(g_rxq, rx_pkts, 1);
+
+    RTE_TEST_ASSERT_EQUAL(count, 1, "should receive 1 packet");
+    RTE_TEST_ASSERT((rx_pkts[0]->ol_flags & HINIC3_PKT_RX_RSS_HASH) == 0,
+                    "should NOT have RSS_HASH flag when rss_type=0");
+
+    g_rx_cqe[0].status = 0;
+    return TEST_SUCCESS;
+}
+
+/* ====== hinic3_recv_pkts: checksum disabled ====== */
+
+static int
+test_recv_pkts_csum_disabled(void)
+{
+    struct rte_mbuf *rx_pkts[TEST_PKT_NUM];
+    u32 status, vlan_len, offload_type;
+    u16 count;
+
+    g_rxq->cons_idx = 0;
+    g_rxq->rxq_stats.empty = 0;
+    g_nic_dev->rx_csum_en = 0;
+
+    status = MAKE_CQE_STATUS(0, 0, 1);
+    vlan_len = MAKE_CQE_VLAN_LEN(64, 0);
+    offload_type = MAKE_CQE_OFFLOAD(
+        (IPSU_METADATA_FMT_NO_ENC << RQ_CQE_OFFOLAD_TYPE_PKT_FORMAT_SHIFT) |
+        (IPSU_METADATA_L3_TP_IPV4 << RQ_CQE_OFFOLAD_TYPE_IP_TYPE_SHIFT) |
+        (IPSU_PKT_TYPE_TCP << RQ_CQE_OFFOLAD_TYPE_PKT_TYPE_SHIFT),
+        0, 0);
+
+    fill_cqe_slot(0, status, vlan_len, offload_type, 0);
+
+    count = hinic3_recv_pkts(g_rxq, rx_pkts, 1);
+
+    RTE_TEST_ASSERT_EQUAL(count, 1, "should receive 1 packet");
+    RTE_TEST_ASSERT((rx_pkts[0]->ol_flags & (HINIC3_PKT_RX_IP_CKSUM_BAD |
+                                             HINIC3_PKT_RX_IP_CKSUM_GOOD)) == 0,
+                    "should have IP_CKSUM_UNKNOWN when csum disabled");
+
+    g_rx_cqe[0].status = 0;
+    return TEST_SUCCESS;
+}
+
+/* ====== hinic3_recv_pkts: VXLAN tunnel ptype ====== */
+
+static int
+test_recv_pkts_tunnel_vxlan(void)
+{
+    struct rte_mbuf *rx_pkts[TEST_PKT_NUM];
+    u32 status, vlan_len, offload_type;
+    u16 count;
+
+    g_rxq->cons_idx = 0;
+    g_rxq->rxq_stats.empty = 0;
+
+    status = MAKE_CQE_STATUS(0, 0, 1);
+    vlan_len = MAKE_CQE_VLAN_LEN(64, 0);
+    offload_type = MAKE_CQE_OFFLOAD(
+        (IPSU_METADATA_FMT_VXLAN << RQ_CQE_OFFOLAD_TYPE_PKT_FORMAT_SHIFT) |
+        (IPSU_METADATA_L3_TP_IPV4 << RQ_CQE_OFFOLAD_TYPE_ENC_L3_TYPE_SHIFT) |
+        (IPSU_METADATA_L3_TP_IPV4 << RQ_CQE_OFFOLAD_TYPE_IP_TYPE_SHIFT) |
+        (IPSU_PKT_TYPE_TCP << RQ_CQE_OFFOLAD_TYPE_PKT_TYPE_SHIFT),
+        0, 0);
+
+    fill_cqe_slot(0, status, vlan_len, offload_type, 0);
+
+    count = hinic3_recv_pkts(g_rxq, rx_pkts, 1);
+
+    RTE_TEST_ASSERT_EQUAL(count, 1, "should receive 1 packet");
+    RTE_TEST_ASSERT((rx_pkts[0]->packet_type & RTE_PTYPE_TUNNEL_VXLAN) != 0,
+                    "should have TUNNEL_VXLAN ptype");
+    RTE_TEST_ASSERT((rx_pkts[0]->packet_type & RTE_PTYPE_L2_ETHER) != 0,
+                    "should have L2_ETHER ptype");
+    RTE_TEST_ASSERT((rx_pkts[0]->packet_type & RTE_PTYPE_L4_UDP) != 0,
+                    "should have L4_UDP (outer) ptype for VXLAN");
+
+    g_rx_cqe[0].status = 0;
+    return TEST_SUCCESS;
+}
+
+/* ====== hinic3_recv_pkts: jumbo frame (scattered) ====== */
+
+static int
+test_recv_pkts_jumbo(void)
+{
+    struct rte_mbuf *rx_pkts[TEST_PKT_NUM];
+    u32 status, vlan_len, offload_type;
+    u16 count;
+
+    g_rxq->cons_idx = 0;
+    g_rxq->rxq_stats.empty = 0;
+    g_rxq->is_scattered_rx = 1;
+    rte_eth_devices[0].data->scattered_rx = 1;
+
+    status = MAKE_CQE_STATUS(0, 0, 1);
+    vlan_len = MAKE_CQE_VLAN_LEN(3000, 0);
+    offload_type = MAKE_CQE_OFFLOAD(
+        (IPSU_METADATA_FMT_NO_ENC << RQ_CQE_OFFOLAD_TYPE_PKT_FORMAT_SHIFT) |
+        (IPSU_METADATA_L3_TP_IPV4 << RQ_CQE_OFFOLAD_TYPE_IP_TYPE_SHIFT) |
+        (IPSU_PKT_TYPE_TCP << RQ_CQE_OFFOLAD_TYPE_PKT_TYPE_SHIFT),
+        0, 0);
+
+    fill_cqe_slot(0, status, vlan_len, offload_type, 0);
+
+    count = hinic3_recv_pkts(g_rxq, rx_pkts, TEST_PKT_NUM);
+
+    RTE_TEST_ASSERT_EQUAL(count, 1, "should receive 1 jumbo packet");
+    RTE_TEST_ASSERT_EQUAL(rx_pkts[0]->pkt_len, 3000, "pkt_len should be 3000");
+    RTE_TEST_ASSERT_EQUAL(rx_pkts[0]->data_len, 2048,
+                          "first seg data_len should be buf_len");
+    RTE_TEST_ASSERT_EQUAL(rx_pkts[0]->nb_segs, 2,
+                          "should have 2 segments");
+    RTE_TEST_ASSERT(rx_pkts[0]->next != NULL, "should have next segment");
+    RTE_TEST_ASSERT_EQUAL(rx_pkts[0]->next->data_len, 952,
+                          "second seg data_len should be 3000-2048=952");
+
+    rte_pktmbuf_free(rx_pkts[0]);
+    g_rx_info[0].mbuf = NULL;
+    g_rx_info[1].mbuf = NULL;
+    g_rx_cqe[0].status = 0;
+
+    return TEST_SUCCESS;
+}
+
+
+/* ================================================================
+ * Section B: hinic3_free_rxq_mbufs
+ * ================================================================ */
+
+static int
+test_free_rxq_mbufs_all(void)
+{
+    int i;
+
+    hinic3_free_rxq_mbufs(g_rxq);
+
+    for (i = 0; i < TEST_RXQ_DEPTH - 1; i++) {
+        RTE_TEST_ASSERT_EQUAL(g_rx_info[i].mbuf, NULL,
+                              "slot %d mbuf should be NULL after free", i);
+    }
+    RTE_TEST_ASSERT(g_rx_info[TEST_RXQ_DEPTH - 1].mbuf != NULL,
+                    "last slot mbuf should still exist");
+
+    return TEST_SUCCESS;
+}
+
+static int
+test_free_rxq_mbufs_empty(void)
+{
+    int i;
+
+    g_rxq->delta = TEST_RXQ_DEPTH;
+
+    hinic3_free_rxq_mbufs(g_rxq);
+
+    for (i = 0; i < TEST_RXQ_DEPTH; i++) {
+        RTE_TEST_ASSERT(g_rx_info[i].mbuf != NULL,
+                        "slot %d mbuf should still exist", i);
+    }
+
+    return TEST_SUCCESS;
+}
+
+/* ================================================================
+ * Section C: hinic3_free_all_rxq_mbufs
+ * ================================================================ */
+
+static int
+rx_free_all_setup(void)
+{
+    int i;
+
+    if (rx_recv_setup() != TEST_SUCCESS)
+        return TEST_FAILED;
+
+    g_rx_info2 = rte_zmalloc("test_rx_info2",
+                              TEST_RXQ_DEPTH * sizeof(*g_rx_info2), 0);
+    if (!g_rx_info2)
+        return TEST_FAILED;
+    for (i = 0; i < TEST_RXQ_DEPTH; i++) {
+        g_rx_info2[i].mbuf = rte_pktmbuf_alloc(g_mp);
+        if (!g_rx_info2[i].mbuf)
+            return TEST_FAILED;
+    }
+
+    g_rx_cqe2 = rte_zmalloc_socket("test_rx_cqe2",
+                                     TEST_RXQ_DEPTH * sizeof(*g_rx_cqe2),
+                                     RTE_CACHE_LINE_SIZE, SOCKET_ID_ANY);
+    if (!g_rx_cqe2)
+        return TEST_FAILED;
+    for (i = 0; i < TEST_RXQ_DEPTH; i++)
+        g_rx_cqe2[i].status = 0;
+
+    g_rxq2 = rte_zmalloc("test_rxq2", sizeof(*g_rxq2), 0);
+    if (!g_rxq2)
+        return TEST_FAILED;
+
+    g_rxq2->nic_dev = g_nic_dev;
+    g_rxq2->rx_info = g_rx_info2;
+    g_rxq2->rx_cqe = g_rx_cqe2;
+    g_rxq2->mb_pool = g_mp;
+    g_rxq2->port_id = 0;
+    g_rxq2->q_id = 1;
+    g_rxq2->local_qid = 1;
+    g_rxq2->q_depth = TEST_RXQ_DEPTH;
+    g_rxq2->q_mask = TEST_RXQ_MASK;
+    g_rxq2->buf_len = 2048;
+    g_rxq2->cons_idx = 0;
+    g_rxq2->prod_idx = TEST_RXQ_DEPTH;
+    g_rxq2->delta = 1;
+    g_rxq2->rx_free_thresh = 32;
+    g_rxq2->wqe_type = HINIC3_EXTEND_RQ_WQE;
+    g_rxq2->is_scattered_rx = 0;
+    g_rxq2->is_hairpin = false;
+
+    g_rxqs_arr = rte_zmalloc("test_rxqs", 2 * sizeof(*g_rxqs_arr), 0);
+    if (!g_rxqs_arr)
+        return TEST_FAILED;
+    g_rxqs_arr[0] = g_rxq;
+    g_rxqs_arr[1] = g_rxq2;
+    g_nic_dev->rxqs = g_rxqs_arr;
+    g_nic_dev->num_rqs = 2;
+
+    return TEST_SUCCESS;
+}
+
+static void
+rx_free_all_teardown(void)
+{
+    int i;
+
+    if (g_rx_info2) {
+        for (i = 0; i < TEST_RXQ_DEPTH; i++) {
+            if (g_rx_info2[i].mbuf)
+                rte_pktmbuf_free(g_rx_info2[i].mbuf);
+        }
+        rte_free(g_rx_info2);
+    }
+    if (g_rx_cqe2)
+        rte_free(g_rx_cqe2);
+    if (g_rxq2)
+        rte_free(g_rxq2);
+    if (g_rxqs_arr)
+        rte_free(g_rxqs_arr);
+
+    g_rx_info2 = NULL;
+    g_rx_cqe2 = NULL;
+    g_rxq2 = NULL;
+    g_rxqs_arr = NULL;
+
+    if (g_nic_dev) {
+        g_nic_dev->rxqs = NULL;
+        g_nic_dev->num_rqs = 0;
+    }
+
+    rx_recv_teardown();
+}
+
+static int
+test_free_all_rxq_mbufs(void)
+{
+    int i;
+
+    RTE_TEST_ASSERT_EQUAL(g_nic_dev->num_rqs, 2, "should have 2 queues");
+
+    hinic3_free_all_rxq_mbufs(g_nic_dev);
+
+    for (i = 0; i < TEST_RXQ_DEPTH - 1; i++) {
+        RTE_TEST_ASSERT_EQUAL(g_rx_info[i].mbuf, NULL,
+                              "queue 0 slot %d mbuf should be NULL", i);
+    }
+    RTE_TEST_ASSERT(g_rx_info[TEST_RXQ_DEPTH - 1].mbuf != NULL,
+                    "queue 0 last slot mbuf should still exist");
+
+    for (i = 0; i < TEST_RXQ_DEPTH - 1; i++) {
+        RTE_TEST_ASSERT_EQUAL(g_rx_info2[i].mbuf, NULL,
+                              "queue 1 slot %d mbuf should be NULL", i);
+    }
+    RTE_TEST_ASSERT(g_rx_info2[TEST_RXQ_DEPTH - 1].mbuf != NULL,
+                    "queue 1 last slot mbuf should still exist");
+
+    return TEST_SUCCESS;
+}
+
+/* ================================================================
+ * Section D: hinic3_refill_indir_rqid
+ * ================================================================ */
+
+static int
+test_refill_indir_normal(void)
+{
+    int ret;
+
+    g_nic_dev->hwdev = (struct hinic3_hwdev *)g_nic_dev;
+    g_nic_dev->num_rss = 2;
+    g_nic_dev->rx_queue_list[0] = 0;
+    g_nic_dev->rx_queue_list[1] = 1;
+    g_qinfo_type = HINIC3_QINFO_TYPE_NORMAL;
+    g_mock_rss_set_indir_tbl_ret = 0;
+
+    ret = hinic3_refill_indir_rqid(g_rxq);
+
+    RTE_TEST_ASSERT_EQUAL(ret, 0, "refill_indir should succeed in normal mode");
+
+    g_qinfo_type = HINIC3_QINFO_TYPE_NORMAL;
+    return TEST_SUCCESS;
+}
+
+static int
+test_refill_indir_qpool(void)
+{
+    int ret;
+
+    g_nic_dev->hwdev = (struct hinic3_hwdev *)g_nic_dev;
+    g_nic_dev->num_rss = 2;
+    g_nic_dev->rx_queue_list[0] = 0;
+    g_nic_dev->rx_queue_list[1] = 1;
+    g_qinfo_type = HINIC3_QINFO_TYPE_QPOOL;
+    g_mock_rss_set_indir_tbl_qpool_ret = 0;
+
+    ret = hinic3_refill_indir_rqid(g_rxq);
+
+    RTE_TEST_ASSERT_EQUAL(ret, 0, "refill_indir should succeed in QPOOL mode");
+
+    g_qinfo_type = HINIC3_QINFO_TYPE_NORMAL;
+    return TEST_SUCCESS;
+}
+
+static int
+test_refill_indir_fail(void)
+{
+    int ret;
+
+    g_nic_dev->hwdev = (struct hinic3_hwdev *)g_nic_dev;
+    g_nic_dev->num_rss = 2;
+    g_nic_dev->rx_queue_list[0] = 0;
+    g_nic_dev->rx_queue_list[1] = 1;
+    g_qinfo_type = HINIC3_QINFO_TYPE_NORMAL;
+    g_mock_rss_set_indir_tbl_ret = -1;
+
+    ret = hinic3_refill_indir_rqid(g_rxq);
+
+    RTE_TEST_ASSERT(ret != 0, "refill_indir should propagate error");
+
+    g_mock_rss_set_indir_tbl_ret = 0;
+    return TEST_SUCCESS;
+}
+
+static int
+test_refill_indir_empty(void)
+{
+    int ret;
+
+    g_nic_dev->hwdev = (struct hinic3_hwdev *)g_nic_dev;
+    g_nic_dev->num_rss = 0;
+    g_qinfo_type = HINIC3_QINFO_TYPE_NORMAL;
+    g_mock_rss_set_indir_tbl_ret = 0;
+
+    ret = hinic3_refill_indir_rqid(g_rxq);
+
+    RTE_TEST_ASSERT_EQUAL(ret, 0, "refill_indir should succeed with empty list");
+
+    return TEST_SUCCESS;
+}
+
+
+/* ================================================================
+ * Section E: hinic3_recv_pkts_compact_cqe
+ * ================================================================ */
+
+static int
+rx_compact_setup(void)
+{
+    int ret = rx_recv_setup();
+    if (ret != TEST_SUCCESS)
+        return ret;
+
+    if (g_nic_dev->ptype_tbl) {
+        rte_free(g_nic_dev->ptype_tbl);
+        g_nic_dev->ptype_tbl = NULL;
+    }
+    g_nic_dev->feature_cap = NIC_F_TX_WQE_COMPACT_TASK |
+                             NIC_F_RX_HW_COMPACT_CQE;
+    if (hinic3_init_rx_ptype_table(&rte_eth_devices[0]) != 0)
+        return TEST_FAILED;
+
+    g_rxq->wqe_type = HINIC3_COMPACT_RQ_WQE;
+
+    g_rq_ci = rte_zmalloc_socket("test_rq_ci", sizeof(*g_rq_ci),
+                                  RTE_CACHE_LINE_SIZE, SOCKET_ID_ANY);
+    if (!g_rq_ci)
+        return TEST_FAILED;
+    g_rxq->rq_ci = g_rq_ci;
+    g_rxq->hw_cons_idx = 0;
+    g_rxq->prefetch_flag = false;
+
+    return TEST_SUCCESS;
+}
+
+static void
+rx_compact_teardown(void)
+{
+    if (g_rq_ci) {
+        rte_free(g_rq_ci);
+        g_rq_ci = NULL;
+    }
+    rx_recv_teardown();
+}
+
+static void
+fill_compact_cqe(struct rte_mbuf *mbuf, u32 dw0, u32 dw1, u32 dw2)
+{
+    volatile struct hinic3_rq_cqe *cqe =
+        (volatile struct hinic3_rq_cqe *)
+        ((char *)mbuf->buf_addr + RTE_PKTMBUF_HEADROOM);
+
+    cqe->status = cpu_to_be32(dw0);
+    cqe->vlan_len = cpu_to_be32(dw1);
+    cqe->offload_type = cpu_to_be32(dw2);
+    cqe->hash_val = 0;
+    cqe->mark_id_0 = 0;
+    cqe->mark_id_1 = 0;
+    cqe->mark_id_2 = 0;
+    cqe->pkt_info = 0;
+}
+
+static void
+set_hw_ci(u16 hw_ci)
+{
+    struct hinic3_rq_ci_wb ci;
+
+    ci.dw1.bs.cqe_num = 0;
+    ci.dw1.bs.hw_ci = hw_ci;
+    g_rxq->rq_ci->dw1.value = hinic3_hw_be32(ci.dw1.value);
+}
+
+static int
+test_recv_compact_empty(void)
+{
+    struct rte_mbuf *rx_pkts[TEST_PKT_NUM];
+    u16 count;
+
+    g_rxq->cons_idx = 0;
+    g_rxq->hw_cons_idx = 0;
+    g_rxq->prefetch_flag = false;
+    g_rxq->rxq_stats.empty = 0;
+
+    set_hw_ci(0);
+
+    count = hinic3_recv_pkts_compact_cqe(g_rxq, rx_pkts, TEST_PKT_NUM);
+
+    RTE_TEST_ASSERT_EQUAL(count, 0, "empty compact queue should return 0 pkts");
+    return TEST_SUCCESS;
+}
+
+static int
+test_recv_compact_single_pkt(void)
+{
+    struct rte_mbuf *rx_pkts[TEST_PKT_NUM];
+    u32 dw0, dw2;
+    u16 count;
+
+    g_rxq->cons_idx = 0;
+    g_rxq->hw_cons_idx = 0;
+    g_rxq->prefetch_flag = false;
+    g_rxq->rxq_stats.empty = 0;
+    g_rxq->delta = 1;
+
+    dw0 = MAKE_COMPACT_CQE_DW0(
+        1,
+        HINIC3_RQ_CQE_INTEGRATE,
+        0,
+        IPSU_METADATA_FMT_NO_ENC,
+        IPSU_METADATA_L3_TP_IPV4,
+        HINIC3_RQ_COMPACT_CQE_16BYTE,
+        HINIC3_RX_COMPACT_CSUM_NO_ERROR,
+        IPSU_PKT_TYPE_TCP,
+        128);
+    dw2 = MAKE_COMPACT_CQE_DW2(0, 0);
+
+    fill_compact_cqe(g_rx_info[0].mbuf, dw0, 0, dw2);
+    set_hw_ci(1);
+
+    count = hinic3_recv_pkts_compact_cqe(g_rxq, rx_pkts, TEST_PKT_NUM);
+
+    RTE_TEST_ASSERT_EQUAL(count, 1, "should receive 1 packet");
+    RTE_TEST_ASSERT_EQUAL(rx_pkts[0]->pkt_len, 128, "pkt_len should be 128");
+    RTE_TEST_ASSERT_EQUAL(rx_pkts[0]->data_len, 128, "data_len should be 128");
+    RTE_TEST_ASSERT_EQUAL(rx_pkts[0]->port, 0, "port should be 0");
+
+    RTE_TEST_ASSERT((rx_pkts[0]->ol_flags & HINIC3_PKT_RX_IP_CKSUM_GOOD) != 0,
+                    "should have IP_CKSUM_GOOD");
+    RTE_TEST_ASSERT((rx_pkts[0]->ol_flags & HINIC3_PKT_RX_L4_CKSUM_GOOD) != 0,
+                    "should have L4_CKSUM_GOOD");
+
+    RTE_TEST_ASSERT((rx_pkts[0]->packet_type & RTE_PTYPE_L3_IPV4_EXT_UNKNOWN) != 0,
+                    "should have L3_IPV4");
+    RTE_TEST_ASSERT((rx_pkts[0]->packet_type & RTE_PTYPE_L4_TCP) != 0,
+                    "should have L4_TCP");
+
+    return TEST_SUCCESS;
+}
+
+static int
+test_recv_compact_csum_error(void)
+{
+    struct rte_mbuf *rx_pkts[TEST_PKT_NUM];
+    u32 dw0, dw2;
+    u16 count;
+
+    g_rxq->cons_idx = 0;
+    g_rxq->hw_cons_idx = 0;
+    g_rxq->prefetch_flag = false;
+    g_rxq->rxq_stats.empty = 0;
+    g_rxq->delta = 1;
+
+    dw0 = MAKE_COMPACT_CQE_DW0(
+        1,
+        HINIC3_RQ_CQE_INTEGRATE,
+        0,
+        IPSU_METADATA_FMT_NO_ENC,
+        IPSU_METADATA_L3_TP_IPV4,
+        HINIC3_RQ_COMPACT_CQE_16BYTE,
+        HINIC3_RX_COMPACT_L3_L4_CSUM_ERROR,
+        IPSU_PKT_TYPE_TCP,
+        64);
+    dw2 = MAKE_COMPACT_CQE_DW2(0, 0);
+
+    fill_compact_cqe(g_rx_info[0].mbuf, dw0, 0, dw2);
+    set_hw_ci(1);
+
+    count = hinic3_recv_pkts_compact_cqe(g_rxq, rx_pkts, TEST_PKT_NUM);
+
+    RTE_TEST_ASSERT_EQUAL(count, 1, "should receive packet even with csum error");
+    RTE_TEST_ASSERT((rx_pkts[0]->ol_flags & HINIC3_PKT_RX_IP_CKSUM_BAD) != 0,
+                    "should have IP_CKSUM_BAD for compact csum error");
+
+    return TEST_SUCCESS;
+}
+
+static int
+test_recv_compact_vlan(void)
+{
+    struct rte_mbuf *rx_pkts[TEST_PKT_NUM];
+    u32 dw0, dw2;
+    u16 count;
+
+    g_rxq->cons_idx = 0;
+    g_rxq->hw_cons_idx = 0;
+    g_rxq->prefetch_flag = false;
+    g_rxq->rxq_stats.empty = 0;
+    g_rxq->delta = 1;
+
+    dw0 = MAKE_COMPACT_CQE_DW0(
+        1,
+        HINIC3_RQ_CQE_INTEGRATE,
+        1,
+        IPSU_METADATA_FMT_NO_ENC,
+        IPSU_METADATA_L3_TP_IPV4,
+        HINIC3_RQ_COMPACT_CQE_16BYTE,
+        HINIC3_RX_COMPACT_CSUM_NO_ERROR,
+        IPSU_PKT_TYPE_TCP,
+        64);
+    dw2 = MAKE_COMPACT_CQE_DW2(0, 200);
+
+    fill_compact_cqe(g_rx_info[0].mbuf, dw0, 0, dw2);
+    set_hw_ci(1);
+
+    count = hinic3_recv_pkts_compact_cqe(g_rxq, rx_pkts, TEST_PKT_NUM);
+
+    RTE_TEST_ASSERT_EQUAL(count, 1, "should receive 1 packet");
+    RTE_TEST_ASSERT_EQUAL(rx_pkts[0]->vlan_tci, 200, "vlan_tci should be 200");
+    RTE_TEST_ASSERT((rx_pkts[0]->ol_flags & HINIC3_PKT_RX_VLAN) != 0,
+                    "should have RX_VLAN flag");
+    RTE_TEST_ASSERT((rx_pkts[0]->ol_flags & HINIC3_PKT_RX_VLAN_STRIPPED) != 0,
+                    "should have RX_VLAN_STRIPPED flag");
+
+    return TEST_SUCCESS;
+}
+
+
 static struct unit_test_suite hinic3_rx_test_suite = {
     .suite_name = "HINIC3 RX Unit Tests",
     .setup = rx_suite_setup,
@@ -693,6 +1398,34 @@ static struct unit_test_suite hinic3_rx_test_suite = {
         TEST_CASE(test_remove_rq_from_rx_queue_list),
         TEST_CASE(test_remove_rq_not_in_list),
         TEST_CASE(test_add_remove_add_cycle),
+
+        /* Section A: Additional hinic3_recv_pkts scenarios */
+        TEST_CASE_ST(rx_recv_setup, rx_recv_teardown, test_recv_pkts_udp_csum_error),
+        TEST_CASE_ST(rx_recv_setup, rx_recv_teardown, test_recv_pkts_sctp_csum_error),
+        TEST_CASE_ST(rx_recv_setup, rx_recv_teardown, test_recv_pkts_no_rss),
+        TEST_CASE_ST(rx_recv_setup, rx_recv_teardown, test_recv_pkts_csum_disabled),
+        TEST_CASE_ST(rx_recv_setup, rx_recv_teardown, test_recv_pkts_tunnel_vxlan),
+        TEST_CASE_ST(rx_recv_setup, rx_recv_teardown, test_recv_pkts_jumbo),
+
+        /* Section B: hinic3_free_rxq_mbufs */
+        TEST_CASE_ST(rx_recv_setup, rx_recv_teardown, test_free_rxq_mbufs_all),
+        TEST_CASE_ST(rx_recv_setup, rx_recv_teardown, test_free_rxq_mbufs_empty),
+
+        /* Section C: hinic3_free_all_rxq_mbufs */
+        TEST_CASE_ST(rx_free_all_setup, rx_free_all_teardown, test_free_all_rxq_mbufs),
+
+        /* Section D: hinic3_refill_indir_rqid */
+        TEST_CASE_ST(rx_recv_setup, rx_recv_teardown, test_refill_indir_normal),
+        TEST_CASE_ST(rx_recv_setup, rx_recv_teardown, test_refill_indir_qpool),
+        TEST_CASE_ST(rx_recv_setup, rx_recv_teardown, test_refill_indir_fail),
+        TEST_CASE_ST(rx_recv_setup, rx_recv_teardown, test_refill_indir_empty),
+
+        /* Section E: hinic3_recv_pkts_compact_cqe */
+        TEST_CASE_ST(rx_compact_setup, rx_compact_teardown, test_recv_compact_empty),
+        TEST_CASE_ST(rx_compact_setup, rx_compact_teardown, test_recv_compact_single_pkt),
+        TEST_CASE_ST(rx_compact_setup, rx_compact_teardown, test_recv_compact_csum_error),
+        TEST_CASE_ST(rx_compact_setup, rx_compact_teardown, test_recv_compact_vlan),
+
 
         TEST_CASES_END()
     }

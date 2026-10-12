@@ -436,10 +436,12 @@ int hinic3_set_vport_enable(void *hwdev, bool enable)
 	struct hinic3_vport_state en_state;
 	u16 out_size = sizeof(en_state);
 	int err;
-	struct hinic3_nic_dev *nic_dev = (struct hinic3_nic_dev*)((struct hinic3_hwdev *)hwdev)->dev_handle;
 
 	if (!hwdev)
 		return -EINVAL;
+
+	struct hinic3_nic_dev *nic_dev = (struct hinic3_nic_dev *)
+		((struct hinic3_hwdev *)hwdev)->dev_handle;
 
 	if (IS_QPOOL_MODE((struct hinic3_hwdev *)hwdev)) {
 		PMD_DRV_LOG(WARNING, "Qpool not support set vport enable");
@@ -2033,12 +2035,12 @@ hinic3_sync_dcb_state(void *hwdev, u8 op_code, u8 state)
 	u16 out_size = sizeof(dcb_state);
 	int err;
 
+	if (!hwdev)
+		return -EINVAL;
+
 	if (HINIC3_IS_VF((struct hinic3_hwdev *)hwdev) &&
 	    !is_sp620_nic(((struct hinic3_hwdev *)hwdev)->dev_handle))
 		return -EPERM;
-
-	if (!hwdev)
-		return -EINVAL;
 
 	memset(&dcb_state, 0, sizeof(dcb_state));
 

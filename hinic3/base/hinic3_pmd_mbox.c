@@ -3,6 +3,7 @@
  */
 
 #include <fcntl.h>
+#include <string.h>
 #include <sys/ioctl.h>
 
 #include "mml/hinic3_pmd_mml_lib.h"
@@ -469,7 +470,7 @@ static void mbox_copy_send_data(struct hinic3_send_mbox *mbox, void *seg,
 
 	/* The mbox message should be aligned in 4 bytes. */
 	if (seg_len % chk_sz) {
-		rte_memcpy(mbox_max_buf, seg, seg_len);
+		memcpy(mbox_max_buf, seg, seg_len);
 		data = (u32 *)mbox_max_buf;
 	}
 
