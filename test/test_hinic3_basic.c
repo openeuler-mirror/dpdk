@@ -10,9 +10,9 @@ test_framework_malloc(void)
 {
     void *ptr = rte_zmalloc("test_malloc", 1024, 0);
     RTE_TEST_ASSERT(ptr != NULL, "rte_zmalloc failed");
-    
+
     rte_free(ptr);
-    
+
     return TEST_SUCCESS;
 }
 
@@ -23,7 +23,7 @@ test_framework_assertion(void)
     RTE_TEST_ASSERT(value == 42, "Basic assertion failed");
     RTE_TEST_ASSERT(value > 0, "Comparison assertion failed");
     RTE_TEST_ASSERT(value < 100, "Comparison assertion failed");
-    
+
     return TEST_SUCCESS;
 }
 
