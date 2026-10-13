@@ -56,10 +56,10 @@ if [ -n "${DPDK_BUILD_DIR}" ] && [ -d "${DPDK_BUILD_DIR}" ]; then
 	elif [ -e build ] && [ ! -L build ]; then
 		echo "[WARN] 仓库已存在 build 目录（非软链），保留原有目录，跳过软链创建"
 	else
-		# 软链仅供 manual 阶段的 clang-tidy 使用，创建失败不应中断主检查
+		# 软链供 clang-tidy 定位编译数据库，创建失败不在此中断
 		ln -sfn "${BUILD_DIR_ABS}" build \
 			&& echo "[INFO] 已创建软链: build -> ${BUILD_DIR_ABS}" \
-			|| echo "[WARN] 创建软链 build 失败，clang-tidy(manual) 可能不可用"
+			|| echo "[WARN] 创建软链 build 失败，clang-tidy 可能因缺少编译数据库而失败"
 	fi
 else
 	echo "[INFO] 未设置 DPDK_BUILD_DIR 或目录不存在，跳过 clang-tidy 编译数据库准备"

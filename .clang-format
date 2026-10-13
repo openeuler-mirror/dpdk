@@ -17,20 +17,20 @@ AlignOperands:   true
 AlignTrailingComments: true
 ColumnLimit:     100
 TabWidth:        8
-UseTab:          ForContinuationAndIndentation
+UseTab:          ForContinuationAndIndentation  # 缩进用 Tab，对齐用空格
 IndentWidth:     8
 AlignConsecutiveMacros: true
 AllowAllParametersOfDeclarationOnNextLine: true
-AlignEscapedNewlines: Right
+AlignEscapedNewlines: Right                     # 反斜杠右对齐到固定列
 AllowAllArgumentsOnNextLine: true
 AllowAllConstructorInitializersOnNextLine: true
 AllowShortBlocksOnASingleLine: false
 AllowShortCaseLabelsOnASingleLine: false
-AllowShortFunctionsOnASingleLine: None
+AllowShortFunctionsOnASingleLine: None          # 函数体不能一行写完
 AllowShortLambdasOnASingleLine: All
 AllowShortIfStatementsOnASingleLine: Never
 AllowShortLoopsOnASingleLine: false
-AlwaysBreakAfterReturnType: TopLevel
+AlwaysBreakAfterReturnType: TopLevel            # 仅对顶层函数定义断行、声明不断行
 AlwaysBreakBeforeMultilineStrings: false
 AlwaysBreakTemplateDeclarations: MultiLine
 BinPackArguments: true
@@ -126,7 +126,7 @@ PenaltyBreakTemplateDeclaration: 10
 PenaltyExcessCharacter: 1000000
 PenaltyReturnTypeOnItsOwnLine: 60
 PointerAlignment: Right
-ReflowComments:  false
+ReflowComments:  false                          # 是否对注释文字重新折行/重排
 SortIncludes:    false
 SortUsingDeclarations: true
 SpaceAfterCStyleCast: false
@@ -138,7 +138,7 @@ SpaceBeforeCtorInitializerColon: true
 SpaceBeforeInheritanceColon: true
 SpaceBeforeRangeBasedForLoopColon: true
 SpaceInEmptyParentheses: false
-SpacesBeforeTrailingComments: 1
+SpacesBeforeTrailingComments: 1                 # 行尾注释前至少保留 1 个空格（原为 8 个）
 SpacesInAngles:  false
 SpacesInContainerLiterals: true
 SpacesInCStyleCastParentheses: false

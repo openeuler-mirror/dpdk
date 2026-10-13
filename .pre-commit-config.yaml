@@ -34,8 +34,7 @@ repos:
     rev: v22.1.8
     hooks:
       - id: clang-format
-        stages: [manual]                 # 手动阶段，待全量格式化后再开启阻塞
-        types_or: [c, c++]
+        types_or: [c, c++]               # 仅作用于 C/C++ 文件
         args: ["--style=file"]           # 读取仓库根目录 .clang-format
 
   # ==================== C/C++ 静态分析 ====================
@@ -43,5 +42,4 @@ repos:
     rev: v1.1.3
     hooks:
       - id: clang-tidy
-        stages: [manual]                 # 手动阶段，需 DPDK 构建出 compile_commands.json
         args: ["--version=21", "-p=build"]  # -p 指向含 compile_commands.json 的构建目录
