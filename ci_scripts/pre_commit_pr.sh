@@ -45,24 +45,15 @@ export PATH="/home/jenkins/.local/bin:${PATH}"
 
 pre-commit --version
 
-# 准备 clang-tidy 编译数据库
-# clang-tidy 钩子通过 -p=build 查找 compile_commands.json，而该文件由 DPDK 构建现场生成，
-# 此处依据 DPDK_BUILD_DIR 在仓库根目录创建软链 build，供 clang-tidy 定位编译数据库
-echo -e "\n[INFO] 准备 clang-tidy 编译数据库 (compile_commands.json)"
+# 定位 clang-tidy 的编译数据库与 DPDK 源码树
+# compile_commands.json 由 ci_scripts/build.sh 构建现场生成，故需在构建之后执行
+BUILD_DIR_ABS=""
+SRC_DIR=""
 if [ -n "${DPDK_BUILD_DIR}" ] && [ -d "${DPDK_BUILD_DIR}" ]; then
-	BUILD_DIR_ABS=$(cd "${DPDK_BUILD_DIR}" && pwd)
-	if [ ! -f "${BUILD_DIR_ABS}/compile_commands.json" ]; then
-		echo "[WARN] ${BUILD_DIR_ABS} 下未找到 compile_commands.json，跳过 clang-tidy 编译数据库准备"
-	elif [ -e build ] && [ ! -L build ]; then
-		echo "[WARN] 仓库已存在 build 目录（非软链），保留原有目录，跳过软链创建"
-	else
-		# 软链供 clang-tidy 定位编译数据库，创建失败不在此中断
-		ln -sfn "${BUILD_DIR_ABS}" build \
-			&& echo "[INFO] 已创建软链: build -> ${BUILD_DIR_ABS}" \
-			|| echo "[WARN] 创建软链 build 失败，clang-tidy 可能因缺少编译数据库而失败"
-	fi
+	BUILD_DIR_ABS="$(cd "${DPDK_BUILD_DIR}" && pwd)"
+	SRC_DIR="${DPDK_SRC_DIR:-$(dirname "${BUILD_DIR_ABS}")}"
 else
-	echo "[INFO] 未设置 DPDK_BUILD_DIR 或目录不存在，跳过 clang-tidy 编译数据库准备"
+	echo "[INFO] 未设置 DPDK_BUILD_DIR 或目录不存在，本次不执行 clang-tidy"
 fi
 
 # 执行 pre-commit 检查
@@ -73,6 +64,53 @@ pre-commit run --show-diff-on-failure --files "${FILES_ARR[@]}"
 CODE=$?
 set -e
 
+# ---------- clang-tidy 静态分析（方案 A：路径对齐）----------
+# 本仓库通过 install.sh 把 hinic3/ 注入到 DPDK 的 drivers/net/hinic3/、把 test/ 注入到
+# app/test/test_hinic3/，编译数据库中的路径均为 DPDK 树路径。若直接以仓库路径调用
+# clang-tidy，会因 "Compile command not found" 被静默跳过；故此处先把变更文件映射为
+# DPDK 树路径，再进入 DPDK 源码树执行分析。
+TIDY_CODE=0
+echo -e "\n[INFO] clang-tidy 静态分析"
+
+if [ -z "${BUILD_DIR_ABS}" ] || [ ! -f "${BUILD_DIR_ABS}/compile_commands.json" ]; then
+	echo "[INFO] 缺少编译数据库，跳过 clang-tidy"
+elif [ ! -d "${SRC_DIR}/drivers/net/hinic3" ]; then
+	echo "[INFO] 未找到注入 hinic3 的 DPDK 源码树（${SRC_DIR}），跳过 clang-tidy"
+else
+	# 仓库路径 -> DPDK 树路径
+	TIDY_FILES=()
+	for file in "${FILES_ARR[@]}"; do
+		case "${file}" in
+		hinic3/*.c) mapped="drivers/net/hinic3/${file#hinic3/}" ;;
+		test/*.c) mapped="app/test/test_hinic3/${file#test/}" ;;
+		*) continue ;;
+		esac
+		if [ -f "${SRC_DIR}/${mapped}" ]; then
+			TIDY_FILES+=("${mapped}")
+		else
+			echo "[WARN] ${file} 在 DPDK 树中不存在（${mapped}），跳过"
+		fi
+	done
+
+	if [ ${#TIDY_FILES[@]} -eq 0 ]; then
+		echo "[INFO] 无需静态分析的 C 文件"
+	else
+		# clang-tidy 可执行文件：环境变量 CLANG_TIDY > 系统 PATH > pip 安装（与钩子同版本）
+		CLANG_TIDY_BIN="${CLANG_TIDY:-$(command -v clang-tidy || true)}"
+		if [ -z "${CLANG_TIDY_BIN}" ]; then
+			echo "[INFO] 未找到 clang-tidy，安装 clang-tidy==${CLANG_TIDY_VERSION:-21.1.0}"
+			pip install "clang-tidy==${CLANG_TIDY_VERSION:-21.1.0}"
+			CLANG_TIDY_BIN="$(command -v clang-tidy)"
+		fi
+		echo "[COMMAND] cd ${SRC_DIR} && ${CLANG_TIDY_BIN} -p=${BUILD_DIR_ABS} ${TIDY_FILES[*]}"
+
+		set +e
+		(cd "${SRC_DIR}" && "${CLANG_TIDY_BIN}" "-p=${BUILD_DIR_ABS}" "${TIDY_FILES[@]}")
+		TIDY_CODE=$?
+		set -e
+	fi
+fi
+
 # 输出检查结果
 echo -e "\n[INFO] 检查结果"
 if [ ${CODE} -eq 0 ]; then
@@ -80,4 +118,14 @@ if [ ${CODE} -eq 0 ]; then
 else
 	echo "  pre-commit 检查未通过（退出码 ${CODE}），请修复以上问题后重新提交。" >&2
 fi
-exit "${CODE}"
+if [ ${TIDY_CODE} -eq 0 ]; then
+	echo "  clang-tidy 检查通过。"
+else
+	echo "  clang-tidy 检查未通过（退出码 ${TIDY_CODE}），请修复以上问题后重新提交。" >&2
+fi
+
+# 任一检查未通过即失败
+if [ ${CODE} -ne 0 ]; then
+	exit "${CODE}"
+fi
+exit "${TIDY_CODE}"
