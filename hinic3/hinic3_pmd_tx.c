@@ -839,7 +839,16 @@ static int hinic3_ipinip_cksum(struct rte_mbuf *mbuf)
 		 */
 		is_first_fragment = ((fragment_offset & 0x1FFF) == 0);
 
-		/* Skip outer IP header checksum calculation - not needed */
+		/* Calculate outer IPv4 header checksum in software:
+		 * hinic3 IP-in-IP offload (OUT_L3_EN) does not fill the outer
+		 * IPv4 checksum when the inner packet is IPv6, so do not rely
+		 * on hardware to do it. Clear the flag so that OUT_L3_EN is
+		 * not set afterwards.
+		 */
+		if (mbuf->ol_flags & HINIC3_PKT_TX_OUTER_IP_CKSUM) {
+			ipv4_hdr->hdr_checksum = rte_ipv4_cksum(ipv4_hdr);
+			mbuf->ol_flags &= ~HINIC3_PKT_TX_OUTER_IP_CKSUM;
+		}
 
 		/* If fragment_offset != 0, this is not the first fragment,
 		 * and inner IP header is not present in this fragment.
@@ -904,6 +913,8 @@ static int hinic3_set_tx_offload(struct rte_mbuf *mbuf,
 	if (hinic3_is_ipinip(mbuf)) {
 		if(hinic3_ipinip_cksum(mbuf) != 0)
 			return -EINVAL;
+		/* refresh flags: outer IP checksum already handled in software */
+		ol_flags = mbuf->ol_flags;
 	}
 
 	/* Tso offload */
