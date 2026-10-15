@@ -17,6 +17,24 @@
 
 set -e
 
+# ---------- 0. 构建依赖检查（缺 meson/ninja/pyelftools 时自动安装）----------
+# CI 镜像未必预装构建依赖；容器内有免密 sudo 时优先用 dnf，否则 pip 装到 ~/.local/bin
+export PATH="${HOME}/.local/bin:${PATH}"
+MISSING=""
+command -v meson >/dev/null 2>&1 || MISSING="${MISSING} meson"
+command -v ninja >/dev/null 2>&1 || MISSING="${MISSING} ninja"
+python3 -c 'import elftools' >/dev/null 2>&1 || MISSING="${MISSING} pyelftools"
+if [ -n "${MISSING}" ]; then
+	echo "[INFO] 缺少构建依赖:${MISSING}，尝试安装 ..."
+	if command -v dnf >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+		sudo dnf install -y meson ninja-build python3-pyelftools
+	else
+		pip config set global.index-url https://repo.huaweicloud.com/repository/pypi/simple
+		pip config set global.trusted-host repo.huaweicloud.com
+		pip install --user meson ninja pyelftools
+	fi
+fi
+
 # ---------- 路径（参考 test.sh）----------
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ -f "${SCRIPT_DIR}/install.sh" ]; then

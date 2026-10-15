@@ -20,8 +20,9 @@ repos:
       - id: check-json                   # 校验 JSON 语法
       - id: check-xml                   # 校验 XML 语法
       - id: check-merge-conflict        # 检查残留的合并冲突标记
+        args: [--assume-in-merge]        # CI 中合并已完成、无 MERGE_HEAD，需显式假定处于合并状态
       - id: check-added-large-files     # 拦截超大文件
-        # args: [--maxkb=2048]
+        args: [--enforce-all]            # 默认仅查暂存区新增文件，CI 直接传文件名时需强制全查
       - id: detect-private-key           # 检测私钥泄露
 
   - repo: https://gitcode.com/gh_mirrors/de/detect-secrets
@@ -30,7 +31,7 @@ repos:
       - id: detect-secrets
 
   # ==================== C/C++ 代码格式化 ====================
-  - repo: https://github.com/pre-commit/mirrors-clang-format
+  - repo: https://gitcode.com/pre-commit-clang/mirrors-clang-format
     rev: v22.1.8
     hooks:
       - id: clang-format
@@ -41,11 +42,7 @@ repos:
   # 说明：本仓库通过 install.sh 把 hinic3/ 注入到 DPDK 的 drivers/net/hinic3/，
   #       编译数据库中的路径都是 DPDK 树路径，与仓库路径不一致，pre-commit 直接
   #       调用 clang-tidy 会因 "Compile command not found" 被静默跳过。
-  #       因此 clang-tidy 统一由 ci_scripts/pre_commit_pr.sh 在 DPDK 源码树内单独
-  #       执行（含路径映射），此处钩子置为 manual，仅供手动调试时调用。
-  - repo: https://github.com/cpp-linter/cpp-linter-hooks
-    rev: v1.1.3
-    hooks:
-      - id: clang-tidy
-        stages: [manual]
-        args: ["--version=21", "-p=build"]  # -p 指向含 compile_commands.json 的构建目录
+  #       因此 clang-tidy 不在此处配置钩子，统一由 ci_scripts/pre_commit_pr.sh
+  #       在 DPDK 源码树内单独执行（含路径映射）。
+  # 注：原 cpp-linter-hooks 钩子已移除——它属于 manual 阶段、实际从不执行，
+  #     且 gitcode 上无可用镜像，保留它会让 CI 每次访问 github.com 超时 128 秒。
