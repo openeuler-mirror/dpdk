@@ -30,7 +30,7 @@ DPDK_DIR="${DPDK_DIR:-$(dirname "${REPO_ROOT}")}"    # DPDK 源码包所在目�
 DPDK_VERSION="${DPDK_VERSION:-21.11.9}"
 DPDK_TARBALL="dpdk-${DPDK_VERSION}.tar.xz"
 SETUP_ONLY="${SETUP_ONLY:-1}"                        # 1=只 meson setup（默认）；0=完整编译
-BUILD_TYPE="${BUILD_TYPE:-release}"                  # 构建类型：release / debug（对应 install.sh 的 build/debug，也是构建目录名）
+BUILD_TYPE="${BUILD_TYPE:-release}"                  # meson 构建类型：release / debug（同时决定构建目录名）
 
 # ---------- 1. 准备 DPDK 源码树（参考 test.sh）----------
 cd "${DPDK_DIR}"
@@ -83,10 +83,16 @@ if [ "${SETUP_ONLY}" = "1" ]; then
 	meson "${build_dir}" ${MESON_FLAGS} -Dbuildtype="${BUILD_TYPE}"
 	cd "${DPDK_DIR}"
 else
+	# install.sh 的 ACTION 只认 install/build/debug/test/export，release 不是合法值
+	if [ "${BUILD_TYPE}" = "debug" ]; then
+		BUILD_ACTION="debug"
+	else
+		BUILD_ACTION="build"
+	fi
 	echo "[INFO] 完整编译（meson + ninja）..."
-	if ! sh "${REPO_ROOT}/install.sh" "${stable_dir}" "${BUILD_TYPE}"; then
+	if ! sh "${REPO_ROOT}/install.sh" "${stable_dir}" "${BUILD_ACTION}"; then
 		echo "[WARN] 默认构建失败，尝试 generic 配置 ..."
-		sh "${REPO_ROOT}/install.sh" "${stable_dir}" "${BUILD_TYPE}" generic
+		sh "${REPO_ROOT}/install.sh" "${stable_dir}" "${BUILD_ACTION}" generic
 	fi
 fi
 
