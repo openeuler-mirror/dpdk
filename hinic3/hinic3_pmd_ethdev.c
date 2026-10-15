@@ -2121,7 +2121,8 @@ static int hinic3_set_rxtx_configure(struct rte_eth_dev *dev)
 	nic_dev->rx_mode = HINIC3_DEFAULT_RX_MODE;
 
 	/* Config rx checksum offload */
-	if (dev_conf->rxmode.offloads & RTE_ETH_RX_OFFLOAD_CHECKSUM)
+	if ((dev_conf->rxmode.offloads & RTE_ETH_RX_OFFLOAD_CHECKSUM) &&
+	    !(nic_dev->feature_cap & NIC_F_RX_CSUM_DIS_BIT))
 		nic_dev->rx_csum_en = HINIC3_DEFAULT_RX_CSUM_OFFLOAD;
 
 	err = hinic3_set_lro(nic_dev, dev_conf);
