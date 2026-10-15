@@ -105,7 +105,9 @@ else
 		# clang-tidy 默认 checks 只有 clang-diagnostic-*（编译诊断），不做静态分析，
 		# 且默认只有 error 才返回非 0。此处显式启用 clang-analyzer-*（空指针解引用、
 		# 越界、资源泄漏等），并让静态分析告警直接判定失败。
-		TIDY_CHECKS="${TIDY_CHECKS:--*,clang-diagnostic-*,clang-analyzer-*}"
+		# 排除 DeprecatedOrUnsafeBufferHandling：它要求用 C11 的 memset_s/memcpy_s，
+		# 会把 DPDK 通篇使用的 memset/memcpy 一律判为不安全，误拦既有正常代码。
+		TIDY_CHECKS="${TIDY_CHECKS:--*,clang-diagnostic-*,clang-analyzer-*,-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling}"
 		TIDY_WARN_AS_ERRORS="${TIDY_WARN_AS_ERRORS:-clang-analyzer-*}"
 		# 编译数据库由 GCC 生成，含 -Wno-packed-not-aligned 等 GCC 专有开关，
 		# 追加该参数让 clang 忽略不认识的告警开关
