@@ -102,10 +102,22 @@ else
 			pip install "clang-tidy==${CLANG_TIDY_VERSION:-21.1.0}"
 			CLANG_TIDY_BIN="$(command -v clang-tidy)"
 		fi
-		echo "[COMMAND] cd ${SRC_DIR} && ${CLANG_TIDY_BIN} -p=${BUILD_DIR_ABS} ${TIDY_FILES[*]}"
+		# clang-tidy 默认 checks 只有 clang-diagnostic-*（编译诊断），不做静态分析，
+		# 且默认只有 error 才返回非 0。此处显式启用 clang-analyzer-*（空指针解引用、
+		# 越界、资源泄漏等），并让静态分析告警直接判定失败。
+		TIDY_CHECKS="${TIDY_CHECKS:--*,clang-diagnostic-*,clang-analyzer-*}"
+		TIDY_WARN_AS_ERRORS="${TIDY_WARN_AS_ERRORS:-clang-analyzer-*}"
+		# 编译数据库由 GCC 生成，含 -Wno-packed-not-aligned 等 GCC 专有开关，
+		# 追加该参数让 clang 忽略不认识的告警开关
+		TIDY_EXTRA_ARG="--extra-arg=-Wno-unknown-warning-option"
+		echo "[COMMAND] cd ${SRC_DIR} && ${CLANG_TIDY_BIN} -p=${BUILD_DIR_ABS} --checks=${TIDY_CHECKS} --warnings-as-errors=${TIDY_WARN_AS_ERRORS} ${TIDY_FILES[*]}"
 
 		set +e
-		(cd "${SRC_DIR}" && "${CLANG_TIDY_BIN}" "-p=${BUILD_DIR_ABS}" "${TIDY_FILES[@]}")
+		(cd "${SRC_DIR}" && "${CLANG_TIDY_BIN}" "-p=${BUILD_DIR_ABS}" \
+			"--checks=${TIDY_CHECKS}" \
+			"--warnings-as-errors=${TIDY_WARN_AS_ERRORS}" \
+			"${TIDY_EXTRA_ARG}" \
+			"${TIDY_FILES[@]}")
 		TIDY_CODE=$?
 		set -e
 	fi

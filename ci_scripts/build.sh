@@ -85,15 +85,14 @@ fi
 BUILD_DIR="${DPDK_DIR}/${stable_dir}/${build_dir}"
 
 if [ "${SETUP_ONLY}" = "1" ]; then
-	# meson 参数与 install.sh 的 build 保持一致
-	extra_cflags=""
-	if [ -n "${DISABLE_WNO_ERROR}" ]; then
-		extra_cflags="-Dwerror=true"
-	fi
+	# 只产出编译数据库、不编译产物，故此处不带 install.sh 的 -Dwerror=true：
+	# 数据库由 GCC 生成，含 -Wno-packed-not-aligned 等 GCC 专有开关，clang 不认识；
+	# 一旦带 -Werror，这些未知开关会被 clang-tidy 报成 error，导致检查必然失败。
+	# 其余参数与 install.sh 的 build 保持一致
 	if [ "${DPDK_MAJOR}" = "20" ]; then
-		MESON_FLAGS="-Ddisable_drivers=net/cnxk,net/mlx4,net/mlx5,common/mlx5,regex/mlx5,vdpa/mlx5,crypto/* ${extra_cflags}"
+		MESON_FLAGS="-Ddisable_drivers=net/cnxk,net/mlx4,net/mlx5,common/mlx5,regex/mlx5,vdpa/mlx5,crypto/*"
 	else
-		MESON_FLAGS="-Ddisable_drivers=true -Denable_drivers=mempool/ring,net/hns3,net/hinic3 ${extra_cflags}"
+		MESON_FLAGS="-Ddisable_drivers=true -Denable_drivers=mempool/ring,net/hns3,net/hinic3"
 	fi
 	echo "[INFO] 只生成编译数据库（SETUP_ONLY=1，跳过 ninja）..."
 	cd "${stable_dir}"
