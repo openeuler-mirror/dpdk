@@ -89,15 +89,15 @@ wget https://fast.dpdk.org/rel/dpdk-20.11.10.tar.xz
 tar -xf dpdk-20.11.10.tar.xz
 ```
 
-解压后得到目录 `dpdk-20.11.10`，进入该目录：
+解压后得到目录 `dpdk-stable-20.11.10`（官方 stable 发布包顶层目录带 `stable` 前缀），进入该目录：
 
 ```bash
-cd dpdk-20.11.10
+cd dpdk-stable-20.11.10
 ```
 
 ## 3. 应用 Patch
 
-patch 由 `diff -ruN` 生成（非 git format-patch 格式），将 `hns5_20_11.patch` 复制到源码根目录，在 `dpdk-20.11.10` 目录内执行：
+patch 文件位于**本仓库** `DPDK_20.11_patch/hns5_20_11.patch`（即本 README 同级目录下的 `DPDK_20.11_patch/` 子目录，非 DPDK 官方发布内容）。由 `diff -ruN` 生成（非 git format-patch 格式），将其复制到源码根目录，在 `dpdk-stable-20.11.10` 目录内执行：
 
 ```bash
 patch -p1 < hns5_20_11.patch
@@ -119,12 +119,12 @@ dnf install -y gcc meson ninja-build pkgconf-pkg-config numactl-devel unzip
 
 ### 4.2 获取 SDK
 
-从[华为支持网站](https://support.huawei.com/enterprise/zh/edge-computing-and-server/s920l18-pid-267076760/software/267397720?idAbsPath=fixnode01|23710424|251364417|261608284|262279635|267076760)下载 `S920L18_SDK_004.zip`，放到 **dpdk 源码目录的上层**（与 `dpdk-20.11.10` 同级）：
+从[华为支持网站](https://support.huawei.com/enterprise/zh/edge-computing-and-server/s920l18-pid-267076760/software/267397720?idAbsPath=fixnode01|23710424|251364417|261608284|262279635|267076760)下载 `S920L18_SDK_004.zip`，放到 **dpdk 源码目录的上层**（与 `dpdk-stable-20.11.10` 同级）：
 
 ```
 .
 ├── S920L18_SDK_004.zip
-└── dpdk-20.11.10/    ← 应用过 patch 的源码目录
+└── dpdk-stable-20.11.10/    ← 应用过 patch 的源码目录
 ```
 
 SDK 提供驱动所依赖的 uDriver（hidrv/ndrv）API 头文件。
@@ -213,6 +213,37 @@ export LD_LIBRARY_PATH=/root/hns5/build/lib:/root/hns5/build/drivers:$LD_LIBRARY
 >   ldd dpdk-testpmd | grep "not found"      # 无输出即正常
 >   ```
 
+**模组运行期依赖**：
+
+| 依赖库 | 必需性 | 缺失时典型报错 |
+|---|---|---|
+| `libnuma.so.1` | 必须（DPDK EAL 依赖 numactl 用户态库） | `error while loading shared libraries: libnuma.so.1: cannot open shared object file` |
+| `libsecurec.so` | 视模组 BSP 而定 | `error while loading shared libraries: libsecurec.so: cannot open shared object file` |
+
+若存在其他依赖库在模组上缺失，可直接从**编译环境**（aarch64 编译机）拷贝这两个库到模组 `/lib64/`：
+
+```bash
+# 在编译机上执行
+scp /usr/lib64/libnuma.so.1 root@<模组IP>:/lib64/
+scp <libsecurec.so所在路径>/libsecurec.so root@<模组IP>:/lib64/
+```
+
+> **建议：关注 glibc 版本**。编译环境的 glibc 版本需**低于或等于**目标模组环境的 glibc 版本，否则产物在模组上运行时会因符号版本缺失而报错：
+> ```
+> /lib64/libc.so.6: version `GLIBC_2.xx' not found
+> ```
+> 查看与验证方法：
+>
+> ```bash
+> # 编译机
+> ldd --version            # 查看编译环境 glibc 版本
+> # 模组
+> ldd --version            # 查看模组 glibc 版本，需 >= 编译机版本
+> objdump -T dpdk-testpmd | grep GLIBC_ | sort -u   # 查看产物实际依赖的 GLIBC 符号版本
+> ```
+>
+> 若编译机 glibc 高于模组，请在与模组同版本或更低版本的系统环境中编译。
+
 ### 6.3 配置大页内存
 
 hns5 驱动依赖大页内存，需在模组上配置 **32M 大页**并挂载（以 256 个大页、共 8G 为例，按实际内存调整）：
@@ -228,8 +259,9 @@ echo 256 > /sys/kernel/mm/hugepages/hugepages-32768kB/nr_hugepages
 mkdir -p /mnt/huge
 mount -t hugetlbfs -o pagesize=32M nodev /mnt/huge
 
-# 3. 验证
-grep Huge /proc/meminfo     # 确认 HugePages_Free 数量正确
+# 3. 验证：读取 sysfs 计数（nr_hugepages 为配置总量，free_hugepages 为当前剩余）
+cat /sys/kernel/mm/hugepages/hugepages-32768kB/nr_hugepages
+cat /sys/kernel/mm/hugepages/hugepages-32768kB/free_hugepages
 ls /mnt/huge                # 空目录即为正常，运行时会动态创建文件
 ```
 
@@ -241,14 +273,23 @@ nodev  /mnt/huge  hugetlbfs  pagesize=32M  0  0
 
 ### 6.4 运行
 
-环境就绪后即可运行 test-pmd，启动时需通过 `--huge-dir` 指定大页目录，命令与参数详见第 7 章：
+环境就绪后即可运行 test-pmd，启动时需通过 `--huge-dir` 指定大页目录、`-d` 指定驱动库目录，命令与参数详见第 7 章：
 
 ```bash
 ./dpdk-testpmd -l 0-3 \
     --huge-dir /mnt/huge \
-    --vdev "net_hns5_0,port=0,share_group=0,mode=10GBASE_R" \
+    -d build/drivers \
+    --vdev "net_hns5_0,port=0,share_group=2,mode=10GBASE_R" \
     -- -i --rxq=4 --txq=4 --nb-cores=2 --forward-mode=io
 ```
+
+> **为什么必须加 `-d build/drivers`**：hns5 网卡驱动与内存池驱动以动态库形式提供（`librte_net_hns5.so`、`librte_mempool_hns5.so`）。EAL 启动时只从默认安装路径（如 `/usr/lib64/dpdk/`）加载 PMD 库，`-d build/drivers` 让 EAL 从该目录加载驱动库并注册 `net_hns5` vdev 类型和 `hns5_bmu` 内存池 ops。缺少该参数时启动报错：
+> ```
+> EAL: failed to parse device "net_hns5_0"
+> EAL: no driver found for device net_hns5_0
+> Cannot get mempool ops          # 内存池 ops 同样无法注册
+> ```
+> 注意：`build/drivers` 为相对路径，需在解压出 `build/` 的目录（如 `/root/hns5`）下执行；否则请改用绝对路径 `-d /root/hns5/build/drivers`。
 
 ---
 
@@ -261,7 +302,7 @@ hns5 驱动注册为 **vdev 虚拟设备驱动**（`RTE_PMD_REGISTER_VDEV(net_hn
 | 参数 | 必填 | 取值范围 | 默认值 | 说明 |
 |------|:----:|---------|--------|------|
 | `port` | 是 | 0~31 | 无 | CPU 侧端口 ID（cport），用于 POE 转发绑定 |
-| `share_group` | 是 | 2~31 | 无 | RX 共享组 ID，需外部人工分配以避免多端口冲突。**避免使用 group 1**（控制网口占用） |
+| `share_group` | 是 | 2~31 | 无 | RX 共享组 ID，需外部人工分配以避免多端口冲突。group 1 被控制网口占用，不可使用（本文示例统一使用 2、3） |
 | `mode` | 是 | 见 7.2 节 | 无 | MAC 端口模式（物理接口协议类型） |
 | `macport` | 否 | 0~31 | `port` 值 | MAC 侧端口 ID（mport） |
 | `fw_tnl` | 否 | 0 或 1 | 1 | 硬件隧道分发表开关，`fw_tnl=0` 关闭 |
@@ -284,12 +325,14 @@ FLEXMII_5G2P | FLEXMII_10G2P | FLEXMII_20G2P | FLEXMII_10G4P | FLEXMII_20G4P |
 ```bash
 ./dpdk-testpmd -l 0-3 \
     --huge-dir /mnt/huge \
-    --vdev "net_hns5_0,port=0,share_group=0,mode=10GBASE_R" \
+    -d build/drivers \
+    --vdev "net_hns5_0,port=0,share_group=2,mode=10GBASE_R" \
     -- -i --rxq=4 --txq=4 --nb-cores=2 --forward-mode=io
 ```
 
 参数说明：
 - `--huge-dir /mnt/huge`：指定大页目录（见 6.3 节，需先配置并挂载 32M 大页）
+- `-d build/drivers`：指定 PMD 驱动库目录，EAL 从中加载 `librte_net_hns5.so`、`librte_mempool_hns5.so` 等驱动（缺失时的报错见 6.4 节）
 - `--vdev "net_hns5,..."`：创建 hns5 端口，必填 `port`/`share_group`/`mode` 三项
 - `--rxq=4 --txq=4`：收发队列数（最大收队列数受 `HNS5_POE_CPU_GRP_QUE_NUM` 限制）
 - `--forward-mode=io`：IO 转发模式（同口收发）
@@ -298,7 +341,7 @@ FLEXMII_5G2P | FLEXMII_10G2P | FLEXMII_20G2P | FLEXMII_10G4P | FLEXMII_20G4P |
 
 ```
 testpmd> show port info 0          # 查看端口信息（offload 能力、队列数、速率）
-testpmd> show config rss           # 查看 RSS 配置
+testpmd> show port 0 rss-hash      # 查看 RSS hash 配置
 testpmd> set promisc all on        # 开启混杂模式
 testpmd> set fwd io                # 设置转发模式
 testpmd> start                     # 开始转发
@@ -313,23 +356,26 @@ testpmd> quit                      # 退出
 
 ```bash
 ./dpdk-testpmd -l 0-7 \
-    --vdev "net_hns5_0,port=0,share_group=0,mode=10GBASE_R" \
-    --vdev "net_hns5_1,port=1,share_group=1,mode=10GBASE_R" \
+    --huge-dir /mnt/huge \
+    -d build/drivers \
+    --vdev "net_hns5_0,port=0,share_group=2,mode=10GBASE_R" \
+    --vdev "net_hns5_1,port=1,share_group=3,mode=10GBASE_R" \
     -- -i --rxq=4 --txq=4 --nb-cores=4
 ```
 
 ### 7.5 test-pmd 运行注意事项
 
 1. **内存池已固定为 hns5_bmu**：patch 将 testpmd 默认内存池分支（`MP_ALLOC_MEMZONE`）改为 `rte_pktmbuf_pool_create_by_ops(..., "hns5_bmu")`，内存池名固定为 `bmu_pool6`。**无需**（也不支持）再指定 `--mp-alloc` 其他模式。
-2. **RSS RETA 查询/设置**：RETA 表为 1024 项，test-pmd 已适配，可直接使用：
+2. **RSS RETA 查询/设置**：RETA 表为 1024 项，test-pmd 已适配，按 DPDK 20.11 语法使用：
    ```
-   testpmd> show port 0 rss reta 64 (0,64)
-   testpmd> set port 0 rss reta (0,64) (0,1)
+   testpmd> show port 0 rss reta 64 (0xffffffffffffffff)     # 查询 RETA 表项（64 位十六进制掩码）
+   testpmd> port config 0 rss reta (0,1)(1,2)(2,3)           # 设置 RETA 表项（索引,队列）
    ```
 3. **MTU 设置**：
    ```
-   testpmd> set port 0 mtu 9000    # 需硬件支持，超限会告警并取最大值
+   testpmd> port config mtu 0 9000    # 需硬件支持，超限会告警并取最大值
    ```
+4. **启动/打流时的历史包残留报错**：启动或开始打流时可能出现部分地址相关报错，属**历史包残留**所致，不影响正常转发，可直接忽略；必要时 `stop` 后重新 `start` 即可。
 
 ### 7.6 常见启动失败排查
 
@@ -342,4 +388,5 @@ testpmd> quit                      # 退出
 | `unsupport port speed:0x%x for port mode:%u` | 速率与模式不匹配 | 核对模式支持的速率 |
 | `failed to hns5_tm_platform_dev_probe` | TM 平台设备初始化失败 | 检查 BSP/内核驱动加载状态 |
 | `failed to hidrv_ppe_vf_open_pool` | PPE 内存池打开失败 | 检查 BMU 依赖与固件状态 |
+| `failed to parse device` / `no driver found for device net_hns5_0` / `Cannot get mempool ops` | 启动命令缺少 `-d build/drivers`，EAL 未加载 hns5 驱动库 | 补加 `-d build/drivers`（见 6.4 节说明） |
 
