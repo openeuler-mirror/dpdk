@@ -164,6 +164,7 @@ enum nic_feature_cap {
  	NIC_F_VEB_OFFLOAD = LBIT(30),
  	NIC_F_GET_COUNTER_BY_CMDQ = LBIT(31),
 	NIC_F_HAIRPIN = LBIT(32),
+	NIC_F_RX_CSUM_DIS_BIT = LBIT(34),
 };
 
 enum hinic3_function_mode {
@@ -171,7 +172,7 @@ enum hinic3_function_mode {
 	HINIC3_FUNC_SHARED,
 };
 
-#define DEFAULT_DRV_FEATURE 0x0BFC3FFF
+#define DEFAULT_DRV_FEATURE 0x40BFC3FFF
 #define HINIC3_VERIFY_RX_DEPTH     1
 #define HINIC3_VERIFY_TX_DEPTH     0
 
