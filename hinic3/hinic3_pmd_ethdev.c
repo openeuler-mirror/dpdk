@@ -5633,12 +5633,14 @@ static int hinic3_pci_probe(struct rte_pci_driver *pci_drv,
 		    qinfo_type == HINIC3_QINFO_TYPE_BIFUR ? "traffic bifur" : "normal");
 
 	if (qinfo_type == HINIC3_QINFO_TYPE_NORMAL) {
-		ret = rte_pci_map_device(pci_dev);
-		pci_drv->drv_flags |= RTE_PCI_DRV_NEED_MAPPING;
-		if (ret != 0) {
-			PMD_DRV_LOG(ERR, "Rte pci map device failed: %d", ret);
-			return ret;
+		if (pci_dev->mem_resource[HINIC3_PCI_DB_BAR].addr == NULL) {
+			ret = rte_pci_map_device(pci_dev);
+			if (ret != 0) {
+				PMD_DRV_LOG(ERR, "Rte pci map device failed: %d", ret);
+				return ret;
+			}
 		}
+		pci_drv->drv_flags |= RTE_PCI_DRV_NEED_MAPPING;
 	} else if (qinfo_type == HINIC3_QINFO_TYPE_BIFUR) {
 		enum BIFUR_ACTION bifur_action = BIFUR_CONTINUE;
 		ret = hinic3_bifur_pre_probe(pci_drv, pci_dev, &work_pci_dev, &bifur_action);
