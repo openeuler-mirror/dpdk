@@ -942,14 +942,14 @@ hinic3_non_tso_pkt_pre_process(struct rte_mbuf *mbuf,
 {
 	u16 i, copy_mbuf_num, total_len = 0;
 	struct rte_mbuf *mbuf_pkt = mbuf;
+	/* Non-tso packet length must less than HINIC3_MAX_JUMBO_FRAME_SIZE */
+	if (unlikely(mbuf->pkt_len > non_tso_max_pkt_len))
+		return -EINVAL;
 
 	if (likely(HINIC3_NONTSO_SEG_NUM_VALID(mbuf->nb_segs)))
 		/* valid non-tso mbuf */
 		return 0;
 
-	/* Non-tso packet length must less than HINIC3_MAX_JUMBO_FRAME_SIZE */
-	if (unlikely(mbuf->pkt_len > non_tso_max_pkt_len))
-		return -EINVAL;
 	for (i = 0; i < HINIC3_NON_COPY_SGE_NUM; i++) {
 		total_len += mbuf_pkt->data_len;
 		mbuf_pkt = mbuf_pkt->next;

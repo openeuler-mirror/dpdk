@@ -1735,7 +1735,7 @@ static int hinic3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t qid,
 	txq->owner = 1;
 	txq->is_sp620_nic = is_sp620_nic(nic_dev);
 	txq->non_tso_max_pkt_len = 
-		is_sp230_nic(nic_dev) ? MAX_SINGLE_SGE_SIZE : HINIC3_MAX_JUMBO_FRAME_SIZE;
+		!is_sp230_nic(nic_dev) ? MAX_SINGLE_SGE_SIZE : HINIC3_MAX_JUMBO_FRAME_SIZE;
 	txq->tx_free_loop = nic_dev->config.tx_free_loop;
 	if (nic_dev->dcb->dcb_on)
 		txq->cos = nic_dev->dcb->txq_cos[qid];
