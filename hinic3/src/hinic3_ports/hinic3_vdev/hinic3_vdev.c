@@ -593,7 +593,7 @@ hinic3_virtual_queue_recv_pkts_distribute(struct hinic3_queue *rxq,
             rte_pktmbuf_free(buffer[i]);
             buffer[i] = NULL;
             hinic3_add_error_stats(HINIC3_PORTS_ERROR_VIRTUAL_QUEUE_RECV_PKTS_DISTRIBUTE_DROP, 1);
-            break;
+            continue;
         }
     }
 
