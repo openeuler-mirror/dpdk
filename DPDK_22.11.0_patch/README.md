@@ -34,7 +34,9 @@ git am dpdk/DPDK_22.11.0_patch/*.patch
 
 #### 3.编译安装
 ```shell
-meson --prefix=/usr/ -Ddisable_drivers=net/cnxk -Dplatform=generic -Ddefault_library='shared' build
+虚拟化场景编译命令：meson --prefix=/usr/ -Ddisable_drivers=net/cnxk -Dplatform=generic -Ddefault_library='shared' build
+裸金属场景编译命令：meson --prefix=/usr/ -Ddisable_drivers=net/cnxk -Dplatform=generic -Ddefault_library='shared' -Dc_args='-DHINIC3_METAL' build
+
 ninja -C build
 ninja install -C build
 ```
