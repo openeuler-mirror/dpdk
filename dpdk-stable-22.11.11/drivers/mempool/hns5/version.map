@@ -1,0 +1,19 @@
+DPDK_23 {
+	global:
+
+	hns5_bmu_phys2virt;
+	hns5_bmu_virt2phys;
+	hns5_get_lcore_id;
+
+	local: *;
+};
+
+INTERNAL {
+	global:
+
+	g_hns5_bmu_addr_trans_tbl;
+	hns5_mp_clean_addr_trans_tbl;
+	hns5_bmu_dump_addr_trans;
+	hns5_bmu_get_first_blk;
+	hns5_bmu_hw_reset;
+};

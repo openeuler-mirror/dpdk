@@ -64,6 +64,14 @@ rte_mempool_register_ops(const struct rte_mempool_ops *h)
 	ops->populate = h->populate;
 	ops->get_info = h->get_info;
 	ops->dequeue_contig_blocks = h->dequeue_contig_blocks;
+	/* Ops behavior flags must be propagated as well, otherwise drivers that
+	 * rely on RTE_MEMPOOL_OPS_F_* keep seeing flags == 0 at runtime: e.g.
+	 * hns5_bmu then falls into the generic branch of
+	 * rte_mempool_free_memchunks() and calls its dequeue op once per object
+	 * while the pool is being destroyed, although those buffers are owned by
+	 * the BMU hardware at that point.
+	 */
+	ops->flags = h->flags;
 
 	rte_spinlock_unlock(&rte_mempool_ops_table.sl);
 
