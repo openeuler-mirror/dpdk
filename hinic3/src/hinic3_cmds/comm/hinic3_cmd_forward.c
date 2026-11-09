@@ -9,6 +9,7 @@
 #include "hinic3_cmd_forward.h"
 #include "hinic3_ufid_map_rte_flow.h"
 #include "hinic3_command.h"
+#include "hinic3_parse_agent_config.h"
 
 static uint8_t g_packet_detect_mode = 0;
 
@@ -249,12 +250,19 @@ hinic3_set_packet_detect_mode(struct ds *ds, enum hinic3_packet_detect_mode dete
     uint8_t buf[8] = {0};
     struct hinic3_nlattr set_nla = {0};
     struct hinic3_drv_ops *ops = hinic3_get_drv_ops();
+    int (*global_cfg_set)(const struct nlattr *, size_t, struct nlattr *, size_t *) = NULL;
 
-    HINIC3_FUNC_PTR_OR_ERR_RET(ops->hovs_global_cfg_set, HINIC3_DRV_FUNC_NO_PTR);
+    if (hinic3_card_mod_get() == PROG_MODE) {
+        HINIC3_FUNC_PTR_OR_ERR_RET(ops->hovs_flexda_global_cfg_set, HINIC3_DRV_FUNC_NO_PTR);
+        global_cfg_set = ops->hovs_flexda_global_cfg_set;
+    } else {
+        HINIC3_FUNC_PTR_OR_ERR_RET(ops->hovs_global_cfg_set, HINIC3_DRV_FUNC_NO_PTR);
+        global_cfg_set = ops->hovs_global_cfg_set;
+    }
     hinic3_nlattr_init(&set_nla, buf, sizeof(buf));
     hinic3_nlattr_put_u8(&set_nla, HINIC3_GLOBAL_CFG_ARG_VXLAN_CHECK_UPCALL, detect_mode);
 
-    ret = ops->hovs_global_cfg_set((struct nlattr *)set_nla.data, set_nla.used_len,
+    ret = global_cfg_set((struct nlattr *)set_nla.data, set_nla.used_len,
         (struct nlattr *)set_nla.data, &set_nla.used_len);
     if (ret != 0) {
         hinic3_ds_put_format_prefix(ds, 0, HINIC3_UI_LEADING_SIGN_ERROR,

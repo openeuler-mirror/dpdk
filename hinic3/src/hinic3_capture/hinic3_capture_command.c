@@ -28,6 +28,7 @@
 #include "hinic3_timeval.h"
 #include "hinic3_ui_string.h"
 #include "hinic3_capture_command.h"
+#include "hinic3_parse_agent_config.h"
 
 #define PCAP_CMD_DESC                                                                                                \
 "  Usage: dpak-ovs-ctl hwoff/capture-probe { start <portname> -w <filename> -t INTEGER<1-1440>\n"                    \
@@ -318,8 +319,15 @@ hinic3_set_pcap_mode(struct ds *ds)
     uint8_t buf[PCAP_BUF_SIZE] = {0};
     struct hinic3_nlattr set_nla = {0};
     struct hinic3_drv_ops *ops = hinic3_get_drv_ops();
+    int (*global_cfg_set)(const struct nlattr *, size_t, struct nlattr *, size_t *) = NULL;
 
-    HINIC3_FUNC_PTR_OR_ERR_RET(ops->hovs_global_cfg_set, HINIC3_DRV_FUNC_NO_PTR);
+    if (hinic3_card_mod_get() == PROG_MODE) {
+        HINIC3_FUNC_PTR_OR_ERR_RET(ops->hovs_flexda_global_cfg_set, HINIC3_DRV_FUNC_NO_PTR);
+        global_cfg_set = ops->hovs_flexda_global_cfg_set;
+    } else {
+        HINIC3_FUNC_PTR_OR_ERR_RET(ops->hovs_global_cfg_set, HINIC3_DRV_FUNC_NO_PTR);
+        global_cfg_set = ops->hovs_global_cfg_set;
+    }
     hinic3_nlattr_init(&set_nla, buf, PCAP_BUF_SIZE * sizeof(uint8_t));
     /* only-header与limited-capture由解析模块截断，组件不区分这两个模式 */
     if (pcap_mode_get() == FULLY_CAPTURE)
@@ -327,7 +335,7 @@ hinic3_set_pcap_mode(struct ds *ds)
     else
         hinic3_nlattr_put_u8(&set_nla, HINIC3_GLOBAL_CFG_ARG_PCAP, 0);
 
-    ret = ops->hovs_global_cfg_set((struct nlattr *)set_nla.data, set_nla.used_len,
+    ret = global_cfg_set((struct nlattr *)set_nla.data, set_nla.used_len,
         (struct nlattr *)set_nla.data, &set_nla.used_len);
     if (ret != 0) {
         hinic3_ds_put_format_prefix(ds, 0, HINIC3_UI_LEADING_SIGN_ERROR,

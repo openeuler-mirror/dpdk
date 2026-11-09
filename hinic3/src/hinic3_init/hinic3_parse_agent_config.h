@@ -21,8 +21,7 @@
 #define HINIC3_VIRTUAL_QUEUE_MULTIPLEX_MIN 0
 #define HINIC3_VIRTUAL_QUEUE_MULTIPLEX_MAX 16
 #define HINIC3_PORT_QUEUE_DEPTH_SIZE 1024
-#define HINIC3_PORT_MIN_QUEUE_DEPTH  (1 << 7)
-#define HINIC3_PORT_MAX_QUEUE_DEPTH  (1 << 15)
+#define HINIC3_PORT_MIN_QUEUE_DEPTH  (1 << 7) // DEPTH MAX由init_arg中的virtio_queue_depth_limit获取
 
 struct hinic3_parse_num_type {
     char section_name[HINIC3_ARGS_NAME_MAX_LEN];
@@ -101,6 +100,12 @@ static inline bool hinic3_check_virtio_queue_depth_set(void)
 {
     struct hinic3_init_arg *conf = hinic3_get_init_arg();
     return conf->is_virtio_queue_depth_set;
+};
+
+static inline uint16_t hinic3_virtio_queue_depth_limit_get(void)
+{
+    struct hinic3_init_arg *conf = hinic3_get_init_arg();
+    return conf->virtio_queue_depth_limit;
 };
 
 static inline bool hinic3_support_hardware_flow_age_set(void)

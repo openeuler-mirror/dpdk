@@ -21,7 +21,6 @@
 #define AGENT_SECTION_OFFLOAD_THREAD_NUM_KEY "offload_thread_num"
 #define AGENT_SECTION_MAX_FLOW_NUM_KEY "max_flow_num"
 #define AGENT_SECTION_RUN_TIME_MODE "run_time_mode"
-#define AGENT_SECTION_CARD_MODE "card_mode"
 #define AGENT_SECTION_BOND_HASH_POLICY "bond_hash_policy"
 #define AGENT_SECTION_FORWARD_CPU_MASK_KEY "forward_cpu_mask"
 #define AGENT_SECTION_CONTROL_CPU_MASK_KEY "control_cpu_mask"
@@ -51,14 +50,11 @@
 #define HINIC3_OFFLOAD_THREAD_DEFAULT_NUM 2
 #define HINIC3_OFFLOAD_THREAD_NUM_MIN 1
 #define HINIC3_OFFLOAD_THREAD_NUM_MAX 4
-#define HINIC3_CARD_MODE_MIN 0
-#define HINIC3_CARD_MODE_MAX 1
 #define HINIC3_BOND_HASH_POLICY_MIN 0
 #define HINIC3_BOND_HASH_POLICY_MAX 1
 #define HINIC3_MAX_FLOW_DEFAULT_NUM 2
 #define HINIC3_MAX_FLOW_NUM_MIN 1
-#define HINIC3_MAX_FLOW_NUM_MAX 4
-#define HINIC3_MAX_FLOW_NUM_INVALID 3
+#define HINIC3_MAX_FLOW_NUM_MAX 32
 #define HINIC3_MAX_QUEUE_DEFAULT_NUM 4
 #define HINIC3_MAX_QUEUE_LIMIT_DEFAULT_NUM 32
 #define HINIC3_MAX_QUEUE_NUM_MIN 1
@@ -125,13 +121,6 @@ static struct hinic3_parse_num_type g_num_table[] = {
         HINIC3_MAX_FLOW_NUM_MIN,
         HINIC3_MAX_FLOW_NUM_MAX,
         &g_agent_config_init_arg.max_flow_num,
-    },
-    {
-        AGENT_SECTION,
-        AGENT_SECTION_CARD_MODE,
-        HINIC3_CARD_MODE_MIN,
-        HINIC3_CARD_MODE_MAX,
-        &g_agent_config_init_arg.card_mode,
     },
     {
         AGENT_SECTION,
@@ -212,8 +201,16 @@ static struct hinic3_parse_num_type g_num_table[] = {
     },
 };
 
+static inline bool hinic3_is_power_of_two(uint32_t value)
+{
+    return value != 0 && (value & (value - 1)) == 0;
+}
+
 static int hinic3_parse_virtio_queue_depth(struct rte_cfgfile *rte_file)
 {
+    if(!hinic3_check_virtio_queue_depth_set())
+        return 0;
+
     char* end_ptr = NULL;
     uint16_t virtio_queue_depth  = 0;
     const char *queue_depth_str = rte_cfgfile_get_entry(rte_file, PORT_SECTION, PORT_VIRTIO_QUEUE_DEPTH);
@@ -244,9 +241,10 @@ static int hinic3_parse_virtio_queue_depth(struct rte_cfgfile *rte_file)
     }
     
     if (virtio_queue_depth < HINIC3_PORT_MIN_QUEUE_DEPTH ||
-                        virtio_queue_depth > HINIC3_PORT_MAX_QUEUE_DEPTH) {
+                        virtio_queue_depth > hinic3_virtio_queue_depth_limit_get()) {
         HINIC3_LOG(INFO, AGENT,
-            "virtio_queue_depth value %u is out of range!\n", virtio_queue_depth);
+            "virtio_queue_depth value %u is out of range, min value is %u, max value is %u!\n", virtio_queue_depth,
+            HINIC3_PORT_MIN_QUEUE_DEPTH, hinic3_virtio_queue_depth_limit_get());
         return -1;
     }
 
@@ -278,6 +276,11 @@ static void hinic3_parse_config_num(struct rte_cfgfile *rte_file, uint32_t mod_i
             *g_num_table[mod_id].num);
         return;
     }
+    if (g_num_table[mod_id].num == &g_agent_config_init_arg.max_flow_num && !hinic3_is_power_of_two(config_num)) {
+        HINIC3_LOG(INFO, AGENT, "%s %u is invalid, use default value %u.", g_num_table[mod_id].name, config_num,
+            *g_num_table[mod_id].num);
+        return;
+    } 
 
     *g_num_table[mod_id].num = config_num;
     HINIC3_LOG(INFO, AGENT, "%s set, value %u.", g_num_table[mod_id].name, *g_num_table[mod_id].num);
@@ -556,6 +559,7 @@ static int hinic3_set_config_value(void)
     g_agent_config_init_arg.support_pf_port = arg->support_pf_port;
     g_agent_config_init_arg.support_vf_port = arg->support_vf_port;
     g_agent_config_init_arg.virtio_queue_depth = arg->virtio_queue_depth;
+    g_agent_config_init_arg.virtio_queue_depth_limit = arg->virtio_queue_depth_limit;
     g_agent_config_init_arg.is_virtio_queue_depth_set = arg->is_virtio_queue_depth_set;
     g_agent_config_init_arg.is_preload_pf_port = arg->is_preload_pf_port;
     g_agent_config_init_arg.is_preload_vf_port = arg->is_preload_vf_port;
@@ -594,7 +598,7 @@ static void hinic3_check_config(void)
         g_agent_config_init_arg.offload_thread_num = HINIC3_OFFLOAD_THREAD_DEFAULT_NUM;
     }
 
-    if (g_agent_config_init_arg.max_flow_num == HINIC3_MAX_FLOW_NUM_INVALID ||
+    if (!hinic3_is_power_of_two(g_agent_config_init_arg.max_flow_num) ||
         g_agent_config_init_arg.max_flow_num > hinic3_max_flow_num_limit_get()) {
         HINIC3_LOG(INFO, AGENT, "illegal %s %u, use default value %u.", AGENT_SECTION_MAX_FLOW_NUM_KEY,
             g_agent_config_init_arg.max_flow_num, HINIC3_MAX_FLOW_DEFAULT_NUM);

@@ -65,7 +65,7 @@ int hinic3_init_flow_mpool(void)
     uint32_t max_flow_num = hinic3_max_flow_num_get();
 
     g_mpool_mgmt.rte_flow_mpool = hinic3_create_single_mpool(HINIC3_RTE_FLOW_ELE_MPOOL_NAME, sizeof(struct rte_flow),
-        max_flow_num * HINIC3_RTE_FLOW_SINGLE_BLOCK_NUM, HINIC3_UFID_MAP, false);
+        max_flow_num * HINIC3_RTE_FLOW_SINGLE_BLOCK_NUM, HINIC3_UFID_MAP, true);
     if (g_mpool_mgmt.rte_flow_mpool == NULL) {
         HINIC3_LOG(ERR, FLOW, "Init flow mpool: failed to create single rte flow mpool!");
         return -1;
@@ -76,7 +76,7 @@ int hinic3_init_flow_mpool(void)
         ufid_map_size += HINIC3_FUZZY_FLOW_MAX_NUM * HINIC3_FUZZY_FLOW_TABLE_MAX_NUM;
     }
     g_mpool_mgmt.ufid_map_mpool = hinic3_create_single_mpool(HINIC3_UFID_MAP_MPOOL_NAME,
-        sizeof(struct hinic3_ufid_hmap_node), ufid_map_size, HINIC3_UFID_MAP, false);
+        sizeof(struct hinic3_ufid_hmap_node), ufid_map_size, HINIC3_UFID_MAP, true);
     if (g_mpool_mgmt.ufid_map_mpool == NULL) {
         dpak_mempool_destroy(g_mpool_mgmt.rte_flow_mpool);
         g_mpool_mgmt.rte_flow_mpool = NULL;

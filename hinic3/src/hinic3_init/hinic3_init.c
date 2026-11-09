@@ -25,7 +25,7 @@
 #include "hinic3_flexda_flow_public.h"
 
 #define HINIC3_DRV_SHARD_LIBRARY_OVS3         "/usr/lib64/libhiovs3.so"
-#define HINIC3_DRV_SHARD_LIBRARY_OPA        "/usr/lib64/libhiflexda.so"
+#define HINIC3_DRV_SHARD_LIBRARY_OPA        "/usr/lib64/libhiflexda_ovs.so"
 #define HINIC3_PF_ADDR_NULL_STR          "XXXX:XX:XX.X"
 
 #define HINIC3_FLEXDA_OVS_SHARD_LIBRARY "/usr/lib64/libhiflexda_ovs_adapter.so"
@@ -113,6 +113,49 @@ static struct hinic3_drv_ops_map g_hinic3_drv_ops_map[] = {
     HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_flow_mgmt_update),
     HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_flow_mgmt_set_block_version),
     HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_flow_mgmt_get_block_version),
+};
+
+static struct hinic3_drv_ops_map g_hinic3_drv_flexda_common_ops_map[] = {
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_port_mgmt_add),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_port_mgmt_add_dynamic),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_port_mgmt_del),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_port_mgmt_get),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_port_mgmt_set),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_port_mgmt_get_capability),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_port_mgmt_get_upcall_info),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_port_mgmt_setup_upcall_queue),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_port_mgmt_release_upcall_queue),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_bond_mgmt_create),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_bond_mgmt_delete),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_bond_mgmt_get),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_etheraddr_get),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_etheraddr_set),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_mtu_set),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_port_statistics_get),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_port_statistics_flush),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_global_statistics_get),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_global_statistics_flush),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_set_log_level),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_qos_statistics_get_batch),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_qos_statistics_get_all_batch),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_qos_statistics_clear_batch),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_qos_vm_limit_set),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_qos_vm_limit_get),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_qos_vport_limit_set),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_qos_vport_limit_get),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_rte_tx_burst),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_global_pcie_list_query),
+    // HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_qos_flow_limit_set),
+    // HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_qos_flow_limit_get),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_bond_slave_statistics_get),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_port_mgmt_set_usage_state),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_port_mgmt_get_usage_state),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_upcall_mtu_set),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_flow_mgmt_get_capability),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_flow_mgmt_get_forward_mode),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_flow_mgmt_set_forward_mode),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_global_cfg_get),
+    HINIC3_DRV_ADD_FUNC(g_hinic3_drv_ops, hovs_open_log),
 };
 
 static struct hinic3_drv_ops_map g_hinic3_drv_standard_ops_map[] = {
@@ -257,10 +300,19 @@ int hinic3_drv_ops_init(void)
         return -1;
     }
 
-    ret = hinic3_drv_ops_init_sub(handler, g_hinic3_drv_ops_map, ARRAY_SIZE(g_hinic3_drv_ops_map));
-    if (ret != 0) {
-        HINIC3_LOG(ERR, AGENT, "hinic3 drv ops init: common api load failed!");
-        goto err;
+    if (hinic3_card_mod_get() == PROG_MODE) {
+        ret = hinic3_drv_ops_init_sub(handler, g_hinic3_drv_flexda_common_ops_map,
+                                      ARRAY_SIZE(g_hinic3_drv_flexda_common_ops_map));
+        if (ret != 0) {
+            HINIC3_LOG(ERR, AGENT, "hinic3 drv ops init: flexda common api load failed!");
+            goto err;
+        }
+    } else {
+        ret = hinic3_drv_ops_init_sub(handler, g_hinic3_drv_ops_map, ARRAY_SIZE(g_hinic3_drv_ops_map));
+        if (ret != 0) {
+            HINIC3_LOG(ERR, AGENT, "hinic3 drv ops init: common api load failed!");
+            goto err;
+        }
     }
 
     if (hinic3_card_mod_get() == PROG_MODE) {
@@ -274,7 +326,7 @@ int hinic3_drv_ops_init(void)
         if (ret != 0) {
             HINIC3_LOG(ERR, AGENT, "hinic3 drv ops init: standard api load failed!");
             goto err;
-        }  
+        }
     }
 
     if (hinic3_check_fuzzy_flow_switch()) {

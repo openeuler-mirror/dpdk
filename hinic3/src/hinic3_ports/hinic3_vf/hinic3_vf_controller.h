@@ -27,8 +27,6 @@
 #define HINIC3_VF_SECURITY_ETH_GROUP_INVALID    0
 #define HINIC3_VF_MTU_MAX                       9216
 #define HINIC3_VF_MTU_MIN                       256
-#define HINIC3_VF_MAX_QUEUE_NUM                 32
-#define HINIC3_VF_UPCALL_NUM                    16
 #define VNI_INVALID                            (1UL << 24)
 #define HINIC3_DEFAULT_MTU                      1500
 #define HINIC3_VF_SIZE_OFFSET                   26   /* eth头(14) + 内层vlan(4) * 2 + FCS(4) */

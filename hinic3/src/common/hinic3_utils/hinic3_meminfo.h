@@ -10,6 +10,8 @@
 #include "hinic3_mutex.h"
 #include "hinic3_flow_agent_enum.h"
 
+#define HINIC3_ALLOC_SIZE_MAX (1 << 30)
+
 struct hinic3_module_id {
     enum hinic3_module module_id;
 } __attribute__((__aligned__(8)));

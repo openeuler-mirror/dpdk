@@ -41,6 +41,7 @@ struct hinic3_init_arg init_arg_openovs_standard_dpu_virt = {
     .support_vf_port = true,
     .support_pf_port = false,
     .is_virtio_queue_depth_set = true,
+    .virtio_queue_depth_limit = 32768,
     .is_preload_pf_port = false,
     .is_preload_vf_port = false,
     .vf_del_no_driver_check = false,
@@ -119,6 +120,7 @@ struct hinic3_init_arg init_arg_openovs_standard_smartnic_virt = {
     .support_vf_port = true,
     .support_pf_port = false,
     .is_virtio_queue_depth_set = true,
+    .virtio_queue_depth_limit = 32768,
     .is_preload_pf_port = false,
     .is_preload_vf_port = false,
     .vf_del_no_driver_check = false,
@@ -324,6 +326,7 @@ struct hinic3_init_arg init_arg_combd_standard_dpu_virt = {
     .is_preload_vf_port = false,
     .vf_del_no_driver_check = false,
     .is_virtio_queue_depth_set = true,
+    .virtio_queue_depth_limit = 32768,
     .card_mode = STANDARD_MODE,
     .user_scenario = COM_BD,
     .support_hardware_flow_age = true,
@@ -363,6 +366,7 @@ struct hinic3_init_arg init_arg_combd_standard_dpu_metal = {
     .is_preload_vf_port = false,
     .vf_del_no_driver_check = false,
     .is_virtio_queue_depth_set = true,
+    .virtio_queue_depth_limit = 32768,
     .card_mode = STANDARD_MODE,
     .user_scenario = COM_BD,
     .support_flow_qos = true,
@@ -483,6 +487,48 @@ struct hinic3_init_arg init_arg_comsn_prog_dpu_virt = {
     .support_payload_capture = false,
 };
 
+struct hinic3_init_arg init_arg_comzj_prog_smartnic_virt = {
+    .hot_migration = false,
+    .is_dpu = false,
+    .security_filter = false,
+    .offload_policy = false,
+    .masked_to_exact = true,
+    .acl_flow = false,
+    .dp_hash_flow = false,
+    .fuzzy_flow = false,
+    .fuzzy_flow_flexda = false,
+    .fuzzy_flow_l3_forward = false,
+    .hardware_flow_age = false,
+    .con_track = false,
+    .support_sample = false,
+    .support_sample_pkt_cutoff = false,
+    .support_sample_ratio = false,
+    .forward_mode = OVS_KEY_EXTRACT_MODE_9TUPLE,
+    .hiovs_mode = HIOVS_WORK_MODE_PT_CONTAINER,
+    .vdpa_virtio_feature = 0,
+    .status_packet_upcall = DEFAULT_NOT_PUT,
+    .support_virtio_queue = 8192,
+    .max_flow_num_limit = 32,
+    .max_queue_num_limit = 64,
+    .query_bdf_type = QUERY_BDF_TYPE_REAL,
+    .support_port_hot_plug = false,
+    .support_vf_port = true,
+    .support_pf_port = false,
+    .is_preload_pf_port = false,
+    .is_preload_vf_port = false,
+    .vf_del_no_driver_check = false,
+    .is_virtio_queue_depth_set = true,
+    .virtio_queue_depth_limit = 16384,
+    .card_mode = PROG_MODE,
+    .user_scenario = OPEN_OVS,
+    .support_flow_qos = false,
+    .support_multi_qos = false,
+    .support_hardware_flow_age = false,
+    .virtio_queue_depth = 1024,
+    .support_vlan_tci = true,
+    .support_payload_capture = false,
+};
+
 // 初始化函数
 void hinic3_init_log_prefix(const char *run_time_mode)
 {
@@ -526,6 +572,7 @@ static struct hinic3_run_time_mode g_hinic3_run_time_mode_map[] = {
     {"0x0302", &init_arg_cmnnet_standard_dpu_container},
     {"0x0305", &init_arg_cmnnet_standard_smartnic_virt},
     {"0x0400", &init_arg_cmnit_standard_dpu_metal},
+    {"0x050D", &init_arg_comzj_prog_smartnic_virt},
 };
 
 static struct hinic3_init_arg *hinic3_get_run_time_mode_arg(const char *run_time_mode)
