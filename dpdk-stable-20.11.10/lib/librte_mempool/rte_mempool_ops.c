@@ -64,6 +64,7 @@ rte_mempool_register_ops(const struct rte_mempool_ops *h)
 	ops->populate = h->populate;
 	ops->get_info = h->get_info;
 	ops->dequeue_contig_blocks = h->dequeue_contig_blocks;
+	ops->flags = h->flags;
 
 	rte_spinlock_unlock(&rte_mempool_ops_table.sl);
 

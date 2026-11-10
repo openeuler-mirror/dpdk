@@ -54,7 +54,7 @@ extern volatile uint8_t f_quit;
 #define MAX_SEGS_BUFFER_SPLIT 8 /**< nb_segs is a 8-bit unsigned char. */
 
 /* The prefix of the mbuf pool names created by the application. */
-#define MBUF_POOL_NAME_PFX "mb_pool"
+#define MBUF_POOL_NAME_PFX "bmu_pool"
 
 #define MAX_PKT_BURST 512
 #define DEF_PKT_BURST 32
@@ -675,12 +675,15 @@ static inline void
 mbuf_poolname_build(unsigned int sock_id, char *mp_name,
 		    int name_size, uint16_t idx)
 {
-	if (!idx)
-		snprintf(mp_name, name_size,
-			 MBUF_POOL_NAME_PFX "_%u", sock_id);
-	else
-		snprintf(mp_name, name_size,
-			 MBUF_POOL_NAME_PFX "_%hu_%hu", (uint16_t)sock_id, idx);
+	snprintf(mp_name,name_size,"bmu_pool%u",6);
+	(void)sock_id;
+	(void)idx;
+	// if (!idx)
+	// 	snprintf(mp_name, name_size,
+	// 		 MBUF_POOL_NAME_PFX "_%u", sock_id);
+	// else
+	// 	snprintf(mp_name, name_size,
+	// 		 MBUF_POOL_NAME_PFX "_%hu_%hu", (uint16_t)sock_id, idx);
 }
 
 static inline struct rte_mempool *

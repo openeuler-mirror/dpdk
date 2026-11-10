@@ -643,7 +643,23 @@ struct rte_mempool_ops {
 	 * Dequeue a number of contiguous object blocks.
 	 */
 	rte_mempool_dequeue_contig_blocks_t dequeue_contig_blocks;
+	/**
+	 * Flags for mempool ops behavior.
+	 */
+	uint32_t flags;
 } __rte_cache_aligned;
+
+/**
+ * Mempool ops behavior flags.
+ */
+#define RTE_MEMPOOL_OPS_F_NEED_FREE_MEMCHUNKS  0x0001
+/**
+ * Mempool ops requires the allocated memory chunk to be physically
+ * contiguous and its base address aligned to the block size reported
+ * by calc_mem_size. rte_mempool_populate_default() honors this by
+ * forcing RTE_MEMZONE_IOVA_CONTIG and realigning base/len accordingly.
+ */
+#define RTE_MEMPOOL_OPS_F_CONTIG_ALIGN         0x0002
 
 #define RTE_MEMPOOL_MAX_OPS_IDX 16  /**< Max registered ops structs */
 

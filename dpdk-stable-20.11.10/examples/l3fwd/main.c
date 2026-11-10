@@ -116,7 +116,12 @@ static struct rte_eth_conf port_conf = {
 		.mq_mode = ETH_MQ_RX_RSS,
 		.max_rx_pkt_len = RTE_ETHER_MAX_LEN,
 		.split_hdr_size = 0,
+#ifdef RTE_LIBRTE_HNS5_PMD
+		/* hns5网卡不支持RX CHECKSUM卸载，请求会导致dev_configure失败 */
+		.offloads = 0,
+#else
 		.offloads = DEV_RX_OFFLOAD_CHECKSUM,
+#endif
 	},
 	.rx_adv_conf = {
 		.rss_conf = {
@@ -817,12 +822,32 @@ init_mem(uint16_t portid, unsigned int nb_mbuf)
 		}
 
 		if (pktmbuf_pool[portid][socketid] == NULL) {
+#ifdef RTE_LIBRTE_HNS5_PMD
+			/* hns5平台必须使用hns5_bmu mempool(硬件BMU buffer池)，
+			 * pool名遵循"bmu_pool%u"格式，id由hns5_bmu从池名解析，
+			 * 起始id取6与testpmd的bmu_pool6保持一致
+			 */
+			static uint16_t bmu_pool_id = 6;
+
+			if (bmu_pool_id >= 64) {
+				rte_exit(EXIT_FAILURE,
+					"hns5 bmu pool id exhausted\n");
+			}
+			snprintf(s, sizeof(s), "bmu_pool%u",
+				 bmu_pool_id++);
+			pktmbuf_pool[portid][socketid] =
+				rte_pktmbuf_pool_create_by_ops(s, nb_mbuf,
+					MEMPOOL_CACHE_SIZE, 0,
+					RTE_MBUF_DEFAULT_BUF_SIZE, socketid,
+					"hns5_bmu");
+#else
 			snprintf(s, sizeof(s), "mbuf_pool_%d:%d",
 				 portid, socketid);
 			pktmbuf_pool[portid][socketid] =
 				rte_pktmbuf_pool_create(s, nb_mbuf,
 					MEMPOOL_CACHE_SIZE, 0,
 					RTE_MBUF_DEFAULT_BUF_SIZE, socketid);
+#endif
 			if (pktmbuf_pool[portid][socketid] == NULL)
 				rte_exit(EXIT_FAILURE,
 					"Cannot init mbuf pool on socket %d\n",

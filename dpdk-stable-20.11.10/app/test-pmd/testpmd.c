@@ -987,8 +987,7 @@ mbuf_pool_create(uint16_t mbuf_seg_size, unsigned nb_mbuf,
 			/* wrapper to rte_mempool_create() */
 			TESTPMD_LOG(INFO, "preferred mempool ops selected: %s\n",
 					rte_mbuf_best_mempool_ops());
-			rte_mp = rte_pktmbuf_pool_create(pool_name, nb_mbuf,
-				mb_mempool_cache, 0, mbuf_seg_size, socket_id);
+			rte_mp = rte_pktmbuf_pool_create_by_ops("bmu_pool6", nb_mbuf, mb_mempool_cache, 0, mbuf_seg_size, rte_socket_id(), "hns5_bmu");
 			break;
 		}
 	case MP_ALLOC_ANON:

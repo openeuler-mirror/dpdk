@@ -2925,7 +2925,7 @@ cmd_set_rss_reta_parsed(void *parsed_result,
 {
 	int ret;
 	struct rte_eth_dev_info dev_info;
-	struct rte_eth_rss_reta_entry64 reta_conf[8];
+	struct rte_eth_rss_reta_entry64 reta_conf[16];
 	struct cmd_config_rss_reta *res = parsed_result;
 
 	ret = eth_dev_info_get_print_err(res->port_id, &dev_info);
@@ -2939,11 +2939,6 @@ cmd_set_rss_reta_parsed(void *parsed_result,
 	} else
 		printf("The reta size of port %d is %u\n",
 			res->port_id, dev_info.reta_size);
-	if (dev_info.reta_size > ETH_RSS_RETA_SIZE_512) {
-		printf("Currently do not support more than %u entries of "
-			"redirection table\n", ETH_RSS_RETA_SIZE_512);
-		return;
-	}
 
 	memset(reta_conf, 0, sizeof(reta_conf));
 	if (!strcmp(res->list_name, "reta")) {
@@ -3009,7 +3004,7 @@ showport_parse_reta_config(struct rte_eth_rss_reta_entry64 *conf,
 	const char *p, *p0 = str;
 	char s[256];
 	char *end;
-	char *str_fld[8];
+	char *str_fld[16];
 	uint16_t i;
 	uint16_t num = (nb_entries + RTE_RETA_GROUP_SIZE - 1) /
 			RTE_RETA_GROUP_SIZE;
@@ -3046,7 +3041,7 @@ cmd_showport_reta_parsed(void *parsed_result,
 			 __rte_unused void *data)
 {
 	struct cmd_showport_reta *res = parsed_result;
-	struct rte_eth_rss_reta_entry64 reta_conf[8];
+	struct rte_eth_rss_reta_entry64 reta_conf[16];
 	struct rte_eth_dev_info dev_info;
 	uint16_t max_reta_size;
 	int ret;
@@ -3055,7 +3050,7 @@ cmd_showport_reta_parsed(void *parsed_result,
 	if (ret != 0)
 		return;
 
-	max_reta_size = RTE_MIN(dev_info.reta_size, ETH_RSS_RETA_SIZE_512);
+	max_reta_size = dev_info.reta_size;
 	if (res->size == 0 || res->size > max_reta_size) {
 		printf("Invalid redirection table size: %u (1-%u)\n",
 			res->size, max_reta_size);

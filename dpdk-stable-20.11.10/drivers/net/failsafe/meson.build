@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright(c) 2018 Intel Corporation
 
-cflags += '-std=gnu99'
+cflags += '-std=gnu11'
 cflags += '-D_DEFAULT_SOURCE'
 cflags += '-D_XOPEN_SOURCE=700'
 cflags += '-pedantic'

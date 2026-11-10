@@ -269,13 +269,28 @@ static void
 rte_mempool_free_memchunks(struct rte_mempool *mp)
 {
 	struct rte_mempool_memhdr *memhdr;
+	struct rte_mempool_ops *ops;
 	void *elt;
 
-	while (!STAILQ_EMPTY(&mp->elt_list)) {
-		rte_mempool_ops_dequeue_bulk(mp, &elt, 1);
-		(void)elt;
-		STAILQ_REMOVE_HEAD(&mp->elt_list, next);
-		mp->populated_size--;
+	ops = rte_mempool_get_ops(mp->ops_index);
+
+	if (ops->flags & RTE_MEMPOOL_OPS_F_NEED_FREE_MEMCHUNKS) {
+		struct rte_mempool_objhdr *hdr;
+
+		while (!STAILQ_EMPTY(&mp->elt_list)) {
+			hdr = STAILQ_FIRST(&mp->elt_list);
+			elt = (void *)((char *)hdr + sizeof(struct rte_mempool_objhdr));
+			rte_mempool_ops_enqueue_bulk(mp, &elt, 1);
+			STAILQ_REMOVE_HEAD(&mp->elt_list, next);
+			mp->populated_size--;
+		}
+	} else {
+		while (!STAILQ_EMPTY(&mp->elt_list)) {
+			rte_mempool_ops_dequeue_bulk(mp, &elt, 1);
+			(void)elt;
+			STAILQ_REMOVE_HEAD(&mp->elt_list, next);
+			mp->populated_size--;
+		}
 	}
 
 	while (!STAILQ_EMPTY(&mp->mem_list)) {
@@ -480,6 +495,7 @@ rte_mempool_populate_default(struct rte_mempool *mp)
 	int ret;
 	bool need_iova_contig_obj;
 	size_t max_alloc_size = SIZE_MAX;
+	struct rte_mempool_ops *ops;
 
 	ret = mempool_ops_alloc_once(mp);
 	if (ret != 0)
@@ -538,6 +554,7 @@ rte_mempool_populate_default(struct rte_mempool *mp)
 	for (mz_id = 0, n = mp->size; n > 0; mz_id++, n -= ret) {
 		size_t min_chunk_size;
 
+		ops = rte_mempool_get_ops(mp->ops_index);
 		mem_size = rte_mempool_ops_calc_mem_size(
 			mp, n, pg_shift, &min_chunk_size, &align);
 
@@ -556,7 +573,8 @@ rte_mempool_populate_default(struct rte_mempool *mp)
 		/* if we're trying to reserve contiguous memory, add appropriate
 		 * memzone flag.
 		 */
-		if (min_chunk_size == (size_t)mem_size)
+		if ((ops->flags & RTE_MEMPOOL_OPS_F_CONTIG_ALIGN) ||
+				min_chunk_size == (size_t)mem_size)
 			mz_flags |= RTE_MEMZONE_IOVA_CONTIG;
 
 		/* Allocate a memzone, retrying with a smaller area on ENOMEM */
@@ -582,16 +600,32 @@ rte_mempool_populate_default(struct rte_mempool *mp)
 		else
 			iova = RTE_BAD_IOVA;
 
-		if (pg_sz == 0 || (mz_flags & RTE_MEMZONE_IOVA_CONTIG))
-			ret = rte_mempool_populate_iova(mp, mz->addr,
-				iova, mz->len,
+		void *addr = mz->addr;
+		size_t len = mz->len;
+
+		if ((ops->flags & RTE_MEMPOOL_OPS_F_CONTIG_ALIGN) &&
+				iova != RTE_BAD_IOVA) {
+			size_t blk_align = align;
+
+			if (blk_align != 0 && iova % blk_align != 0) {
+				size_t align_offset = RTE_ALIGN(iova, blk_align) - iova;
+
+				addr = (char *)addr + align_offset;
+				iova = RTE_ALIGN(iova, blk_align);
+				len = RTE_ALIGN_FLOOR(len - align_offset, blk_align);
+			}
+		}
+
+		if (pg_sz == 0 || (mz_flags & RTE_MEMZONE_IOVA_CONTIG)) {
+			ret = rte_mempool_populate_iova(mp, addr, iova, len,
 				rte_mempool_memchunk_mz_free,
 				(void *)(uintptr_t)mz);
-		else
-			ret = rte_mempool_populate_virt(mp, mz->addr,
-				mz->len, pg_sz,
+		} else {
+			ret = rte_mempool_populate_virt(mp, addr,
+				len, pg_sz,
 				rte_mempool_memchunk_mz_free,
 				(void *)(uintptr_t)mz);
+		}
 		if (ret == 0) /* should not happen */
 			ret = -ENOBUFS;
 		if (ret < 0) {
