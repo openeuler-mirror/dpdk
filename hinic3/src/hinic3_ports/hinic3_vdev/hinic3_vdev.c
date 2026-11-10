@@ -837,9 +837,10 @@ hinic3_vf_parse_virtio_queue_depth(struct rte_kvargs *kvlist, uint16_t *virtio_q
             HINIC3_LOG(ERR, VPORT, "virtio queue depth num parse failed");
             return -1;
         }
-        if (*virtio_queue_depth < HINIC3_PORT_MIN_QUEUE_DEPTH || *virtio_queue_depth > HINIC3_PORT_MAX_QUEUE_DEPTH) {
+        if (*virtio_queue_depth < HINIC3_PORT_MIN_QUEUE_DEPTH || *virtio_queue_depth > hinic3_virtio_queue_depth_limit_get()) {
             *virtio_queue_depth = 0;
-            HINIC3_LOG(ERR, VPORT, "virtio queue_depth is out of the range");
+            HINIC3_LOG(ERR, VPORT, "virtio queue_depth is out of the range, min value is %u, max value is %u!\n",
+                HINIC3_PORT_MIN_QUEUE_DEPTH, hinic3_virtio_queue_depth_limit_get());
             return -1;
         }
     }

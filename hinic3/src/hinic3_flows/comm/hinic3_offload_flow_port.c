@@ -8,7 +8,7 @@
 #include "hinic3_mutex.h"
 #include "hinic3_offload_flow_port.h"
 
-#define HINIC3_VF_PORT_MAX_NUM          1024
+#define HINIC3_VF_PORT_MAX_NUM          2000
 #define HINIC3_PF_PORT_MAX_NUM          32
 #define HINIC3_BOND_PORT_MAX_NUM        2
 #define HINIC3_PORT_INDEX_OFFSET        1

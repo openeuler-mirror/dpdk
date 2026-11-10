@@ -23,7 +23,11 @@
 #include <stdint.h>
 #include <string.h>
 #include <arpa/inet.h>
+#ifdef __aarch64__
 #include <arm_acle.h>
+#else
+#include <rte_hash_crc.h>
+#endif
 #include "hinic3_hash.h"
 
 #define HINIC3_HALF_BYTE_SIZE 4
@@ -32,19 +36,37 @@
 #define HINIC3_THREE_BYTE_SIZE 24
 #define HINIC3_WORD_SIZE 32
 
+static inline uint32_t hinic3_crc32c_u32(uint32_t hash, uint32_t data)
+{
+#ifdef __aarch64__
+    return __crc32cw(hash, data);
+#else
+    return rte_hash_crc_4byte(hash, data);
+#endif
+}
+
+static inline uint32_t hinic3_crc64c_u64(uint32_t hash, uint64_t data)
+{
+#ifdef __aarch64__
+    return __crc32cd(hash, data);
+#else
+    return rte_hash_crc_8byte(hash, data);
+#endif
+}
+
 uint32_t hinic3_hash_add(uint32_t hash, uint32_t data)
 {
-    return __crc32cw(hash, data);
+    return hinic3_crc32c_u32(hash, data);
 }
 
 uint32_t hinic3_hash_add64(uint32_t hash, uint64_t data)
 {
-    return __crc32cd(hash, data);
+    return hinic3_crc64c_u64(hash, data);
 }
 
 static inline uint32_t hinic3_hash_finish(uint32_t hash, uint64_t final)
 {
-    uint32_t hash_num = __crc32cd(hash, final) * 0x805204f3;
+    uint32_t hash_num = hinic3_hash_add64(hash, final) * 0x805204f3;
     return hash_num ^ (hash_num >> HINIC3_SHORT_SIZE);
 }
 

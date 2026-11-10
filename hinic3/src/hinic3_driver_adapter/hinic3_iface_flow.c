@@ -657,9 +657,16 @@ int hinic3_iface_global_cfg_set(struct hiovs_mirror_session_info *hiovs_session_
     uint8_t buf[GLOBAL_CFG_ARGS_SIZE];
     struct hinic3_nlattr set_nla;
     struct hinic3_drv_ops *ops = NULL;
+    int (*global_cfg_set)(const struct nlattr *, size_t, struct nlattr *, size_t *) = NULL;
 
     ops = hinic3_get_drv_ops();
-    HINIC3_FUNC_PTR_OR_ERR_RET(ops->hovs_global_cfg_set, HINIC3_DRV_FUNC_NO_PTR);
+    if (hinic3_card_mod_get() == PROG_MODE) {
+        HINIC3_FUNC_PTR_OR_ERR_RET(ops->hovs_flexda_global_cfg_set, HINIC3_DRV_FUNC_NO_PTR);
+        global_cfg_set = ops->hovs_flexda_global_cfg_set;
+    } else {
+        HINIC3_FUNC_PTR_OR_ERR_RET(ops->hovs_global_cfg_set, HINIC3_DRV_FUNC_NO_PTR);
+        global_cfg_set = ops->hovs_global_cfg_set;
+    }
 
     hinic3_nlattr_init(&set_nla, buf, GLOBAL_CFG_ARGS_SIZE);
 
@@ -676,8 +683,8 @@ int hinic3_iface_global_cfg_set(struct hiovs_mirror_session_info *hiovs_session_
         break;
     }
 
-    ret = ops->hovs_global_cfg_set((struct nlattr *)set_nla.data, set_nla.used_len,
-                                   (struct nlattr *)set_nla.data, &set_nla.used_len);
+    ret = global_cfg_set((struct nlattr *)set_nla.data, set_nla.used_len,
+                         (struct nlattr *)set_nla.data, &set_nla.used_len);
     if (ret != 0)
     {
         hinic3_add_error_stats(HINIC3_FLOWS_ERROR_GLOBAL_CFG_SET_EMC_SAMPLE, 1);

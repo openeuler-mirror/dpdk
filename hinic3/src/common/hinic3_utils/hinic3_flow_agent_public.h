@@ -142,8 +142,6 @@ struct hinic3_flow_capability {
     uint16_t flags;
     uint32_t max_flow_size;
     uint32_t rx_thread_num;
-    uint32_t cmd_queue_base;
-    uint32_t cmd_queue_num;
 };
 
 struct hinic3_flow_stats {

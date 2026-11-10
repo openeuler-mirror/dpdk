@@ -27,6 +27,7 @@ struct dpak_mp_block {
     char *virt_start;
     uint32_t free_count;
     uint32_t alloc_count;
+    uint32_t ele_count;
 };
 
 struct dpak_mempool {
@@ -35,6 +36,7 @@ struct dpak_mempool {
     uint32_t ele_need_size;
     uint32_t per_block_ele_count;
     uint32_t ele_total_count;
+    uint32_t ele_max_count;
     uint32_t ele_used_count;
     uint32_t block_num;
     struct dpak_mp_block *blk_list;

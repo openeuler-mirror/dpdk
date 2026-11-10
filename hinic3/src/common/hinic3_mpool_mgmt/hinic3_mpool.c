@@ -10,10 +10,29 @@
 #include "hinic3_ui_string.h"
 #include "hinic3_mpool.h"
 
+#define HINIC3_MPOOL_BLOCK_ELE_MAX (1u * (1u << 20))
+
 static uint32_t dpak_mp_align_up(uint32_t size)
 {
     /* Aligin to sizeof uint64_t */
     return (size + sizeof(uint64_t) - 1) & (~(sizeof(uint64_t) - 1));
+}
+
+static uint32_t dpak_mp_calc_block_ele_count(uint32_t need_size, uint32_t ele_limit){
+    uint32_t per_block;
+
+    if (need_size == 0 || (uint64_t)need_size > HINIC3_ALLOC_SIZE_MAX) {
+        return 0;
+    }
+
+    per_block = (uint32_t)(HINIC3_ALLOC_SIZE_MAX / need_size);
+    if (per_block > HINIC3_MPOOL_BLOCK_ELE_MAX)
+        per_block = HINIC3_MPOOL_BLOCK_ELE_MAX;
+
+    if (ele_limit != 0 && per_block > ele_limit)
+        per_block = ele_limit;
+
+    return per_block;
 }
 
 static inline int dpak_mp_lock(struct dpak_mempool *mp)
@@ -54,7 +73,7 @@ static int dpak_mp_insert_blocks(struct dpak_mempool *mp, uint32_t need_size, ui
         return -1;
     }
 
-    if ((ele_count == 0) || (need_size == 0)) {
+    if ((ele_count == 0) || (need_size == 0) || ((uint64_t)ele_count > HINIC3_MPOOL_BLOCK_ELE_MAX)) {
         HINIC3_LOG(ERR, AGENT, "Block alloc size is invalid!");
         hinic3_free(blk_head);
         return -1;
@@ -73,10 +92,38 @@ static int dpak_mp_insert_blocks(struct dpak_mempool *mp, uint32_t need_size, ui
     mp->block_num += 1;
     blk_head->free_count = ele_count;
     blk_head->alloc_count = 0;
+    blk_head->ele_count = ele_count;
 
     for (uint32_t i = 0; i < ele_count; i++) {
-        struct dpak_mp_chunk *tmp = (struct dpak_mp_chunk *)(blk_head->virt_start + need_size * i);
+        struct dpak_mp_chunk *tmp = (struct dpak_mp_chunk *)(blk_head->virt_start + (size_t)need_size * i);
         dpak_mp_list_insert(&blk_head->free_list, tmp);
+    }
+    return 0;
+}
+
+static int dpak_mp_calc_create_args(uint32_t ele_size, uint32_t ele_count, uint32_t *need_size, uint32_t *per_block_ele_count)
+{
+    if (ele_size == 0) {
+        HINIC3_LOG(ERR, AGENT, "Memory pool size can not be %u, mempool create failed!", ele_size);
+        return -1;
+    }
+
+    if (ele_count == 0) {
+        HINIC3_LOG(ERR, AGENT, "Memory pool element count can not be 0, mempool create failed!");
+        return -1;
+    }
+
+    if ((uint64_t)ele_size + MP_CK_HEADER_LEN > HINIC3_ALLOC_SIZE_MAX) {
+        HINIC3_LOG(ERR, AGENT, "Element size %u is too large, mempool create failed!", ele_size);
+        return -1;
+    }
+
+    *need_size = dpak_mp_align_up((uint32_t)((uint64_t)ele_size + MP_CK_HEADER_LEN));
+    /* 按字节封顶，保证单次分配不超过内存分配器单次上限（HINIC3_ALLOC_SIZE_MAX）*/
+    *per_block_ele_count = dpak_mp_calc_block_ele_count(*need_size, ele_count);
+    if (*per_block_ele_count == 0) { 
+        HINIC3_LOG(ERR, AGENT, "Invalid block ele count, need_size is %u, ele_count is %u!", *need_size, ele_count);
+        return -1;
     }
     return 0;
 }
@@ -85,27 +132,33 @@ static int dpak_mempool_create(struct dpak_mempool *mp, uint32_t ele_size, uint3
     enum hinic3_module module_id)
 {
     int ret;
+    uint32_t need_size;
+    uint32_t per_block_ele_count;
+    uint32_t remain;
 
-    if (ele_size == 0) {
-        HINIC3_LOG(ERR, AGENT, "Memory pool size can not be %u, mempool create failed!", ele_size);
-        return -1;
-    }
-
-    uint32_t need_size = dpak_mp_align_up(ele_size + MP_CK_HEADER_LEN);
-    ret = dpak_mp_insert_blocks(mp, need_size, ele_count, module_id);
-    if (ret != 0) {
-        HINIC3_LOG(ERR, AGENT, "Init block failed, err is %d!", ret);
+    ret = dpak_mp_calc_create_args(ele_size, ele_count, &need_size, &per_block_ele_count);
+    if (ret != 0)
         return ret;
-    }
 
     mp->ele_size = ele_size;
     mp->ele_need_size = need_size;
-    mp->per_block_ele_count = ele_count;
-    ret = pthread_mutex_init(&mp->lock, NULL);
-    if (ret != 0) {
-        HINIC3_LOG(ERR, AGENT, "Init lock failed. errno is %d!", ret);
-        return ret;
+    mp->per_block_ele_count = per_block_ele_count;
+    mp->ele_max_count = ele_count;
+    mp->blk_list = NULL;
+    mp->ele_total_count = 0;
+    mp->block_num = 0;
+    
+    remain = mp->is_extend ? per_block_ele_count : ele_count;
+    while (remain > 0) {
+        uint32_t cur_count = (remain > per_block_ele_count) ? per_block_ele_count : remain;
+        ret = dpak_mp_insert_blocks(mp, need_size, cur_count, module_id);
+        if (ret != 0) {
+            HINIC3_LOG(ERR, AGENT, "Init block failed, err is %d!", ret);
+            return ret;
+        }
+        remain -= cur_count;
     }
+
     mp->is_valid = true;
     return 0;
 }
@@ -128,6 +181,36 @@ dpak_mp_alloc_mem_from_block(struct dpak_mp_block *blk, uint64_t size HINIC3_UNU
     return alloc;
 }
 
+static void *dpak_mp_extend_and_alloc(struct dpak_mempool *mp, uint32_t need_size, enum hinic3_module module_id)
+{
+    struct dpak_mp_block *blk = NULL;
+    void *alloc = NULL;
+    uint32_t grow;
+    uint32_t left;
+    int ret;
+
+    grow = mp->per_block_ele_count;
+    left = mp->ele_max_count - mp->ele_total_count;
+    if (grow > left)
+        grow = left;
+
+    ret = dpak_mp_insert_blocks(mp, need_size, grow, module_id);
+    if (ret != 0) {
+        HINIC3_LOG(ERR, AGENT, "Init block failed, err is %d!", ret);
+        return NULL;
+    }
+    HINIC3_LOG(WARNING, AGENT, "Mempool of ele_size %u extend new block, grow %u!, total %u/%u",
+        need_size, grow, mp->ele_total_count, mp->ele_max_count);
+
+    /* 从新分配的块中返回一个元素 */
+    blk = mp->blk_list;
+    alloc = dpak_mp_alloc_mem_from_block(blk, need_size);
+    if (HINIC3_LIKELY(alloc != NULL))
+        mp->ele_used_count++;
+
+    return alloc;
+}
+
 static void *dpak_mp_alloc_mem_from_blocks(struct dpak_mempool *mp, uint32_t need_size, enum hinic3_module module_id)
 {
     struct dpak_mp_block *blk = mp->blk_list;
@@ -147,12 +230,12 @@ static void *dpak_mp_alloc_mem_from_blocks(struct dpak_mempool *mp, uint32_t nee
         blk = blk->next;
     }
 
-    HINIC3_LOG(WARNING, AGENT, "Mempool of ele_size %u no enough memory, start alloc new block!", need_size);
-    if (mp->is_extend)
-    {
-        (void)dpak_mp_insert_blocks(mp, need_size, mp->per_block_ele_count, module_id);
+    if (!mp->is_extend || mp->ele_total_count >= mp->ele_max_count) {
+        HINIC3_LOG(ERR, AGENT, "Mempool of ele_size %u no enough memory!", need_size);
+        return NULL;
     }
-    return NULL;
+
+    return dpak_mp_extend_and_alloc(mp, need_size, module_id);
 }
 
 static struct dpak_mp_block *dpak_mp_find_block(struct dpak_mempool *mp, void *p)
@@ -161,9 +244,9 @@ static struct dpak_mp_block *dpak_mp_find_block(struct dpak_mempool *mp, void *p
     uint32_t need_size = mp->ele_need_size;
 
     while (blk != NULL) {
-        if ((blk->virt_start <= (char *)p) && ((blk->virt_start + mp->per_block_ele_count * need_size) > (char *)p)) {
+        if ((blk->virt_start <= (char *)p) && ((blk->virt_start + (uint64_t)blk->ele_count * need_size) > (char *)p))
             break;
-        }
+
         blk = blk->next;
     }
 
@@ -194,7 +277,6 @@ int dpak_mempool_flush(struct dpak_mempool *mp)
     }
 
     uint32_t need_size = mp->ele_need_size;
-    uint32_t ele_count = mp->per_block_ele_count;
     struct dpak_mp_block *blk = mp->blk_list;
     struct dpak_mp_chunk *mp_chunk_start = NULL;
 
@@ -205,13 +287,14 @@ int dpak_mempool_flush(struct dpak_mempool *mp)
     }
 
     while (blk != NULL) {
+        uint32_t blk_ele_count = blk->ele_count;
         blk->free_list = NULL;
-        memset(blk->virt_start, 0, need_size * ele_count);
-        for (uint32_t i = 0; i < ele_count; i++) {
-            mp_chunk_start = (struct dpak_mp_chunk *)(blk->virt_start + need_size * i);
+        memset(blk->virt_start, 0, (size_t)need_size * blk_ele_count);
+        for (uint32_t i = 0; i < blk_ele_count; i++) {
+            mp_chunk_start = (struct dpak_mp_chunk *)(blk->virt_start + (size_t)need_size * i);
             dpak_mp_list_insert(&blk->free_list, mp_chunk_start);
         }
-        blk->free_count = ele_count;
+        blk->free_count = blk_ele_count;
         blk->alloc_count = 0;
         blk = blk->next;
     }
@@ -268,10 +351,6 @@ void *dpak_mempool_alloc(struct dpak_mempool *mp, enum hinic3_module module_id)
         return NULL;
     }
     alloc = dpak_mp_alloc_mem_from_blocks(mp, mp->ele_need_size, module_id);
-    if (HINIC3_UNLIKELY(alloc == NULL)) {
-        /* 此处为支持block可动态扩张，如果一个block里边没有可用内存，则再申请一个 */
-        alloc = dpak_mp_alloc_mem_from_blocks(mp, mp->ele_need_size, module_id);
-    }
     ret = dpak_mp_unlock(mp);
     if (ret != 0) {
         dpak_mempool_free(mp, alloc);
@@ -302,6 +381,13 @@ struct dpak_mempool *hinic3_create_single_mpool(const char *pool_name, uint32_t 
     }
 
     pool->is_extend = is_extend;
+    ret = pthread_mutex_init(&pool->lock, NULL);
+    if (ret != 0) {
+        HINIC3_LOG(ERR, AGENT, "Init lock failed. errno is %d!", ret);
+        hinic3_free(pool);
+        return NULL;
+    }
+
     ret = dpak_mempool_create(pool, ele_size, ele_num, module_id);
     if (ret != 0) {
         dpak_mempool_destroy(pool);
@@ -354,9 +440,8 @@ void dpak_mempool_free(struct dpak_mempool *mp, void *ptr)
 
 void hinic3_show_one_mpool(const struct dpak_mempool *mpool, struct ds *ds, bool is_end)
 {
-    if ((mpool == NULL) || (mpool->is_valid != true) || ds == NULL) {
+    if ((mpool == NULL) || (mpool->is_valid != true) || ds == NULL)
         return;
-    }
 
     uint64_t need_size = mpool->ele_need_size;
     hinic3_ds_put_format(ds, "%2smempool %s:\n", HINIC3_UI_INDENT_SPACE, mpool->pool_name);
@@ -364,7 +449,8 @@ void hinic3_show_one_mpool(const struct dpak_mempool *mpool, struct ds *ds, bool
     hinic3_ds_put_format(ds, "%4stotal-obj-size(Byte):      %u\n", HINIC3_UI_INDENT_SPACE, need_size);
     hinic3_ds_put_format(ds, "%4sblock-count:               %u\n", HINIC3_UI_INDENT_SPACE, mpool->block_num);
     hinic3_ds_put_format(ds, "%4sper-block-ele-num:         %u\n", HINIC3_UI_INDENT_SPACE, mpool->per_block_ele_count);
-    hinic3_ds_put_format(ds, "%4sused-ele-count:            %u \n", HINIC3_UI_INDENT_SPACE, mpool->ele_used_count);
+    hinic3_ds_put_format(ds, "%4smax-ele-count:             %u\n", HINIC3_UI_INDENT_SPACE, mpool->ele_max_count);
+    hinic3_ds_put_format(ds, "%4sused-ele-count:            %u\n", HINIC3_UI_INDENT_SPACE, mpool->ele_used_count);
     hinic3_ds_put_format(ds, "%4stotal-ele-count:           %u\n", HINIC3_UI_INDENT_SPACE, mpool->ele_total_count);
     hinic3_ds_put_format(ds, "%4sTotal Memory(KByte):       %u\n", HINIC3_UI_INDENT_SPACE,
         mpool->ele_total_count * need_size / HINIC3_KB_TO_BYTE);
@@ -375,8 +461,6 @@ void hinic3_show_one_mpool(const struct dpak_mempool *mpool, struct ds *ds, bool
         (((float)mpool->ele_used_count) / ((float)mpool->ele_total_count) * HINIC3_PERCENTAGE);
     hinic3_ds_put_format(ds, "%4sMemory usage(%%):           %.2f\n", HINIC3_UI_INDENT_SPACE, mem_usage);
 
-    if (!is_end) {
-    hinic3_ds_put_format(ds, "%s\n", HINIC3_UI_INDENT_SPACE);
-    }
-    return;
+    if (!is_end)
+        hinic3_ds_put_format(ds, "%s\n", HINIC3_UI_INDENT_SPACE);
 }

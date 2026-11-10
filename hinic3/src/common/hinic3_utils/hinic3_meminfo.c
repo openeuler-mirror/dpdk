@@ -9,7 +9,6 @@
 #include "hinic3_meminfo.h"
 
 #define HINIC3_CALLOC_DEFAULT_NUM 1
-#define HINIC3_ALLOC_SIZE_MAX (1 << 30)
 
 static struct hinic3_mem_statistics g_mem_statistics = { 0 };
 

@@ -127,6 +127,7 @@ struct hinic3_init_arg {
     char qos_level[QOS_LEVEL_MAX_LENGTH];
     bool is_virtio_queue_depth_set;
     uint16_t virtio_queue_depth;
+    uint16_t virtio_queue_depth_limit;
     // 是否预载所有PF端口
     bool is_preload_pf_port;
     // 是否预载所有VF端口
