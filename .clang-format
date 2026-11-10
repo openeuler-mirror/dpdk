@@ -1,0 +1,150 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 Huawei Technologies Co., Ltd
+#
+# C/C++ 代码风格配置，对齐 DPDK 官方规范：
+#   doc/guides/contributing/coding_style.rst   (DPDK Coding Style)
+#   doc/guides/contributing/documentation.rst  (Doxygen Guidelines)
+# 由 clang-format 通过 --style=file 读取，需随代码一并提交
+#
+---
+Language:        Cpp
+# BasedOnStyle:  LLVM
+AccessModifierOffset: 0
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
+AlignOperands:   true
+AlignTrailingComments: true
+ColumnLimit:     100
+TabWidth:        8
+UseTab:          ForContinuationAndIndentation  # 缩进用 Tab，对齐用空格
+IndentWidth:     8
+AlignConsecutiveMacros: true
+AllowAllParametersOfDeclarationOnNextLine: true
+AlignEscapedNewlines: Right                     # 反斜杠右对齐到固定列
+AllowAllArgumentsOnNextLine: true
+AllowAllConstructorInitializersOnNextLine: true
+AllowShortBlocksOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None          # 函数体不能一行写完
+AllowShortLambdasOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AlwaysBreakAfterReturnType: TopLevel            # 仅对顶层函数定义断行、声明不断行
+AlwaysBreakBeforeMultilineStrings: false
+AlwaysBreakTemplateDeclarations: MultiLine
+BinPackArguments: true
+BinPackParameters: true
+BraceWrapping:
+  AfterCaseLabel:  false
+  AfterClass:      false
+  AfterControlStatement: false
+  AfterEnum:       false
+  AfterFunction:   true
+  AfterNamespace:  false
+  AfterObjCDeclaration: false
+  AfterStruct:     false
+  AfterUnion:      false
+  AfterExternBlock: false
+  BeforeCatch:     false
+  BeforeElse:      false
+  IndentBraces:    false
+  SplitEmptyFunction: true
+  SplitEmptyRecord: true
+  SplitEmptyNamespace: true
+BreakBeforeBinaryOperators: None
+SpaceBeforeParens: ControlStatements
+MaxEmptyLinesToKeep: 1
+SpacesInParentheses: false
+BreakBeforeBraces: Custom
+BreakBeforeInheritanceComma: false
+BreakInheritanceList: BeforeColon
+BreakBeforeTernaryOperators: true
+BreakConstructorInitializersBeforeComma: false
+BreakConstructorInitializers: BeforeColon
+BreakAfterJavaFieldAnnotations: false
+BreakStringLiterals: true
+CommentPragmas:  '^ IWYU pragma:'
+CompactNamespaces: false
+ConstructorInitializerAllOnOneLineOrOnePerLine: false
+ConstructorInitializerIndentWidth: 8
+ContinuationIndentWidth: 8
+Cpp11BracedListStyle: true
+DerivePointerAlignment: false
+DisableFormat:   false
+ExperimentalAutoDetectBinPacking: false
+FixNamespaceComments: true
+ForEachMacros:
+  - foreach
+  - Q_FOREACH
+  - BOOST_FOREACH
+  - STAILQ_FOREACH
+  - TAILQ_FOREACH_SAFE
+  - PKTDEV_FOREACH
+  - TAILQ_FOREACH
+  - json_array_foreach
+  - json_object_object_foreach
+  - json_object_object_foreachC
+  - CIRCLEQ_FOREACH
+  - jcfg_application_foreach
+  - jcfg_defaults_foreach
+  - jcfg_umem_foreach
+  - jcfg_lport_foreach
+  - jcfg_lgroup_foreach
+  - jcfg_options_foreach
+  - jcfg_thread_foreach
+IncludeBlocks:   Preserve
+IncludeCategories:
+  - Regex:           '^<.*\.(h|hpp)>'
+    Priority:        1
+  - Regex:           '^<rte_eal\.h>'
+    Priority:        2
+  - Regex:           '^<rte_.*\.h>'
+    Priority:        3
+  - Regex:           '^".*\.h"'
+    Priority:        4
+IncludeIsMainRegex: '(Test)?$'
+IndentCaseLabels: false
+IndentPPDirectives: None
+IndentWrappedFunctionNames: false
+JavaScriptQuotes: Leave
+JavaScriptWrapImports: true
+KeepEmptyLinesAtTheStartOfBlocks: true
+MacroBlockBegin: ''
+MacroBlockEnd:   ''
+NamespaceIndentation: None
+ObjCBinPackProtocolList: Auto
+ObjCBlockIndentWidth: 8
+PenaltyBreakAssignment: 8
+ObjCSpaceAfterProperty: false
+ObjCSpaceBeforeProtocolList: true
+PenaltyBreakBeforeFirstCallParameter: 19
+PenaltyBreakComment: 300
+PenaltyBreakFirstLessLess: 100
+PenaltyBreakString: 1000
+PenaltyBreakTemplateDeclaration: 10
+PenaltyExcessCharacter: 1000000
+PenaltyReturnTypeOnItsOwnLine: 60
+PointerAlignment: Right
+ReflowComments:  false                          # 是否对注释文字重新折行/重排
+SortIncludes:    false
+SortUsingDeclarations: true
+SpaceAfterCStyleCast: false
+SpaceAfterLogicalNot: false
+SpaceAfterTemplateKeyword: true
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeCpp11BracedList: false
+SpaceBeforeCtorInitializerColon: true
+SpaceBeforeInheritanceColon: true
+SpaceBeforeRangeBasedForLoopColon: true
+SpaceInEmptyParentheses: false
+SpacesBeforeTrailingComments: 1                 # 行尾注释前至少保留 1 个空格（原为 8 个）
+SpacesInAngles:  false
+SpacesInContainerLiterals: true
+SpacesInCStyleCastParentheses: false
+SpacesInSquareBrackets: false
+Standard:        Cpp11
+StatementMacros:
+  - Q_UNUSED
+  - QT_REQUIRE_VERSION
+...
