@@ -1,0 +1,19 @@
+ [binaries]
+ 	 c = '/usr/bin/clang'
+ 	 cpp = '/usr/bin/clang++'
+ 	 ar = '/usr/bin/ar'
+ 	 strip = '/usr/bin/strip'
+ 	 pkg-config = '/usr/bin/pkg-config'
+ 	 pcap-config = ''
+ 	 
+ 	 [host_machine]
+ 	 system = 'linux'
+ 	 cpu_family = 'aarch64'
+ 	 cpu = 'armv8-a'
+ 	 endian = 'little'
+ 	 
+ 	 [properties]
+ 	 platform = 'hns5'
+ 	 
+ 	 [built-in options]
+ 	 c_args = ['-Wno-unknown-warning-option', '-Wno-unused-command-line-argument', '-Wno-macro-redefined']
