@@ -1,0 +1,48 @@
+# pre-commit 配置
+# 提交前自动执行：通用文件规范检查 + C/C++ 代码格式化(clang-format) + C/C++ 静态分析(clang-tidy)
+#
+# 使用方式：
+#   pip install pre-commit
+#   pre-commit install
+#   pre-commit run --all-files        # 首次可全量跑一遍
+# 临时跳过（不推荐）：git commit --no-verify
+fail_fast: false
+# 排除导入的上游 DPDK 22.11.11 基线源码树，避免通用钩子批量改动上游代码
+exclude: ^dpdk-stable-22\.11\.11/
+
+repos:
+  # ==================== 通用基础检查（所有语言） ====================
+  # - repo: https://github.com/pre-commit/pre-commit-hooks
+  - repo: https://gitcode.com/gh_mirrors/pr/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace          # 删除行尾多余空白
+      - id: end-of-file-fixer            # 保证文件末尾仅有一个换行
+      - id: check-yaml                   # 校验 YAML 语法
+      - id: check-json                   # 校验 JSON 语法
+      - id: check-xml                   # 校验 XML 语法
+      - id: check-merge-conflict        # 检查残留的合并冲突标记
+        args: [--assume-in-merge]        # CI 中合并已完成、无 MERGE_HEAD，需显式假定处于合并状态
+      - id: check-added-large-files     # 拦截超大文件
+        args: [--enforce-all]            # 默认仅查暂存区新增文件，CI 直接传文件名时需强制全查
+      - id: detect-private-key           # 检测私钥泄露
+
+  - repo: https://gitcode.com/gh_mirrors/de/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+
+  # ==================== C/C++ 代码格式化 ====================
+  - repo: https://gitcode.com/pre-commit-clang/mirrors-clang-format
+    rev: v22.1.8
+    hooks:
+      - id: clang-format
+        types_or: [c, c++]               # 仅作用于 C/C++ 文件
+        args: ["--style=file"]           # 读取仓库根目录 .clang-format
+
+  # ==================== C/C++ 静态分析 ====================
+  # 说明：clang-tidy 不在此处配置钩子，统一由 ci_scripts/pre_commit_pr.sh 执行。
+  #       hns5 分支没有 DPDK 构建（无 DPDK_BUILD_DIR/compile_commands.json），
+  #       该脚本会自动跳过 clang-tidy，仅执行通用钩子与 clang-format。
+  # 注：原 cpp-linter-hooks 钩子已移除——它属于 manual 阶段、实际从不执行，
+  #     且 gitcode 上无可用镜像，保留它会让 CI 每次访问 github.com 超时 128 秒。
