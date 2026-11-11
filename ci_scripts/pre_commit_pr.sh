@@ -46,14 +46,23 @@ export PATH="/home/jenkins/.local/bin:${PATH}"
 pre-commit --version
 
 # 定位 clang-tidy 的编译数据库与 DPDK 源码树
-# compile_commands.json 由 ci_scripts/build.sh 构建现场生成，故需在构建之后执行
+# compile_commands.json 由 ci_scripts/build.sh 现场生成，故 clang-tidy 需在构建之后执行。
+# 默认不编译（BUILD=0），此时自动跳过 clang-tidy，不影响 pre-commit 检查。
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+DPDK_VERSION="${DPDK_VERSION:-22.11.11}"
+TREE_DIR="${DPDK_VERSION_DIR:-${REPO_ROOT}/dpdk-stable-${DPDK_VERSION}}"
+
 BUILD_DIR_ABS=""
 SRC_DIR=""
-if [ -n "${DPDK_BUILD_DIR}" ] && [ -d "${DPDK_BUILD_DIR}" ]; then
+if [ -n "${DPDK_BUILD_DIR:-}" ] && [ -d "${DPDK_BUILD_DIR}" ]; then
 	BUILD_DIR_ABS="$(cd "${DPDK_BUILD_DIR}" && pwd)"
 	SRC_DIR="${DPDK_SRC_DIR:-$(dirname "${BUILD_DIR_ABS}")}"
+elif [ -f "${TREE_DIR}/build/compile_commands.json" ]; then
+	# build.sh 没导出环境变量时（本地手跑）回退到树内默认构建目录
+	BUILD_DIR_ABS="${TREE_DIR}/build"
+	SRC_DIR="${TREE_DIR}"
 else
-	echo "[INFO] 未设置 DPDK_BUILD_DIR 或目录不存在，本次不执行 clang-tidy"
+	echo "[INFO] 未找到编译数据库（未跑 ci_scripts/build.sh 或已跳过），本次不做 clang-tidy"
 fi
 
 # 执行 pre-commit 检查
@@ -64,25 +73,23 @@ pre-commit run --show-diff-on-failure --files "${FILES_ARR[@]}"
 CODE=$?
 set -e
 
-# ---------- clang-tidy 静态分析（方案 A：路径对齐）----------
-# 本仓库通过 install.sh 把 hinic3/ 注入到 DPDK 的 drivers/net/hinic3/、把 test/ 注入到
-# app/test/test_hinic3/，编译数据库中的路径均为 DPDK 树路径。若直接以仓库路径调用
-# clang-tidy，会因 "Compile command not found" 被静默跳过；故此处先把变更文件映射为
-# DPDK 树路径，再进入 DPDK 源码树执行分析。
+# ---------- clang-tidy 静态分析 ----------
+# 本仓库的驱动源码就在仓库内的 DPDK 树里（dpdk-stable-<版本>/drivers/**），
+# 编译数据库记录的是相对该树根的路径，因此仓库路径只需去掉树名前缀即可对齐。
+# 直接拿仓库路径调用 clang-tidy 会因 "Compile command not found" 被静默跳过。
 TIDY_CODE=0
 echo -e "\n[INFO] clang-tidy 静态分析"
 
 if [ -z "${BUILD_DIR_ABS}" ] || [ ! -f "${BUILD_DIR_ABS}/compile_commands.json" ]; then
 	echo "[INFO] 缺少编译数据库，跳过 clang-tidy"
-elif [ ! -d "${SRC_DIR}/drivers/net/hinic3" ]; then
-	echo "[INFO] 未找到注入 hinic3 的 DPDK 源码树（${SRC_DIR}），跳过 clang-tidy"
+elif [ ! -f "${SRC_DIR}/VERSION" ]; then
+	echo "[INFO] ${SRC_DIR} 不像 DPDK 源码树（缺 VERSION），跳过 clang-tidy"
 else
-	# 仓库路径 -> DPDK 树路径
+	# 仓库路径 -> DPDK 树内路径
 	TIDY_FILES=()
 	for file in "${FILES_ARR[@]}"; do
 		case "${file}" in
-		hinic3/*.c) mapped="drivers/net/hinic3/${file#hinic3/}" ;;
-		test/*.c) mapped="app/test/test_hinic3/${file#test/}" ;;
+		dpdk-stable-*/*.c) mapped="${file#*/}" ;;
 		*) continue ;;
 		esac
 		if [ -f "${SRC_DIR}/${mapped}" ]; then
