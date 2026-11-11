@@ -2764,10 +2764,10 @@ main(int argc, char **argv)
 			options.mac_updating ? "enabled" : "disabled");
 
 	/* create the mbuf pool */
-	l2fwd_pktmbuf_pool = rte_pktmbuf_pool_create("mbuf_pool", NB_MBUF, 512,
+	l2fwd_pktmbuf_pool = rte_pktmbuf_pool_create_by_ops("bmu_pool6", NB_MBUF, 512,
 			RTE_ALIGN(sizeof(struct rte_crypto_op),
 				RTE_CACHE_LINE_SIZE),
-			RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
+			RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id(), "hns5_bmu");
 	if (l2fwd_pktmbuf_pool == NULL)
 		rte_exit(EXIT_FAILURE, "Cannot create mbuf pool\n");
 

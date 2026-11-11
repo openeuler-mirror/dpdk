@@ -270,18 +270,49 @@ rte_mempool_memchunk_mz_free(__rte_unused struct rte_mempool_memhdr *memhdr,
 	rte_memzone_free(mz);
 }
 
+/* Number of objects handed back to the driver in one ops enqueue call when
+ * RTE_MEMPOOL_OPS_F_NEED_FREE_MEMCHUNKS is set.
+ */
+#define RTE_MEMPOOL_OPS_BULK_FREE_NB 32
+
 /* Free memory chunks used by a mempool. Objects must be in pool */
 static void
 rte_mempool_free_memchunks(struct rte_mempool *mp)
 {
 	struct rte_mempool_memhdr *memhdr;
+	struct rte_mempool_ops *ops;
 	void *elt;
 
-	while (!STAILQ_EMPTY(&mp->elt_list)) {
-		rte_mempool_ops_dequeue_bulk(mp, &elt, 1);
-		(void)elt;
-		STAILQ_REMOVE_HEAD(&mp->elt_list, next);
-		mp->populated_size--;
+	ops = rte_mempool_get_ops(mp->ops_index);
+
+	if (ops->flags & RTE_MEMPOOL_OPS_F_NEED_FREE_MEMCHUNKS) {
+		struct rte_mempool_objhdr *hdr;
+		void *bulk[RTE_MEMPOOL_OPS_BULK_FREE_NB];
+		unsigned int n;
+
+		/* Hand the objects back to the driver in batches: going through
+		 * the ops one object at a time may mean one hardware call per
+		 * object for large pools (e.g. hns5_bmu returns each buffer to
+		 * the BMU), which makes pool destruction needlessly slow.
+		 */
+		while (!STAILQ_EMPTY(&mp->elt_list)) {
+			for (n = 0; n < RTE_DIM(bulk) &&
+					!STAILQ_EMPTY(&mp->elt_list); n++) {
+				hdr = STAILQ_FIRST(&mp->elt_list);
+				bulk[n] = (void *)((char *)hdr +
+					sizeof(struct rte_mempool_objhdr));
+				STAILQ_REMOVE_HEAD(&mp->elt_list, next);
+				mp->populated_size--;
+			}
+			rte_mempool_ops_enqueue_bulk(mp, bulk, n);
+		}
+	} else {
+		while (!STAILQ_EMPTY(&mp->elt_list)) {
+			rte_mempool_ops_dequeue_bulk(mp, &elt, 1);
+			(void)elt;
+			STAILQ_REMOVE_HEAD(&mp->elt_list, next);
+			mp->populated_size--;
+		}
 	}
 
 	while (!STAILQ_EMPTY(&mp->mem_list)) {
@@ -494,11 +525,13 @@ rte_mempool_populate_default(struct rte_mempool *mp)
 	int ret;
 	bool need_iova_contig_obj;
 	size_t max_alloc_size = SIZE_MAX;
+	struct rte_mempool_ops *ops;
 
 	ret = mempool_ops_alloc_once(mp);
 	if (ret != 0)
 		return ret;
 
+	ops = rte_mempool_get_ops(mp->ops_index);
 	/* mempool must not be populated */
 	if (mp->nb_mem_chunks != 0)
 		return -EEXIST;
@@ -570,7 +603,8 @@ rte_mempool_populate_default(struct rte_mempool *mp)
 		/* if we're trying to reserve contiguous memory, add appropriate
 		 * memzone flag.
 		 */
-		if (min_chunk_size == (size_t)mem_size)
+		if ((ops->flags & RTE_MEMPOOL_OPS_F_CONTIG_ALIGN) ||
+				min_chunk_size == (size_t)mem_size)
 			mz_flags |= RTE_MEMZONE_IOVA_CONTIG;
 
 		/* Allocate a memzone, retrying with a smaller area on ENOMEM */
@@ -596,14 +630,30 @@ rte_mempool_populate_default(struct rte_mempool *mp)
 		else
 			iova = RTE_BAD_IOVA;
 
+		void *addr = mz->addr;
+		size_t len = mz->len;
+
+		if ((ops->flags & RTE_MEMPOOL_OPS_F_CONTIG_ALIGN) &&
+				iova != RTE_BAD_IOVA) {
+			size_t blk_align = align;
+
+			if (blk_align != 0 && iova % blk_align != 0) {
+				size_t align_offset = RTE_ALIGN(iova, blk_align) - iova;
+
+				addr = (char *)addr + align_offset;
+				iova = RTE_ALIGN(iova, blk_align);
+				len = RTE_ALIGN_FLOOR(len - align_offset, blk_align);
+			}
+		}
+
 		if (pg_sz == 0 || (mz_flags & RTE_MEMZONE_IOVA_CONTIG))
-			ret = rte_mempool_populate_iova(mp, mz->addr,
-				iova, mz->len,
+			ret = rte_mempool_populate_iova(mp, addr,
+				iova, len,
 				rte_mempool_memchunk_mz_free,
 				(void *)(uintptr_t)mz);
 		else
-			ret = rte_mempool_populate_virt(mp, mz->addr,
-				mz->len, pg_sz,
+			ret = rte_mempool_populate_virt(mp, addr,
+				len, pg_sz,
 				rte_mempool_memchunk_mz_free,
 				(void *)(uintptr_t)mz);
 		if (ret == 0) /* should not happen */
