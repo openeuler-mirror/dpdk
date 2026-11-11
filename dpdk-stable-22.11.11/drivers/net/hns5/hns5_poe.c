@@ -59,33 +59,37 @@ static int hns5_poe_module_init(struct rte_eth_dev *dev)
 }
 
 /*
- * CPU group allocation constraints (platform requirement):
- *   - groups 24..31 must not be used at all
- *   - group 12 is reserved by crypto/hns5 as its SEC completion group
- *     (HNS5_SEC_ENGINE_COMPLETION_GRP), so the packet path must not take it
- * The BSP additionally reports which groups are reachable from the CPU
- * (cpu_grp_*) and which belong to the accelerator/SEC (acc_grp_*).
+ * Platform policy: which POE groups the packet path may not bind. On top of
+ * it the BSP reports which groups are reachable from the CPU (cpu_grp_*) and
+ * which belong to the accelerator/SEC (acc_grp_*), cross-checked below.
  */
-#define HNS5_POE_CPU_GRP_FORBIDDEN_FIRST 24U
-#define HNS5_POE_CPU_GRP_FORBIDDEN_LAST  31U
-#define HNS5_POE_SEC_RESERVED_GRP        12U
+int hns5_poe_check_cpu_group(struct rte_eth_dev *dev, uint32_t group)
+{
+    const char *reason;
+
+    if (group == HNS5_POE_GRP_KERNEL_SSH) {
+        reason = "group 1 is used by the kernel SSH path";
+    } else if (group >= HNS5_POE_CPU_GRP_FORBIDDEN_FIRST &&
+               group <= HNS5_POE_CPU_GRP_FORBIDDEN_LAST) {
+        reason = "CPU groups 24..31 must not be used by the packet path";
+    } else if (group == HNS5_POE_SEC_RESERVED_GRP) {
+        reason = "group 12 is the SEC completion group reserved by crypto/hns5";
+    } else {
+        return 0;
+    }
+    hns5_err(dev, "share_group:%u is forbidden: %s\n", group, reason);
+    return -EINVAL;
+}
 
 static int hns5_poe_validate_cpu_group(struct rte_eth_dev *dev, uint32_t group)
 {
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
     struct ndrv_poe_pf_grp_range range = { 0 };
+    int ret;
 
-    if (group >= HNS5_POE_CPU_GRP_FORBIDDEN_FIRST &&
-        group <= HNS5_POE_CPU_GRP_FORBIDDEN_LAST) {
-        hns5_err(dev, "share_group:%u is forbidden: CPU groups %u..%u must not "
-            "be used by the packet path\n", group,
-            HNS5_POE_CPU_GRP_FORBIDDEN_FIRST, HNS5_POE_CPU_GRP_FORBIDDEN_LAST);
-        return -EINVAL;
-    }
-    if (group == HNS5_POE_SEC_RESERVED_GRP) {
-        hns5_err(dev, "share_group:%u collides with the SEC completion group "
-            "reserved by crypto/hns5; pick another CPU group\n", group);
-        return -EINVAL;
+    ret = hns5_poe_check_cpu_group(dev, group);
+    if (ret != 0) {
+        return ret;
     }
 
     if (priv->poe_pfhandle == NULL) {

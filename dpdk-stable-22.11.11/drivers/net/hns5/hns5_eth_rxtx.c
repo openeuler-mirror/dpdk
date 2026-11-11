@@ -199,7 +199,8 @@ static int __rte_hot hns5_mbuf_to_ppe_txd(struct rte_mbuf *pkt, void **ppe_txd, 
     segs_num = pkt->nb_segs;
 
     if (unlikely((ppe_txd_phys_addr & 0x3f) != 0)) {
-        RTE_LOG(ERR, PMD, "[hns5] mbuf_to_ppe_txd: ppe_txd_phys_addr unaligned, addr=0x%lx\n", ppe_txd_phys_addr);
+        RTE_LOG(ERR, PMD, "[hns5] mbuf_to_ppe_txd: ppe_txd_phys_addr unaligned, low=0x%02lx\n",
+        (unsigned long)(ppe_txd_phys_addr & 0x3f));
         return -EFAULT;
     }
     if (unlikely(offset > 0xffff)) {
@@ -243,7 +244,8 @@ static int __rte_hot hns5_mbuf_to_ppe_txd(struct rte_mbuf *pkt, void **ppe_txd, 
             offset = rte_pktmbuf_m2ppe_data_offset(pkt);
 
             if (unlikely((ppe_txd_phys_addr & 0x3f) != 0)) {
-                RTE_LOG(ERR, PMD, "[hns5] mbuf_to_ppe_txd: seg %d ppe_txd_phys_addr unaligned, addr=0x%lx\n", i, ppe_txd_phys_addr);
+                RTE_LOG(ERR, PMD, "[hns5] mbuf_to_ppe_txd: seg %d ppe_txd_phys_addr unaligned, low=0x%02lx\n", i,
+            (unsigned long)(ppe_txd_phys_addr & 0x3f));
                 return -EFAULT;
             }
             if (unlikely(offset > 0xffff)) {
@@ -388,7 +390,7 @@ static uint16_t __rte_hot hns5_eth_forward_to_tm(struct hns5_eth_tx_queue *txq, 
         ret = hns5_mbuf_to_ppe_txd(mbuf, (void **)&ppe_txd, &phys_addr);
         if (unlikely(ret != 0)) {
             txq->stats.oerrors_txd++;
-            hns5_rxtx(ERR, "failed to hns5_mbuf_to_ppe_txd, paddr:0x%lx ret=%d\n", phys_addr, ret);
+            hns5_rxtx(ERR, "failed to hns5_mbuf_to_ppe_txd, ret=%d\n", ret);
             break;
         }
 
@@ -508,7 +510,7 @@ construct_mbuf_with_poe_msg_chain(struct rte_mbuf *ppmbuf, uint64_t next_phys_ad
         ppe_rx_desc_t *rxd = (ppe_rx_desc_t *)hns5_bmu_phys2virt(next_phys_addr);
 
         if (unlikely(rxd == NULL)) {
-            hns5_rxtx(ERR, "failed to hns5_bmu_phys2virt, next_phys_addr:0x%lx\n", next_phys_addr);
+            hns5_rxtx(ERR, "failed to hns5_bmu_phys2virt for a chained segment\n");
             /* Free chained segments (head freed by caller) to avoid dangling pointers/leaks */
             struct rte_mbuf *seg = ppmbuf->next;
 
@@ -571,9 +573,9 @@ static __rte_hot void release_chain_rxd_buf(ppe_rx_desc_t *rxd)
 
 static void hns5_eth_ppe_rxd_dump(ppe_rx_desc_t *rxd, struct rte_mbuf *mbuf)
 {
-    hns5_rxtx(ERR, "rxd: paddr:0x%llx data_offset:%u data_len:%u pkt_len:%u\n",
-        (unsigned long long)hns5_bmu_virt2phys(rxd), rxd->head.data_offset, rxd->head.data_len, rxd->head.pkt_len);
-    hns5_rxtx(ERR, "mbuf: buf_iova:0x%llx, buf_len:%u\n", (unsigned long long)mbuf->buf_iova, mbuf->buf_len);
+    hns5_rxtx(ERR, "rxd: data_offset:%u data_len:%u pkt_len:%u\n",
+        rxd->head.data_offset, rxd->head.data_len, rxd->head.pkt_len);
+    hns5_rxtx(ERR, "mbuf: buf_len:%u\n", mbuf->buf_len);
     hns5_rxtx(ERR, "\n");
 }
 
@@ -670,9 +672,8 @@ construct_mbuf_with_poe_msg(const union ndrv_poe_msg *get_msg, ppe_rx_desc_t *rx
 
             dumped++;
             hns5_rxtx(DEBUG, "rxd[%u]: pkt_len=%u data_len=%u data_offset=%u "
-                "next=0x%llx d0=%02x %02x %02x %02x %02x %02x %02x %02x\n",
+                "d0=%02x %02x %02x %02x %02x %02x %02x %02x\n",
                 dumped, pkt_len, data_len, data_offset,
-                (unsigned long long)next_paddr,
                 d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7]);
         }
     }
@@ -721,11 +722,11 @@ static __rte_always_inline ppe_rx_desc_t *hns5_poe_msg_to_ppe_rx_desc(struct hns
          * queue, since the whole burst of them hits at the start of traffic.
          */
         if (rxq->stats.ierrors_msg++ == 0) {
-            hns5_rxtx(WARNING, "dropped unmapped ppe rxd 0x%llx: the PPE still "
+            hns5_rxtx(WARNING, "dropped unmapped ppe rxd: the PPE still "
                 "holds buffers of the previous run and this run's pools got "
-                "different physical pages; start the application with "
-                "--huge-unlink=never to keep the layout stable (further drops "
-                "are only counted)\n", (long long)paddr);
+                "different physical pages; the BMU re-initialization at start "
+                "should have discarded them -- check the [hns5_bmu] logs for "
+                "that failure (further drops are only counted)\n");
             hns5_bmu_dump_addr_trans("rx unmapped");
         }
         if (priv != NULL) {

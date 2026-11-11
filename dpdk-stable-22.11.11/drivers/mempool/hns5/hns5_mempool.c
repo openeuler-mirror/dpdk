@@ -241,11 +241,11 @@ static __rte_always_inline handle hns5_mp_get_pf_handle(struct hns5_mp_bmu_dev *
             return NULL;
         }
         dev->pfhandle = pfhandle;
-        RTE_LOG(INFO, PMD, "[hns5_bmu] hns5_mp_get_pf_handle: FIRST get pfhandle=%p, die_id=%u, pf_id=%u\n",
-            pfhandle, dev->id.die_id, dev->id.pf_id);
+        RTE_LOG(INFO, PMD, "[hns5_bmu] hns5_mp_get_pf_handle: FIRST get, die_id=%u, pf_id=%u\n",
+            dev->id.die_id, dev->id.pf_id);
         return pfhandle;
     }
-    RTE_LOG(INFO, PMD, "[hns5_bmu] hns5_mp_get_pf_handle: REUSE cached pfhandle=%p\n", dev->pfhandle);
+    RTE_LOG(INFO, PMD, "[hns5_bmu] hns5_mp_get_pf_handle: REUSE cached pfhandle\n");
     return dev->pfhandle;
 }
 
@@ -596,7 +596,7 @@ static int hns5_bmu_free_bulk(struct rte_mempool *mp __rte_unused, void * const 
             continue;
         }
         if (bmu_hdr->udata[0] != BMU_HDR_MAGIC_VALUE) {
-            RTE_LOG(ERR, PMD, "[hns5_bmu] bmu free failed, Invalid buf %p\n", obj_table[i]);
+            RTE_LOG(ERR, PMD, "[hns5_bmu] bmu free failed, Invalid buf (header magic mismatch)\n");
             continue;
         }
         bmu_hdr->udata[2]++;
@@ -643,7 +643,7 @@ static int hns5_bmu_alloc_bulk(struct rte_mempool *mp, void **obj_table, unsigne
         }
         obj = (void *)hns5_bmu_phys2virt(paddr + MBUFF_FROM_PPE_OFFSET);
         if (obj == NULL) {
-            RTE_LOG(ERR, PMD, "[hns5_bmu] bmu alloc phys2virt fail, pool id:%ld paddr:0x%lx\n", mp->pool_id, paddr);
+            RTE_LOG(ERR, PMD, "[hns5_bmu] bmu alloc phys2virt fail, pool id:%ld\n", mp->pool_id);
             goto fail_do_cur;
         }
 #ifdef HNS5_BMU_POOL_HEAD_DFX_DEBUG
@@ -653,8 +653,8 @@ static int hns5_bmu_alloc_bulk(struct rte_mempool *mp, void **obj_table, unsigne
             bmu_hdr->udata[0] = BMU_HDR_MAGIC_VALUE;
         }
         if (bmu_hdr->udata[0] != BMU_HDR_MAGIC_VALUE) {
-            RTE_LOG(ERR, PMD, "[hns5_bmu] bmu alloc a error buf, pool id:%ld, Invalid buf %p, bmu_hdr:%p, magic:0x%x\n",
-                mp->pool_id, obj_table[i], (void *)bmu_hdr, bmu_hdr->udata[0]);
+            RTE_LOG(ERR, PMD, "[hns5_bmu] bmu alloc a error buf, pool id:%ld, magic:0x%x\n",
+                mp->pool_id, bmu_hdr->udata[0]);
             goto fail_do_cur;
         }
 #endif
@@ -745,7 +745,7 @@ static int hns5_mp_phy_pool_inject_block(struct rte_mempool *mp __rte_unused, ui
     /* Record addr translation info (software table, not limited to 16 hw entries) */
     ret = hns5_bmu_add_addr_trans((uint64_t)vaddr, iova, len, pool_id);
     if (ret != 0) {
-        RTE_LOG(ERR, PMD, "[hns5_bmu] BMU add_block add trans tbl fail, ret:%d, vaddr:%p, iova:%p, size:%ld\n", ret, (void *)vaddr, (void *)iova, len);
+        RTE_LOG(ERR, PMD, "[hns5_bmu] BMU add_block add trans tbl fail, ret:%d, size:%ld\n", ret, len);
         return ret;
     }
 
@@ -760,8 +760,8 @@ static int hns5_mp_phy_pool_inject_block(struct rte_mempool *mp __rte_unused, ui
         return E_BMU_PHY_POOL_INIT_FAIL;
     }
 
-    RTE_LOG(INFO, PMD, "[hns5_bmu] inject phy pool, pool_id=%u, vpp_id=%u, iova=0x%lx, len=%zu, blocks=%zu\n",
-        pool_id, vpp_id, iova, len, len / blk_size);
+    RTE_LOG(INFO, PMD, "[hns5_bmu] inject phy pool, pool_id=%u, vpp_id=%u, len=%zu, blocks=%zu\n",
+        pool_id, vpp_id, len, len / blk_size);
 
     /*
      * The first chunk of a pool initializes its physical pool instead of
@@ -895,12 +895,12 @@ static int hns5_bmu_mbuf_populate(struct rte_mempool *mp, unsigned int max_objs,
     }
 
     // Round down memory size to multiple of 4M
-    RTE_LOG(INFO, PMD, "[hns5_bmu] except mem iova:0x%lx, len:0x%zx\n", iova, len);
+    RTE_LOG(INFO, PMD, "[hns5_bmu] except mem len:0x%zx\n", len);
     len = RTE_ALIGN_FLOOR(len, align);
-    RTE_LOG(INFO, PMD, "[hns5_bmu] inject mem iova:0x%lx, len:0x%zx\n", iova, len);
+    RTE_LOG(INFO, PMD, "[hns5_bmu] inject mem len:0x%zx\n", len);
 
     if (iova % align != 0 || (uint64_t)vaddr % align != 0) {
-        RTE_LOG(ERR, PMD, "[hns5_bmu] mbuf_populate addr err iova:0x%lx\n", iova);
+        RTE_LOG(ERR, PMD, "[hns5_bmu] mbuf_populate addr err, not %u aligned\n", (unsigned int)align);
         return E_BMU_INJECT_ADDR_ERR;
     }
 
@@ -1017,10 +1017,8 @@ void __rte_internal hns5_bmu_dump_addr_trans(const char *tag)
     RTE_LOG(INFO, PMD, "[hns5_bmu] addr trans table (%s): num=%u blocks=%u\n",
         tag, p->num, p->current_blk_num);
     for (i = 0; i < p->num; i++) {
-        RTE_LOG(INFO, PMD, "  [%u] phys=0x%llx..0x%llx virt=0x%llx pool=%u\n", i,
-            (unsigned long long)p->tbl[i].phys,
-            (unsigned long long)(p->tbl[i].phys + p->tbl[i].size),
-            (unsigned long long)p->tbl[i].virt, p->tbl[i].pool_id);
+        RTE_LOG(INFO, PMD, "  [%u] size=%llu pool=%u\n", i,
+            (unsigned long long)p->tbl[i].size, p->tbl[i].pool_id);
     }
 }
 

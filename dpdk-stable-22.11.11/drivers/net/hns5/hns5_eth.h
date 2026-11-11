@@ -74,7 +74,7 @@ struct hns5_eth_port_param
     uint32_t max_frame_len;
     uint32_t min_frame_len;
     uint8_t fw_tnl_enable;                  // fw_tnl enable: default 1 (devargs optional), set fw_tnl=0 to disable
-    uint32_t share_group;                   // RX shared group, devargs required (share_group=0~50), assigned externally to avoid conflicts
+    uint32_t share_group;                   // RX shared group, devargs required, assigned externally to avoid conflicts; groups 1, 12 and 24..31 are rejected by hns5_poe_check_cpu_group()
     uint32_t base_tnl;                      // fw_tnl base, default=cport_id*8 (step HNS5_POE_CPU_GRP_QUE_NUM, 8 per cport), devargs override
     uint32_t ppe_reset;                      // devargs ppe_reset: 0=none(default), 1=ppe pf unsetup+setup, 2=mam buffer-mode re-init
     uint32_t bsp_log;                        // devargs bsp_log: 0=leave BSP default, 1=debug, 2=info, 3=warn, 4=err
