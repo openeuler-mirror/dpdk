@@ -211,6 +211,21 @@ New Features
   Added a new crypto driver for the UADK library. See the
   :doc:`../cryptodevs/uadk` guide for more details on this new driver.
 
+* **Added HNS5 crypto driver.**
+
+  Added a new lookaside crypto driver for the board SEC engine, driving the
+  accelerator in POE mode through the board BSP ``libhidrv_api`` library. It
+  supports SM4-CBC, AES-ECB/CBC, SM3 and SHA-256/HMAC. See the
+  :doc:`../cryptodevs/hns5` guide for more details on this new driver.
+
+* **Added HNS5 network driver.**
+
+  Added a full network PMD for the board SoC NIC (adapted from the
+  ``hns5_20_11`` patch to 22.11), driving the PPE/POE/MAG/TM sub-blocks
+  through the board BSP ``libhidrv_api`` library, with a matching
+  BMU-backed mempool driver. See the :doc:`../nics/hns5` guide for more
+  details on this new driver.
+
 * **Added bbdev operation for FFT processing.**
 
   Added a new operation type in bbdev for FFT processing with new functions
