@@ -10,10 +10,17 @@
  */
 
 #include "hns5_crypto_pmd_private.h"
-#include "hns5_sec_debug.h"
 
 #include <rte_memcpy.h>
+#include <rte_mempool.h>
 #include <rte_crypto_sym.h>
+
+/*
+ * Ops that were not allocated from a crypto op pool carry no record of how
+ * big their private area is; bound iv_offset against this instead of failing
+ * them outright.
+ */
+#define HNS5_SEC_OP_PRIV_FALLBACK 1024u
 
 
 static int
@@ -21,8 +28,8 @@ copy_in_data(struct hns5_sec_segment *seg, struct rte_crypto_op *op,
 	     bool is_cipher, size_t *msg_len)
 {
 	unsigned char *dst = seg->raw + HNS5_SEC_DATA_OFFSET + HNS5_SEC_PREFIX_BYTES;
-	struct rte_mbuf *msrc;
-	uint32_t off, len, copied = 0;
+	struct rte_mbuf *msrc, *seg_cur;
+	uint32_t off, len, copied = 0, skip;
 	unsigned int i;
 
 	if (is_cipher) {
@@ -41,22 +48,31 @@ copy_in_data(struct hns5_sec_segment *seg, struct rte_crypto_op *op,
 	if (msrc == NULL)
 		return -EINVAL;
 
-	for (i = 0; i < msrc->nb_segs && copied < len; i++) {
-		struct rte_mbuf *seg_cur = (i == 0) ? msrc : msrc->next;
-		uint32_t seg_off = (i == 0) ? off : 0;
+	/*
+	 * Walk the chain through ->next: indexing msrc->next for every i after
+	 * the first repeats segment 2 and never reaches segment 3. nb_segs comes
+	 * from the caller, so the pointer is checked before it is dereferenced.
+	 * skip steps over whole segments, so the start offset may land anywhere
+	 * in the chain; a chain shorter than nb_segs still ends in the
+	 * copied != len check below.
+	 */
+	for (seg_cur = msrc, skip = off, i = 0;
+	     i < msrc->nb_segs && copied < len && seg_cur != NULL;
+	     seg_cur = seg_cur->next, i++) {
 		uint32_t seg_len = rte_pktmbuf_data_len(seg_cur);
 		uint32_t take;
 
-		if (seg_cur == NULL)
-			return -EINVAL;
-		if (seg_off >= seg_len)
+		if (skip >= seg_len) {
+			skip -= seg_len;
 			continue;
-		take = seg_len - seg_off;
+		}
+		take = seg_len - skip;
 		if (take > len - copied)
 			take = len - copied;
 		rte_memcpy(dst + copied,
-			   rte_pktmbuf_mtod_offset(seg_cur, void *, seg_off), take);
+			   rte_pktmbuf_mtod_offset(seg_cur, void *, skip), take);
 		copied += take;
+		skip = 0;
 	}
 	if (copied != len)
 		return -EINVAL;
@@ -179,8 +195,34 @@ hns5_sec_build_descriptor(struct hns5_sec_runtime *r,
 			   sess->cipher_keylen);
 	/* IV for non-ECB cipher modes sits at the data offset head. */
 	if ((is_cipher || is_chain) && sess->cipher_mode != HNS5_SEC_CIPHER_MODE_ECB) {
-		uint8_t *iv = rte_crypto_op_ctod_offset(op, uint8_t *,
-							sess->iv_offset);
+		uint32_t priv_avail = HNS5_SEC_OP_PRIV_FALLBACK;
+		uint8_t *iv;
+
+		/* iv_offset indexes the operation's private area. Its size is
+		 * recorded in the op pool's private info when the op came from
+		 * rte_crypto_op_pool_create(); reading past the private area
+		 * would pull neighbouring op memory into the IV. */
+		if (op->mempool != NULL) {
+			const struct rte_crypto_op_pool_private *pi =
+				(const struct rte_crypto_op_pool_private *)
+				rte_mempool_get_priv(op->mempool);
+
+			/* Only a pool created by rte_crypto_op_pool_create()
+			 * carries this layout at the mempool private offset;
+			 * ops handed over from a plain mempool would make
+			 * priv_size meaningless, so keep the fallback. */
+			if (pi->type == RTE_CRYPTO_OP_TYPE_SYMMETRIC ||
+			    pi->type == RTE_CRYPTO_OP_TYPE_UNDEFINED)
+				priv_avail = pi->priv_size;
+		}
+		if ((uint32_t)sess->iv_offset + (uint32_t)sess->iv_length >
+		    priv_avail) {
+			HNS5_LOG(ERR, "iv_offset %u + iv_length %u exceeds the op "
+				 "private area (%u)", sess->iv_offset,
+				 sess->iv_length, priv_avail);
+			return -EINVAL;
+		}
+		iv = rte_crypto_op_ctod_offset(op, uint8_t *, sess->iv_offset);
 		rte_memcpy(seg->raw + HNS5_SEC_DATA_OFFSET, iv, sess->iv_length);
 	}
 	/* Copy HMAC key to the auth key area, separate from the cipher key.
@@ -248,9 +290,9 @@ hns5_sec_build_descriptor(struct hns5_sec_runtime *r,
 
 	seg->used = HNS5_SEC_PREFIX_BYTES + msg_len;
 
-	/* One-shot dump of the descriptor that is handed to the engine: when a
-	 * packet comes back unmodified (or with a zero digest) this shows whether
-	 * the transformation was requested at all. */
+	/* Descriptor-level trace, emitted once per process: when a packet comes
+	 * back unmodified (or with a zero digest) this shows whether the engine
+	 * was asked to do the transformation at all. No buffer contents here. */
 	{
 		static bool dumped;
 
@@ -263,34 +305,6 @@ hns5_sec_build_descriptor(struct hns5_sec_runtime *r,
 				 sess->cipher_dir, alg->cipher_alg.bits.cipher_alg,
 				 alg->cipher_alg.bits.cipher_mode,
 				 alg->cipher_alg.bits.cipher_keylen, alg->cipher_type);
-			{
-				const struct rte_mbuf *ms = op->sym->m_src;
-				uint32_t off = op->sym->cipher.data.offset;
-				uint32_t dump_len = (uint32_t)msg_len;
-				const void *mb = rte_pktmbuf_mtod_offset(ms,
-					const void *, off);
-
-				hns5_sec_dump_hex("SEC in (mbuf)", mb, dump_len);
-			}
-			{
-				const struct rte_mbuf *ms = op->sym->m_src;
-				const uint32_t *mi = (const uint32_t *)(const void *)
-					rte_pktmbuf_mtod_offset(ms, const char *,
-								op->sym->cipher.data.offset);
-
-				HNS5_LOG(DEBUG, "bd: mbuf in [%u..+16)=%08x %08x %08x %08x\n",
-					 op->sym->cipher.data.offset,
-					 mi[0], mi[1], mi[2], mi[3]);
-			}
-			{
-				const uint32_t *iv_area = (const uint32_t *)(const void *)(seg->raw + HNS5_SEC_DATA_OFFSET);
-				const uint32_t *src = (const uint32_t *)(const void *)(seg->raw + HNS5_SEC_DATA_OFFSET + HNS5_SEC_PREFIX_BYTES);
-
-				HNS5_LOG(DEBUG, "bd: iv[0..4)  =%08x %08x %08x %08x\n",
-					 iv_area[0], iv_area[1], iv_area[2], iv_area[3]);
-				HNS5_LOG(DEBUG, "bd: data[0..4)=%08x %08x %08x %08x (input before engine)\n",
-					 src[0], src[1], src[2], src[3]);
-			}
 			HNS5_LOG(DEBUG, "bd: in_off=%u authlen=%u mac_len=%u\n",
 				 alg->cipher_data_in_offset,
 				 sess->digest_len, alg->auth_alg.bits.mac_len);

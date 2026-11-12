@@ -66,31 +66,6 @@
 #define HNS5_L4_LEN_UNIT 4
 #define HNS5_TM_PKT_LEN_PAD 24
 
-/* 打印最多 160 字节的十六进制内容，每行 16 字节。
- * 用于按阶段对比报文：RX 收到什么、TX 发出什么，以及 crypto 进/出的数据。 */
-#define HNS5_DUMP_BYTES 160
-static void hns5_dump_hex(const char *tag, const void *data, uint32_t len)
-{
-    const uint8_t *p = (const uint8_t *)data;
-    char buf[1024];
-    int n = 0;
-    uint32_t off;
-
-    if (p == NULL) {
-        return;
-    }
-    n += snprintf(buf + n, sizeof(buf) - n, "%s len=%u", tag, len);
-    for (off = 0; off < len && off < HNS5_DUMP_BYTES &&
-                  n < (int)sizeof(buf) - 64; off += 16) {
-        uint32_t i;
-
-        n += snprintf(buf + n, sizeof(buf) - n, "\n  %04x:", off);
-        for (i = 0; i < 16 && off + i < len && n < (int)sizeof(buf) - 8; i++) {
-            n += snprintf(buf + n, sizeof(buf) - n, " %02x", p[off + i]);
-        }
-    }
-    hns5_rxtx(DEBUG, "%s\n", buf);
-}
 
 
 static __rte_always_inline void hns5_ppe_txd_post_process(ppe_tx_desc_t *ppe_txd)
@@ -442,9 +417,6 @@ uint16_t __rte_hot hns5_eth_tx_burst(void *txq, struct rte_mbuf **tx_pkts, uint1
             hns5_rxtx(DEBUG, "tx[%u]: pkt_len=%u data_len=%u nb_segs=%u\n",
                 dumped, tx_pkts[0]->pkt_len, tx_pkts[0]->data_len,
                 tx_pkts[0]->nb_segs);
-            hns5_dump_hex("TX frame",
-                rte_pktmbuf_mtod(tx_pkts[0], const void *),
-                tx_pkts[0]->pkt_len);
         }
     }
 
@@ -668,13 +640,9 @@ construct_mbuf_with_poe_msg(const union ndrv_poe_msg *get_msg, ppe_rx_desc_t *rx
         static uint32_t dumped;
 
         if (dumped < 4) {
-            const uint8_t *d = (const uint8_t *)rxd + data_offset;
-
             dumped++;
-            hns5_rxtx(DEBUG, "rxd[%u]: pkt_len=%u data_len=%u data_offset=%u "
-                "d0=%02x %02x %02x %02x %02x %02x %02x %02x\n",
-                dumped, pkt_len, data_len, data_offset,
-                d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7]);
+            hns5_rxtx(DEBUG, "rxd[%u]: pkt_len=%u data_len=%u data_offset=%u\n",
+                dumped, pkt_len, data_len, data_offset);
         }
     }
 
@@ -868,23 +836,22 @@ uint16_t __rte_hot hns5_eth_rx_burst(void *q, struct rte_mbuf **rx_pkts, uint16_
 
             dumped++;
             const uint8_t *p = rte_pktmbuf_mtod(m, const uint8_t *);
-            uint16_t eth_type = (uint16_t)(((uint16_t)p[12] << 8) | p[13]);
+            uint16_t eth_type = (m->data_len >= 14) ?
+                (uint16_t)(((uint16_t)p[12] << 8) | p[13]) : 0;
 
             /*
-             * Dump what this process actually received: the IPv4 total_length
-             * and the first four bytes of the crypto region (frame offset 38,
-             * i.e. the UDP length/checksum inside an encrypted datagram). If a
-             * sender rewrites those fields the ciphertext no longer matches the
-             * digest and the crypto op fails authentication, which downstream
-             * looks like "the packet was not decrypted".
+             * What this process actually received, header fields only. A sender
+             * rewriting the IPv4 total_length or the UDP length/checksum makes
+             * the ciphertext no longer match the digest, which downstream looks
+             * like "the packet was not decrypted"; the payload bytes themselves
+             * are never logged. Fixed offsets are only read when the segment
+             * actually holds them.
              */
             hns5_rxtx(DEBUG, "out[%u]: pkt_len=%u data_len=%u nb_segs=%u "
-                "eth=0x%04x ip_len=%u ip_csum=0x%04x ct@38=%02x%02x%02x%02x\n",
+                "eth=0x%04x ip_len=%u ip_csum=0x%04x\n",
                 dumped, m->pkt_len, m->data_len, m->nb_segs, eth_type,
-                (uint16_t)(((uint16_t)p[16] << 8) | p[17]),
-                (uint16_t)(((uint16_t)p[24] << 8) | p[25]),
-                p[38], p[39], p[40], p[41]);
-            hns5_dump_hex("RX frame", p, m->pkt_len);
+                (m->data_len >= 18) ? (uint16_t)(((uint16_t)p[16] << 8) | p[17]) : 0,
+                (m->data_len >= 26) ? (uint16_t)(((uint16_t)p[24] << 8) | p[25]) : 0);
         }
     }
 

@@ -224,7 +224,11 @@ main() {
 
     # stale configs would persist otherwise
     rm -rf "$BUILD_DIR"
-    chmod +x buildtools/*.sh 2>/dev/null || true
+    # No chmod of buildtools/*.sh: meson runs install scripts through their
+    # shebang (falling back to sh), so the executable bit is not needed, and
+    # chmod here used to flip the tracked 0644 mode of
+    # symlink-drivers-solibs.sh into a spurious worktree diff and a _dirty
+    # build id on every build.
 
     local cross_args=()
     if [ "$CROSS" = 1 ]; then

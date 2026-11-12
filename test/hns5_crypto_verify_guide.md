@@ -28,7 +28,8 @@ SM4-CBC 密文 = `681edf34d206965e86b3e94f536e4246`（GM/T 0002-2012 国标）�
 ```bash
 git pull origin hns5
 ./buildtools/hns5_compile.sh --debug
-./usertools/hns5_clean.sh
+./usertools/hns5_clean.sh --status   # 先看状态（默认只读）
+./usertools/hns5_clean.sh --clean    # 确需清残留时才删锁与池文件
 ```
 
 ## 验证入口

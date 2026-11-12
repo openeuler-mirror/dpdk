@@ -26,15 +26,15 @@ ring_next(uint16_t cur, uint16_t depth)
  */
 
 static int
-sec_bmu_free(struct hns5_runtime *common, void *p)
+sec_bmu_free(struct hns5_bmu *common, void *p)
 {
 	int cancel;
 	int rc;
 
-	if (hns5_runtime_lock(common, &cancel))
+	if (hns5_bmu_lock(common, &cancel))
 		return -EIO;
 	rc = hns5_bmu_free(common, p);
-	hns5_runtime_unlock(common, cancel);
+	hns5_bmu_unlock(common, cancel);
 	return rc;
 }
 
@@ -63,11 +63,11 @@ sec_cache_get(struct hns5_qp *qp, uint64_t *pa)
 	sec->cache_misses++;
 	/* Refill under one lock acquisition. */
 	{
-		struct hns5_runtime *common = sec->common;
+		struct hns5_bmu *common = sec->common;
 		unsigned int i;
 		int cancel;
 
-		if (hns5_runtime_lock(common, &cancel))
+		if (hns5_bmu_lock(common, &cancel))
 			return NULL;
 		for (i = 0; i < c->limit / 2; ++i) {
 			uint64_t t0 = hns5_sec_stats_en ? hns5_tsc() : 0;
@@ -87,7 +87,7 @@ sec_cache_get(struct hns5_qp *qp, uint64_t *pa)
 			c->pa[c->count] = *pa;
 			c->count++;
 		}
-		hns5_runtime_unlock(common, cancel);
+		hns5_bmu_unlock(common, cancel);
 	}
 
 	if (c->count == 0) {
@@ -100,6 +100,25 @@ sec_cache_get(struct hns5_qp *qp, uint64_t *pa)
 	return c->raw[c->count];
 }
 
+/*
+ * Key material and the digest live in fixed areas of the segment while an op
+ * is in flight. Segments are recycled - first through this queue pair's
+ * cache, then through the BMU pool shared by every channel - so clear those
+ * areas before a segment changes owner. The volatile walk mirrors
+ * hns5_wipe() in the session layer; 96 bytes per op is negligible next to the
+ * payload copies.
+ */
+static void
+sec_segment_wipe_keys(void *raw)
+{
+	volatile unsigned char *v = (volatile unsigned char *)raw;
+	size_t i;
+
+	for (i = HNS5_SEC_KEY_OFFSET;
+	     i < HNS5_SEC_KEY_OFFSET + HNS5_SEC_KEYMAT_SPAN_BYTES; i++)
+		v[i] = 0;
+}
+
 static void
 sec_cache_put(struct hns5_qp *qp, void *raw, uint64_t pa)
 {
@@ -107,6 +126,7 @@ sec_cache_put(struct hns5_qp *qp, void *raw, uint64_t pa)
 
 	if (raw == NULL)
 		return;
+	sec_segment_wipe_keys(raw);
 	if (c->count < c->limit) {
 		c->raw[c->count] = raw;
 		c->pa[c->count] = pa;
@@ -136,7 +156,7 @@ void
 hns5_qp_cache_prefill(struct hns5_qp *qp)
 {
 	struct hns5_buf_cache *c;
-	struct hns5_runtime *common;
+	struct hns5_bmu *common;
 	int cancel;
 
 	if (qp == NULL || qp->sec == NULL || qp->sec->common == NULL)
@@ -151,7 +171,7 @@ hns5_qp_cache_prefill(struct hns5_qp *qp)
 	 * 0 and limit/2 forever: the probe never returned and the pool leaked.
 	 */
 	common = qp->sec->common;
-	if (hns5_runtime_lock(common, &cancel))
+	if (hns5_bmu_lock(common, &cancel))
 		return;
 	while (c->count < c->limit) {
 		uint64_t pa;
@@ -163,7 +183,7 @@ hns5_qp_cache_prefill(struct hns5_qp *qp)
 		c->pa[c->count] = pa;
 		c->count++;
 	}
-	hns5_runtime_unlock(common, cancel);
+	hns5_bmu_unlock(common, cancel);
 }
 
 static uint16_t hns5_enqueue_impl(struct hns5_qp *qp,
@@ -216,24 +236,44 @@ hns5_sec_register_app_pool(struct hns5_sec_runtime *sec, struct rte_mempool *mp)
 		void *va = chunks[i].va;
 		size_t len = chunks[i].len;
 
-		/* Merge physically adjacent chunks (typical 2 MiB pages). */
-		for (j = i + 1; j < n && chunks[j].pa == pa + len; j++)
+		/* Merge physically adjacent chunks (typical 2 MiB pages),
+		 * stopping the comparison before pa + len could wrap.
+		 */
+		for (j = i + 1;
+		     j < n && len <= UINT64_MAX - pa &&
+		     chunks[j].pa == pa + len; j++)
 			len += chunks[j].len;
 
 		HNS5_LOG(DEBUG, "zc: chunk len=%zu (merged %u)", len, j - i);
 
 		{
 			const uint64_t mask = 0x3fffffULL;   /* 4 MiB - 1 */
-			uint64_t pa_al = (pa + mask) & ~mask;/* align up */
+			uint64_t pa_al;
+
+			if (pa > UINT64_MAX - mask) {
+				HNS5_LOG(WARNING, "zc: pa=%" PRIu64 " too high to "
+					 "align up, skipping", pa);
+				continue;
+			}
+			pa_al = (pa + mask) & ~mask;	/* align up */
 			size_t delta = (size_t)(pa_al - pa);
 			void *va_al = (char *)va + delta;
 			uint32_t alen;
-			struct hidrv_bmu_pp_cfg cfg;
+			/* Zero it even though every field is set below: this
+			 * struct comes from the BSP header and a new field must
+			 * not silently reach hidrv_bmu_init_pp() uninitialised. */
+			struct hidrv_bmu_pp_cfg cfg = { 0 };
 			int rc;
 
 			if (len <= delta) {
 				HNS5_LOG(WARNING, "zc: chunk len=%zu too small "
 					 "to align up to 4 MiB", len);
+				continue;
+			}
+			if (len - delta > (size_t)UINT32_MAX) {
+				HNS5_LOG(WARNING, "zc: chunk len=%zu exceeds the u32 "
+					 "size field after 4 MiB alignment, skipping",
+					 len);
 				continue;
 			}
 			alen = (uint32_t)((len - delta) & ~(size_t)mask);
@@ -268,8 +308,17 @@ hns5_sec_register_app_pool(struct hns5_sec_runtime *sec, struct rte_mempool *mp)
 				 * the smallest power-of-two >= elt_size. */
 				uint32_t elt = 64;
 
-				while (elt < (uint32_t)mp->elt_size && elt < 4096)
+				/* buffer_size must divide the 4 MiB block and
+				 * hold one element, so follow elt_size up to
+				 * the block size instead of stopping at 4 KiB. */
+				while (elt < (uint32_t)mp->elt_size && elt < (4u << 20))
 					elt <<= 1;
+				if (elt < (uint32_t)mp->elt_size) {
+					HNS5_LOG(WARNING, "zc: elt_size=%u is larger "
+						 "than a 4 MiB block, skipping lp=%u",
+						 (uint32_t)mp->elt_size, lp_id);
+					continue;
+				}
 
 				memset(&lp, 0, sizeof(lp));
 				lp.buffer_size = elt;
@@ -290,13 +339,27 @@ hns5_sec_register_app_pool(struct hns5_sec_runtime *sec, struct rte_mempool *mp)
 						 lp_id, pp, elt, blocks);
 				}
 			}
+			/* Span end: checked before forming it rather than
+			 * trusting the alignment arithmetic above.
+			 */
+			if (pa > UINT64_MAX - (uint64_t)alen) {
+				HNS5_LOG(WARNING, "zc: span end would wrap, "
+					 "skipping pp=%u", pp);
+				continue;
+			}
 			sec->zc_pools[sec->zc_pool_num].mp = mp;
 			sec->zc_pools[sec->zc_pool_num].pa_lo = pa;
 			sec->zc_pools[sec->zc_pool_num].pa_hi = pa + alen;
 			sec->zc_pool_num++;
 			sec->zc_pool_pp_next++;
-			HNS5_LOG(NOTICE, "zc: app pool %s registered as BMU pp=%u "
-				 "(span=%zu B)", mp->name, pp, (size_t)alen);
+			{
+				char shown[64];
+
+				hns5_str_shown(shown, sizeof(shown), mp->name);
+				HNS5_LOG(NOTICE, "zc: app pool %s registered as BMU "
+					 "pp=%u (span=%zu B)", shown, pp,
+					 (size_t)alen);
+			}
 			pp++;
 			if (sec->zc_pool_num >= RTE_DIM(sec->zc_pools))
 				break;
@@ -334,6 +397,7 @@ hns5_qp_cache_flush(struct hns5_qp *qp)
 	c = &qp->cache;
 	while (c->count != 0) {
 		c->count--;
+		sec_segment_wipe_keys(c->raw[c->count]);
 		(void)sec_bmu_free(qp->sec->common, c->raw[c->count]);
 	}
 }
@@ -349,7 +413,7 @@ hns5_enqueue_impl(struct hns5_qp *qp, struct rte_crypto_op **ops, uint16_t nb_op
 	if (qp == NULL || ops == NULL || nb_ops == 0)
 		return 0;
 	sec = qp->sec;
-	if (sec == NULL || sec->common == NULL || sec->common->poisoned)
+	if (sec == NULL || sec->common == NULL || HNS5_BMU_POISONED(sec->common))
 		return 0;
 	t_begin = hns5_sec_stats_en ? hns5_tsc() : 0;
 
@@ -368,6 +432,19 @@ hns5_enqueue_impl(struct hns5_qp *qp, struct rte_crypto_op **ops, uint16_t nb_op
 			break;
 		}
 
+		if (op == NULL || op->sym == NULL ||
+		    op->sess_type != RTE_CRYPTO_OP_WITH_SESSION ||
+		    op->sym->session == NULL) {
+			/* A SESSIONLESS op carries its xform inline and has no
+			 * session object: the private-area macro would turn the
+			 * NULL session into a small non-NULL pointer and the
+			 * first field read would fault. A NULL op/sym is a
+			 * caller contract violation; skip it the same way. */
+			if (op != NULL)
+				op->status = RTE_CRYPTO_OP_STATUS_INVALID_ARGS;
+			hns5_stat_inc(&qp->stats.enqueue_err_count);
+			continue;
+		}
 		sess = (struct hns5_session *)CRYPTODEV_GET_SYM_SESS_PRIV(op->sym->session);
 		if (sess == NULL) {
 			op->status = RTE_CRYPTO_OP_STATUS_INVALID_ARGS;
@@ -399,9 +476,15 @@ hns5_enqueue_impl(struct hns5_qp *qp, struct rte_crypto_op **ops, uint16_t nb_op
 
 			/* In place, single segment, whole payload inside the
 			 * segment, 64 B aligned start, and (for chains) the
-			 * cipher and auth ranges must be the same. */
+			 * cipher and auth ranges must be the same. The range is
+			 * tested with subtractions: off and len are both
+			 * caller-controlled u32 and off + len can wrap.
+			 */
 			if (op->sym->m_dst == NULL && m != NULL && len != 0 &&
-			    m->nb_segs == 1 && (uint32_t)m->data_len >= off + len &&
+			    m->nb_segs == 1 &&
+			    off <= UINT16_MAX &&
+			    off <= (uint32_t)m->data_len &&
+			    len <= (uint32_t)m->data_len - off &&
 			    (sess->op_type != 2 || aoff == off)) {
 				uint64_t dpa = rte_mbuf_data_iova(m) + off;
 				/* Once the BSP refused the mbuf input, never
@@ -429,7 +512,7 @@ hns5_enqueue_impl(struct hns5_qp *qp, struct rte_crypto_op **ops, uint16_t nb_op
 		}
 		/*
 		 * Clear only what this op actually depends on. The old code zeroed
-		 * the whole 64 KiB segment for every op - ~100x more memory traffic
+		 * the whole 64 KiB segment for every op - far more memory traffic
 		 * than the packet itself (64 B .. 1 KiB) and the single biggest cost
 		 * in the crypto throughput numbers.
 		 *
@@ -534,7 +617,7 @@ hns5_enqueue_impl(struct hns5_qp *qp, struct rte_crypto_op **ops, uint16_t nb_op
 				if (!fell_back) {
 					/* First failure is unexpected: stop using
 					 * the device until re-initialised. */
-					hns5_runtime_poison(sec->common,
+					hns5_bmu_poison(sec->common,
 						"SEC submit failed; DMA ownership uncertain");
 				}
 				if (sec->priv != NULL && sec->priv->slot_map != NULL &&
@@ -639,14 +722,28 @@ hns5_reap_shared(struct hns5_dev_private *priv, struct hns5_qp *self,
 			priv->reap_orphan++;
 			continue;
 		}
-		owner = priv->qps[(entry >> 16) - 1U];
-		if (owner == NULL) {
-			priv->reap_orphan++;
-			continue;
-		}
 		{
+			/* entry is written by this driver, but a stale or torn
+			 * u32 must not become an index: (entry >> 16) - 1 can
+			 * wrap when the queue-pair field is 0, and slot is only
+			 * bounded by the ring depth of whoever owns it.
+			 */
+			unsigned int owner_id = (unsigned int)(entry >> 16) - 1U;
 			uint16_t slot = (uint16_t)(entry & 0xffffU);
 
+			if (owner_id >= priv->max_qps) {
+				priv->reap_orphan++;
+				continue;
+			}
+			owner = priv->qps[owner_id];
+			if (owner == NULL) {
+				priv->reap_orphan++;
+				continue;
+			}
+			if (slot >= owner->depth) {
+				priv->reap_orphan++;
+				continue;
+			}
 			__atomic_store_n(&owner->ring[slot].completed, true,
 					 __ATOMIC_RELEASE);
 		}
@@ -656,8 +753,8 @@ hns5_reap_shared(struct hns5_dev_private *priv, struct hns5_qp *self,
 		 * Fairness mode is only used with smooth: there the backlog makes a
 		 * thread that lags behind hold up everyone else, so stopping as soon
 		 * as our own request is flagged helps. In the normal mode the full
-		 * batch is drained under one lock hold, which amortises the lock cost
-		 * (measured 21 Gbps vs 18 Gbps for early exit).
+		 * batch is drained under one lock hold, which amortises the lock
+		 * cost; bailing out on the first own completion costs throughput.
 		 */
 		if (priv->sec.reap_fair && self != NULL && self->inflight != 0 &&
 		    __atomic_load_n(&self->ring[self->cons_tail].completed,
@@ -715,7 +812,7 @@ hns5_dequeue_impl(struct hns5_qp *qp, struct rte_crypto_op **ops, uint16_t nb_op
 				break;	/* nothing available yet */
 			continue;
 		} else {
-			rc = hns5_sec_reap_completion(sec, &slot->seg, NULL);
+			rc = hns5_sec_reap_completion(sec, &slot->seg);
 			if (rc == -ETIMEDOUT)
 				break;	/* no completion yet */
 			if (rc == -EIO)
@@ -723,6 +820,32 @@ hns5_dequeue_impl(struct hns5_qp *qp, struct rte_crypto_op **ops, uint16_t nb_op
 		}
 
 		op = slot->op;
+		if (op == NULL || op->sym == NULL ||
+		    op->sess_type != RTE_CRYPTO_OP_WITH_SESSION ||
+		    op->sym->session == NULL) {
+			/* The op passed these checks at enqueue, so reaching
+			 * here means its session was freed behind our back.
+			 * Hand the op back as an error and release the segment
+			 * without touching the session. */
+			if (sec->priv != NULL && sec->priv->slot_map != NULL &&
+			    slot->seg.pa >= sec->priv->slot_base) {
+				uint64_t idx = (slot->seg.pa - sec->priv->slot_base) /
+					       HNS5_BUFFER_BYTES;
+
+				if (idx < sec->priv->slot_count)
+					sec->priv->slot_map[idx] = 0;
+			}
+			sec_cache_put(qp, slot->seg.raw, slot->seg.pa);
+			slot->used = false;
+			qp->cons_tail = ring_next(qp->cons_tail, qp->depth);
+			qp->inflight--;
+			if (op != NULL) {
+				op->status = RTE_CRYPTO_OP_STATUS_ERROR;
+				hns5_stat_inc(&qp->stats.dequeue_err_count);
+				ops[dequeued++] = op;
+			}
+			continue;
+		}
 		sess = (struct hns5_session *)CRYPTODEV_GET_SYM_SESS_PRIV(op->sym->session);
 		/*
 		 * The engine wrote these areas through DMA, so they are cold in the
@@ -841,7 +964,7 @@ hns5_enqueue_burst(struct hns5_qp *qp, struct rte_crypto_op **ops,
 		if (sec != NULL)
 			sec->smooth_backlog++;
 	}
-	return (uint16_t)(done + (i - done));
+	return i;
 }
 
 uint16_t

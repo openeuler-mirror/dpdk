@@ -342,9 +342,33 @@ static int32_t hns5_bmu_add_addr_trans(uint64_t virt, uint64_t phys, uint32_t si
 
 static bool hns5_bmu_sole_owner(void)
 {
-    /* rte_cryptodev_count() is 0 for net-only applications (testpmd, l2fwd),
-     * and non-zero once a crypto_hns5 vdev has been probed. */
-    return rte_cryptodev_count() == 0;
+    /*
+     * Does a crypto_hns5 device own the BMU? It sets up the same common
+     * BMU VF0 with its own PF re-init and VF reset, so the packet path
+     * must not repeat that behind its back.
+     *
+     * Counting cryptodevs was wrong in both directions: any other
+     * cryptodev (an openssl vdev, the scheduler) made this driver skip
+     * initialisation that nobody else would perform, and a crypto_hns5
+     * whose probe failed still counted as an owner. Ask for the driver
+     * id by name and match it per device instead.
+     */
+    struct rte_cryptodev_info info;
+    int ours;
+    uint8_t id;
+
+    /* The name must match HNS5_CRYPTO_DRIVER_NAME in the crypto PMD. */
+    ours = rte_cryptodev_driver_id_get("crypto_hns5");
+    if (ours < 0)
+        return true;
+    for (id = 0; id < RTE_CRYPTO_MAX_DEVS; id++) {
+        if (!rte_cryptodev_is_valid_dev(id))
+            continue;
+        rte_cryptodev_info_get(id, &info);
+        if ((int)info.driver_id == ours)
+            return false;
+    }
+    return true;
 }
 
 static int hns5_bmu_pf_init(struct hns5_mp_bmu_dev *dev)

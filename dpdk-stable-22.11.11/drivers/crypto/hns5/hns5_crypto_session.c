@@ -24,9 +24,16 @@ cipher_setup(struct hns5_session *sess, const struct rte_crypto_cipher_xform *x)
 		sess->cipher_mode = HNS5_SEC_CIPHER_MODE_CBC;
 		break;
 	case RTE_CRYPTO_CIPHER_AES_ECB:
-		sess->cipher_alg = HNS5_SEC_CIPHER_ALG_AES;
-		sess->cipher_mode = HNS5_SEC_CIPHER_MODE_ECB;
-		break;
+		/*
+		 * The engine implements ECB, but it is not semantically secure:
+		 * equal plaintext blocks give equal ciphertext, so patterns in
+		 * the data survive encryption. It is therefore not offered at
+		 * all - no capability entry (see hns5_crypto_capabilities.c) and
+		 * refused here, instead of being logged and then executed.
+		 */
+		HNS5_LOG(ERR, "AES-ECB is not offered by this driver "
+			 "(not semantically secure)");
+		return -ENOTSUP;
 	default:
 		HNS5_LOG(ERR, "unsupported cipher algo %u", x->algo);
 		return -ENOTSUP;
@@ -48,6 +55,21 @@ cipher_setup(struct hns5_session *sess, const struct rte_crypto_cipher_xform *x)
 	}
 	sess->cipher_keylen = (uint8_t)x->key.length;
 	sess->cipher_dir = (uint8_t)x->op;
+	/*
+	 * The IV is copied verbatim into the SEC segment, so its length has to
+	 * be what the capability table advertises: one cipher block for the CBC
+	 * modes. ECB ignores it, but a caller may still fill one in, so only the
+	 * upper bound applies there. A longer IV would read past the operation's
+	 * private area and run over the key and MAC areas of the segment.
+	 */
+	if (x->iv.length > HNS5_SEC_IV_BYTES ||
+	    (sess->cipher_mode != HNS5_SEC_CIPHER_MODE_ECB &&
+	     x->iv.length != HNS5_SEC_IV_BYTES)) {
+		HNS5_LOG(ERR, "cipher IV length %u not allowed for mode %u "
+			 "(block size %u)", x->iv.length, sess->cipher_mode,
+			 HNS5_SEC_IV_BYTES);
+		return -EINVAL;
+	}
 	sess->iv_offset = (uint16_t)x->iv.offset;
 	sess->iv_length = (uint16_t)x->iv.length;
 	if (x->key.data != NULL)
@@ -107,6 +129,11 @@ auth_setup(struct hns5_session *sess, const struct rte_crypto_auth_xform *x)
 		    (x->key.length % 4) != 0) {
 			HNS5_LOG(ERR, "bad HMAC key length %u (need 16..64, "
 				 "multiple of 4)", x->key.length);
+			return -EINVAL;
+		}
+		if (x->key.data == NULL) {
+			HNS5_LOG(ERR, "HMAC needs a %u-byte key, but no key "
+				 "pointer was given", x->key.length);
 			return -EINVAL;
 		}
 		sess->akey_len = (uint16_t)x->key.length;
@@ -173,9 +200,24 @@ hns5_session_configure(struct rte_crypto_sym_xform *xform, void *priv)
 	return -ENOTSUP;
 }
 
+/*
+ * The compiler may drop a memset() of an object that is not used again, which
+ * is exactly the case here (the session private area is recycled, not read).
+ * Writing through a volatile pointer keeps the clear: keys and IV must not
+ * survive in memory the pool hands to the next session.
+ */
+static void
+hns5_wipe(void *p, size_t len)
+{
+	volatile unsigned char *v = (volatile unsigned char *)p;
+
+	while (len-- != 0)
+		*v++ = 0;
+}
+
 void
 hns5_session_clear(void *priv)
 {
 	if (priv != NULL)
-		memset(priv, 0, sizeof(struct hns5_session));
+		hns5_wipe(priv, sizeof(struct hns5_session));
 }

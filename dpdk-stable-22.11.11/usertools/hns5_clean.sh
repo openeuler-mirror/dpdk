@@ -13,11 +13,15 @@
 #      removed when the pool size changes or when a clean slate is wanted.
 #
 # Usage:
-#   ./hns5_clean.sh           # clean hns5 locks + pool only
-#   ./hns5_clean.sh --full    # also clean DPDK runtime state
-#   ./hns5_clean.sh --hugepages  # also remove EAL hugepage files (rtemap_*)
-#   ./hns5_clean.sh --full       # clean hns5 state + DPDK runtime + hugepage files
-#   ./hns5_clean.sh --status  # show current state without cleaning
+#   ./hns5_clean.sh              # show current state (READ-ONLY, the default)
+#   ./hns5_clean.sh --status     # same as above
+#   ./hns5_clean.sh --clean      # remove hns5 locks and the pool file
+#   ./hns5_clean.sh --hugepages  # the above + EAL hugepage files (rtemap_*)
+#   ./hns5_clean.sh --full       # the above + DPDK runtime state
+#
+# Removing the pool file and the locks destroys the recovery marker that the
+# driver writes when a teardown did not complete, so it is never the default:
+# the marker is what stops a later process from reusing live DMA memory.
 
 set -euo pipefail
 
@@ -69,6 +73,11 @@ show_status() {
 do_clean() {
     log "cleaning hns5 residual state..."
     local cleaned=0
+    local marker=""
+
+    if [ -e "$OWNER_LOCK" ]; then
+        marker=$(head -c 64 "$OWNER_LOCK" 2>/dev/null || true)
+    fi
 
     for f in "$OWNER_LOCK" "$LEGACY_LOCK"; do
         if [ -e "$f" ]; then
@@ -115,6 +124,16 @@ do_clean() {
         fi
     fi
 
+    case "$marker" in
+        *NEEDS_BSP_RESET*)
+            warn "the owner lock carried a NEEDS_BSP_RESET marker: the BMU was" \
+                 "left configured by an abnormal exit."
+            warn "deleting the lock does NOT reset the hardware. Run the BSP" \
+                 "reset flow (BMU unsetup/reset/setup) or reboot the board" \
+                 "before starting anything that touches the SEC/BMU again."
+            ;;
+    esac
+
     if [ "$cleaned" = 1 ]; then
         log "done: residual state cleaned"
     else
@@ -122,10 +141,10 @@ do_clean() {
     fi
 }
 
-case "${1:---clean}" in
+case "${1:---status}" in
     --status) show_status ;;
     --hugepages) do_clean --hugepages; show_status ;;
     --full)   do_clean --full; show_status ;;
     --clean|'') do_clean; show_status ;;
-    *) echo "Usage: $0 [--clean|--hugepages|--full|--status]"; exit 1 ;;
+    *) echo "Usage: $0 [--status|--clean|--hugepages|--full]"; exit 1 ;;
 esac

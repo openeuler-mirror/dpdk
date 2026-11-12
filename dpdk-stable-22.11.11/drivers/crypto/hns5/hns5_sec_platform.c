@@ -4,7 +4,7 @@
  * SEC PF/VF + POE setup, adapted from the vendor reference sec_platform.c.
  * Brings up POE submit/completion groups, binds the reserved vCPU1 to the
  * completion group, sets the SEC PF/VF into POE mode, and verifies the POE
- * routing. Ownership markers in the common runtime keep DMA memory from being
+ * routing. Ownership markers in the common BMU state keep DMA memory from being
  * reused after an uncertain teardown.
  */
 
@@ -97,6 +97,15 @@ check_submit_group_unbound(struct hns5_sec_runtime *p,
 	unsigned int local = p->submit_group - range->acc_grp_start;
 	size_t i;
 
+	/* Both operands are hardware-provided; an unsigned subtraction that
+	 * wrapped would index mask[] out of range.
+	 */
+	if (local >= range->acc_grp_num) {
+		HNS5_LOG(ERR, "submit group %u outside ACC range [%u, %u)\n",
+			 p->submit_group, range->acc_grp_start,
+			 range->acc_grp_start + range->acc_grp_num);
+		return -EIO;
+	}
 	if (words == 0U || words > POE_MASK_WORDS)
 		return -EIO;
 	for (i = 0; i < sizeof(poe_acc_endpoints) / sizeof(poe_acc_endpoints[0]); ++i) {
@@ -134,6 +143,13 @@ select_reserved_vcpu(struct hns5_sec_runtime *p,
 	unsigned int vcpu_count = ndrv_poe_get_lcpu_num();
 	unsigned int i;
 
+	/* local indexes mask[] below; grp_num is its only real bound. */
+	if (local >= range->cpu_grp_num) {
+		HNS5_LOG(ERR, "completion group %u outside CPU range [%u, %u)\n",
+			 p->completion_group, range->cpu_grp_start,
+			 range->cpu_grp_start + range->cpu_grp_num);
+		return -EIO;
+	}
 	if (words == 0U || words > POE_MASK_WORDS || vcpu_count == 0U ||
 	    vcpu_count > POE_VCPU_LIMIT || want >= vcpu_count) {
 		HNS5_LOG(ERR, "vcpu check failed: words=%u vcpu_count=%u engine_vcpu=%u\n",
@@ -246,6 +262,16 @@ hns5_sec_platform_inspect(struct hns5_sec_runtime *p)
 		 range.acc_grp_start, range.acc_grp_start + range.acc_grp_num);
 	p->completion_group_local = p->completion_group - range.cpu_grp_start;
 	p->submit_group_local = p->submit_group - range.acc_grp_start;
+	/* Both *_local values index group_mask[] later (setup and readback);
+	 * check them here so the invariant lives next to the subtraction.
+	 */
+	if (p->completion_group_local >= range.cpu_grp_num ||
+	    p->submit_group_local >= range.acc_grp_num) {
+		HNS5_LOG(ERR, "group ids out of range after planning: "
+			 "completion=%u submit=%u\n",
+			 p->completion_group, p->submit_group);
+		return -EIO;
+	}
 	submit_status = check_group(p, p->submit_group);
 	completion_status = check_group(p, p->completion_group);
 	HNS5_LOG(DEBUG, "check_group: submit=%d completion=%d\n",
@@ -461,7 +487,7 @@ purge_stale_poe_packets(struct hns5_sec_runtime *p)
 static void
 drain_stale_completions(struct hns5_sec_runtime *p)
 {
-	union ndrv_poe_msg msg;
+	union ndrv_poe_msg msg = { 0 };
 	unsigned int queue;
 	unsigned int n;
 	unsigned int total = 0;
@@ -609,7 +635,7 @@ setup_sec(struct hns5_sec_runtime *p)
 
 	rc = hidrv_sec_pf_setup((uint32_t)p->sec_pf, &pf, NULL);
 	if (rc != 0) {
-		hns5_runtime_poison(p->common, "SEC PF init failed");
+		hns5_bmu_poison(p->common, "SEC PF init failed");
 		return -1;
 	}
 	p->sec_pf_started = true;
@@ -622,7 +648,7 @@ setup_sec(struct hns5_sec_runtime *p)
 
 	rc = hidrv_sec_vf_setup((uint32_t)p->sec_vf, &vf, NULL);
 	if (rc != 0) {
-		hns5_runtime_poison(p->common, "SEC VF init failed");
+		hns5_bmu_poison(p->common, "SEC VF init failed");
 		return -1;
 	}
 	p->sec_vf_started = true;
@@ -680,7 +706,7 @@ hns5_sec_platform_start(struct hns5_sec_runtime *r)
 	 */
 
 	if (setup_poe(r) || setup_sec(r)) {
-		hns5_runtime_poison(r->common, "SEC/POE partial initialization");
+		hns5_bmu_poison(r->common, "SEC/POE partial initialization");
 		return -EIO;
 	}
 	HNS5_LOG(NOTICE, "channel 0: vcpu=%u submit=%u(vqi %u) completion=%u"
@@ -697,13 +723,13 @@ hns5_sec_platform_start(struct hns5_sec_runtime *r)
 			 * application block forever on completions. */
 			HNS5_LOG(ERR, "SEC engine is stuck; refusing to start "
 				 "(reboot the board to clear it)");
-			hns5_runtime_poison(r->common, "SEC engine stuck");
+			hns5_bmu_poison(r->common, "SEC engine stuck");
 			return -EIO;
 		}
 		if (pr > 0) {
 			/* The VF reset wiped the group configuration. */
 			if (setup_poe(r) != 0 || setup_sec(r) != 0) {
-				hns5_runtime_poison(r->common,
+				hns5_bmu_poison(r->common,
 						    "SEC/POE re-init after reset");
 				return -EIO;
 			}
@@ -728,7 +754,8 @@ find_channel_vcpu(struct hns5_sec_runtime *p, unsigned int want, unsigned int *o
 	unsigned int local = p->completion_group - p->range.cpu_grp_start;
 	unsigned int i;
 
-	if (words == 0U || words > POE_MASK_WORDS || want >= vcpu_count)
+	if (local >= p->range.cpu_grp_num ||
+	    words == 0U || words > POE_MASK_WORDS || want >= vcpu_count)
 		return -EINVAL;
 
 	for (i = 0; i < vcpu_count; ++i) {
@@ -1066,7 +1093,7 @@ hns5_sec_platform_close(struct hns5_sec_runtime *r)
 	if (r->complete_open && hidrv_poe_close_group(r->poe_vf, r->completion_group))
 		rc = -EIO;
 	if (rc)
-		hns5_runtime_poison(r->common, "SEC close incomplete");
+		hns5_bmu_poison(r->common, "SEC close incomplete");
 	r->sec_vf_started = false;
 	r->sec_pf_started = false;
 	r->cpu_bound = false;

@@ -9,7 +9,6 @@
  */
 
 #include "hns5_crypto_pmd_private.h"
-#include "hns5_sec_debug.h"
 
 #include <string.h>
 #include <rte_memcpy.h>
@@ -29,7 +28,7 @@ int
 hns5_sec_fetch_completion(struct hns5_sec_runtime *r, uint64_t *pa,
 			  bool *from_error_queue, uint32_t max_polls)
 {
-	union ndrv_poe_msg msg;
+	union ndrv_poe_msg msg = { 0 };
 	unsigned int queue = 0;
 	uint32_t empty_polls = 0;
 	unsigned int rc;
@@ -82,9 +81,9 @@ hns5_sec_fetch_completion(struct hns5_sec_runtime *r, uint64_t *pa,
 
 int
 hns5_sec_reap_completion(struct hns5_sec_runtime *r,
-			struct hns5_sec_segment *seg, int *result)
+			struct hns5_sec_segment *seg)
 {
-	union ndrv_poe_msg msg;
+	union ndrv_poe_msg msg = { 0 };
 	unsigned int queue = 0;
 	uint32_t empty_polls = 0;
 	unsigned int rc;
@@ -114,16 +113,10 @@ hns5_sec_reap_completion(struct hns5_sec_runtime *r,
 		if (!rc)
 			break;
 		if (r->reap_mode == 0 &&
-		    !UDRV_IS_ERR(rc, POE_GET_QUEUE_FAIL)) {
-			if (result)
-				*result = -EIO;
+		    !UDRV_IS_ERR(rc, POE_GET_QUEUE_FAIL))
 			return -EIO;
-		}
-		if (++empty_polls >= HNS5_MAX_RECV_POLLS) {
-			if (result)
-				*result = -ETIMEDOUT;
+		if (++empty_polls >= HNS5_MAX_RECV_POLLS)
 			return -ETIMEDOUT;
-		}
 		queue ^= 1;
 	}
 
@@ -137,15 +130,10 @@ hns5_sec_reap_completion(struct hns5_sec_runtime *r,
 	     msg.packet_msg.vqi != (queue ? r->error_vqi : r->completion_vqi) :
 	     (msg.packet_msg.vqi != r->completion_vqi &&
 	      msg.packet_msg.vqi != r->error_vqi)) ||
-	    pa != seg->pa) {
-		if (result)
-			*result = -EIO;
+	    pa != seg->pa)
 		return -EIO;
-	}
 
 	rte_rmb();   /* 只读方向的顺序保证；置 completed 用 RELEASE 原子写 */
-	if (result)
-		*result = 0;
 	return 0;
 }
 
@@ -164,10 +152,24 @@ hns5_sec_extract_result(struct hns5_sec_segment *seg,
 	bool is_chain = (sess->op_type == 2 || sess->op_type == 3);
 
 	{
+		static uint64_t refresh_failed;
 		uint64_t t0 = hns5_sec_stats_en ? hns5_tsc() : 0;
 		uint64_t dt;
+		int refresh_rc;
 
-		hidrv_sec_poe_reflesh_mbuf_result(m);
+		/*
+		 * The BSP can fail this refresh and returns an error code. The
+		 * fields read afterwards are validated (done/sec_result), so a
+		 * failure is not fatal here - but it must not be silent either:
+		 * "engine did not complete the op" caused by a failed refresh is
+		 * a different root cause than a dead engine.
+		 */
+		refresh_rc = hidrv_sec_poe_reflesh_mbuf_result(m);
+		if (refresh_rc != 0)
+			HNS5_LOG_LIMITED(WARNING, &refresh_failed, 3, 1000,
+					 "mbuf result refresh failed (%d); the "
+					 "result fields may be stale",
+					 refresh_rc);
 		dt = hns5_sec_stats_en ? hns5_tsc() - t0 : 0;
 		if (hns5_sec_stats_en && seg->rt != NULL) {
 			seg->rt->ref_calls++;
@@ -177,35 +179,16 @@ hns5_sec_extract_result(struct hns5_sec_segment *seg,
 		}
 	}
 
-	/* One-shot dump of the engine write-back: tells whether the engine really
-	 * ran (done/flag/sec_result) or the descriptor was silently ignored. */
+	/* One-shot trace of the engine write-back status: tells whether the engine
+	 * really ran (done/flag/sec_result) or the descriptor was ignored. */
 	{
 		static bool dumped;
 
 		if (!dumped) {
-			const uint32_t *base = (const uint32_t *)(const void *)(seg->raw + HNS5_SEC_DATA_OFFSET);
-			const uint32_t *data = (const uint32_t *)(const void *)(seg->raw + HNS5_SEC_DATA_OFFSET + HNS5_SEC_PREFIX_BYTES);
-			const uint32_t *mac = (const uint32_t *)(const void *)(seg->raw + HNS5_SEC_MAC_OFFSET);
-
 			dumped = true;
 			HNS5_LOG(DEBUG, "wb: done=%u flag=0x%x sec_result=%u err=%u warn=%u icv=%u csc=%u\n",
 				 m->done, m->flag, m->sec_result, m->err_type,
 				 m->warning_type, m->icv, m->csc);
-			/* Where did the engine actually write? data is where the plaintext
-			 * was copied to, base is the descriptor's cipher in/out address
-			 * (IV lives there), mac is the auth output area. */
-			HNS5_LOG(DEBUG, "wb: base[0..4)=%08x %08x %08x %08x\n",
-				 base[0], base[1], base[2], base[3]);
-			HNS5_LOG(DEBUG, "wb: data[0..4)=%08x %08x %08x %08x\n",
-				 data[0], data[1], data[2], data[3]);
-			/* First block only is wrong -> the engine did not use our IV;
-			 * everything wrong -> input range or key differs. */
-			HNS5_LOG(DEBUG, "wb: data[4..8)=%08x %08x %08x %08x\n",
-				 data[4], data[5], data[6], data[7]);
-			HNS5_LOG(DEBUG, "wb: mac[0..4) =%08x %08x %08x %08x\n",
-				 mac[0], mac[1], mac[2], mac[3]);
-			hns5_sec_dump_hex("SEC out (engine mem)", data,
-				(uint32_t)op->sym->cipher.data.length);
 		}
 	}
 
@@ -241,30 +224,45 @@ hns5_sec_extract_result(struct hns5_sec_segment *seg,
 		uint8_t *mac_in_ddr = seg->raw + HNS5_SEC_MAC_OFFSET;
 
 		if (sess->auth_op == RTE_CRYPTO_AUTH_OP_GENERATE) {
+			/*
+			 * dst carries no length of its own: rte_crypto_sym_op's
+			 * digest is a va/iova pair only, and rte_crypto_sym.h
+			 * states the contract - "the caller must allocate at
+			 * least digest_length of physically contiguous memory at
+			 * this location". dlen is the session's digest_len,
+			 * pinned to the advertised size at session creation, so
+			 * the copy is bounded by what the application promised.
+			 */
 			uint8_t *dst = op->sym->auth.digest.data;
 
-			if (dst != NULL && dlen > 0 && dlen <= 32)
+			if (dst != NULL && dlen > 0 &&
+			    dlen <= HNS5_SEC_MAX_DIGEST_BYTES)
 				rte_memcpy(dst, mac_in_ddr, dlen);
 		} else {
 			/* Verify: compare engine-generated MAC with the
-			 * digest provided by the application. */
+			 * digest provided by the application. dlen is the
+			 * session's digest length, pinned to the advertised
+			 * size at session creation; how much of
+			 * op->sym->auth.digest.data is readable is the
+			 * application's contract (DPDK: the operation's
+			 * private area must hold digest_len bytes), so bound
+			 * the compare by that as well.
+			 */
 			uint8_t *expected = op->sym->auth.digest.data;
 
 			if (expected != NULL && dlen > 0) {
 				if (memcmp(mac_in_ddr, expected, dlen) != 0) {
+					/*
+					 * Counted, not printed. Neither MAC goes
+					 * into a log: the caller reports
+					 * RTE_CRYPTO_OP_STATUS_AUTH_FAILED, bumps
+					 * dequeue_err_count, and the per-channel
+					 * total is printed at close, so the failure
+					 * is visible without leaking key-derived
+					 * bytes.
+					 */
 					if (seg->rt != NULL)
-						HNS5_LOG_LIMITED(ERR, &seg->rt->auth_mismatch,
-							5, 1000,
-							"auth mismatch: engine mac %08x %08x %08x %08x, "
-							"packet mac %08x %08x %08x %08x",
-							((const uint32_t *)(const void *)mac_in_ddr)[0],
-							((const uint32_t *)(const void *)mac_in_ddr)[1],
-							((const uint32_t *)(const void *)mac_in_ddr)[2],
-							((const uint32_t *)(const void *)mac_in_ddr)[3],
-							((const uint32_t *)(const void *)expected)[0],
-							((const uint32_t *)(const void *)expected)[1],
-							((const uint32_t *)(const void *)expected)[2],
-							((const uint32_t *)(const void *)expected)[3]);
+						seg->rt->auth_mismatch++;
 					return -EBADMSG;
 				}
 			}
@@ -277,56 +275,60 @@ hns5_sec_extract_result(struct hns5_sec_segment *seg,
 
 	if ((is_cipher || is_chain) && !seg->zero_copy && !seg->zero_copy_out &&
 	    !seg->zero_copy_in) {
+		static uint64_t not_in_range;
 		struct rte_mbuf *mdst = op->sym->m_dst ? op->sym->m_dst :
 				  op->sym->m_src;
-		{
-			static bool dumped_out;
-			const uint32_t *mo;
-
-			if (!dumped_out) {
-				dumped_out = true;
-				mo = (const uint32_t *)(const void *)rte_pktmbuf_mtod_offset(
-					mdst, const char *, op->sym->cipher.data.offset);
-				HNS5_LOG(DEBUG, "wb: mbuf in [%u..+16)=%08x %08x %08x %08x (before copy back)\n",
-					 op->sym->cipher.data.offset,
-					 mo[0], mo[1], mo[2], mo[3]);
-			}
-		}
 		uint32_t off = op->sym->cipher.data.offset;
 		uint32_t len = op->sym->cipher.data.length;
+		uint32_t room;
 		unsigned char *src = seg->raw + HNS5_SEC_DATA_OFFSET +
 				     HNS5_SEC_PREFIX_BYTES;
 
-		if (mdst != NULL && len <= HNS5_SEC_SEGMENT_BYTES) {
+		/*
+		 * off and len come from the application's xform. Bound them
+		 * against the destination chain with subtractions only (adding
+		 * two caller-controlled u32 can wrap), and refuse the copy
+		 * instead of writing past the last segment: the caller reports
+		 * a non-zero return as a failed op.
+		 */
+		if (mdst == NULL)
+			return -EINVAL;
+		room = rte_pktmbuf_pkt_len(mdst);
+		if (len > HNS5_SEC_SEGMENT_BYTES || off > room ||
+		    len > room - off) {
+			HNS5_LOG_LIMITED(ERR, &not_in_range, 3, 1000,
+					 "cipher range %u+%u does not fit the "
+					 "destination (%u bytes)", off, len, room);
+			return -EINVAL;
+		}
+		{
 			uint32_t copied = 0;
+			uint32_t skip = off;
 			struct rte_mbuf *cur = mdst;
 
 			while (cur != NULL && copied < len) {
-				uint32_t seg_off = (cur == mdst) ? off : 0;
-				uint32_t cap = rte_pktmbuf_data_len(cur) - seg_off;
-				uint32_t take;
+				uint32_t seg_len = rte_pktmbuf_data_len(cur);
+				uint32_t seg_off, cap, take;
 
-				if (cap == 0) {
+				/* Step over whole segments the range starts
+				 * beyond, so seg_off < seg_len always holds and
+				 * cap cannot underflow. */
+				if (skip >= seg_len) {
+					skip -= seg_len;
 					cur = cur->next;
 					continue;
 				}
+				seg_off = skip;
+				skip = 0;
+				cap = seg_len - seg_off;
 				take = (cap < len - copied) ? cap : (len - copied);
 				rte_memcpy(rte_pktmbuf_mtod_offset(cur, void *, seg_off),
 					   src + copied, take);
 				copied += take;
 				cur = cur->next;
 			}
-		}
-
-		{
-			static uint32_t dumped_out;
-
-			if (dumped_out < 2 && mdst != NULL && len > 0) {
-				dumped_out++;
-				hns5_sec_dump_hex("SEC out (mbuf)",
-					rte_pktmbuf_mtod_offset(mdst, const void *,
-								off), len);
-			}
+			if (copied != len)
+				return -EINVAL;
 		}
 	}
 
