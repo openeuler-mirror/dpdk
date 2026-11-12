@@ -1,12 +1,13 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright(c) 2026 Huawei Technologies Co., Ltd
  *
- * DPDK vdev front-end. Probe acquires the shared HugeTLB/BMU runtime and
+ * DPDK vdev front-end. Probe acquires the shared HugeTLB/BMU pool and
  * brings up the SEC PF/VF + POE submit/completion groups; each queue pair
  * keeps its own in-flight ring.
  */
 
 #include "hns5_crypto_pmd_private.h"
+#include <string.h>
 
 /* 逐 op 计时开关，由 devarg stats= 设置（默认 0：关闭计时，只保留计数）*/
 bool hns5_sec_stats_en;
@@ -18,7 +19,6 @@ bool hns5_sec_stats_en;
 #include <stdlib.h>
 
 #include "hidrv_log_api.h"
-#include "hns5_sec_debug.h"
 
 static uint8_t hns5_cryptodev_driver_id;
 
@@ -58,7 +58,7 @@ hns5_dev_stop(struct rte_cryptodev *dev __rte_unused)
 }
 
 /*
- * Tear the device down: SEC engine + shared BMU runtime. Idempotent, because
+ * Tear the device down: SEC engine + shared BMU. Idempotent, because
  * the cryptodev teardown path can reach it more than once (explicit close,
  * then rte_cryptodev_pmd_release_device() while removing the device).
  */
@@ -90,12 +90,59 @@ hns5_crypto_teardown(struct rte_cryptodev *dev)
 			(void)hns5_sec_platform_close(&priv->extra[c - 2]);
 		hns5_sec_platform_close(&priv->sec);
 	}
-	if (priv->common_runtime_acquired) {
-		priv->common_runtime_acquired = false;
-		hns5_runtime_release(priv->sec.common);
+	if (priv->common_bmu_acquired) {
+		priv->common_bmu_acquired = false;
+		hns5_bmu_release(priv->sec.common);
 		priv->sec.common = NULL;
 	}
 	return 0;
+}
+
+/*
+ * Release what probe allocated beside the framework's private area.
+ * rte_cryptodev_pmd_destroy() frees dev->data (and with it the private area),
+ * but nothing here: without this, every probe/remove cycle leaks the queue
+ * pair array, the completion ownership table and the extra channel state.
+ *
+ * Deliberately NOT called from hns5_crypto_teardown(): that also runs on
+ * dev_close, after which an application may still start the device again, and
+ * both the queue pair setup path and the reaper need these tables.
+ */
+static void
+hns5_crypto_free_priv(struct rte_cryptodev *dev)
+{
+	struct hns5_dev_private *priv = dev->data->dev_private;
+	uint16_t i;
+
+	if (priv == NULL)
+		return;
+
+	/* rte_free() accepts NULL, so each table is handled on its own: probe can
+	 * fail after slot_map was allocated but before the queue pair array.
+	 */
+	if (priv->qps != NULL) {
+		for (i = 0; i < priv->max_qps; i++) {
+			struct hns5_qp *qp = priv->qps[i];
+
+			if (qp == NULL)
+				continue;
+			/* Only reached when teardown succeeded, so no queue pair
+			 * is still in use; the cached segments went back to the BMU
+			 * while it was still ours.
+			 */
+			rte_free(qp->bl);
+			rte_free(qp->ring);
+			rte_free(qp);
+			priv->qps[i] = NULL;
+			dev->data->queue_pairs[i] = NULL;
+		}
+	}
+	rte_free(priv->qps);
+	priv->qps = NULL;
+	rte_free(priv->slot_map);
+	priv->slot_map = NULL;
+	rte_free(priv->extra);
+	priv->extra = NULL;
 }
 
 static int
@@ -199,6 +246,8 @@ hns5_qp_setup(struct rte_cryptodev *dev, uint16_t qp_id,
 		} else if (hint < want) {
 			want = hint;
 		}
+		if (want > 0xffffU)	/* depth is 16 bits */
+			want = 0xffffU;
 		qp->depth = (uint16_t)want;
 	}
 	qp->ring = rte_zmalloc_socket("hns5 inflight",
@@ -253,10 +302,15 @@ hns5_qp_release(struct rte_cryptodev *dev, uint16_t qp_id)
 	if (qp->inflight != 0)
 		HNS5_LOG(ERR, "releasing qp %u with %u ops in flight", qp_id, qp->inflight);
 	hns5_qp_cache_flush(qp);
-	rte_free(qp->ring);
-	rte_free(qp);
+	/*
+	 * bl and ring are members of qp, so they must be released while qp is
+	 * still alive: reading qp->bl after rte_free(qp) is a use-after-free, and
+	 * with smooth=1 it also frees a pointer read out of freed memory.
+	 */
 	rte_free(qp->bl);
 	qp->bl = NULL;
+	rte_free(qp->ring);
+	rte_free(qp);
 	priv->qps[qp_id] = NULL;
 	dev->data->queue_pairs[qp_id] = NULL;
 	return 0;
@@ -311,6 +365,114 @@ hns5_crypto_dequeue_burst(void *qp, struct rte_crypto_op **ops, uint16_t nb_ops)
 }
 
 /*
+ * Device arguments. Each key is defined once so the parser below, the
+ * unknown-key check and RTE_PMD_REGISTER_PARAM_STRING cannot drift apart.
+ */
+#define HNS5_DEVARG_BSP_LOG	"bsp_log"
+#define HNS5_DEVARG_CAP	"cap"
+#define HNS5_DEVARG_DEBUG_MEMCPY	"debug_memcpy"
+#define HNS5_DEVARG_POE_BP_TH	"poe_bp_th"
+#define HNS5_DEVARG_POE_FLOW	"poe_flow"
+#define HNS5_DEVARG_POE_INT_TH	"poe_int_th"
+#define HNS5_DEVARG_POE_ORDER	"poe_order"
+#define HNS5_DEVARG_POE_PRELOAD	"poe_preload"
+#define HNS5_DEVARG_POOL_MB	"pool_mb"
+#define HNS5_DEVARG_QPS	"qps"
+#define HNS5_DEVARG_REAP	"reap"
+#define HNS5_DEVARG_REAP_BATCH	"reap_batch"
+#define HNS5_DEVARG_REAP_FAIR	"reap_fair"
+#define HNS5_DEVARG_REAP_POLLS	"reap_polls"
+#define HNS5_DEVARG_REAP_SPIN	"reap_spin"
+#define HNS5_DEVARG_REAPER_QP	"reaper_qp"
+#define HNS5_DEVARG_SEC_GET_POE	"sec_get_poe"
+#define HNS5_DEVARG_SEC_SKIP_LEN	"sec_skip_len"
+#define HNS5_DEVARG_SMOOTH	"smooth"
+#define HNS5_DEVARG_STATS	"stats"
+#define HNS5_DEVARG_VCPU	"vcpu"
+#define HNS5_DEVARG_ZC_APP_POOL	"zc_app_pool"
+#define HNS5_DEVARG_ZERO_COPY	"zero_copy"
+#define HNS5_DEVARG_ZERO_COPY_IN	"zero_copy_in"
+#define HNS5_DEVARG_ZERO_COPY_OUT	"zero_copy_out"
+
+static const char * const hns5_devargs[] = {
+	HNS5_DEVARG_BSP_LOG,
+	HNS5_DEVARG_CAP,
+	HNS5_DEVARG_DEBUG_MEMCPY,
+	HNS5_DEVARG_POE_BP_TH,
+	HNS5_DEVARG_POE_FLOW,
+	HNS5_DEVARG_POE_INT_TH,
+	HNS5_DEVARG_POE_ORDER,
+	HNS5_DEVARG_POE_PRELOAD,
+	HNS5_DEVARG_POOL_MB,
+	HNS5_DEVARG_QPS,
+	HNS5_DEVARG_REAP,
+	HNS5_DEVARG_REAP_BATCH,
+	HNS5_DEVARG_REAP_FAIR,
+	HNS5_DEVARG_REAP_POLLS,
+	HNS5_DEVARG_REAP_SPIN,
+	HNS5_DEVARG_REAPER_QP,
+	HNS5_DEVARG_SEC_GET_POE,
+	HNS5_DEVARG_SEC_SKIP_LEN,
+	HNS5_DEVARG_SMOOTH,
+	HNS5_DEVARG_STATS,
+	HNS5_DEVARG_VCPU,
+	HNS5_DEVARG_ZC_APP_POOL,
+	HNS5_DEVARG_ZERO_COPY,
+	HNS5_DEVARG_ZERO_COPY_IN,
+	HNS5_DEVARG_ZERO_COPY_OUT,
+	NULL
+};
+
+/*
+ * Whoever writes the command line or the JSON device config controls a devarg
+ * value, and a value carrying \n or \r would forge extra log lines. Nothing
+ * external is printed until it has passed through here: non-printable bytes
+ * become '?', which also makes any numeric parse fail instead of reading a
+ * truncated number.
+ */
+static void
+hns5_arg_shown(char *dst, size_t dst_len, const char *src)
+{
+	hns5_str_shown(dst, dst_len, src);
+}
+
+static int
+hns5_arg_known(const char *key, const char *value __rte_unused,
+	       void *arg __rte_unused)
+{
+	char shown[64];
+	unsigned int i;
+
+	for (i = 0; hns5_devargs[i] != NULL; i++) {
+		if (strcmp(key, hns5_devargs[i]) == 0)
+			return 0;
+	}
+	hns5_arg_shown(shown, sizeof(shown), key);
+	/*
+	 * Warn, do not fail: a mistyped key used to be ignored silently, and the
+	 * operator then measured default behaviour. Failing the probe here would
+	 * turn that invisible mistake into a boot failure for existing scripts.
+	 */
+	HNS5_LOG(WARNING, "ignoring unknown devarg \"%s\"; see "
+		 "doc/guides/cryptodevs/hns5.rst for the supported list", shown);
+	return 0;
+}
+
+static void
+hns5_crypto_check_devargs(const char *args)
+{
+	struct rte_kvargs *kvlist;
+
+	if (args == NULL || *args == '\0')
+		return;
+	kvlist = rte_kvargs_parse(args, NULL);
+	if (kvlist == NULL)
+		return;
+	(void)rte_kvargs_process(kvlist, NULL, hns5_arg_known, NULL);
+	rte_kvargs_free(kvlist);
+}
+
+/*
  * bsp_log=debug|info|warn|err on the crypto vdev as well.
  *
  * The BSP logger (libhidrv_api / hidrv_log) is global and DPDK's --log-level
@@ -337,7 +499,7 @@ static void hns5_crypto_apply_bsp_log(const char *args)
 	if (kvlist == NULL) {
 		return;
 	}
-	value = rte_kvargs_get(kvlist, "bsp_log");
+	value = rte_kvargs_get(kvlist, HNS5_DEVARG_BSP_LOG);
 	if (value != NULL) {
 		if (strcasecmp(value, "debug") == 0) {
 			level = 1;
@@ -348,8 +510,11 @@ static void hns5_crypto_apply_bsp_log(const char *args)
 		} else if (strcasecmp(value, "err") == 0) {
 			level = 4;
 		} else if (strcasecmp(value, "default") != 0) {
+			char shown[64];
+
+			hns5_arg_shown(shown, sizeof(shown), value);
 			HNS5_LOG(ERR, "bsp_log=%s unsupported "
-				 "(use default|debug|info|warn|err)", value);
+				 "(use default|debug|info|warn|err)", shown);
 		}
 	}
 
@@ -368,6 +533,45 @@ static void hns5_crypto_apply_bsp_log(const char *args)
 }
 
 /*
+ * Every numeric devarg goes through here. A bare strtoul() accepted "12abc",
+ * read "yes" as 0 and applied no range at all, so a typo silently meant "the
+ * default" or, worse, a different number. The value must be a plain integer
+ * inside [min, max]; anything else is reported and the existing default
+ * stays. Returns 1 when the value was applied, 0 when the key was not given,
+ * -1 when the given value was rejected.
+ */
+static int
+hns5_arg_num(const struct rte_kvargs *kvlist, const char *key,
+	     unsigned int min, unsigned int max, unsigned int *out)
+{
+	const char *v = rte_kvargs_get(kvlist, key);
+	char shown[64];
+	char *end;
+	unsigned long n;
+
+	if (v == NULL)
+		return 0;
+	if (v[0] == '\0') {
+		/* An empty value is not "0": strtoul() would hand back 0 with
+		 * end == start and the range check below would then accept it.
+		 */
+		HNS5_LOG(ERR, "%s= has no value, keeping the default", key);
+		return -1;
+	}
+	hns5_arg_shown(shown, sizeof(shown), v);
+	errno = 0;
+	n = strtoul(v, &end, 0);
+	if (errno != 0 || end == NULL || *end != '\0' ||
+	    n < (unsigned long)min || n > (unsigned long)max) {
+		HNS5_LOG(ERR, "%s=%s invalid (need %u..%u), keeping the default",
+			 key, shown, min, max);
+		return -1;
+	}
+	*out = (unsigned int)n;
+	return 1;
+}
+
+/*
  * POE group tunables (defaults reproduce the previous behaviour):
  *   poe_preload=0|1   preload one cache line into L2 when the CPU gets a msg
  *   poe_order=0|1     group ordering
@@ -378,33 +582,48 @@ static void hns5_crypto_apply_bsp_log(const char *args)
 static void hns5_crypto_parse_poe(struct hns5_dev_private *priv, const char *args)
 {
 	struct rte_kvargs *kvlist;
-	const char *v;
+	unsigned int val;
+	int r;
 
-	if (priv == NULL || args == NULL || *args == '\0')
+	/*
+	 * stats= is the only devarg that lands in a process-wide flag (the per-op
+	 * path reads it without going through a private pointer), so its
+	 * documented "off" default has to be set explicitly here rather than
+	 * left to the BSS: a second vdev, or the same one re-probed after a
+	 * hot-unplug, would otherwise inherit the previous device's value and
+	 * silently pay six counter reads per operation.
+	 */
+	hns5_sec_stats_en = 0;
+	if (priv == NULL)
 		return;
+	/*
+	 * The non-zero defaults (POE flow and zero-copy output) are applied by
+	 * the caller: they must hold for a vdev created without any argument too,
+	 * and this function used to return right here for that case, which left
+	 * a bare "--vdev crypto_hns5" on the 1 KiB copy path. The report below
+	 * still runs, so the effective values are visible either way.
+	 */
+	if (args == NULL || *args == '\0')
+		goto report;
 	kvlist = rte_kvargs_parse(args, NULL);
 	if (kvlist == NULL)
-		return;
+		goto report;
 
-	v = rte_kvargs_get(kvlist, "poe_preload");
-	if (v != NULL)
-		priv->sec.poe_preload_en = (unsigned int)strtoul(v, NULL, 0) ? 1U : 0U;
-	v = rte_kvargs_get(kvlist, "poe_order");
-	if (v != NULL)
-		priv->sec.poe_order_en = (unsigned int)strtoul(v, NULL, 0) ? 1U : 0U;
-	v = rte_kvargs_get(kvlist, "poe_flow");
-	if (v != NULL)
-		priv->sec.poe_flow_en = (unsigned int)strtoul(v, NULL, 0) ? 1U : 0U;
-	else
-		priv->sec.poe_flow_en = 1U;
-	v = rte_kvargs_get(kvlist, "zero_copy");
-	if (v != NULL && strtoul(v, NULL, 0) != 0) {
+	if (hns5_arg_num(kvlist, HNS5_DEVARG_POE_PRELOAD, 0u, 1u, &val) == 1)
+		priv->sec.poe_preload_en = (val != 0) ? 1U : 0U;
+	if (hns5_arg_num(kvlist, HNS5_DEVARG_POE_ORDER, 0u, 1u, &val) == 1)
+		priv->sec.poe_order_en = (val != 0) ? 1U : 0U;
+	r = hns5_arg_num(kvlist, HNS5_DEVARG_POE_FLOW, 0u, 1u, &val);
+	if (r == 1)
+		priv->sec.poe_flow_en = (val != 0) ? 1U : 0U;
+	if (hns5_arg_num(kvlist, HNS5_DEVARG_ZERO_COPY, 0u, 1u, &val) == 1 &&
+	    val != 0) {
 		/*
 		 * POE-mode completion delivers the processed packet back into the
 		 * buffer whose address is in the BD, so that buffer has to belong to
 		 * the BMU pool the VF uses. Pointing the BD at an application mbuf
 		 * makes hidrv_send_sec() reject the descriptor (observed as
-		 * "SEC submit failed" -> runtime poisoned). Keep the switch disabled
+		 * "SEC submit failed" -> BMU poisoned). Keep the switch disabled
 		 * until a QM-mode path (completion carries our own descriptor) exists.
 		 */
 		HNS5_LOG(ERR, "zero_copy=1 is not supported in POE mode: completion "
@@ -414,65 +633,50 @@ static void hns5_crypto_parse_poe(struct hns5_dev_private *priv, const char *arg
 	}
 	/*
 	 * The engine writes the result straight into the application mbuf, which
-	 * removes the 1 KiB cold copy at dequeue (measured 4.27 -> 7.28 Gbps).
-	 * It is the default; zero_copy_out=0 restores the copy path. Requests that
-	 * cannot be processed in place (out-of-place, multi segment, misaligned)
-	 * fall back automatically.
+	 * removes the 1 KiB cold copy at dequeue. The "on" default is applied by
+	 * the caller, so zero_copy_out=0 is the only way to restore the copy
+	 * path. Requests that cannot be processed in place (out-of-place,
+	 * multi segment, misaligned) fall back automatically.
 	 */
-	priv->sec.zero_copy_out = 1U;
-	v = rte_kvargs_get(kvlist, "zero_copy_out");
-	if (v != NULL)
-		priv->sec.zero_copy_out = (unsigned int)strtoul(v, NULL, 0) ? 1U : 0U;
+	if (hns5_arg_num(kvlist, HNS5_DEVARG_ZERO_COPY_OUT, 0u, 1u, &val) == 1)
+		priv->sec.zero_copy_out = (val != 0) ? 1U : 0U;
 	/*
 	 * Hidden experimental switch. Registering the application pool with the
 	 * BMU did NOT make the engine accept mbuf input (rc=-33) and it disturbed
 	 * the BMU pool state (hang after the first op), so it is off unless asked
 	 * for explicitly during BSP experiments.
 	 */
-	v = rte_kvargs_get(kvlist, "pool_mb");
-	if (v != NULL) {
-		unsigned long mb = strtoul(v, NULL, 0);
-
-		if (mb < (HNS5_HUGE_BLOCK_BYTES >> 20) ||
-		    (mb % (HNS5_QUEUE_RESERVE_BYTES >> 20)) != 0) {
-			HNS5_LOG(ERR, "pool_mb=%lu invalid: must be a multiple of "
-				 "%u MiB and at least %u MiB", mb,
-				 (unsigned)HNS5_QUEUE_RESERVE_BYTES >> 20,
-				 (unsigned)HNS5_HUGE_BLOCK_BYTES >> 20);
-		} else {
-			priv->sec.pool_bytes = (uint64_t)mb << 20;
-		}
+	if (hns5_arg_num(kvlist, HNS5_DEVARG_POOL_MB,
+			 (unsigned int)(HNS5_HUGE_BLOCK_BYTES >> 20),
+			 HNS5_POOL_MB_MAX, &val) == 1) {
+		if ((val % (HNS5_QUEUE_RESERVE_BYTES >> 20)) != 0)
+			HNS5_LOG(ERR, "pool_mb=%u must be a multiple of %u MiB, "
+				 "keeping the default", val,
+				 (unsigned)(HNS5_QUEUE_RESERVE_BYTES >> 20));
+		else
+			priv->sec.pool_bytes = (uint64_t)val << 20;
 	}
-	v = rte_kvargs_get(kvlist, "reap_batch");
-	if (v != NULL)
-		priv->sec.reap_batch = (unsigned int)strtoul(v, NULL, 0);
-	v = rte_kvargs_get(kvlist, "cap");
-	if (v != NULL)
-		priv->sec.req_cap = (unsigned int)strtoul(v, NULL, 0);
-	v = rte_kvargs_get(kvlist, "reaper_qp");
-	if (v != NULL)
-		priv->sec.reaper_qp = (unsigned int)strtoul(v, NULL, 0);
-	v = rte_kvargs_get(kvlist, "reap_spin");
-	if (v != NULL)
-		priv->sec.reap_spin = (unsigned int)strtoul(v, NULL, 0);
-	v = rte_kvargs_get(kvlist, "reap_polls");
-	if (v != NULL)
-		priv->sec.reap_polls = (unsigned int)strtoul(v, NULL, 0);
-	v = rte_kvargs_get(kvlist, "stats");
-	if (v != NULL)
-		hns5_sec_stats_en = strtoul(v, NULL, 0) ? true : false;
+	if (hns5_arg_num(kvlist, HNS5_DEVARG_REAP_BATCH, 1u, 4096u, &val) == 1)
+		priv->sec.reap_batch = val;
+	if (hns5_arg_num(kvlist, HNS5_DEVARG_CAP, 1u, HNS5_SEC_CAP_LIMIT, &val) == 1)
+		priv->sec.req_cap = val;
+	if (hns5_arg_num(kvlist, HNS5_DEVARG_REAPER_QP, 0u, (HNS5_SEC_QPS_CEILING - 1u), &val) == 1)
+		priv->sec.reaper_qp = val;
+	if (hns5_arg_num(kvlist, HNS5_DEVARG_REAP_SPIN, 1u, 4096u, &val) == 1)
+		priv->sec.reap_spin = val;
+	if (hns5_arg_num(kvlist, HNS5_DEVARG_REAP_POLLS, 1u, 4096u, &val) == 1)
+		priv->sec.reap_polls = val;
+	if (hns5_arg_num(kvlist, HNS5_DEVARG_STATS, 0u, 1u, &val) == 1)
+		hns5_sec_stats_en = (val != 0);
 
-	v = rte_kvargs_get(kvlist, "reap_fair");
-	if (v != NULL)
-		priv->sec.reap_fair = (unsigned int)strtoul(v, NULL, 0) ? 1U : 0U;
-	v = rte_kvargs_get(kvlist, "smooth");
-	if (v != NULL)
-		priv->sec.smooth = (unsigned int)strtoul(v, NULL, 0) ? 1U : 0U;
-	v = rte_kvargs_get(kvlist, "zc_app_pool");
-	if (v != NULL)
-		priv->sec.zc_app_pool = (unsigned int)strtoul(v, NULL, 0) ? 1U : 0U;
-	v = rte_kvargs_get(kvlist, "zero_copy_in");
-	if (v != NULL && strtoul(v, NULL, 0) != 0) {
+	if (hns5_arg_num(kvlist, HNS5_DEVARG_REAP_FAIR, 0u, 1u, &val) == 1)
+		priv->sec.reap_fair = (val != 0) ? 1U : 0U;
+	if (hns5_arg_num(kvlist, HNS5_DEVARG_SMOOTH, 0u, 1u, &val) == 1)
+		priv->sec.smooth = (val != 0) ? 1U : 0U;
+	if (hns5_arg_num(kvlist, HNS5_DEVARG_ZC_APP_POOL, 0u, 1u, &val) == 1)
+		priv->sec.zc_app_pool = (val != 0) ? 1U : 0U;
+	if (hns5_arg_num(kvlist, HNS5_DEVARG_ZERO_COPY_IN, 0u, 1u, &val) == 1 &&
+	    val != 0) {
 		/*
 		 * Opt-in: register the application's mbuf pool with the BMU on the
 		 * first op and point the descriptor input at the mbuf. The BSP
@@ -486,33 +690,20 @@ static void hns5_crypto_parse_poe(struct hns5_dev_private *priv, const char *arg
 			 "pool with the BMU on the first op (falls back to copying "
 			 "if the BSP refuses it)");
 	}
-	v = rte_kvargs_get(kvlist, "debug_dump");
-	if (v != NULL) {
-		hns5_sec_dump_enabled = strtoul(v, NULL, 0) ? 1 : 0;
-		if (hns5_sec_dump_enabled != 0)
-			HNS5_LOG(WARNING, "debug_dump=1: 报文内容（含明文）将写入日志，"
-				 "仅用于调试，请勿用于生产");
-	}
-	v = rte_kvargs_get(kvlist, "debug_memcpy");
-	if (v != NULL)
-		priv->sec.debug_memcpy = (unsigned int)strtoul(v, NULL, 0) ? 1U : 0U;
-	v = rte_kvargs_get(kvlist, "sec_skip_len");
-	if (v != NULL)
-		priv->sec.req_skip_len = (unsigned int)strtoul(v, NULL, 0);
-	v = rte_kvargs_get(kvlist, "sec_get_poe");
-	if (v != NULL)
-		priv->sec.req_get_poe = (unsigned int)strtoul(v, NULL, 0) ? 1U : 0U;
+	if (hns5_arg_num(kvlist, HNS5_DEVARG_DEBUG_MEMCPY, 0u, 1u, &val) == 1)
+		priv->sec.debug_memcpy = (val != 0) ? 1U : 0U;
+	if (hns5_arg_num(kvlist, HNS5_DEVARG_SEC_SKIP_LEN, 0u, HNS5_SEC_SKIP_LEN_MAX, &val) == 1)
+		priv->sec.req_skip_len = val;
+	if (hns5_arg_num(kvlist, HNS5_DEVARG_SEC_GET_POE, 0u, 1u, &val) == 1)
+		priv->sec.req_get_poe = (val != 0) ? 1U : 0U;
 
-	v = rte_kvargs_get(kvlist, "poe_int_th");
-	if (v != NULL)
-		priv->sec.poe_int_th = (unsigned int)strtoul(v, NULL, 0);
-	v = rte_kvargs_get(kvlist, "poe_bp_th");
-	if (v != NULL)
-		priv->sec.poe_bp_th = (unsigned int)strtoul(v, NULL, 0);
+	if (hns5_arg_num(kvlist, HNS5_DEVARG_POE_INT_TH, 0u, 0xffffffffu, &val) == 1)
+		priv->sec.poe_int_th = val;
+	if (hns5_arg_num(kvlist, HNS5_DEVARG_POE_BP_TH, 0u, 0xffffffffu, &val) == 1)
+		priv->sec.poe_bp_th = val;
 
-	if (priv->sec.req_skip_len > 15U)
-		HNS5_LOG(ERR, "sec_skip_len must be 0..15, got %u",
-			 priv->sec.req_skip_len);
+	rte_kvargs_free(kvlist);
+report:
 	HNS5_LOG(NOTICE, "zero_copy=%u", priv->sec.zero_copy);
 	HNS5_LOG(NOTICE, "zero_copy_out=%u zero_copy_in=%u zc_app_pool=%u",
 		 priv->sec.zero_copy_out, priv->sec.zero_copy_in,
@@ -526,7 +717,6 @@ static void hns5_crypto_parse_poe(struct hns5_dev_private *priv, const char *arg
 		 priv->sec.poe_preload_en, priv->sec.poe_order_en,
 		 priv->sec.poe_flow_en, priv->sec.poe_int_th,
 		 priv->sec.poe_bp_th);
-	rte_kvargs_free(kvlist);
 }
 
 /*
@@ -547,7 +737,7 @@ static void hns5_crypto_parse_reap(struct hns5_dev_private *priv, const char *ar
 	kvlist = rte_kvargs_parse(args, NULL);
 	if (kvlist == NULL)
 		return;
-	value = rte_kvargs_get(kvlist, "reap");
+	value = rte_kvargs_get(kvlist, HNS5_DEVARG_REAP);
 	if (value != NULL) {
 		if (!strcasecmp(value, "que"))
 			priv->sec.reap_mode = 0;
@@ -555,9 +745,15 @@ static void hns5_crypto_parse_reap(struct hns5_dev_private *priv, const char *ar
 			priv->sec.reap_mode = 1;
 		else if (!strcasecmp(value, "msg"))
 			priv->sec.reap_mode = 2;
-		else
-			HNS5_LOG(ERR, "reap=%s invalid (que|grp|msg)", value);
-		HNS5_LOG(NOTICE, "reap mode: %s", value);
+		else {
+			char shown[64];
+
+			hns5_arg_shown(shown, sizeof(shown), value);
+			HNS5_LOG(ERR, "reap=%s invalid (que|grp|msg)", shown);
+		}
+		HNS5_LOG(NOTICE, "reap mode: %s",
+			 (strcasecmp(value, "que") && strcasecmp(value, "grp") &&
+			  strcasecmp(value, "msg")) ? "<rejected>" : value);
 	}
 	rte_kvargs_free(kvlist);
 }
@@ -580,12 +776,15 @@ static unsigned int hns5_crypto_qps_from_args(const char *args)
 	kvlist = rte_kvargs_parse(args, NULL);
 	if (kvlist == NULL)
 		return qps;
-	value = rte_kvargs_get(kvlist, "qps");
+	value = rte_kvargs_get(kvlist, HNS5_DEVARG_QPS);
 	if (value != NULL) {
 		v = strtoul(value, &end, 0);
 		if (end == NULL || *end != '\0' || v == 0 ||
 		    v > HNS5_SEC_QPS_CEILING) {
-			HNS5_LOG(ERR, "qps=%s invalid (1..%u)", value,
+			char shown[64];
+
+			hns5_arg_shown(shown, sizeof(shown), value);
+			HNS5_LOG(ERR, "qps=%s invalid (1..%u)", shown,
 				 HNS5_SEC_QPS_CEILING);
 		} else {
 			qps = (unsigned int)v;
@@ -613,11 +812,14 @@ static void hns5_crypto_parse_vcpu(struct hns5_dev_private *priv, const char *ar
 	kvlist = rte_kvargs_parse(args, NULL);
 	if (kvlist == NULL)
 		return;
-	value = rte_kvargs_get(kvlist, "vcpu");
+	value = rte_kvargs_get(kvlist, HNS5_DEVARG_VCPU);
 	if (value != NULL) {
 		v = strtoul(value, &end, 0);
 		if (end == NULL || *end != '\0' || v > 63UL) {
-			HNS5_LOG(ERR, "vcpu=%s invalid", value);
+			char shown[64];
+
+			hns5_arg_shown(shown, sizeof(shown), value);
+			HNS5_LOG(ERR, "vcpu=%s invalid", shown);
 		} else {
 			priv->sec.requested_vcpu = (unsigned int)v;
 			HNS5_LOG(NOTICE, "vcpu: requested SEC engine vcpu %lu", v);
@@ -652,6 +854,8 @@ hns5_crypto_probe(struct rte_vdev_device *vdev)
 	if (name == NULL)
 		return -EINVAL;
 
+	/* Report unknown keys before anything depends on them. */
+	hns5_crypto_check_devargs(rte_vdev_device_args(vdev));
 	hns5_crypto_apply_bsp_log(rte_vdev_device_args(vdev));
 	/* Parse qps before creating the device so CRYPTODEV logs the real value
 	 * instead of the default 1 (which used to look like "qps was ignored"). */
@@ -703,11 +907,25 @@ hns5_crypto_probe(struct rte_vdev_device *vdev)
 			     RTE_CRYPTODEV_FF_OOP_SGL_IN_LB_OUT;
 
 	priv = dev->data->dev_private;
-	memset(priv, 0, sizeof(*priv));
+	/*
+	 * rte_cryptodev_pmd_create() zero-allocates the private area
+	 * (rte_zmalloc_socket in lib/cryptodev/cryptodev_pmd.c), so only the
+	 * fields whose default is not zero are set here.
+	 */
 	priv->sec.sec_pf = -1;
 	priv->sec.sec_vf = -1;
 	priv->sec.poe_pf = -1;
 	priv->sec.poe_vf = -1;
+	/*
+	 * Devarg defaults whose value is not zero. They are applied here and not
+	 * in hns5_crypto_parse_poe(): the parse helper only walks its override
+	 * list when the vdev carries arguments, so a bare "--vdev crypto_hns5"
+	 * used to run with zero-copy output off (a 1 KiB copy per operation on
+	 * the dequeue path) and POE flow off, contradicting the documented
+	 * defaults and making an argument-carrying run measurably faster.
+	 */
+	priv->sec.poe_flow_en = 1U;
+	priv->sec.zero_copy_out = 1U;
 	hns5_crypto_parse_vcpu(priv, rte_vdev_device_args(vdev));
 	hns5_crypto_parse_reap(priv, rte_vdev_device_args(vdev));
 	hns5_crypto_parse_poe(priv, rte_vdev_device_args(vdev));
@@ -715,15 +933,15 @@ hns5_crypto_probe(struct rte_vdev_device *vdev)
 	 * channels are brought up (and therefore how many QPs can be set up). */
 	priv->max_qps = (uint16_t)req_qps;
 	/*
-	 * Per-QP buffer cache. Measured: cache=32 with the derived in-flight cap
-	 * gives the best multi-QP throughput (20.9 Gbps on 4 QP); shrinking the
-	 * cache below that caused a 2x regression, so keep it fixed.
+	 * Per-queue-pair cache of SEC segments. The 16 KiB layout gives 1792
+	 * buffers, so one cache of HNS5_SEC_BUF_CACHE per pair is affordable
+	 * even at 8 pairs (512 of 1792). It exists because the BSP only offers
+	 * single-buffer alloc/free: without it every operation took the global
+	 * mutex and made two BSP calls, which is what made enqueue bursts come
+	 * up short. The value is the same for one pair and for eight: a smaller
+	 * cache costs throughput, so there is no per-mode variant.
 	 */
-	/* The 16 KiB layout gives 1792 buffers, so a full cache per queue pair is
-	 * affordable (8 QP x 64 = 512 buffers). A larger cache means fewer BMU
-	 * allocations, which is what made enqueue bursts come up short. */
-	priv->buf_cache = (req_qps > 1U) ? 64U :
-			  (uint32_t)HNS5_SEC_BUF_CACHE;
+	priv->buf_cache = (uint32_t)HNS5_SEC_BUF_CACHE;
 
 	/* Extra channel descriptors must exist before the channels are started:
 	 * hns5_sec_channels_start() fills them in. */
@@ -739,13 +957,14 @@ hns5_crypto_probe(struct rte_vdev_device *vdev)
 		}
 	}
 
-	rc = hns5_runtime_acquire(&priv->sec.common, pool,
+	rc = hns5_bmu_acquire(&priv->sec.common, pool,
 				  priv->sec.pool_bytes);
 	if (rc) {
-		HNS5_LOG(ERR, "HugeTLB/BMU runtime acquire failed: %d", rc);
-		goto destroy;
+		HNS5_LOG(ERR, "HugeTLB/BMU acquire failed: %d", rc);
+		/* Nothing was acquired, but priv->extra already exists. */
+		goto free_priv;
 	}
-	priv->common_runtime_acquired = true;
+	priv->common_bmu_acquired = true;
 
 	/* Shared completion routing: allocate the slot ownership table. */
 	rte_spinlock_init(&priv->reap_lock);
@@ -758,11 +977,12 @@ hns5_crypto_probe(struct rte_vdev_device *vdev)
 	if (priv->slot_map == NULL) {
 		HNS5_LOG(ERR, "cannot allocate the completion ownership table");
 		rc = -ENOMEM;
-		goto release_runtime;
+		goto release_bmu;
 	}
 	priv->sec.priv = priv;
-	/* POE ordering stays off: measured 7360 ns/op starvation with order=1.
-	 * Completions are matched by buffer address instead (see slot_map). */
+	/* POE ordering stays off: with order=1 the queue starved and per-op
+	 * latency became unacceptable. Completions are matched by buffer address
+	 * instead (see slot_map). */
 	/*
 	 * Cap the in-flight requests per queue pair: two queue pairs each trying
 	 * to keep a full descriptor ring in flight would exceed the 448 pool
@@ -773,7 +993,22 @@ hns5_crypto_probe(struct rte_vdev_device *vdev)
 		uint32_t cache = priv->buf_cache;
 
 		if (req_qps > 1U) {
-			per_qp = (priv->slot_count - req_qps * cache) / req_qps;
+			uint32_t reserved = req_qps * cache;
+
+			/* Check before subtracting: with a small pool and many
+			 * queue pairs the caches alone can exceed the buffer
+			 * count, and an unsigned wrap would ask for a ring of
+			 * the wrong size.
+			 */
+			if (reserved >= priv->slot_count) {
+				HNS5_LOG(ERR, "%u queue pairs x %u cached segments "
+					 "leave no buffers in a pool of %u - use a "
+					 "bigger pool_mb or fewer qps",
+					 req_qps, cache, priv->slot_count);
+				rc = -EINVAL;
+				goto release_bmu;
+			}
+			per_qp = (priv->slot_count - reserved) / req_qps;
 			/* Never let the pipeline eat the whole pool: cap at a value
 			 * that is still far deeper than any application keeps in
 			 * flight, and leave the rest as allocation headroom. */
@@ -786,17 +1021,32 @@ hns5_crypto_probe(struct rte_vdev_device *vdev)
 		}
 		if (priv->sec.req_cap != 0U)
 			per_qp = priv->sec.req_cap;
+		/* Also clamp the derived value: a large pool_mb makes the
+		 * buffer count exceed what the 16-bit ring can hold.
+		 */
+		if (per_qp > HNS5_SEC_CAP_LIMIT)
+			per_qp = HNS5_SEC_CAP_LIMIT;
 		priv->inflight_cap = (uint16_t)per_qp;
 		HNS5_LOG(NOTICE, "buffer budget: cache=%u, in-flight cap=%u "
 			 "per queue pair (%u qps)", priv->buf_cache,
 			 priv->inflight_cap, req_qps);
 	}
 	/*
-	 * Defaults match the build that measured 21.2 Gbps on 4 QP / 1024 B:
-	 * drain up to 64 completions per lock hold and allow 64 empty polls.
-	 * reap_batch= / reap_polls= override them (8 QP prefers a smaller poll
-	 * budget because every empty poll steals submission time).
+	 * Defaults picked by the multi-QP tuning runs: drain up to 64 completions
+	 * per lock hold and allow 64 empty polls. reap_batch= / reap_polls=
+	 * override them (8 QP prefers a smaller poll budget because every empty
+	 * poll steals submission time).
 	 */
+	/*
+	 * State the reaping default instead of inheriting it from a zeroed
+	 * field: with several queue pairs, QP0 draining the shared completion
+	 * group for everyone performs better in aggregate than each pair reaping
+	 * for itself. With a single pair there is no "everyone" to drain for, so
+	 * ask for no dedicated reaper - same behaviour, fewer moving parts.
+	 * reaper_qp= overrides either case.
+	 */
+	if (req_qps == 1U && priv->sec.reaper_qp == 0U)
+		priv->sec.reaper_qp = HNS5_REAPER_NONE;
 	if (priv->sec.reaper_qp != HNS5_REAPER_NONE &&
 	    priv->sec.reaper_qp >= req_qps) {
 		HNS5_LOG(ERR, "reaper_qp=%u invalid (qps=%u); using lazy reaping",
@@ -830,7 +1080,7 @@ hns5_crypto_probe(struct rte_vdev_device *vdev)
 	rc = hns5_sec_platform_inspect(&priv->sec);
 	if (rc) {
 		HNS5_LOG(ERR, "SEC platform inspect failed: %d", rc);
-		goto release_runtime;
+		goto release_bmu;
 	}
 
 	rc = hns5_sec_platform_start(&priv->sec);
@@ -847,7 +1097,7 @@ hns5_crypto_probe(struct rte_vdev_device *vdev)
 	}
 	if (rc) {
 		HNS5_LOG(ERR, "SEC platform start failed: %d", rc);
-		goto release_runtime;
+		goto release_bmu;
 	}
 
 	priv->qps = rte_calloc("hns5 qps", priv->max_qps, sizeof(struct hns5_qp *), 0);
@@ -861,8 +1111,18 @@ hns5_crypto_probe(struct rte_vdev_device *vdev)
 
 close_platform:
 	hns5_sec_platform_close(&priv->sec);
-release_runtime:
-	hns5_runtime_release(priv->sec.common);
+release_bmu:
+	hns5_bmu_release(priv->sec.common);
+	/*
+	 * rte_cryptodev_pmd_destroy() can reach hns5_crypto_teardown() again
+	 * while unwinding, and teardown would then hand the released runtime
+	 * pointer back into hns5_bmu_release(). Hand it NULL instead: the
+	 * second pass must not even compare against freed memory.
+	 */
+	priv->sec.common = NULL;
+	priv->common_bmu_acquired = false;
+free_priv:
+	hns5_crypto_free_priv(dev);
 destroy:
 	rte_cryptodev_pmd_destroy(dev);
 	return rc;
@@ -873,6 +1133,7 @@ hns5_crypto_remove(struct rte_vdev_device *vdev)
 {
 	struct rte_cryptodev *dev;
 	const char *name;
+	int rc;
 
 	if (vdev == NULL)
 		return -EINVAL;
@@ -886,12 +1147,18 @@ hns5_crypto_remove(struct rte_vdev_device *vdev)
 	 * rte_cryptodev_pmd_release_device() only reaches our .dev_close when the
 	 * device is no longer started, but applications (examples/l2fwd-crypto,
 	 * test-crypto-perf) commonly exit while it is still started, so the SEC
-	 * engine and the BMU runtime would survive the process. The next start
+	 * engine and the BMU would stay owned by this process. The next start
 	 * then reconfigures hardware that is still owned by the previous run,
 	 * which is exactly why the first start after boot worked and the next one
 	 * failed. Do it here, where the private data is still valid.
 	 */
-	(void)hns5_crypto_teardown(dev);
+	rc = hns5_crypto_teardown(dev);
+	if (rc == 0)
+		hns5_crypto_free_priv(dev);
+	else
+		HNS5_LOG(ERR, "%s: teardown refused (%d); leaving the queue "
+			 "pair arrays in place rather than freeing live objects",
+			 name, rc);
 
 	rte_cryptodev_pmd_destroy(dev);
 	return 0;
@@ -907,4 +1174,30 @@ static struct cryptodev_driver hns5_crypto_drv;
 RTE_PMD_REGISTER_VDEV(HNS5_CRYPTO_DRIVER_NAME, hns5_crypto_vdev_drv);
 RTE_PMD_REGISTER_CRYPTO_DRIVER(hns5_crypto_drv, hns5_crypto_vdev_drv.driver,
 			       hns5_cryptodev_driver_id);
-RTE_PMD_REGISTER_PARAM_STRING(HNS5_CRYPTO_DRIVER_NAME, "");
+/* Keys and value ranges: doc/guides/cryptodevs/hns5.rst. */
+RTE_PMD_REGISTER_PARAM_STRING(HNS5_CRYPTO_DRIVER_NAME,
+	HNS5_DEVARG_QPS "=<1-16>,"
+	HNS5_DEVARG_VCPU "=<0-63>,"
+	HNS5_DEVARG_CAP "=<0-65470>,"
+	HNS5_DEVARG_POOL_MB "=<32-4096 MiB>,"
+	HNS5_DEVARG_STATS "=<0|1>,"
+	HNS5_DEVARG_BSP_LOG "=<default|debug|info|warn|err>,"
+	HNS5_DEVARG_REAP "=<que|grp|msg>,"
+	HNS5_DEVARG_REAPER_QP "=<0..qps-1|65535>,"
+	HNS5_DEVARG_REAP_BATCH "=<number>,"
+	HNS5_DEVARG_REAP_POLLS "=<number>,"
+	HNS5_DEVARG_REAP_SPIN "=<number>,"
+	HNS5_DEVARG_REAP_FAIR "=<0|1>,"
+	HNS5_DEVARG_SMOOTH "=<0|1>,"
+	HNS5_DEVARG_ZERO_COPY "=<0|1>,"
+	HNS5_DEVARG_ZERO_COPY_OUT "=<0|1>,"
+	HNS5_DEVARG_ZERO_COPY_IN "=<0|1>,"
+	HNS5_DEVARG_ZC_APP_POOL "=<0|1>,"
+	HNS5_DEVARG_POE_PRELOAD "=<0|1>,"
+	HNS5_DEVARG_POE_ORDER "=<0|1>,"
+	HNS5_DEVARG_POE_FLOW "=<0|1>,"
+	HNS5_DEVARG_POE_INT_TH "=<number>,"
+	HNS5_DEVARG_POE_BP_TH "=<number>,"
+	HNS5_DEVARG_SEC_SKIP_LEN "=<0-15>,"
+	HNS5_DEVARG_SEC_GET_POE "=<0|1>,"
+	HNS5_DEVARG_DEBUG_MEMCPY "=<0|1>");
