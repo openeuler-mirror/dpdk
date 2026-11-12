@@ -17,7 +17,7 @@ sources = files(
         'hns5_crypto_log.c',
         'hns5_crypto_pmd.c',
         'hns5_crypto_capabilities.c',
-        'hns5_crypto_runtime.c',
+        'hns5_bmu.c',
         'hns5_sec_platform.c',
         'hns5_sec_bd.c',
         'hns5_sec_complete.c',

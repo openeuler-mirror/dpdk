@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause
  * Copyright(c) 2026 Huawei Technologies Co., Ltd
  *
- * Common HugeTLB/BMU runtime, adapted from the vendor SEC reference engine. A
+ * HugeTLB pool and BMU ownership, adapted from the vendor SEC reference engine. A
  * single process owns a 32 MiB file-backed HugeTLB pool (whose physical
  * address is read from /proc/self/pagemap) and drives the BMU VF that hands
  * out DMA buffers from it. Owner lock + recovery markers preserve DMA
@@ -55,17 +55,37 @@
 #define HUGETLBFS_MAGIC        0x958458f6UL
 #define HUGE_DIR               "/sys/kernel/mm/hugepages/hugepages-32768kB"
 
-#define RLOGE(stage, ...) HNS5_LOG(ERR, __VA_ARGS__)
-
 /* ---------------------------------------------------------------- config */
 
+/*
+ * Copy an already validated path into a fixed buffer. A path that does not fit
+ * is rejected, never truncated: a truncated path is a different path, and this
+ * one drives file creation and removal.
+ */
 static int
-hns5_config_pool(const char **path)
+copy_path(char *dst, size_t dst_size, const char *src)
 {
-	*path = getenv(HNS5_POOL_ENV);
-	if (*path == NULL || **path == '\0')
-		*path = HNS5_DEFAULT_POOL_FILE;
+	int length = snprintf(dst, dst_size, "%s", src);
+
+	if (length < 0 || (size_t)length >= dst_size)
+		return -ENAMETOOLONG;
 	return 0;
+}
+
+static int
+hns5_config_pool(char *path, size_t size)
+{
+	const char *configured = getenv(HNS5_POOL_ENV);
+
+	if (configured == NULL || *configured == '\0')
+		configured = HNS5_DEFAULT_POOL_FILE;
+	/*
+	 * getenv() returns a pointer into the environment block; any later
+	 * setenv()/putenv(), including one from a library we call, can invalidate
+	 * it. Copy it once into the caller's buffer and never keep the raw
+	 * pointer around.
+	 */
+	return copy_path(path, size, configured);
 }
 
 /* ---------------------------------------------------------------- hugepages */
@@ -179,7 +199,15 @@ hns5_hugepage_reserve(void)
 		rc = -EIO;
 	if (close(fd) != 0 && !rc)
 		rc = -errno;
-	(void)read_availability(directory, &total, &free_pages, &reserved);
+	/*
+	 * Either the write above failed, or it succeeded and the free-page count
+	 * has to be re-read to prove it: if the re-read itself fails there is no
+	 * proof, so report that instead of falling back on the stale values.
+	 */
+	int reread = read_availability(directory, &total, &free_pages, &reserved);
+
+	if (!rc)
+		rc = reread;
 	if (!rc && free_pages <= reserved)
 		rc = -ENOMEM;
 out:
@@ -188,13 +216,86 @@ out:
 	return rc;
 }
 
+/* Length of a leading page-size token ("<digits><unit>", as in "32m" or "1g"),
+ * or 0 when the text does not start with one.
+ */
+static size_t
+page_size_prefix(const char *text)
+{
+	size_t digits = 0;
+
+	while (digits < 4 && isdigit((unsigned char)text[digits]) != 0)
+		++digits;
+	if (digits == 0)
+		return 0;
+	switch (text[digits]) {
+	case 'k':
+	case 'K':
+	case 'm':
+	case 'M':
+	case 'g':
+	case 'G':
+		return digits + 1;
+	default:
+		return 0;
+	}
+}
+
+/* The first component of a pool path has to name a hugetlbfs mount. Accepted
+ * spellings, each ending at a component boundary:
+ *
+ *   /mnt/huge[/...]             generic mount (default system page size)
+ *   /mnt/huge<size>[/...]       sized mount, e.g. /mnt/huge32m for 32 MiB pages,
+ *                               which is what the pool itself requires
+ *   /dev/hugepages[/...]        DPDK's standard mount point
+ *   /dev/hugepages-<size>[/...] sized mount, as libhugetlbfs names them
+ *
+ * The boundary matters: /mnt/huge32m is a mount, but /mnt/hugeevil and
+ * /dev/hugepagesXYZ are ordinary directories that merely share the prefix, and
+ * the pool must not create files in, or mount hugetlbfs over, those.
+ *
+ * @path is never NULL here: validate_pool_path() rejects NULL before calling.
+ */
+static bool
+hugepage_mount_path(const char *path)
+{
+	const char *rest;
+	size_t size;
+
+	if (strncmp(path, "/dev/hugepages", 14) == 0) {
+		rest = path + 14;
+		if (*rest == '/' || *rest == '\0')
+			return true;
+		if (*rest != '-')
+			return false;
+		size = page_size_prefix(rest + 1);
+		if (size == 0)
+			return false;
+		rest += size + 1;
+		return *rest == '/' || *rest == '\0';
+	}
+	if (strncmp(path, "/mnt/huge", 9) != 0)
+		return false;
+	rest = path + 9;
+	if (*rest == '/' || *rest == '\0')
+		return true;
+	size = page_size_prefix(rest);
+	if (size == 0)
+		return false;
+	rest += size;
+	return *rest == '/' || *rest == '\0';
+}
+
 static int
 validate_pool_path(const char *path)
 {
-	size_t length = strnlen(path, PATH_MAX);
+	size_t length;
 	const char *component;
 
-	if (path == NULL || path[0] != '/' || length == PATH_MAX || length < 2 ||
+	if (path == NULL)
+		return -EINVAL;
+	length = strnlen(path, PATH_MAX);
+	if (path[0] != '/' || length == PATH_MAX || length < 2 ||
 	    path[length - 1] == '/')
 		return -EINVAL;
 	component = path + 1;
@@ -214,7 +315,31 @@ validate_pool_path(const char *path)
 			break;
 		component = p + 1;
 	}
+	/*
+	 * The pool file is created, replaced (unlinkat) and possibly used as a
+	 * hugetlbfs mount point, all with this process' privileges. Keep that
+	 * power inside the hugepage mounts: a typo in HNS5_ENGINE_POOL_FILE
+	 * must not be able to delete an unrelated file or mount over an
+	 * unrelated directory.
+	 */
+	if (!hugepage_mount_path(path)) {
+		HNS5_LOG(ERR, "pool path is outside the hugepage mounts "
+			 "(/mnt/huge[<size>]*, /dev/hugepages[-<size>]*): %s", path);
+		return -EACCES;
+	}
 	return 0;
+}
+
+/* Last path component. validate_pool_path() requires a leading '/' and a
+ * non-empty final component, so every caller that reaches here gets a real
+ * name; the fallback keeps the pattern safe if that ever changes.
+ */
+static const char *
+pool_file_name(const char *path)
+{
+	const char *slash = strrchr(path, '/');
+
+	return (slash != NULL) ? slash + 1 : path;
 }
 
 static int
@@ -222,9 +347,12 @@ open_directory(const char *path, int create)
 {
 	char components[PATH_MAX];
 	char *save = NULL;
+	int rc;
 	int fd;
 
-	memcpy(components, path, strlen(path) + 1);
+	rc = copy_path(components, sizeof(components), path);
+	if (rc != 0)
+		return rc;
 	fd = open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC);
 	if (fd < 0)
 		return -errno;
@@ -236,13 +364,13 @@ open_directory(const char *path, int create)
 		if (next < 0 && errno == ENOENT && create) {
 			if (mkdirat(fd, part, 0700) != 0 && errno != EEXIST) {
 				error = errno;
-				close(fd);
+				(void)close(fd);
 				return -error;
 			}
 			next = openat(fd, part, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
 		}
 		error = errno;
-		close(fd);
+		(void)close(fd);
 		if (next < 0)
 			return -error;
 		fd = next;
@@ -258,7 +386,8 @@ mount_id(int fd, uint64_t *id)
 	FILE *info;
 	int rc;
 
-	snprintf(path, sizeof(path), "/proc/self/fdinfo/%d", fd);
+	if (snprintf(path, sizeof(path), "/proc/self/fdinfo/%d", fd) < 0)
+		return -errno;
 	info = fopen(path, "re");
 	if (info == NULL)
 		return -errno;
@@ -292,7 +421,7 @@ directory_empty(int fd)
 	directory = fdopendir(copy);
 	if (directory == NULL) {
 		int e = errno;
-		close(copy);
+		(void)close(copy);
 		return -e;
 	}
 	errno = 0;
@@ -340,8 +469,8 @@ check_hugetlbfs(int fd)
 }
 
 static int
-hns5_hugepage_open_directory(const char *pool_path, bool allow_existing,
-			     uint64_t pool_bytes)
+hns5_hugepage_open_directory(const char *pool_path, uint64_t pool_bytes,
+			     bool *reuse)
 {
 	char directory[PATH_MAX];
 	char target[64];
@@ -351,9 +480,11 @@ hns5_hugepage_open_directory(const char *pool_path, bool allow_existing,
 
 	if (rc)
 		return rc;
-	memcpy(directory, pool_path, strlen(pool_path) + 1);
+	rc = copy_path(directory, sizeof(directory), pool_path);
+	if (rc != 0)
+		return rc;
 	char *slash = strrchr(directory, '/');
-	const char *name = strrchr(pool_path, '/') + 1;
+	const char *name = pool_file_name(pool_path);
 
 	if (slash == directory)
 		directory[1] = '\0';
@@ -364,17 +495,36 @@ hns5_hugepage_open_directory(const char *pool_path, bool allow_existing,
 		rc = fd;
 		goto fail;
 	}
+	*reuse = false;
 	if (fstatat(fd, name, &st, AT_SYMLINK_NOFOLLOW) == 0) {
 		/*
 		 * Reuse: on hugetlbfs an existing file maps the very same physical
 		 * hugepages, so keeping it pins the pool's physical layout across
-		 * runs. Only a regular file of exactly the expected size qualifies;
-		 * anything else is rejected so the caller can drop it.
+		 * runs. Only a regular file of exactly the expected size qualifies.
+		 *
+		 * Anything else is dropped here, through this directory handle and
+		 * this component name: the path is never re-resolved, so an
+		 * intermediate directory cannot be swapped or pointed somewhere
+		 * else between checking and removing it.
 		 */
-		if (!allow_existing || !S_ISREG(st.st_mode) ||
-		    (uint64_t)st.st_size != pool_bytes) {
-			rc = -EEXIST;
-			goto fail;
+		if (S_ISREG(st.st_mode) && (uint64_t)st.st_size == pool_bytes) {
+			*reuse = true;
+		} else {
+			unsigned int tries;
+			int err = 0;
+
+			for (tries = 0; tries < 3; tries++) {
+				err = (unlinkat(fd, name, 0) == 0) ? 0 : errno;
+				if (err == 0 || err != EAGAIN)
+					break;
+				usleep(1000);	/* hugetlbfs can be busy */
+			}
+			if (err != 0 && err != ENOENT) {
+				rc = -err;
+				goto fail;
+			}
+			HNS5_LOG(WARNING, "removed unusable SEC pool file %s",
+				 pool_path);
 		}
 	} else if (errno != ENOENT) {
 		rc = -errno;
@@ -412,7 +562,7 @@ hns5_hugepage_open_directory(const char *pool_path, bool allow_existing,
 		rc = mount_id(parent, &above);
 	if (!rc)
 		rc = fstat(parent, &parent_stat) ? -errno : 0;
-	close(parent);
+	(void)close(parent);
 	if (rc)
 		goto fail;
 	if (here != above ||
@@ -426,13 +576,16 @@ hns5_hugepage_open_directory(const char *pool_path, bool allow_existing,
 	rc = persistent_mount_namespace();
 	if (rc)
 		goto fail;
-	snprintf(target, sizeof(target), "/proc/self/fd/%d", fd);
+	if (snprintf(target, sizeof(target), "/proc/self/fd/%d", fd) < 0) {
+		rc = -errno;
+		goto fail;
+	}
 	if (mount("hns5", target, "hugetlbfs",
 		  MS_NOSUID | MS_NODEV | MS_NOEXEC, "pagesize=32M,mode=0700") != 0) {
 		rc = -errno;
 		goto fail;
 	}
-	close(fd);
+	(void)close(fd);
 	fd = open_directory(directory, 0);
 	if (fd < 0) {
 		rc = fd;
@@ -444,7 +597,7 @@ hns5_hugepage_open_directory(const char *pool_path, bool allow_existing,
 	return fd;
 fail:
 	if (fd >= 0)
-		close(fd);
+		(void)close(fd);
 	return rc;
 }
 
@@ -462,7 +615,7 @@ legacy_owner_check(void)
 	if (flock(fd, LOCK_EX | LOCK_NB) != 0 || fstat(fd, &st) != 0 ||
 	    !S_ISREG(st.st_mode) || st.st_size != 0)
 		rc = -EBUSY;
-	close(fd);
+	(void)close(fd);
 	return rc;
 }
 
@@ -526,7 +679,7 @@ map_pool(struct hns5_pool *pool, bool reuse)
 	count = pread(pagemap_fd, &pagemap_entry, sizeof(pagemap_entry),
 		      (off_t)pagemap_offset);
 	saved_errno = errno;
-	close(pagemap_fd);
+	(void)close(pagemap_fd);
 	if (count != (ssize_t)sizeof(pagemap_entry))
 		return (count < 0) ? -saved_errno : -EIO;
 	pfn = pagemap_entry & ((UINT64_C(1) << 55) - 1);
@@ -607,7 +760,7 @@ hns5_pool_open(struct hns5_pool *pool, const char *path)
 		return system_failure("pool.lock.open");
 	if (flock(pool->lock_fd, LOCK_EX | LOCK_NB) != 0) {
 		rc = system_failure("pool.lock.flock");
-		close(pool->lock_fd);
+		(void)close(pool->lock_fd);
 		pool->lock_fd = -1;
 		return rc;
 	}
@@ -622,7 +775,7 @@ hns5_pool_open(struct hns5_pool *pool, const char *path)
 	if (lock_stat.st_size != 0) {
 		/*
 		 * A previous run left the "needs BSP reset" marker behind because it
-		 * exited without releasing the runtime (SIGKILL, or an app that closes
+		 * exited without releasing the BMU (SIGKILL, or an app that closes
 		 * the cryptodev without stopping it). We already hold the exclusive
 		 * lock, so nobody else owns the BMU, and start_bmu() resets the whole
 		 * BMU (VF unsetup + reset + setup) before any transfer. Recover here
@@ -636,6 +789,15 @@ hns5_pool_open(struct hns5_pool *pool, const char *path)
 			goto fail;
 		}
 	}
+	/*
+	 * path comes from HNS5_ENGINE_POOL_FILE (or the built-in default). It has
+	 * to be validated before anything in this function touches the
+	 * filesystem: the helper below opens the directory it validated and
+	 * removes an unfit file through that handle, never by path again.
+	 */
+	rc = validate_pool_path(path);
+	if (rc != 0)
+		return rc;
 	pool->path = strdup(path);
 	if (pool->path == NULL) {
 		rc = -ENOMEM;
@@ -645,32 +807,21 @@ hns5_pool_open(struct hns5_pool *pool, const char *path)
 	 * Pool file policy (we hold the exclusive BMU lock, so nothing alive can
 	 * own it):
 	 *
-	 *  - a regular file of exactly HNS5_POOL_BYTES is *reused*. On hugetlbfs
-	 *    that maps the very same physical hugepages as the previous run, which
-	 *    pins the pool's physical address. The net pool is allocated from the
-	 *    same hugepage pool right after this one, so keeping this block fixed
-	 *    also stops net's memzone from alternating between two placements,
-	 *    which was what pushed the PPE's pre-requested buffers out of reach on
-	 *    every other start.
+	 *  - a regular file of exactly pool->bytes is *reused*. On hugetlbfs that
+	 *    maps the very same physical hugepages as the previous run, which pins
+	 *    the pool's physical address. The net pool is allocated from the same
+	 *    hugepage pool right after this one, so keeping this block fixed also
+	 *    stops net's memzone from alternating between two placements, which
+	 *    was what pushed the PPE's pre-requested buffers out of reach on every
+	 *    other start.
 	 *  - anything else (wrong size, wrong type, leftovers of an old build) is
-	 *    removed and a fresh file is created.
+	 *    removed by the helper above and a fresh file is created here. Both the
+	 *    check and the removal happen through the validated directory handle.
 	 */
 	{
-		struct stat st;
 		bool reuse = false;
 
-		if (stat(path, &st) == 0) {
-			reuse = S_ISREG(st.st_mode) &&
-				(uint64_t)st.st_size == pool->bytes;
-			if (!reuse && unlink(path) != 0 && errno != ENOENT) {
-				rc = -errno;
-				goto fail;
-			}
-			if (!reuse) {
-				HNS5_LOG(WARNING, "removed unusable SEC pool file %s", path);
-			}
-		}
-		rc = hns5_hugepage_open_directory(path, reuse, pool->bytes);
+		rc = hns5_hugepage_open_directory(path, pool->bytes, &reuse);
 		if (rc < 0) {
 			goto fail;
 		}
@@ -679,7 +830,7 @@ hns5_pool_open(struct hns5_pool *pool, const char *path)
 			HNS5_LOG(DEBUG, "reusing SEC pool file %s: physical layout "
 				 "is pinned across runs", path);
 			pool->file_fd = openat(pool->dir_fd,
-					strrchr(path, '/') + 1,
+					pool_file_name(path),
 					O_RDWR | O_CLOEXEC | O_NOFOLLOW);
 			if (pool->file_fd < 0) {
 				rc = -errno;
@@ -692,10 +843,7 @@ hns5_pool_open(struct hns5_pool *pool, const char *path)
 			return 0;
 		}
 	}
-	if (rc < 0)
-		goto fail;
-	pool->dir_fd = rc;
-	pool->file_fd = openat(pool->dir_fd, strrchr(path, '/') + 1,
+	pool->file_fd = openat(pool->dir_fd, pool_file_name(path),
 			O_RDWR | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600);
 	if (pool->file_fd < 0 && errno == EEXIST) {
 		/*
@@ -705,11 +853,11 @@ hns5_pool_open(struct hns5_pool *pool, const char *path)
 		 * manual hns5_clean.sh run.
 		 */
 		HNS5_LOG(WARNING, "removing stale BMU pool file %s", path);
-		if (unlinkat(pool->dir_fd, strrchr(path, '/') + 1, 0) != 0) {
+		if (unlinkat(pool->dir_fd, pool_file_name(path), 0) != 0) {
 			rc = system_failure("pool.file.unlink_stale");
 			goto fail;
 		}
-		pool->file_fd = openat(pool->dir_fd, strrchr(path, '/') + 1,
+		pool->file_fd = openat(pool->dir_fd, pool_file_name(path),
 				O_RDWR | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600);
 	}
 	if (pool->file_fd < 0) {
@@ -729,15 +877,15 @@ fail:
 		pool->path = NULL;
 	}
 	if (pool->file_fd >= 0) {
-		close(pool->file_fd);
+		(void)close(pool->file_fd);
 		pool->file_fd = -1;
 	}
 	if (pool->dir_fd >= 0) {
-		close(pool->dir_fd);
+		(void)close(pool->dir_fd);
 		pool->dir_fd = -1;
 	}
 	if (pool->lock_fd >= 0) {
-		close(pool->lock_fd);
+		(void)close(pool->lock_fd);
 		pool->lock_fd = -1;
 	}
 	return rc;
@@ -761,7 +909,7 @@ hns5_pool_close(struct hns5_pool *pool)
 	if (rc == 0 && pool->file_fd >= 0) {
 		if (pool_file_identity(pool) != 0 && pool->dir_fd >= 0 &&
 		    pool->path != NULL &&
-		    unlinkat(pool->dir_fd, strrchr(pool->path, '/') + 1, 0) != 0)
+		    unlinkat(pool->dir_fd, pool_file_name(pool->path), 0) != 0)
 			rc = system_failure("pool.file.unlink");
 	}
 	if (pool->file_fd >= 0 && close(pool->file_fd) != 0 && !rc)
@@ -825,31 +973,43 @@ hns5_bmu_reset(void)
 	return (reset_rc != 0 || close_rc != 0) ? -EIO : 0;
 }
 
-/* ---------------------------------------------------------------- runtime */
+/* ---------------------------------------------------------------- lifecycle */
 
 static pthread_mutex_t lifecycle = PTHREAD_MUTEX_INITIALIZER;
-static struct hns5_runtime *shared;
+static struct hns5_bmu *shared;
 static unsigned int users;
 static _Atomic pid_t process_pid;
 
 void
-hns5_runtime_poison(struct hns5_runtime *r, const char *reason)
+hns5_bmu_poison(struct hns5_bmu *r, const char *reason)
 {
 	/*
 	 * Report the cause once: once poisoned, every enqueue/dequeue silently
 	 * returns 0, so without this line the only visible symptom is a crypto
 	 * device that stops working with no explanation.
 	 */
-	if (!r->poisoned)
-		HNS5_LOG(ERR, "runtime poisoned: %s\n",
+	if (r == NULL) {
+		HNS5_LOG(ERR, "BMU poison requested with no BMU: %s\n",
 			 (reason != NULL) ? reason : "unknown");
-	r->poisoned = true;
+		return;
+	}
+	if (!HNS5_BMU_POISONED(r))
+		HNS5_LOG(ERR, "BMU poisoned: %s\n",
+			 (reason != NULL) ? reason : "unknown");
+	HNS5_BMU_SET_POISONED(r);
 }
 
 static int
-start_bmu(struct hns5_runtime *r)
+start_bmu(struct hns5_bmu *r)
 {
 	struct hidrv_bmu_vf_cfg cfg = { .endian = HIDRV_BMU_VF_ENDIAN_LITTLE };
+	if (r->pool.bytes - HNS5_QUEUE_RESERVE_BYTES > UINT32_MAX) {
+		HNS5_LOG(ERR, "start_bmu: data region %llu B does not fit the "
+			 "u32 size field of hidrv_bmu_pp_cfg\n",
+			 (unsigned long long)(r->pool.bytes -
+					      HNS5_QUEUE_RESERVE_BYTES));
+		return -EOVERFLOW;
+	}
 	struct hidrv_bmu_pp_cfg pp = {
 		.phys_addr = r->pool.pa + HNS5_QUEUE_RESERVE_BYTES,
 		.addr = (unsigned char *)r->pool.va + HNS5_QUEUE_RESERVE_BYTES,
@@ -964,11 +1124,11 @@ start_bmu(struct hns5_runtime *r)
 }
 
 int
-hns5_runtime_acquire(struct hns5_runtime **out, const char *path,
+hns5_bmu_acquire(struct hns5_bmu **out, const char *path,
 		     uint64_t pool_bytes)
 {
-	struct hns5_runtime *r;
-	const char *configured;
+	struct hns5_bmu *r;
+	char configured[PATH_MAX];
 	int rc;
 
 	if (out == NULL || (process_pid && process_pid != getpid()))
@@ -977,7 +1137,7 @@ hns5_runtime_acquire(struct hns5_runtime **out, const char *path,
 	if (pthread_mutex_lock(&lifecycle))
 		return -EIO;
 	if (shared != NULL) {
-		if (shared->poisoned || users == UINT_MAX)
+		if (HNS5_BMU_POISONED(shared) || users == UINT_MAX)
 			rc = -EIO;
 		else {
 			++users;
@@ -986,7 +1146,7 @@ hns5_runtime_acquire(struct hns5_runtime **out, const char *path,
 		}
 		goto done;
 	}
-	rc = hns5_config_pool(&configured);
+	rc = hns5_config_pool(configured, sizeof(configured));
 	if (rc)
 		goto done;
 	if (path == NULL)
@@ -1007,7 +1167,7 @@ hns5_runtime_acquire(struct hns5_runtime **out, const char *path,
 	rc = hns5_pool_open(&r->pool, path);
 	if (rc) {
 		if (r->pool.touched) {
-			hns5_runtime_poison(r, "partial common initialization");
+			hns5_bmu_poison(r, "partial common initialization");
 			hns5_pool_close(&r->pool);
 			shared = r;
 			process_pid = getpid();
@@ -1021,7 +1181,7 @@ hns5_runtime_acquire(struct hns5_runtime **out, const char *path,
 	rc = start_bmu(r);
 	if (rc) {
 		if (r->pool.touched) {
-			hns5_runtime_poison(r, "partial common initialization");
+			hns5_bmu_poison(r, "partial common initialization");
 			hns5_pool_close(&r->pool);
 			shared = r;
 			process_pid = getpid();
@@ -1042,28 +1202,35 @@ done:
 }
 
 int
-hns5_runtime_release(struct hns5_runtime *r)
+hns5_bmu_release(struct hns5_bmu *r)
 {
 	int rc = 0;
 
-	/* Compare against the shared pointer before dereferencing: callers may
-	 * still hold a stale runtime pointer after it was released (e.g. a second
-	 * hns5_dev_close() during teardown), and reading r->owner_pid from freed
-	 * memory would be a use-after-free. */
+	/* Only the pointer comparison happens outside the lock: callers may hold
+	 * a stale BMU pointer after it was released (a second hns5_dev_close()
+	 * during teardown), and dereferencing it would be a use-after-free.
+	 * shared is cleared under the same lock that frees it, so once the lock
+	 * is held, r == shared implies r is still alive - every read of r below
+	 * relies on that. */
 	if (r == NULL || r != shared)
-		return -EINVAL;
-	if (r->owner_pid != getpid())
 		return -EINVAL;
 	if (pthread_mutex_lock(&lifecycle))
 		return -EIO;
-	if (r != shared || !users) {
+	if (r != shared || r->owner_pid != getpid()) {
+		rc = -EINVAL;
+		goto done;
+	}
+	if (!users) {
 		rc = -EINVAL;
 		goto done;
 	}
 	if (--users)
 		goto done;
-	pthread_mutex_lock(&r->queue_lock);
-	if (r->poisoned)
+	if (pthread_mutex_lock(&r->queue_lock)) {
+		rc = -EIO;
+		goto done;
+	}
+	if (HNS5_BMU_POISONED(r))
 		rc = -EIO;
 	if (!rc && hidrv_bmu_vf_unsetup((unsigned)r->bmu_vf))
 		rc = -EIO;
@@ -1072,7 +1239,7 @@ hns5_runtime_release(struct hns5_runtime *r)
 	if (!rc)
 		r->pool.recovered = true;
 	else
-		hns5_runtime_poison(r, "common close/reset incomplete");
+		hns5_bmu_poison(r, "common close/reset incomplete");
 	if (hns5_pool_close(&r->pool) != 0)
 		rc = -EIO;
 	pthread_mutex_unlock(&r->queue_lock);
@@ -1081,7 +1248,7 @@ hns5_runtime_release(struct hns5_runtime *r)
 		free(r);
 		shared = NULL;
 	} else
-		hns5_runtime_poison(r, "close incomplete");
+		hns5_bmu_poison(r, "close incomplete");
 done:
 	pthread_mutex_unlock(&lifecycle);
 	return rc;
@@ -1093,23 +1260,23 @@ done:
  * Apps such as examples/l2fwd-crypto call rte_cryptodev_close() on a device
  * that was never stopped; libcryptodev rejects that ("Device must be stopped
  * before closing"), so hns5_dev_close() - and therefore
- * hns5_runtime_release() - never run. The BMU pool file and the "needs BSP
+ * hns5_bmu_release() - never run. The BMU pool file and the "needs BSP
  * reset" marker then survive the process, and the next start used to need a
  * manual hns5_clean.sh. Release whatever is still held here so that a normal
  * exit leaves nothing behind.
  */
-RTE_FINI(hns5_runtime_exit_release)
+RTE_FINI(hns5_bmu_exit_release)
 {
 	if (shared == NULL || shared->owner_pid != getpid())
 		return;
 	/* The process is going away: force a full release even if several
-	 * cryptodevs still reference the shared runtime. */
+	 * cryptodevs still reference the shared BMU state. */
 	users = 1;
-	(void)hns5_runtime_release(shared);
+	(void)hns5_bmu_release(shared);
 }
 
 int
-hns5_runtime_lock(struct hns5_runtime *r, int *cancel_state)
+hns5_bmu_lock(struct hns5_bmu *r, int *cancel_state)
 {
 	int rc;
 
@@ -1123,27 +1290,29 @@ hns5_runtime_lock(struct hns5_runtime *r, int *cancel_state)
 		pthread_setcancelstate(*cancel_state, NULL);
 		return -rc;
 	}
-	if (r->poisoned) {
-		hns5_runtime_unlock(r, *cancel_state);
+	if (HNS5_BMU_POISONED(r)) {
+		hns5_bmu_unlock(r, *cancel_state);
 		return -EIO;
 	}
 	return 0;
 }
 
 void
-hns5_runtime_unlock(struct hns5_runtime *r, int cancel_state)
+hns5_bmu_unlock(struct hns5_bmu *r, int cancel_state)
 {
 	pthread_mutex_unlock(&r->queue_lock);
 	pthread_setcancelstate(cancel_state, NULL);
 }
 
 void *
-hns5_bmu_alloc(struct hns5_runtime *r, uint64_t *pa)
+hns5_bmu_alloc(struct hns5_bmu *r, uint64_t *pa)
 {
 	void *p;
 	uintptr_t offset;
 
-	if (r->poisoned)
+	if (r == NULL || pa == NULL)
+		return NULL;
+	if (HNS5_BMU_POISONED(r))
 		return NULL;
 	p = hidrv_bmu_pool_alloc((unsigned)r->bmu_vf, 0);
 	if (p == NULL)
@@ -1158,19 +1327,29 @@ hns5_bmu_alloc(struct hns5_runtime *r, uint64_t *pa)
 	    hidrv_bmu_virt2phys((unsigned)r->bmu_vf,
 			(unsigned char *)p + HNS5_BUFFER_BYTES - 1) !=
 			    *pa + HNS5_BUFFER_BYTES - 1) {
-		hns5_runtime_poison(r, "invalid BMU allocation/address");
+		/* Return the segment before poisoning: the free list belongs to
+		 * the BSP, and a buffer we never handed back is lost to every
+		 * later process, not just to this one. */
+		(void)hidrv_bmu_pool_free((unsigned)r->bmu_vf, p);
+		hns5_bmu_poison(r, "invalid BMU allocation/address");
 		return NULL;
 	}
 	return p;
 }
 
 int
-hns5_bmu_free(struct hns5_runtime *r, void *p)
+hns5_bmu_free(struct hns5_bmu *r, void *p)
 {
-	if (r->poisoned)
+	/* Defensive only: every caller today passes a live BMU and a real
+	 * segment. Handing NULL to the BSP would be a driver bug, and it is
+	 * cheaper to refuse than to find out through the BSP's error path.
+	 */
+	if (r == NULL || p == NULL)
+		return -EINVAL;
+	if (HNS5_BMU_POISONED(r))
 		return -EIO;
 	if (hidrv_bmu_pool_free((unsigned)r->bmu_vf, p)) {
-		hns5_runtime_poison(r, "BMU free failed");
+		hns5_bmu_poison(r, "BMU free failed");
 		return -EIO;
 	}
 	return 0;

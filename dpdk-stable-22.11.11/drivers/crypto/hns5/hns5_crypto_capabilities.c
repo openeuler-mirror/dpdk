@@ -33,18 +33,6 @@ static const struct rte_cryptodev_capabilities hns5_capabilities[] = {
 			}, }
 		}, }
 	},
-	{	/* AES-128/192/256 ECB */
-		.op = RTE_CRYPTO_OP_TYPE_SYMMETRIC,
-		{.sym = {
-			.xform_type = RTE_CRYPTO_SYM_XFORM_CIPHER,
-			{.cipher = {
-				.algo = RTE_CRYPTO_CIPHER_AES_ECB,
-				.block_size = 16,
-				.key_size = { .min = 16, .max = 32, .increment = 8 },
-				.iv_size = { .min = 0, .max = 0, .increment = 0 }
-			}, }
-		}, }
-	},
 	{	/* SM3 */
 		.op = RTE_CRYPTO_OP_TYPE_SYMMETRIC,
 		{.sym = {

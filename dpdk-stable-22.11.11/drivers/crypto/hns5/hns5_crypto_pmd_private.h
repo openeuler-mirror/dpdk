@@ -33,9 +33,9 @@
 
 /*
  * 逐 op 计时开关（devarg: stats=0/1，默认 0=关闭）。
- * 关闭时 hns5_tsc() 只做一次可预测分支，代价远低于 rte_rdtsc()
- * （arm64 上约 20~30 ns/次）。计数类统计（calls、成功/失败次数）
- * 始终累计；cycles 与 max 仅在开启时有效。
+ * 关闭时 hns5_tsc() 只做一次可预测分支，代价远低于 rte_rdtsc()。
+ * 计数类统计（calls、成功/失败次数）始终累计；cycles 与 max 仅在
+ * 开启时有效。
  */
 extern bool hns5_sec_stats_en;
 
@@ -71,6 +71,9 @@ void hns5_log_write(uint32_t level, const char *fmt, ...)
 void hns5_log_limited(uint32_t level, uint64_t *cnt, uint64_t first,
 		      uint64_t every, const char *fmt, ...)
 	__attribute__((format(printf, 5, 6)));
+
+/* Sanitised copy of a caller-controlled string, for log output. */
+void hns5_str_shown(char *dst, size_t dst_len, const char *src);
 
 #define HNS5_LOG(level, ...) \
 	hns5_log_write(RTE_LOG_ ## level, HNS5_CRYPTO_LOG_PREFIX ": " __VA_ARGS__)
@@ -142,7 +145,8 @@ hns5_stat_clear(uint64_t *counter)
 #define HNS5_SEC_BUFFER_OFFSET     448u
 #define HNS5_SEC_CIPHER_BLOCK_BYTES 16u
 #define HNS5_SEC_DATA_OFFSET       576u
-#define HNS5_SEC_PREFIX_BYTES      128u
+#define HNS5_SEC_PREFIX_BYTES      128u     /* skipped head of the data area    */
+#define HNS5_SEC_IV_BYTES          16u      /* IV slot, one cipher block        */
 #define HNS5_SEC_KEY_OFFSET        16128u   /* cipher key (lower, auth_offset=2) */
 #define HNS5_SEC_MAC_OFFSET        16144u   /* MAC output (middle) */
 /* The engine writes only the digest; clear a little extra so a stale tail can
@@ -151,15 +155,26 @@ hns5_stat_clear(uint64_t *counter)
 /* Longest digest the engine produces (SM3 / SHA-256 output length). */
 #define HNS5_SEC_MAX_DIGEST_BYTES   32u
 #define HNS5_SEC_AUTH_KEY_OFFSET   16208u   /* auth key (higher than cipher) */
+/*
+ * Span covering the cipher key area, the MAC output area and the auth key
+ * area: they are contiguous in the segment (16128..16224). Wiped before a
+ * segment is recycled so key material does not outlive its operation.
+ */
+#define HNS5_SEC_KEYMAT_SPAN_BYTES \
+	(HNS5_SEC_AUTH_KEY_OFFSET + 16u - HNS5_SEC_KEY_OFFSET)
 #define HNS5_BUFFER_BYTES         16384u
 /* Hugepage block size of the pool mount, and the default pool size. */
 #define HNS5_HUGE_BLOCK_BYTES     (32u * 1024u * 1024u)
 #define HNS5_POOL_BYTES_DEFAULT   HNS5_HUGE_BLOCK_BYTES
+/* Upper bound for the pool_mb devarg: far beyond what the board uses, and
+ * still keeps the ownership table (4 B per buffer) under a few MB. It also
+ * has to keep the BMU physical-pool size field (uint32_t, see start_bmu())
+ * representable: bytes - 4 MiB reserve must stay <= UINT32_MAX, so 4096 MiB
+ * is the ceiling (8192 MiB used to wrap the u32 size field).
+ */
+#define HNS5_POOL_MB_MAX          4096u
 #define HNS5_QUEUE_RESERVE_BYTES  (4u * 1024u * 1024u)
 #define HNS5_BMU_BLOCKS           7u
-#define HNS5_SEC_MAX_SEGMENTS     274u
-#define HNS5_SEC_MESSAGE_MAX      0xfffe00u
-#define HNS5_SEC_CIPHER_CHUNK     262144u
 #define HNS5_SEC_SEGMENT_BYTES    HNS5_SEC_MAX_PAYLOAD
 #define HNS5_MAX_RECV_POLLS       100000u
 #define HNS5_SEC_SOURCE_PORT      0x60u
@@ -168,8 +183,6 @@ hns5_stat_clear(uint64_t *counter)
 #define HNS5_SEC_CIPHER_ALG_AES   0x2u
 #define HNS5_SEC_CIPHER_MODE_ECB  0x0u
 #define HNS5_SEC_CIPHER_MODE_CBC  0x1u
-#define HNS5_SEC_CIPHER_MODE_OFB  0x3u
-#define HNS5_SEC_CIPHER_MODE_CTR  0x4u
 /* SEC auth algorithm identifiers (vendor ABI). */
 #define HNS5_SEC_AUTH_SM3         0xBu
 #define HNS5_SEC_AUTH_HMAC_SM3    0xCu
@@ -187,24 +200,25 @@ hns5_stat_clear(uint64_t *counter)
 #define HNS5_SEC_MIN_PER_QP            40u
 /* Completions pulled from the shared POE group per reaper call. */
 #define HNS5_REAP_SHARED_BATCH          128u
-/* Defaults used by the 21 Gbps / 4 QP measurement. */
+/* Defaults picked by the multi-QP tuning runs. */
 #define HNS5_REAP_DEFAULT_BATCH         64u
 #define HNS5_REAP_DEFAULT_POLLS         64u
 /*
- * Upper bound on in-flight requests per queue pair. Deeper pipelines do not
- * help (the application keeps 32..64 requests in flight) but they do consume
- * the whole buffer pool, which turns every cache refill into a failed BMU
- * allocation.
- */
-/*
- * In-flight ceiling per queue pair. Measured on 4 QP / 1024 B:
- *   128 -> 21.2 Gbps, 192 -> 20.1 Gbps (deeper pipeline only stretches the
- *   completion latency, and the failure counters stay the same because the
- *   application keeps refilling until the driver refuses).
+ * In-flight ceiling per queue pair. Deeper pipelines do not help: the
+ * application keeps a limited window in flight, while a larger cap only
+ * stretches completion latency and consumes the whole buffer pool, which
+ * turns every cache refill into a failed BMU allocation. The failure
+ * counters look the same either way because the application keeps refilling
+ * until the driver refuses.
  */
 #define HNS5_SEC_MAX_INFLIGHT_PER_QP    128u
 /* Extra ring slots above the in-flight cap, so a burst can always be taken. */
 #define HNS5_QP_RING_SLACK             64u
+/* Largest in-flight cap that still fits its own ring: queue depth is 16
+ * bits and must hold cap + slack (+1 when the application's descriptor
+ * count is honoured instead).
+ */
+#define HNS5_SEC_CAP_LIMIT             (0xffffu - HNS5_QP_RING_SLACK - 1u)
 /*
  * Software backlog depth per queue pair (smooth mode). It only stores op
  * pointers (8 bytes each), so a deep backlog is cheap: 4096 entries = 32 KiB.
@@ -216,13 +230,11 @@ hns5_stat_clear(uint64_t *counter)
 #define HNS5_SEC_SMOOTH_SPIN            512u
 /*
  * Poll budget per shared reap call. It is deliberately small: an empty poll
- * costs roughly 20 ns, and with many queue pairs each thread doing a long
- * empty spin wastes the CPU that should be submitting. Measured on 8 QP:
- * 64 polls per call made the aggregate throughput worse than 4 QP.
+ * is not free, and with many queue pairs each thread doing a long empty spin
+ * wastes the CPU that should be submitting. A larger per-call budget hurt
+ * aggregate throughput once many queue pairs were running.
  */
 #define HNS5_REAP_SHARED_POLLS          8u
-/* Spin attempts before a thread gives up on the shared completion lock. */
-#define HNS5_REAP_LOCK_SPIN             512u
 /* Sentinel: every queue pair may reap (lazy shared reaping). */
 #define HNS5_REAPER_NONE                0xffffu
 /* Default lock spin: shorter under heavy contention (many queue pairs). */
@@ -232,6 +244,8 @@ hns5_stat_clear(uint64_t *counter)
  * and make two BSP calls. Caching batches those: one locked refill per
  * HNS5_SEC_BUF_CACHE/2 allocations instead of one per op. */
 #define HNS5_SEC_BUF_CACHE          64u
+/* SEC VF skip_length is a 4-bit field: 0..15 words. */
+#define HNS5_SEC_SKIP_LEN_MAX       15u
 /* Completion group is a POE CPU group, so it must stay out of group 1 (the
  * kernel's SSH path) and groups 24..31; the submit group is an ACC group and
  * is checked against the usable ACC window in hns5_sec_platform.c. See the
@@ -240,7 +254,7 @@ hns5_stat_clear(uint64_t *counter)
 #define HNS5_SEC_ENGINE_COMPLETION_GRP 12u
 
 /* ------------------------------------------------------------------ */
-/* Common runtime: HugeTLB pool + BMU ownership, per process.          */
+/* Common BMU state: HugeTLB pool + ownership, per process.           */
 /* ------------------------------------------------------------------ */
 
 struct hns5_pool {
@@ -255,13 +269,23 @@ struct hns5_pool {
 	bool recovered;
 };
 
-struct hns5_runtime {
+struct hns5_bmu {
 	struct hns5_pool pool;
 	int bmu_vf;
-	bool poisoned;
+	bool poisoned;	/* accessed atomically; see HNS5_BMU_POISONED */
 	pid_t owner_pid;
 	pthread_mutex_t queue_lock;
 };
+/*
+ * Poisoning is sticky and is checked on the hot path without holding
+ * queue_lock, so make the access an acquire/release pair instead of a
+ * plain bool read/write (which is a data race by the C standard).
+ */
+#define HNS5_BMU_POISONED(r) \
+	__atomic_load_n(&(r)->poisoned, __ATOMIC_ACQUIRE)
+#define HNS5_BMU_SET_POISONED(r) \
+	__atomic_store_n(&(r)->poisoned, true, __ATOMIC_RELEASE)
+
 
 /* Per-request BMU-backed DMA segment. */
 struct hns5_sec_segment {
@@ -281,7 +305,7 @@ struct hns5_sec_segment {
 /* ------------------------------------------------------------------ */
 
 struct hns5_sec_runtime {
-	struct hns5_runtime *common;
+	struct hns5_bmu *common;
 	struct hns5_dev_private *priv;	/* owner device (completion routing) */
 	int poe_pf;
 	int poe_vf;
@@ -384,7 +408,6 @@ struct hns5_session {
 	uint16_t digest_len;	/* bytes, from xform auth */
 	uint16_t iv_offset;	/* IV offset within op private data */
 	uint16_t iv_length;	/* IV length, bytes */
-	bool is_aead;		/* GCM: cipher==auth combined */
 
 	uint8_t op_type;	/* 0 cipher, 1 auth, 2 chain cipher-then-auth */
 	uint8_t cipher_key[64];	/* cipher key (SM4=16, AES-256=32) */
@@ -408,11 +431,6 @@ struct hns5_buf_cache {
 	unsigned int head;	/* next slot to hand out */
 	unsigned char *raw[HNS5_SEC_BUF_CACHE];
 	uint64_t pa[HNS5_SEC_BUF_CACHE];
-};
-
-/* Completion routed from the shared POE group to the owning queue pair. */
-struct hns5_cqe {
-	uint64_t pa;		/* SEC buffer physical address */
 };
 
 struct hns5_qp {
@@ -451,7 +469,7 @@ struct hns5_dev_private {
 	uint16_t max_qps;
 	uint16_t nb_chans;	/* SEC channels actually brought up */
 	uint16_t nb_used_qps;
-	bool common_runtime_acquired;
+	bool common_bmu_acquired;
 	/*
 	 * SEC POE mode has a single completion group per VF, so every queue pair
 	 * posts its completions there. One lock serialises the readers; each
@@ -487,15 +505,15 @@ uint16_t hns5_enqueue_burst(struct hns5_qp *qp, struct rte_crypto_op **ops,
 uint16_t hns5_dequeue_burst(struct hns5_qp *qp, struct rte_crypto_op **ops,
 			    uint16_t nb_ops);
 
-/* hns5_crypto_runtime.c (common HugeTLB/BMU layer) */
-int hns5_runtime_acquire(struct hns5_runtime **out, const char *path,
+/* hns5_bmu.c (common HugeTLB/BMU layer) */
+int hns5_bmu_acquire(struct hns5_bmu **out, const char *path,
 			 uint64_t pool_bytes);
-int hns5_runtime_release(struct hns5_runtime *r);
-void hns5_runtime_poison(struct hns5_runtime *r, const char *reason);
-int hns5_runtime_lock(struct hns5_runtime *r, int *cancel_state);
-void hns5_runtime_unlock(struct hns5_runtime *r, int cancel_state);
-void *hns5_bmu_alloc(struct hns5_runtime *r, uint64_t *pa);
-int hns5_bmu_free(struct hns5_runtime *r, void *buffer);
+int hns5_bmu_release(struct hns5_bmu *r);
+void hns5_bmu_poison(struct hns5_bmu *r, const char *reason);
+int hns5_bmu_lock(struct hns5_bmu *r, int *cancel_state);
+void hns5_bmu_unlock(struct hns5_bmu *r, int cancel_state);
+void *hns5_bmu_alloc(struct hns5_bmu *r, uint64_t *pa);
+int hns5_bmu_free(struct hns5_bmu *r, void *buffer);
 int hns5_pool_mark_hardware(struct hns5_pool *pool);
 int hns5_bmu_reset(void);
 
@@ -526,7 +544,7 @@ int hns5_sec_build_descriptor(struct hns5_sec_runtime *r,
 
 /* hns5_sec_complete.c (POE completion poll + write-back parse) */
 int hns5_sec_reap_completion(struct hns5_sec_runtime *r,
-			     struct hns5_sec_segment *seg, int *result);
+			     struct hns5_sec_segment *seg);
 
 /* Extract the engine result from a completed segment into the DPDK op. */
 int hns5_sec_extract_result(struct hns5_sec_segment *seg,
