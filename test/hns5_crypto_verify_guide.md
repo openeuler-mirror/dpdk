@@ -189,10 +189,29 @@ hns5 网口是 vdev 设备，用 `--vdev` 创建，不是 PCI 自动探测：
 
 ### 运行
 
+单口
 ```bash
 ./build/examples/dpdk-l2fwd-crypto -l 0-1 \
-    --vdev crypto_hns5_0 \
-    --vdev crypto_hns5_1 \
+    --vdev 'crypto_hns5' \
+    --vdev 'net_hns5_0,port=2,mode=10GBASE_R,hw_txq_id=32,share_group=2' \
+    --huge-dir /dev/hugepages-32M \
+    -- \
+    --cdev_type HW \
+    --chain CIPHER_HASH \
+    --cipher_algo sm4-cbc \
+    --cipher_op ENCRYPT \
+    --cipher_key 01:23:45:67:89:ab:cd:ef:fe:dc:ba:98:76:54:32:10 \
+    --cipher_iv 00:01:02:03:04:05:06:07:08:09:0a:0b:0c:0d:0e:0f \
+    --auth_algo sm3-hmac \
+    --auth_op GENERATE \
+    --auth_key ff:ee:dd:cc:bb:aa:99:88:77:66:55:44:33:22:11:00 \
+    --digest_size 32
+```
+
+双口
+```bash
+./build/examples/dpdk-l2fwd-crypto -l 0-2 \
+    --vdev 'crypto_hns5,qps=2' \
     --vdev 'net_hns5_0,port=2,mode=10GBASE_R,hw_txq_id=32,share_group=2' \
     --vdev 'net_hns5_1,port=3,mode=10GBASE_R,hw_txq_id=48,share_group=3' \
     --huge-dir /dev/hugepages-32M \
@@ -213,12 +232,11 @@ hns5 网口是 vdev 设备，用 `--vdev` 创建，不是 PCI 自动探测：
 > - hns5 网口是 vdev 设备，需用 `--vdev 'net_hns5_N,port=M,mode=...,hw_txq_id=K'` 创建
 > - `hw_txq_id` 按 16 递增（port0=0, port1=16, port2=32 ...）
 > - `--huge-dir /dev/hugepages-32M` 指定 32MB 大页目录
-> - l2fwd-crypto 参数用下划线（`--cipher_algo`），不是连字符
 > - `--chain CIPHER_HASH` = cipher-then-auth = 先加密后认证
 
 ### 验证
 
-在端口 1 用抓包工具（tcpdump / Wireshark）捕获转发出的包：
+用抓包工具（tcpdump / Wireshark）捕获转发出的包：
 - 检查 payload 是否为 SM4-CBC 密文
 - 检查包尾是否附加了 32 字节 SM3-HMAC MAC
 
@@ -253,21 +271,3 @@ hns5 网口是 vdev 设备，用 `--vdev` 创建，不是 PCI 自动探测：
 | `--auth_op` | GENERATE/VERIFY | 生成/验证 |
 | `--auth_key` | ff:ee:... | 冒号分隔十六进制 |
 | `--digest_size` | 32 | SM3 摘要 256 位 |
-
-## BMU 池的块划分与在途深度
-
-`HNS5_BMU_BLOCKS = 7`（`hns5_crypto_pmd_private.h`）只用在 BMU VF 的
-`max_block_num` / `min_block_num`，是 SEC 池注册给 BMU 的**物理块划分数**，
-不是并发上限，也不限制 `--burst-sz`。
-
-在途能力由 inflight cap 与 buffer 预算决定，实际数值在 probe 日志里打印：
-
-```text
-buffer budget: cache=64, in-flight cap=128 per queue pair (4 qps)
-```
-
-- 单 QP：cap ≈ buffer 数 − cache − 8（32 MiB 池为 1792 → 约 1720）
-- 多 QP：cap 钳到 128（`HNS5_SEC_MAX_INFLIGHT_PER_QP`），实测 4 QP/1024 B 为
-  21.2 Gbps，把 cap 放到 192 反而降到 20.1 Gbps（管道更深只拉长完成延迟）
-- `--burst-sz` 只要不超过 cap 即可，本指南用例统一取 32；`--total-ops` 可以
-  远大于 cap，buffer 会循环复用
