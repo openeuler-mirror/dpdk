@@ -195,13 +195,23 @@ hns5_sec_build_descriptor(struct hns5_sec_runtime *r,
 			   sess->cipher_keylen);
 	/* IV for non-ECB cipher modes sits at the data offset head. */
 	if ((is_cipher || is_chain) && sess->cipher_mode != HNS5_SEC_CIPHER_MODE_ECB) {
-		uint32_t priv_avail = HNS5_SEC_OP_PRIV_FALLBACK;
+		/*
+		 * iv_offset is an absolute offset from the start of the crypto op
+		 * (rte_crypto_op_ctod_offset() computes (char *)op + offset), and
+		 * rte_crypto_op_pool_create() lays each element out as
+		 *   [rte_crypto_op][rte_crypto_sym_op][private area: priv_size].
+		 * The private area therefore spans [priv_base, priv_base+priv_size),
+		 * so the upper bound is priv_base + priv_size, not priv_size alone.
+		 * Comparing an op-absolute offset against the bare priv_size rejects
+		 * the standard layout: l2fwd-crypto sets iv.offset to
+		 * sizeof(op)+sizeof(sym_op) with priv_size = the IV length, which
+		 * fits the private area exactly.
+		 */
+		uint32_t priv_base = (uint32_t)(sizeof(struct rte_crypto_op) +
+					    sizeof(struct rte_crypto_sym_op));
+		uint32_t priv_avail = priv_base + HNS5_SEC_OP_PRIV_FALLBACK;
 		uint8_t *iv;
 
-		/* iv_offset indexes the operation's private area. Its size is
-		 * recorded in the op pool's private info when the op came from
-		 * rte_crypto_op_pool_create(); reading past the private area
-		 * would pull neighbouring op memory into the IV. */
 		if (op->mempool != NULL) {
 			const struct rte_crypto_op_pool_private *pi =
 				(const struct rte_crypto_op_pool_private *)
@@ -213,13 +223,14 @@ hns5_sec_build_descriptor(struct hns5_sec_runtime *r,
 			 * priv_size meaningless, so keep the fallback. */
 			if (pi->type == RTE_CRYPTO_OP_TYPE_SYMMETRIC ||
 			    pi->type == RTE_CRYPTO_OP_TYPE_UNDEFINED)
-				priv_avail = pi->priv_size;
+				priv_avail = priv_base + pi->priv_size;
 		}
-		if ((uint32_t)sess->iv_offset + (uint32_t)sess->iv_length >
+		if ((uint32_t)sess->iv_offset < priv_base ||
+		    (uint32_t)sess->iv_offset + (uint32_t)sess->iv_length >
 		    priv_avail) {
-			HNS5_LOG(ERR, "iv_offset %u + iv_length %u exceeds the op "
-				 "private area (%u)", sess->iv_offset,
-				 sess->iv_length, priv_avail);
+			HNS5_LOG(ERR, "iv_offset %u + iv_length %u outside the op "
+				 "private area [%u, %u)", sess->iv_offset,
+				 sess->iv_length, priv_base, priv_avail);
 			return -EINVAL;
 		}
 		iv = rte_crypto_op_ctod_offset(op, uint8_t *, sess->iv_offset);

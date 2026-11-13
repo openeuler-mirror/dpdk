@@ -182,8 +182,8 @@ hns5 网口是 vdev 设备，用 `--vdev` 创建，不是 PCI 自动探测：
 ```bash
 # 创建 2 个网口（port 0 和 port 1）
 # hw_txq_id 按 16 递增：port0=0, port1=16, port2=32 ...
---vdev 'net_hns5_0,port=0,mode=10GBASE_R,hw_txq_id=0' \
---vdev 'net_hns5_1,port=1,mode=10GBASE_R,hw_txq_id=16' \
+--vdev 'net_hns5_0,port=2,mode=10GBASE_R,hw_txq_id=32,share_group=2' \
+--vdev 'net_hns5_1,port=3,mode=10GBASE_R,hw_txq_id=48,share_group=3' \
 --huge-dir /dev/hugepages-32M
 ```
 
@@ -191,9 +191,10 @@ hns5 网口是 vdev 设备，用 `--vdev` 创建，不是 PCI 自动探测：
 
 ```bash
 ./build/examples/dpdk-l2fwd-crypto -l 0-1 \
-    --vdev crypto_hns5 \
-    --vdev 'net_hns5_0,port=0,mode=10GBASE_R,hw_txq_id=0' \
-    --vdev 'net_hns5_1,port=1,mode=10GBASE_R,hw_txq_id=16' \
+    --vdev crypto_hns5_0 \
+    --vdev crypto_hns5_1 \
+    --vdev 'net_hns5_0,port=2,mode=10GBASE_R,hw_txq_id=32,share_group=2' \
+    --vdev 'net_hns5_1,port=3,mode=10GBASE_R,hw_txq_id=48,share_group=3' \
     --huge-dir /dev/hugepages-32M \
     -- \
     --cdev_type HW \
