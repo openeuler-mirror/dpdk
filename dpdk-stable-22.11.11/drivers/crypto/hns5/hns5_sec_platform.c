@@ -224,6 +224,37 @@ hns5_sec_platform_inspect(struct hns5_sec_runtime *p)
 	HNS5_LOG(NOTICE, "poE grp range: cpu[start=%u num=%u] acc[start=%u num=%u]\n",
 		 range.cpu_grp_start, range.cpu_grp_num,
 		 range.acc_grp_start, range.acc_grp_num);
+
+	/*
+	 * Multi-instance feasibility probe (diagnostic only).
+	 *
+	 * Two crypto_hns5 vdevs in one process both take SEC vf0, completion
+	 * group 12 and vcpu 1, and the second instance's setup rebinds them out
+	 * from under the first ("stale binding ... clearing"), corrupting the
+	 * shared engine once both drive traffic. Whether that can be fixed by
+	 * giving each instance its own VF + groups depends on how many SEC VFs
+	 * this board exposes. POE mode's PF conf carries no vf_num (only the QM
+	 * conf does), so enumerate what actually resolves instead of trusting a
+	 * field. get_vf_devid is a (die,pf,vf)->devid lookup; the loop stops at
+	 * the first failure and does not touch the real sec_vf chosen above.
+	 */
+	{
+		int vf_count = 0;
+		int vf;
+
+		for (vf = 0; vf < 16; vf++) {
+			if (hidrv_sec_get_vf_devid(0, 0, vf, HIDRV_SEC_VF_MODE_POE) < 0)
+				break;
+			vf_count++;
+		}
+		HNS5_LOG(NOTICE,
+			 "SEC VF probe: %d VF(s) available. Each instance needs its own "
+			 "completion(CPU)+submit(ACC) group and vcpu (cpu %u..%u, acc %u..%u)\n",
+			 vf_count, range.cpu_grp_start,
+			 range.cpu_grp_start + range.cpu_grp_num - 1,
+			 range.acc_grp_start,
+			 range.acc_grp_start + range.acc_grp_num - 1);
+	}
 	if (!range.cpu_grp_num || !range.acc_grp_num ||
 	    range.cpu_grp_start >= POE_GROUP_LIMIT ||
 	    range.acc_grp_start >= POE_GROUP_LIMIT ||
