@@ -1429,17 +1429,9 @@ static int hns5_eth_params_parse(struct rte_vdev_device *vdev, struct rte_eth_de
     if (ret < 0) {
         goto free_kvargs;
     }
-    /* Platform constraints, checked as early as possible:
-     *  - CPU groups 24..31 must not be used by the packet path
-     *  - group 12 is the SEC completion group reserved by crypto/hns5 */
-    if (priv->param.share_group >= 24 && priv->param.share_group <= 31) {
-        hns5_err(dev, "invalid share_group:%u: CPU groups 24..31 must not be used\n",
-            priv->param.share_group);
-        goto free_kvargs;
-    }
-    if (priv->param.share_group == 12) {
-        hns5_err(dev, "invalid share_group:12 collides with the SEC completion group "
-            "reserved by crypto/hns5\n");
+    /* Platform constraints, checked as early as possible; POE init repeats
+     * them together with the BSP group windows. */
+    if (hns5_poe_check_cpu_group(dev, priv->param.share_group) != 0) {
         goto free_kvargs;
     }
     if (priv->param.share_group > HNS5_ETH_GROUP_MAX) {
@@ -1843,7 +1835,7 @@ RTE_PMD_REGISTER_VDEV(net_hns5, net_hns5_pmd);
 RTE_PMD_REGISTER_PARAM_STRING(net_hns5,
     "port=<0-31>"
     "macport=<0-31>"
-    "share_group=<0-31>"
+    "share_group=<0-23, excluding 1 and 12>"
     "fw_tnl=<0|1>"
     "base_tnl=<0-4095>"
     "hw_txq_id=<N>"

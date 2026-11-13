@@ -7,8 +7,17 @@
 #   pre-commit run --all-files        # 首次可全量跑一遍
 # 临时跳过（不推荐）：git commit --no-verify
 fail_fast: false
-# 排除导入的上游 DPDK 22.11.11 基线源码树，避免通用钩子批量改动上游代码
-exclude: ^dpdk-stable-22\.11\.11/
+
+# 排除范围：仓库内 dpdk-stable-22.11.11/ 大部分是上游 DPDK 源码，不属于本分支的
+# 交付物，也不该被钩子改写（trailing-whitespace / end-of-file-fixer 会直接改文件）。
+# 但 hns5 自己的代码就住在这棵树里，所以不能整棵排除 —— 下面用负向断言只放行
+# 我们的交付路径：三个 hns5 驱动、cperf 与 l2fwd-crypto、以及我们改过的 lib 目录。
+# DPDK_20.11_patch/ 必须整目录排除：其中的 hns5_20_11.patch 里行尾空格与末尾换行是
+# patch 格式的一部分，被钩子"修好"之后补丁就无法应用了。
+# dpdk-stable-20.11.10/ 由 !559 引入，是 20.11 源码与 hns5 适配；同理只放行我们的
+# 交付路径：该树的 net/mempool hns5 驱动、test-pmd 与 l3fwd 适配、librte_mempool、
+# config/arm 相关项，以及顶层 hns5_compile.sh / hns5_pack.sh。
+exclude: '^(?:DPDK_20\.11_patch/|dpdk-stable-22\.11\.11/(?!(?:drivers/(?:net|crypto|mempool)/hns5/|app/test-crypto-perf/|examples/l2fwd-crypto/|lib/(?:cryptodev|mempool)/|buildtools/hns5_|usertools/hns5_|doc/guides/(?:nics|cryptodevs)/hns5))|dpdk-stable-20\.11\.10/(?!(?:drivers/(?:net|mempool)/hns5/|app/test-pmd/|examples/l3fwd/|lib/librte_mempool/|config/arm/(?:arm64_hns5_linux_gcc|meson\.build)|drivers/(?:net|mempool)/meson\.build|drivers/net/failsafe/meson\.build|hns5_(?:compile|pack)\.sh)))'
 
 repos:
   # ==================== 通用基础检查（所有语言） ====================
@@ -32,17 +41,28 @@ repos:
     hooks:
       - id: detect-secrets
 
-  # ==================== C/C++ 代码格式化 ====================
-  - repo: https://gitcode.com/pre-commit-clang/mirrors-clang-format
-    rev: v22.1.8
-    hooks:
-      - id: clang-format
-        types_or: [c, c++]               # 仅作用于 C/C++ 文件
-        args: ["--style=file"]           # 读取仓库根目录 .clang-format
+  # ==================== C/C++ 代码格式化：CI 暂不启用 ====================
+  # 实测依据（对 21 个 hns5 驱动文件、共 13727 行执行 clang-format -i）：
+  #   用本仓 .clang-format（与社区同款、LLVM 派生）：8350 插入 / 7979 删除
+  #   再关掉全部对齐类选项（AlignConsecutive*/TrailingComments/EscapedNewlines/
+  #   AlignAfterOpenBracket）：仍有 8047 / 7685，只降 4%
+  # 说明差距不是对齐造成的，而是现有代码整体不符合这套配置。一旦启用，任何碰到
+  # 旧文件的 PR 都会带上数千行无关排版 diff，故保持注释状态；.clang-format 仍随
+  # 仓库提交，作为本地编辑器与日后归一的基准。
+  # 将来启用步骤：先做一笔专门的"排版归一"提交，再取消下面整段注释并删掉 stages。
+  # - repo: https://gitcode.com/pre-commit-clang/mirrors-clang-format
+  #   rev: v22.1.8
+  #   hooks:
+  #     - id: clang-format
+  #       types_or: [c, c++]
+  #       args: ["--style=file"]
+  #       stages: [manual]
 
   # ==================== C/C++ 静态分析 ====================
-  # 说明：clang-tidy 不在此处配置钩子，统一由 ci_scripts/pre_commit_pr.sh 执行。
-  #       hns5 分支没有 DPDK 构建（无 DPDK_BUILD_DIR/compile_commands.json），
-  #       该脚本会自动跳过 clang-tidy，仅执行通用钩子与 clang-format。
+  # 说明：本仓库通过 install.sh 把 hinic3/ 注入到 DPDK 的 drivers/net/hinic3/，
+  #       编译数据库中的路径都是 DPDK 树路径，与仓库路径不一致，pre-commit 直接
+  #       调用 clang-tidy 会因 "Compile command not found" 被静默跳过。
+  #       因此 clang-tidy 不在此处配置钩子，统一由 ci_scripts/pre_commit_pr.sh
+  #       在 DPDK 源码树内单独执行（含路径映射）。
   # 注：原 cpp-linter-hooks 钩子已移除——它属于 manual 阶段、实际从不执行，
   #     且 gitcode 上无可用镜像，保留它会让 CI 每次访问 github.com 超时 128 秒。

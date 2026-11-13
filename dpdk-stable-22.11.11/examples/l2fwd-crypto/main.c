@@ -207,6 +207,7 @@ struct lcore_queue_conf {
 
 	unsigned nb_crypto_devs;
 	unsigned cryptodev_list[MAX_RX_QUEUE_PER_LCORE];
+	unsigned cryptodev_qp_list[MAX_RX_QUEUE_PER_LCORE];
 
 	struct op_buffer op_buf[RTE_CRYPTO_MAX_DEVS];
 	struct pkt_buffer pkt_buf[RTE_MAX_ETHPORTS];
@@ -757,7 +758,7 @@ l2fwd_main_loop(struct l2fwd_crypto_options *options)
 		}
 
 		port_cparams[i].dev_id = qconf->cryptodev_list[i];
-		port_cparams[i].qp_id = 0;
+		port_cparams[i].qp_id = qconf->cryptodev_qp_list[i];
 
 		port_cparams[i].block_size = options->block_size;
 
@@ -2361,7 +2362,11 @@ initialize_cryptodevs(struct l2fwd_crypto_options *options, unsigned nb_ports,
 		uint8_t socket_id = (uint8_t) retval;
 
 		struct rte_cryptodev_config conf = {
-			.nb_queue_pairs = 1,
+			/* One device may serve several ports (a single SEC engine
+			 * cannot be two devices): size it for the ports landing on it.
+			 * With devices >= ports this is 1 (original behaviour). */
+			.nb_queue_pairs = (uint16_t)((nb_ports + enabled_cdev_count - 1U) /
+					enabled_cdev_count),
 			.socket_id = socket_id,
 			.ff_disable = RTE_CRYPTODEV_FF_SECURITY,
 		};
@@ -2378,7 +2383,7 @@ initialize_cryptodevs(struct l2fwd_crypto_options *options, unsigned nb_ports,
 			sessions_needed = enabled_cdev_count * nb_workers;
 #endif
 		} else
-			sessions_needed = enabled_cdev_count;
+			sessions_needed = nb_ports;
 
 		if (session_pool_socket[socket_id].sess_mp == NULL) {
 			char mp_name[RTE_MEMPOOL_NAMESIZE];
@@ -2540,12 +2545,14 @@ initialize_cryptodevs(struct l2fwd_crypto_options *options, unsigned nb_ports,
 		qp_conf.nb_descriptors = 2048;
 		qp_conf.mp_session = session_pool_socket[socket_id].sess_mp;
 
-		retval = rte_cryptodev_queue_pair_setup(cdev_id, 0, &qp_conf,
-				socket_id);
-		if (retval < 0) {
-			printf("Failed to setup queue pair %u on cryptodev %u",
-					0, cdev_id);
-			return -1;
+		for (uint16_t qp = 0; qp < conf.nb_queue_pairs; qp++) {
+			retval = rte_cryptodev_queue_pair_setup(cdev_id, qp,
+					&qp_conf, socket_id);
+			if (retval < 0) {
+				printf("Failed to setup queue pair %u on cryptodev %u",
+						qp, cdev_id);
+				return -1;
+			}
 		}
 
 		retval = rte_cryptodev_start(cdev_id);
@@ -2825,51 +2832,74 @@ main(int argc, char **argv)
 	if (enabled_cdevcount < 0)
 		rte_exit(EXIT_FAILURE, "Failed to initialize crypto devices\n");
 
-	if (enabled_cdevcount < enabled_portcount)
-		rte_exit(EXIT_FAILURE, "Number of capable crypto devices (%d) "
-				"has to be more or equal to number of ports (%d)\n",
-				enabled_cdevcount, enabled_portcount);
+	/*
+	 * A single SEC engine cannot present more than one crypto device, so
+	 * this used to require crypto devices >= ports. Ports may now share one
+	 * device on distinct queue pairs (see the assignment loop below), so
+	 * only at least one capable device is required.
+	 */
+	if (enabled_cdevcount == 0)
+		rte_exit(EXIT_FAILURE, "No capable crypto device for %u ports\n",
+				enabled_portcount);
 
 	nb_cryptodevs = rte_cryptodev_count();
 
 	/* Initialize the port/cryptodev configuration of each logical core */
-	for (rx_lcore_id = 0, qconf = NULL, cdev_id = 0;
-			cdev_id < nb_cryptodevs && enabled_cdevcount;
-			cdev_id++) {
-		/* Crypto op not supported by crypto device */
-		if (!enabled_cdevs[cdev_id])
-			continue;
+	/*
+	 * Assign a crypto queue pair to every enabled port/lcore slot.
+	 *
+	 * With crypto devices >= ports this reproduces the original behaviour:
+	 * each port gets its own device at queue pair 0. A single SEC engine
+	 * cannot be two devices, so when there are fewer devices than ports the
+	 * ports round-robin over the enabled devices and take increasing queue
+	 * pairs on the shared device; initialize_cryptodevs() configured each
+	 * device with ceil(ports/devices) queue pairs and one session per port.
+	 * Assumes one port per lcore (the default nb_ports_per_lcore).
+	 */
+	{
+		uint8_t elist[RTE_CRYPTO_MAX_DEVS];
+		unsigned int n_enabled = 0, p;
 
-		if (options.single_lcore && qconf == NULL) {
-			while (rte_lcore_is_enabled(rx_lcore_id) == 0) {
-				rx_lcore_id++;
-				if (rx_lcore_id >= RTE_MAX_LCORE)
-					rte_exit(EXIT_FAILURE,
-							"Not enough cores\n");
-			}
-		} else if (!options.single_lcore) {
-			/* get the lcore_id for this port */
-			while (rte_lcore_is_enabled(rx_lcore_id) == 0 ||
-			       lcore_queue_conf[rx_lcore_id].nb_crypto_devs ==
-			       options.nb_ports_per_lcore) {
-				rx_lcore_id++;
-				if (rx_lcore_id >= RTE_MAX_LCORE)
-					rte_exit(EXIT_FAILURE,
-							"Not enough cores\n");
-			}
-		}
+		for (cdev_id = 0; cdev_id < nb_cryptodevs; cdev_id++)
+			if (enabled_cdevs[cdev_id])
+				elist[n_enabled++] = (uint8_t)cdev_id;
 
-		/* Assigned a new logical core in the loop above. */
-		if (qconf != &lcore_queue_conf[rx_lcore_id])
+		if (n_enabled == 0)
+			rte_exit(EXIT_FAILURE, "No enabled crypto device to assign\n");
+
+		rx_lcore_id = 0;
+		qconf = NULL;
+		for (p = 0; p < (unsigned int)enabled_portcount; p++) {
+			unsigned int qp = p / n_enabled;
+			uint8_t cid = elist[p % n_enabled];
+
+			if (options.single_lcore && qconf == NULL) {
+				while (rte_lcore_is_enabled(rx_lcore_id) == 0) {
+					rx_lcore_id++;
+					if (rx_lcore_id >= RTE_MAX_LCORE)
+						rte_exit(EXIT_FAILURE,
+								"Not enough cores\n");
+				}
+			} else if (!options.single_lcore) {
+				while (rte_lcore_is_enabled(rx_lcore_id) == 0 ||
+				       lcore_queue_conf[rx_lcore_id].nb_crypto_devs ==
+				       options.nb_ports_per_lcore) {
+					rx_lcore_id++;
+					if (rx_lcore_id >= RTE_MAX_LCORE)
+						rte_exit(EXIT_FAILURE,
+								"Not enough cores\n");
+				}
+			}
+
 			qconf = &lcore_queue_conf[rx_lcore_id];
 
-		qconf->cryptodev_list[qconf->nb_crypto_devs] = cdev_id;
-		qconf->nb_crypto_devs++;
+			qconf->cryptodev_list[qconf->nb_crypto_devs] = cid;
+			qconf->cryptodev_qp_list[qconf->nb_crypto_devs] = qp;
+			qconf->nb_crypto_devs++;
 
-		enabled_cdevcount--;
-
-		printf("Lcore %u: cryptodev %u\n", rx_lcore_id,
-				(unsigned)cdev_id);
+			printf("Lcore %u: cryptodev %u qp %u\n", rx_lcore_id,
+					(unsigned int)cid, qp);
+		}
 	}
 
 	/* launch per-lcore init on every lcore */

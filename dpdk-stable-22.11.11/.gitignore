@@ -45,7 +45,3 @@ build-*
 # ignore other build directory patterns
 *-gcc*
 *-clang*
-
-# BSP SDK（厂商专有代码，需自行从 S920L18_SDK_004.zip 解压，禁止入库）
-drivers/net/hns5/dependency/
-S920L18_SDK_*.zip

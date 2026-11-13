@@ -1,6 +1,31 @@
-# HNS5 DPDK 20.11 Patch 使用指南
+# HNS5 DPDK 使用指南
 
-## 概述
+## 目录
+
+- [一、DPDK 20.11 Patch 使用指南](#一dpdk-2011-patch-使用指南)
+  - [概述](#概述)
+  - [特性列表](#特性列表)
+  - [1. 下载 DPDK 源码](#1-下载-dpdk-源码)
+  - [2. 解压源码](#2-解压源码)
+  - [3. 应用 Patch](#3-应用-patch)
+  - [4. 编译](#4-编译)
+  - [5. 打包](#5-打包)
+  - [6. 部署到模组环境运行](#6-部署到模组环境运行)
+  - [7. 运行参数详解](#7-运行参数详解)
+- [二、DPDK 22.11.11 源码树（dpdk-stable-22.11.11）](#二dpdk-221111-源码树dpdk-stable-221111)
+  - [1. 编译环境要求](#1-编译环境要求)
+  - [2. BSP SDK 的放置位置](#2-bsp-sdk-的放置位置)
+  - [3. 执行编译](#3-执行编译)
+  - [4. 编译与运行的区别（重要）](#4-编译与运行的区别重要)
+  - [5. 清理与验证](#5-清理与验证)
+
+> 第一部分为 **DPDK 20.11.10 + Patch** 的使用流程；第二部分为仓库内附带的 **DPDK 22.11.11 完整源码树**（`dpdk-stable-22.11.11/`），两套基线各自独立，按需选用。
+
+---
+
+## 一、DPDK 20.11 Patch 使用指南
+
+### 概述
 
 本 patch 为 DPDK 20.11.10 添加 HNS5 网卡驱动支持，主要包括：
 
@@ -10,14 +35,15 @@
 - **修改 l3fwd 示例**：适配 hns5 网卡的 offload 特性
 - **修改 librte_mempool**：新增内存池 ops 标志位支持
 - **新增编译脚本** `hns5_compile.sh`（aarch64 本地编译，自动解压 SDK 头文件、生成桩库）和打包脚本 `hns5_pack.sh`
+- **附带 DPDK 22.11.11 完整源码树** (`dpdk-stable-22.11.11/`)：已内置 hns5 的 net / mempool / crypto 驱动，无需再打 patch，详见第二部分
 
 ---
 
-## 特性列表
+### 特性列表
 
 > 以下特性列表基于 patch 源码分析得出，参考了 [hinic3 PMD 特性列表](https://atomgit.com/openeuler/dpdk/tree/hinic3_master#4-特性列表) 的格式。
 
-### 通用特性
+#### 通用特性
 
 | Feature | 支持 | Feature | 支持 | Feature | 支持 |
 |---------|:----:|---------|:----:|---------|:----:|
@@ -49,7 +75,7 @@
 | Unicast MAC filter | Y | Inner L4 checksum | - | | |
 | Multicast MAC filter | - | Packet type parsing | Y | | |
 
-### Rx Offload 能力
+#### Rx Offload 能力
 
 | Offload | 支持 | 说明 |
 |---------|:----:|------|
@@ -62,7 +88,7 @@
 | Jumbo Frame | - | 不支持（MTU 受限） |
 
 
-### 使用约束
+#### 使用约束
 
 1. **必须使用 hns5_bmu 内存池**：网卡驱动依赖自有的 BMU 内存池驱动（`drivers/mempool/hns5/`），不能使用标准 `rte_pktmbuf_pool_create`。test-pmd 已修改为调用 `rte_pktmbuf_pool_create_by_ops(..., "hns5_bmu")`。
 2. **MAC 地址数量限制**：`max_mac_addrs = 1`，仅支持单播 MAC 设置（`mac_addr_set`），不支持多播 MAC 增删（`mac_addr_add`/`mac_addr_remove`）。
@@ -77,13 +103,13 @@
 
 ---
 
-## 1. 下载 DPDK 源码
+### 1. 下载 DPDK 源码
 
 ```bash
 wget https://fast.dpdk.org/rel/dpdk-20.11.10.tar.xz
 ```
 
-## 2. 解压源码
+### 2. 解压源码
 
 ```bash
 tar -xf dpdk-20.11.10.tar.xz
@@ -95,7 +121,7 @@ tar -xf dpdk-20.11.10.tar.xz
 cd dpdk-stable-20.11.10
 ```
 
-## 3. 应用 Patch
+### 3. 应用 Patch
 
 patch 文件位于**本仓库** `DPDK_20.11_patch/hns5_20_11.patch`（即本 README 同级目录下的 `DPDK_20.11_patch/` 子目录，非 DPDK 官方发布内容）。由 `diff -ruN` 生成（非 git format-patch 格式），将其复制到源码根目录，在 `dpdk-stable-20.11.10` 目录内执行：
 
@@ -105,9 +131,9 @@ patch -p1 < hns5_20_11.patch
 
 > **注意**：如遇空白差异导致失败，可加 `--ignore-whitespace -l` 重试；仍失败则手动处理生成的 `.rej` 文件。
 
-## 4. 编译
+### 4. 编译
 
-### 4.1 环境要求
+#### 4.1 环境要求
 
 编译脚本 `hns5_compile.sh` **仅支持在 aarch64 主机上本地编译**（x86 交叉编译已移除）。在 aarch64 服务器（openEuler/CentOS 系）上安装工具链：
 
@@ -117,7 +143,7 @@ dnf install -y gcc meson ninja-build pkgconf-pkg-config numactl-devel unzip
 
 要求：`/usr/include/numa.h` 存在（numactl-devel），`gcc`/`meson`/`ninja`/`pkg-config`/`nm`/`unzip` 可用。
 
-### 4.2 获取 SDK
+#### 4.2 获取 SDK
 
 从[华为支持网站](https://support.huawei.com/enterprise/zh/edge-computing-and-server/s920l18-pid-267076760/software/267397720?idAbsPath=fixnode01|23710424|251364417|261608284|262279635|267076760)下载 `S920L18_SDK_004.zip`，放到 **dpdk 源码目录的上层**（与 `dpdk-stable-20.11.10` 同级）：
 
@@ -129,7 +155,7 @@ dnf install -y gcc meson ninja-build pkgconf-pkg-config numactl-devel unzip
 
 SDK 提供驱动所依赖的 uDriver（hidrv/ndrv）API 头文件。
 
-### 4.3 执行编译
+#### 4.3 执行编译
 
 在 dpdk 源码根目录执行：
 
@@ -147,7 +173,7 @@ SDK_DIR=/path/to/extracted_sdk ./hns5_compile.sh       # 方式三：已解压�
 
 可选环境变量：`CHIP`（默认S920L18 的 SoC）、`BD_VERSION`（默认 `v400`，单板版本）。
 
-### 4.4 编译过程说明
+#### 4.4 编译过程说明
 
 脚本自动完成以下步骤，无需手动干预：
 
@@ -162,7 +188,7 @@ SDK_DIR=/path/to/extracted_sdk ./hns5_compile.sh       # 方式三：已解压�
 - `build/drivers/*so*` — 各驱动动态库（含 `librte_net_hns5.so`、`librte_mempool_hns5.so`）
 - `build/lib/*so*` — DPDK 核心动态库
 
-## 5. 打包
+### 5. 打包
 
 编译成功后，在源码根目录执行：
 
@@ -177,9 +203,9 @@ SDK_DIR=/path/to/extracted_sdk ./hns5_compile.sh       # 方式三：已解压�
 | `build.tgz` | `build/drivers/*so*` + `build/lib/*so*`（DPDK 核心库 + hns5 驱动库） |
 | `dpdk-testpmd` | test-pmd 可执行文件 |
 
-## 6. 部署到模组环境运行
+### 6. 部署到模组环境运行
 
-### 6.1 拷贝产物到模组
+#### 6.1 拷贝产物到模组
 
 将 `build.tgz` 和 `dpdk-testpmd` 传输到模组（aarch64 目标板），例如通过 scp：
 
@@ -189,7 +215,7 @@ scp build.tgz dpdk-testpmd root@<模组IP>:/root/hns5/
 
 也可通过 U 盘、TFTP 等方式拖动文件到模组环境。
 
-### 6.2 解压并配置运行环境
+#### 6.2 解压并配置运行环境
 
 在模组上执行：
 
@@ -244,7 +270,7 @@ scp <libsecurec.so所在路径>/libsecurec.so root@<模组IP>:/lib64/
 >
 > 若编译机 glibc 高于模组，请在与模组同版本或更低版本的系统环境中编译。
 
-### 6.3 配置大页内存
+#### 6.3 配置大页内存
 
 hns5 驱动依赖大页内存，需在模组上配置 **32M 大页**并挂载（以 256 个大页、共 8G 为例，按实际内存调整）：
 
@@ -271,7 +297,7 @@ ls /mnt/huge                # 空目录即为正常，运行时会动态创建�
 nodev  /mnt/huge  hugetlbfs  pagesize=32M  0  0
 ```
 
-### 6.4 运行
+#### 6.4 运行
 
 环境就绪后即可运行 test-pmd，启动时需通过 `--huge-dir` 指定大页目录、`-d` 指定驱动库目录，命令与参数详见第 7 章：
 
@@ -293,11 +319,11 @@ nodev  /mnt/huge  hugetlbfs  pagesize=32M  0  0
 
 ---
 
-## 7. 运行参数详解
+### 7. 运行参数详解
 
 hns5 驱动注册为 **vdev 虚拟设备驱动**（`RTE_PMD_REGISTER_VDEV(net_hns5, ...)`），不通过 PCI 扫描发现网卡，必须在 EAL 参数中通过 `--vdev` 显式创建端口。
 
-### 7.1 vdev 参数说明
+#### 7.1 vdev 参数说明
 
 | 参数 | 必填 | 取值范围 | 默认值 | 说明 |
 |------|:----:|---------|--------|------|
@@ -312,7 +338,7 @@ hns5 驱动注册为 **vdev 虚拟设备驱动**（`RTE_PMD_REGISTER_VDEV(net_hn
 
 > **注意**：`port` 和 `macport` 均必须小于 32（驱动内部用于 `1U << id` 位图索引）。
 
-### 7.2 支持的端口模式（`mode` 参数取值）
+#### 7.2 支持的端口模式（`mode` 参数取值）
 
 ```
 100BASE_FX | 1000BASE_X | SGMII | QSGMII | 2G5BASE_X | 10GBASE_R |
@@ -320,7 +346,7 @@ FLEXMII_5G2P | FLEXMII_10G2P | FLEXMII_20G2P | FLEXMII_10G4P | FLEXMII_20G4P |
 5GBASE_R | 5GBASE_KR | XAUI | 25GBASE_R | 40GBASE_R | 50GBASE_R | 100GBASE_R
 ```
 
-### 7.3 运行 test-pmd（基础收发测试）
+#### 7.3 运行 test-pmd（基础收发测试）
 
 ```bash
 ./dpdk-testpmd -l 0-3 \
@@ -350,7 +376,7 @@ testpmd> stop                      # 停止转发
 testpmd> quit                      # 退出
 ```
 
-### 7.4 多端口运行
+#### 7.4 多端口运行
 
 每个物理端口需要单独的 `--vdev`，`port` 和 `share_group` 不能重复：
 
@@ -363,7 +389,7 @@ testpmd> quit                      # 退出
     -- -i --rxq=4 --txq=4 --nb-cores=4
 ```
 
-### 7.5 test-pmd 运行注意事项
+#### 7.5 test-pmd 运行注意事项
 
 1. **内存池已固定为 hns5_bmu**：patch 将 testpmd 默认内存池分支（`MP_ALLOC_MEMZONE`）改为 `rte_pktmbuf_pool_create_by_ops(..., "hns5_bmu")`，内存池名固定为 `bmu_pool6`。**无需**（也不支持）再指定 `--mp-alloc` 其他模式。
 2. **RSS RETA 查询/设置**：RETA 表为 1024 项，test-pmd 已适配，按 DPDK 20.11 语法使用：
@@ -377,7 +403,7 @@ testpmd> quit                      # 退出
    ```
 4. **启动/打流时的历史包残留报错**：启动或开始打流时可能出现部分地址相关报错，属**历史包残留**所致，不影响正常转发，可直接忽略；必要时 `stop` 后重新 `start` 即可。
 
-### 7.6 常见启动失败排查
+#### 7.6 常见启动失败排查
 
 | 现象（日志关键字） | 原因 | 处理 |
 |---|---|---|
@@ -390,3 +416,108 @@ testpmd> quit                      # 退出
 | `failed to hidrv_ppe_vf_open_pool` | PPE 内存池打开失败 | 检查 BMU 依赖与固件状态 |
 | `failed to parse device` / `no driver found for device net_hns5_0` / `Cannot get mempool ops` | 启动命令缺少 `-d build/drivers`，EAL 未加载 hns5 驱动库 | 补加 `-d build/drivers`（见 6.4 节说明） |
 
+---
+
+## 二、DPDK 22.11.11 源码树（dpdk-stable-22.11.11）
+
+本仓库同时维护 DPDK 22.11.11 的完整源码树，位于 `dpdk-stable-22.11.11/`，
+与 `DPDK_20.11_patch/` 同级。该树在 22.11.11 发布版基础上包含 hns5 的完整支持：
+
+- `drivers/net/hns5/`：hns5 POE 网卡驱动（收发、RSS、FDIR、流表、统计）
+- `drivers/mempool/hns5/`：BMU 内存池驱动
+- `drivers/crypto/hns5/`：hns5 SEC 加解密 PMD（POE 模式，SM4-CBC/SM3-HMAC 验收）
+- `doc/guides/nics/hns5.rst`、`doc/guides/cryptodevs/hns5.rst`：用户指南
+- `buildtools/`：编译脚本
+
+### 1. 编译环境要求
+
+| 项 | 要求 | 说明 |
+|---|---|---|
+| 架构 | aarch64 本机编译 | 在 x86_64 上则走交叉编译，需 `aarch64-linux-gnu-gcc` 及 sysroot |
+| 工具 | `cc`、`meson`、`ninja`、`pkg-config`、`nm`、`unzip`、`python3` | 脚本启动即检查，缺哪个报哪个 |
+| 依赖库 | libnuma 开发头文件 | 本机需 `/usr/include/numa.h`；交叉需 `/usr/aarch64-linux-gnu/include/numa.h` |
+| BSP SDK | `S920L18_SDK_004.zip` | 厂商专有代码，**不入库**，需自行获取 |
+
+### 2. BSP SDK 的放置位置
+
+脚本默认在**仓库根目录**（`dpdk-stable-22.11.11/` 的上一级）找 `S920L18_SDK_004.zip`。
+zip 放在别处时，用下面任一方式告知，不必改脚本：
+
+```bash
+./buildtools/hns5_compile.sh /absolute/path/S920L18_SDK_004.zip   # 位置参数
+SDK_ZIP=/absolute/path/S920L18_SDK_004.zip ./buildtools/hns5_compile.sh
+SDK_DIR=/already/extracted/sdk  ./buildtools/hns5_compile.sh      # 已解压，跳过 unzip
+```
+
+### 3. 执行编译
+
+```bash
+cd dpdk-stable-22.11.11
+./buildtools/hns5_compile.sh              # release，输出到 build/
+./buildtools/hns5_compile.sh --debug      # debugoptimized，输出到 build-debug/
+```
+
+脚本按固定顺序做四件事：
+
+1. 从 SDK zip 中取出 uDriver（hidrv/ndrv）API 头文件，按 BSP 的安装布局摊平到
+   `drivers/net/hns5/dependency/{hidrv,native}/`；
+2. 生成**链接期桩库** `dependency/lib64/libhidrv_api.so`（空实现），使 `-lhidrv_api`
+   在只有目标文件时也能解析；
+3. `meson setup`：只启用 `net/hns5`、`mempool/hns5`、`crypto/hns5` 三类驱动，应用取
+   `test-pmd` 与 `test-crypto-perf`，示例取 `l2fwd-crypto`，并把 git 短哈希与构建时间
+   编成 build id（probe 时打印，可据此确认二进制来自哪份源码）；
+4. `ninja`：先单独编出 hns5 的目标文件，按**实际被引用的符号**重建桩库，再做全量构建。
+
+产物位置：
+
+| 产物 | 路径 |
+|---|---|
+| testpmd | `build/app/dpdk-testpmd` |
+| crypto 压测/校验 | `build/app/dpdk-test-crypto-perf` |
+| hns5 驱动库 | `build/drivers/`（`librte_net_hns5` / `librte_mempool_hns5` / `librte_crypto_hns5`，各含 `.so` 与 `.a`）|
+
+构建选项（`--help` 列出全部）：
+
+| 选项 | 作用 |
+|---|---|
+| `--debug` / `-d` | `debugoptimized` 构建，输出到 `build-debug/`；默认 release 到 `build/`，两者可并存 |
+| `--frame-pointers` | 保留帧指针（`-fno-omit-frame-pointer`），使 `perf record -g fp` 能逐级回溯调用栈；不开时每个样本只有一层栈。火焰图定位每 op 固定开销时必开 |
+| `--chip=NAME` | 取 SDK 内哪个 SoC 的头文件目录（`nativedrv/soc/<NAME>`）；不传则自动探测，SDK 内只有一个该目录时直接采用 |
+| `--bd-version=VER` | 取哪套 BD 描述符头（`module_type_api/bd_<VER>`），默认 `v400` |
+
+环境变量 `SDK_ZIP` / `SDK_DIR` / `CHIP` / `BD_VERSION` / `HNS5_FRAME_POINTERS=1`
+仍然有效（等价于对应选项），便于在 CI 里注入。
+
+> `meson setup` 之后脚本会核对 `build/build.ninja` 里这些 flag 是否真的落地，
+> 没落地就直接报错退出 —— 早期版本因为重复传两次 `-Dc_args` 而把帧指针静默丢掉，
+> 却照样打印"已开启"，这类问题现在会被自检拦住。
+
+### 4. 编译与运行的区别（重要）
+
+运行依赖：
+- BSP 提供的真实 `/lib64/libhidrv_api.so`
+- SEC/BMU/POE 的 `/dev` 设备节点
+- 32 MiB 大页挂载 `/mnt/huge32m`。
+
+### 5. 清理与验证
+
+大页与池残留清理脚本在 `usertools/`：
+
+```bash
+./dpdk-stable-22.11.11/usertools/hns5_clean.sh --status       # 查看 rtemap_* 残留与大页占用
+./dpdk-stable-22.11.11/usertools/hns5_clean.sh --hugepages    # 只清 EAL 大页文件
+./dpdk-stable-22.11.11/usertools/hns5_clean.sh --full         # 清 lock + pool + DPDK runtime + 大页
+```
+
+正确性验证材料放在仓库根 `test/`：`hns5_crypto_verify_guide.md` 为验证指南（用例、判据与
+排查），`sm4_cbc_verify.vec` 为 GM/T 0002-2012 国标测试向量，供 test-crypto-perf
+直接消费，无需额外脚本：
+
+```bash
+./build/app/dpdk-test-crypto-perf -l 0-1 --vdev crypto_hns5 -- \
+    --devtype crypto_hns5 --ptest verify --optype cipher-only \
+    --cipher-algo sm4-cbc --cipher-op encrypt --cipher-key-sz 16 --cipher-iv-sz 16 \
+    --buffer-sz 16 --total-ops 1 --burst-sz 1 \
+    --test-file ../test/sm4_cbc_verify.vec
+# 判据：Failed Ops = 0，密文应为 681edf34d206965e86b3e94f536e4246
+```
