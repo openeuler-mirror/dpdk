@@ -9,6 +9,8 @@
 #include <rte_malloc.h>
 #include "hns5_log.h"
 #include "hns5_eth.h"
+#include "hns5_poe.h"
+#include "hns5_hairpin.h"
 
 /* Special Filter id for non-specific packet flagging. Don't change value */
 #define ETHER_TYPE_MASK 0xFFFF
@@ -65,11 +67,13 @@ static inline struct hns5_flow_counter *hns5_counter_lookup(struct rte_eth_dev *
     return NULL;
 }
 
-static int hns5_counter_new(struct rte_eth_dev *dev, uint32_t indirect, uint32_t id, struct rte_flow_error *error)
+static int hns5_counter_new(struct rte_eth_dev *dev, uint32_t indirect, struct hns5_fdir_rule *rule,
+    struct rte_flow_error *error)
 {
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
     struct hns5_flow_counter *cnt;
     unsigned long long value;
+    uint32_t id = rule->act_cnt.id;
     int ret;
 
     cnt = hns5_counter_lookup(dev, id);
@@ -80,7 +84,7 @@ static int hns5_counter_new(struct rte_eth_dev *dev, uint32_t indirect, uint32_t
         }
         /* Clear the indirect counter on first use. */
         if (cnt->indirect && cnt->ref_cnt == 1) {
-            ret = hidrv_ppe_pf_get_fd_flow_hit_cnt(priv->ppe_pf_devid, HIDRV_PPE_FD_FW_FD_STAGE1, id, &value); // check read-clear
+            ret = hidrv_ppe_pf_get_fd_flow_hit_cnt(priv->ppe_pf_devid, rule->type, id, &value); // check read-clear
             if (ret != 0) {
                 return rte_flow_error_set(error, EINVAL, RTE_FLOW_ERROR_TYPE_HANDLE, cnt, "get counter value failed");
             }
@@ -90,7 +94,7 @@ static int hns5_counter_new(struct rte_eth_dev *dev, uint32_t indirect, uint32_t
     }
 
     /* Clear the counter by read ops because the counter is read-clear */
-    ret = hidrv_ppe_pf_get_fd_flow_hit_cnt(priv->ppe_pf_devid, HIDRV_PPE_FD_FW_FD_STAGE1, id, &value);
+    ret = hidrv_ppe_pf_get_fd_flow_hit_cnt(priv->ppe_pf_devid, rule->type, id, &value);
     if (ret != 0) {
         return rte_flow_error_set(error, EIO, RTE_FLOW_ERROR_TYPE_HANDLE, NULL, "Clear counter failed!");
     }
@@ -111,6 +115,7 @@ static int hns5_counter_new(struct rte_eth_dev *dev, uint32_t indirect, uint32_t
 static int hns5_counter_query(struct rte_eth_dev *dev, struct rte_flow *flow, struct rte_flow_query_count *qc,
     struct rte_flow_error *error)
 {
+	struct hns5_fdir_rule_ele *fdir_rule = (struct hns5_fdir_rule_ele *)flow->rule;
     struct hns5_flow_counter *cnt;
     unsigned long long hit_cnt;
     int ret;
@@ -121,7 +126,8 @@ static int hns5_counter_query(struct rte_eth_dev *dev, struct rte_flow *flow, st
         return rte_flow_error_set(error, EINVAL, RTE_FLOW_ERROR_TYPE_HANDLE, NULL, "Can't find counter id");
     }
 
-    ret = hidrv_ppe_pf_get_fd_flow_hit_cnt(priv->ppe_pf_devid, HIDRV_PPE_FD_FW_FD_STAGE1, flow->counter_id, &hit_cnt);
+    ret = hidrv_ppe_pf_get_fd_flow_hit_cnt(priv->ppe_pf_devid, fdir_rule->fdir_conf.type,
+                                            flow->counter_id, &hit_cnt);
     if (ret != 0) {
         rte_flow_error_set(error, -ret, RTE_FLOW_ERROR_TYPE_HANDLE, NULL, "Read counter fail.");
         return ret;
@@ -150,15 +156,42 @@ static int hns5_counter_release(struct rte_eth_dev *dev, uint32_t id)
     }
     return 0;
 }
-static int hns5_handle_action_queue(struct rte_eth_dev *dev __rte_unused, const struct rte_flow_action *action,
-    struct hns5_fdir_rule *rule, struct rte_flow_error *error __rte_unused)
+static int hns5_handle_action_queue(struct rte_eth_dev *dev, const struct rte_flow_action *action,
+    struct hns5_fdir_rule *rule, struct rte_flow_error *error)
 {
-    const struct rte_flow_action_queue *queue;
+	struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
+	const struct rte_flow_action_queue *queue = (const struct rte_flow_action_queue *)action->conf;
+	struct hns5_eth_rx_queue *rxq;
 
-    queue = (const struct rte_flow_action_queue *)action->conf;
+	if (queue->index >= dev->data->nb_rx_queues)
+		return rte_flow_error_set(error, EINVAL, RTE_FLOW_ERROR_TYPE_ACTION_CONF, action,
+					  "Invalid queue index");
 
+    rxq = &priv->rxq[queue->index];
     rule->key_conf.ad.next_step = HNS5_FD_ACTION_ACCEPT_PACKET;
-    rule->key_conf.ad.queue_id = queue->index;
+	if (rxq->is_hairpin) {
+		uint16_t peer_port;
+
+		if (rule->type != HIDRV_PPE_FD_LSW_INGRESS_STAGE1)
+			return rte_flow_error_set(error, EINVAL, RTE_FLOW_ERROR_TYPE_ACTION_CONF,
+						  action, "Hairpin only support ingress");
+
+		peer_port = rxq->hairpin_conf.peers[0].port;
+		if (!hns5_eth_dev_is_hns5(peer_port)) {
+			return rte_flow_error_set(error, EINVAL, RTE_FLOW_ERROR_TYPE_ACTION_CONF,
+                                action, "Hairpin peer port is not a valid hns5 port");
+		}
+
+		rule->key_conf.ad.port_id =
+			hns5_eth_priv_get(&rte_eth_devices[peer_port])->param.mport_id;
+	} else {
+		if (rule->type != HIDRV_PPE_FD_FW_FD_STAGE1)
+			return rte_flow_error_set(error, EINVAL, RTE_FLOW_ERROR_TYPE_ACTION_CONF,
+						  action, "Queue action only support transfer");
+
+		rule->key_conf.ad.queue_id =
+			priv->param.mport_id * HNS5_POE_CPU_GRP_QUE_NUM + queue->index;
+	}
 
     return 0;
 }
@@ -212,6 +245,10 @@ static int hns5_handle_actions(struct rte_eth_dev *dev, const struct rte_flow_ac
                 rule->key_conf.ad.next_step = HNS5_FD_ACTION_DROP_PACKET;
                 break;
             case RTE_FLOW_ACTION_TYPE_COUNT:
+                if (rule->type == HIDRV_PPE_FD_LSW_INGRESS_STAGE1) {
+                    return rte_flow_error_set(error, ENOTSUP, RTE_FLOW_ERROR_TYPE_ACTION,
+                                              actions, "Ingress rule not support count action");
+                }
                 act_count = (const struct rte_flow_action_count *)actions->conf;
                 counter_num = priv->fdir.fd_cfg.cnt_num[HNS5_FD_STAGE_1];
                 if (act_count->id >= counter_num) {
@@ -224,6 +261,10 @@ static int hns5_handle_actions(struct rte_eth_dev *dev, const struct rte_flow_ac
                 rule->flags &= ~HNS5_RULE_FLAG_COUNTER_INDIR;
                 break;
             case RTE_FLOW_ACTION_TYPE_VOID:
+                if (rule->type == HIDRV_PPE_FD_LSW_INGRESS_STAGE1) {
+                    return rte_flow_error_set(error, ENOTSUP, RTE_FLOW_ERROR_TYPE_ACTION,
+                                              actions, "Ingress rule not support void action");
+                }
                 break;
             default:
                 return rte_flow_error_set(error, ENOTSUP, RTE_FLOW_ERROR_TYPE_ACTION, NULL, "Unsupported action");
@@ -235,14 +276,8 @@ static int hns5_handle_actions(struct rte_eth_dev *dev, const struct rte_flow_ac
 
 static int hns5_check_attr(const struct rte_flow_attr *attr, struct rte_flow_error *error)
 {
-    if (!attr->ingress) {
-        return rte_flow_error_set(error, EINVAL, RTE_FLOW_ERROR_TYPE_ATTR_INGRESS, attr, "Ingress can't be zero");
-    }
     if (attr->egress) {
         return rte_flow_error_set(error, ENOTSUP, RTE_FLOW_ERROR_TYPE_ATTR_EGRESS, attr, "Not support egress");
-    }
-    if (attr->transfer) {
-        return rte_flow_error_set(error, ENOTSUP, RTE_FLOW_ERROR_TYPE_ATTR_TRANSFER, attr, "No support for transfer");
     }
     if (attr->group) {
         return rte_flow_error_set(error, ENOTSUP, RTE_FLOW_ERROR_TYPE_ATTR_GROUP, attr, "Not support group");
@@ -800,13 +835,18 @@ static int hns5_validate_item(const struct rte_flow_item *item, struct items_ste
  *    DROP
  *    COUNT
  */
-static int hns5_parse_fdir_filter(struct rte_eth_dev *dev, const struct rte_flow_attr *attr __rte_unused,
+static int hns5_parse_fdir_filter(struct rte_eth_dev *dev, const struct rte_flow_attr *attr,
                                   const struct rte_flow_item pattern[], const struct rte_flow_action actions[],
                                   struct hns5_fdir_rule *rule, struct rte_flow_error *error)
 {
     const struct rte_flow_item *item = NULL;
     struct items_step_mngr step_mngr = { 0 };
     int ret = 0;
+
+	if (attr->ingress)
+		rule->type = HIDRV_PPE_FD_LSW_INGRESS_STAGE1;
+	else
+		rule->type = HIDRV_PPE_FD_FW_FD_STAGE1;
 
     step_mngr.items = hns5_items;
     step_mngr.count = RTE_DIM(hns5_items);
@@ -891,7 +931,7 @@ static int hns5_flow_create_fdir_rule(struct rte_eth_dev *dev, struct hns5_fdir_
 
     indir = !!(fdir_rule->flags & HNS5_RULE_FLAG_COUNTER_INDIR);
     if (fdir_rule->flags & HNS5_RULE_FLAG_COUNTER) {
-        ret = hns5_counter_new(dev, indir, fdir_rule->act_cnt.id, error);
+        ret = hns5_counter_new(dev, indir, fdir_rule, error);
         if (ret != 0) {
             return ret;
         }

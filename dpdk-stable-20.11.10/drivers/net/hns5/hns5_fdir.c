@@ -282,9 +282,11 @@ int hns5_fdir_port_config(struct rte_eth_dev *dev)
     priv->fdir.fd_cfg.cnt_num[HNS5_FD_STAGE_1] = HNS5_FD_MAX_COUNTER; // Max flow table counters
 
     key_cfg = &priv->fdir.fd_cfg.key_cfg[HNS5_FD_STAGE_1];
-    key_cfg->tuple_active = BIT(IN_DMAC) | BIT(IN_SMAC) | BIT(IN_VLAN_TAG_OUTER) | BIT(IN_VLAN_TAG_INNER) |
-                            BIT(IN_ETH_TYPE) | BIT(IN_IP_TOS) | BIT(IN_IP_PROTO) | BIT(IN_SRC_IP) |
-                            BIT(IN_DST_IP) | BIT(IN_SPORT) | BIT(IN_DPORT);
+	/* Only the DMAC tuple is enabled in the FD key template
+     * (hns5_ppe_ppp_set_fw_fd_key_tp) and filled by
+     * fw_key_soft_to_hardware(); hns5_check_tuple() rejects patterns using
+     * any other tuple instead of silently ignoring them. */
+	key_cfg->tuple_active = BIT(IN_DMAC);
 
     key_cfg->meta_data_active = BIT(DST_PORT);
 
@@ -303,6 +305,56 @@ int hns5_fdir_port_config(struct rte_eth_dev *dev)
     }
 
     return hns5_ppe_ppp_cfg_fd_key_match_tp(dev);
+}
+
+static int ing_lsw_key_soft_to_hardware(struct rte_eth_dev *dev, struct ppe_fw_fd_key_ad *fw_info,
+    struct hns5_ppp_fd_key *fd_key, union hidrv_ppe_fd_actn *ad)
+{
+	union ing_lsw_key_word_info key_info  = {0};
+	union ing_lsw_key_word_info mask_info = {0};
+	struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
+	uint32_t i;
+
+	key_info.key320.dmac_byte0 = fw_info->key.dmac[0];
+	key_info.key320.dmac_byte1 = fw_info->key.dmac[1];
+	key_info.key320.dmac_byte2 = fw_info->key.dmac[2];
+	key_info.key320.dmac_byte3 = fw_info->key.dmac[3];
+	key_info.key320.dmac_byte4 = fw_info->key.dmac[4];
+	key_info.key320.dmac_byte5 = fw_info->key.dmac[5];
+
+	mask_info.key320.dmac_byte0 = fw_info->mask.dmac[0];
+	mask_info.key320.dmac_byte1 = fw_info->mask.dmac[1];
+	mask_info.key320.dmac_byte2 = fw_info->mask.dmac[2];
+	mask_info.key320.dmac_byte3 = fw_info->mask.dmac[3];
+	mask_info.key320.dmac_byte4 = fw_info->mask.dmac[4];
+	mask_info.key320.dmac_byte5 = fw_info->mask.dmac[5];
+
+	/* hairpin matches packets received from local MAC port:
+     * ingress_port[6] = 1 (from mac port), ingress_port[4:0] = mport_id */
+	key_info.key320.ingress_port = priv->param.mport_id;
+	key_info.key320.ingress_port |= 1 << 6;
+	mask_info.key320.ingress_port = 0x7f; /* Match all bits */
+
+	for (i = 0; i < HNS5_FD_DATA_WORD_MAX_NUM; i++) {
+		fd_key->key[i] = key_info.word[i];
+		fd_key->key_msk[i] = mask_info.word[i];
+	}
+
+	if (fw_info->ad.next_step == HNS5_FD_ACTION_DROP_PACKET) {
+		ad->lsw_ing_actn.next_step = HNS5_LSW_ING_AD_NEXT_STEP_DROP;
+	} else {
+		ad->lsw_ing_actn.next_step = HNS5_LSW_ING_AD_NEXT_STEP_FWD;
+        ad->lsw_ing_actn.des_type = HIDRV_LSW_ING_FD_DES_MPORT_UCAST_NO_TRUNK;
+        ad->lsw_ing_actn.des_data.des_ucast_no_trunk.des_port_id = fw_info->ad.port_id;
+        ad->lsw_ing_actn.des_data.des_ucast_no_trunk.des_encode_type = 0;
+        ad->lsw_ing_actn.des_data.des_ucast_no_trunk.des_sub_chnl_id = 0;
+	}
+	ad->lsw_ing_actn.inner_vlan_modify = 0;
+	ad->lsw_ing_actn.outer_vlan_modify = 0;
+	ad->lsw_ing_actn.vlan_filter_en = 0;
+	ad->lsw_ing_actn.flow_cnt_id = fw_info->ad.static_cnt_idx;
+
+	return 0;
 }
 
 static int fw_key_soft_to_hardware(struct rte_eth_dev *dev, struct ppe_fw_fd_key_ad *fw_info,
@@ -381,7 +433,7 @@ int hns5_fdir_filter_program(struct rte_eth_dev *dev, struct hns5_fdir_rule *rul
 
     if (del) {
         ret = hidrv_ppe_pf_ftable_mixed_del_entry(priv->ppe_pf_devid, HNS5_FD_TABLE_ID,
-            HIDRV_PPE_FD_FW_FD_STAGE1, rule->entry);
+            rule->type, rule->entry);
         if (ret != 0) {
             hns5_err(dev, "hns5 failed to delete soft entry: %u ret = %d\n", rule->entry, ret);
             show_rule_info(dev, rule);
@@ -389,7 +441,7 @@ int hns5_fdir_filter_program(struct rte_eth_dev *dev, struct hns5_fdir_rule *rul
         }
 
         ret = hidrv_ppe_pf_ftable_mixed_del_hw_entry(priv->ppe_pf_devid, HNS5_FD_TABLE_ID,
-            HIDRV_PPE_FD_FW_FD_STAGE1, rule->entry);
+            rule->type, rule->entry);
         if (ret != 0) {
             hns5_err(dev, "hns5 failed to delete hardware entry: %u ret = %d\n", rule->entry, ret);
             show_rule_info(dev, rule);
@@ -399,24 +451,26 @@ int hns5_fdir_filter_program(struct rte_eth_dev *dev, struct hns5_fdir_rule *rul
         return 0;
     }
 
-    ret = hidrv_ppe_pf_ftable_mixed_alloc_entry(priv->ppe_pf_devid, HNS5_FD_TABLE_ID, HIDRV_PPE_FD_FW_FD_STAGE1, &entry);
+    ret = hidrv_ppe_pf_ftable_mixed_alloc_entry(priv->ppe_pf_devid, HNS5_FD_TABLE_ID, rule->type, &entry);
     if (ret != 0) {
         hns5_err(dev, "hns5 conflict with existing fdir entry(%u), %d", entry, ret);
         return -EINVAL;
     }
-
-    ret = fw_key_soft_to_hardware(dev, &rule->key_conf, &fd_key, &actn);
+	if (rule->type == HIDRV_PPE_FD_LSW_INGRESS_STAGE1)
+		ret = ing_lsw_key_soft_to_hardware(dev, &rule->key_conf, &fd_key, &actn);
+	else
+        ret = fw_key_soft_to_hardware(dev, &rule->key_conf, &fd_key, &actn);
     if (ret != 0) {
-        hns5_err(dev, "hns5 fw key soft to hardware failed, %d", ret);
+        hns5_err(dev, "hns5 key soft to hardware failed, %d", ret);
         return -EINVAL;
     }
 
-    ret = hidrv_ppe_pf_ftable_mixed_set_entry(priv->ppe_pf_devid, HNS5_FD_TABLE_ID, HIDRV_PPE_FD_FW_FD_STAGE1, entry,
+    ret = hidrv_ppe_pf_ftable_mixed_set_entry(priv->ppe_pf_devid, HNS5_FD_TABLE_ID, rule->type, entry,
         fd_key.key, fd_key.key_msk, HNS5_FD_DATA_WORD_MAX_NUM, &actn);
     if (ret != 0) {
         hns5_err(dev, "hns5 failed to set fdir: %u, ret = %d\n", rule->entry, ret);
         show_rule_info(dev, rule);
-        (void)hidrv_ppe_pf_ftable_mixed_del_entry(priv->ppe_pf_devid, HNS5_FD_TABLE_ID, HIDRV_PPE_FD_FW_FD_STAGE1, entry);
+        (void)hidrv_ppe_pf_ftable_mixed_del_entry(priv->ppe_pf_devid, HNS5_FD_TABLE_ID, rule->type, entry);
         return -EINVAL;
     }
 
