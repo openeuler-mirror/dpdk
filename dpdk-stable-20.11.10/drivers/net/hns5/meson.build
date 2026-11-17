@@ -23,6 +23,7 @@ sources = files(
     'hns5_mag.c',
     'hns5_flow.c',
     'hns5_fdir.c',
+    'hns5_hairpin.c',
     'hns5_stats.c',
     'hns5_tm.c',
     'hns5_rss.c',

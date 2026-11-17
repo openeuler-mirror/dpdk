@@ -124,6 +124,8 @@ struct hns5_eth_rx_queue {
     uint16_t port_id;                       // DPDK port id
     handle poe_vfhandle;                    // perf: set at queue init
     struct hns5_eth_rxq_stats stats;
+	bool is_hairpin;                        // rx queue used as hairpin
+	struct rte_eth_hairpin_conf hairpin_conf;
 } __rte_cache_aligned;
 
 struct hns5_eth_tx_queue {
@@ -136,6 +138,8 @@ struct hns5_eth_tx_queue {
     handle poe_vfhandle;                    // perf: set at queue init
     struct hns5_eth_priv *priv;            /* priv ptr, TX path reads port-level VLAN insert flag */
     struct hns5_eth_txq_stats stats;
+	bool is_hairpin;                        // tx queue used as hairpin
+	struct rte_eth_hairpin_conf hairpin_conf;
 } __rte_cache_aligned;
 
 struct hns5_flow {
@@ -206,6 +210,16 @@ static __rte_always_inline struct rte_eth_dev_data *hns5_eth_get_dev_data(struct
 }
 
 int hns5_get_fixed_mac(struct rte_ether_addr *mac);
+
+/**
+ * @brief Check whether port_id is a valid port driven by this PMD
+ * @param[in] port_id  port id to check
+ * @return true for a valid hns5 port; false for unprobed, released or non-hns5 ports
+ * @note Safe to call with any uint16_t value; no global array dereference happens
+ *       before the validity check.
+ */
+bool hns5_eth_dev_is_hns5(uint16_t port_id);
+
 int hns5_lsw_mac_table_write(uint8_t port_id, struct rte_ether_addr *mac);
 int hns5_set_ppe_bypass_mode(uint8_t port_id, enum hidrv_ppe_bypass_mode mode);
 int hns5_promiscuous_enable(struct rte_eth_dev *dev);

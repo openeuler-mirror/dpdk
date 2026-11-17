@@ -68,7 +68,7 @@
 #include "hns5_tm.h"
 #include "hns5_rss.h"
 #include "hns5_lsw.h"
-
+#include "hns5_hairpin.h"
 
 #define HNS5_ETH_DEV_INFO_NAME_LEN     64
 #define HNS5_ETH_DEFAULT_HW_TXQ_NUM    8
@@ -267,8 +267,12 @@ static void hns5_stop_rx_queues(struct rte_eth_dev *dev, uint32_t vcpu)
     int ret;
 
     for (uint32_t i = 0; i < dev->data->nb_rx_queues; i++) {
-        dev->data->rx_queue_state[i] = RTE_ETH_QUEUE_STATE_STOPPED;
         struct hns5_eth_rx_queue *rxq = dev->data->rx_queues[i];
+		if (rxq != NULL && rxq->is_hairpin) {
+			/* hairpin queue owns no POE group and must keep HAIRPIN state */
+			continue;
+		}
+		dev->data->rx_queue_state[i] = RTE_ETH_QUEUE_STATE_STOPPED;
         if (rxq != NULL && (cleared_grp_mask & (1U << rxq->group)) == 0) {
             ret = hidrv_poe_clear_group(priv->poe_vf_devid, vcpu, rxq->group);
             if (ret != 0) {
@@ -294,7 +298,8 @@ static int hns5_eth_dev_stop(struct rte_eth_dev *dev)
     hns5_stop_rx_queues(dev, vcpu);
 
     for (uint32_t i = 0; i < dev->data->nb_tx_queues; i++) {
-        dev->data->tx_queue_state[i] = RTE_ETH_QUEUE_STATE_STOPPED;
+		if (dev->data->tx_queue_state[i] != RTE_ETH_QUEUE_STATE_HAIRPIN)
+            dev->data->tx_queue_state[i] = RTE_ETH_QUEUE_STATE_STOPPED;
     }
     dev->data->scattered_rx = false;
     dev->rx_pkt_burst = NULL;
@@ -348,14 +353,17 @@ static int hns5_eth_dev_close(struct rte_eth_dev *dev)
 static int hns5_eth_dev_start(struct rte_eth_dev *dev)
 {
     int ret = 0;
+    uint16_t real_rxq_num;
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
     struct rte_eth_conf *dev_conf = &dev->data->dev_conf;
 
     for (uint32_t i = 0; i < dev->data->nb_rx_queues; i++) {
-        dev->data->rx_queue_state[i] = RTE_ETH_QUEUE_STATE_STARTED;
+		if (dev->data->rx_queue_state[i] != RTE_ETH_QUEUE_STATE_HAIRPIN)
+            dev->data->rx_queue_state[i] = RTE_ETH_QUEUE_STATE_STARTED;
     }
     for (uint32_t i = 0; i < dev->data->nb_tx_queues; i++) {
-        dev->data->tx_queue_state[i] = RTE_ETH_QUEUE_STATE_STARTED;
+		if (dev->data->tx_queue_state[i] != RTE_ETH_QUEUE_STATE_HAIRPIN)
+            dev->data->tx_queue_state[i] = RTE_ETH_QUEUE_STATE_STARTED;
     }
     if (dev_conf->rxmode.offloads & DEV_RX_OFFLOAD_SCATTER) {
         dev->data->scattered_rx = true;
@@ -374,8 +382,11 @@ static int hns5_eth_dev_start(struct rte_eth_dev *dev)
         return ret;
     }
 
-    if ((dev_conf->rxmode.mq_mode & ETH_MQ_RX_RSS_FLAG) ||
-        (dev->data->nb_rx_queues == 1)) {  // temporary workaround
+    real_rxq_num = hns5_rss_real_rxq_num(dev);
+    if (real_rxq_num == 0) {
+        hns5_warn(dev, "no hardware rx queue, skip rss config\n");
+    } else if ((dev_conf->rxmode.mq_mode & ETH_MQ_RX_RSS_FLAG) ||
+        (real_rxq_num == 1)) {
         ret = hns5_config_rss(dev);
         if (ret != 0) {
             hns5_err(dev, "failed to config RSS, ret:%d\n", ret);
@@ -1078,7 +1089,27 @@ static const struct eth_dev_ops hns5_eth_dev_ops = {
     .allmulticast_enable = hns5_allmulticast_enable,
     .allmulticast_disable = hns5_allmulticast_disable,
     .mac_addr_set = hns5_mac_addr_set,
+	.hairpin_cap_get = hns5_eth_hairpin_cap_get,
+	.rx_hairpin_queue_setup = hns5_eth_rx_hairpin_queue_setup,
+	.tx_hairpin_queue_setup = hns5_eth_tx_hairpin_queue_setup,
+	.hairpin_get_peer_ports = hns5_eth_hairpin_get_peer_ports,
+	.hairpin_bind = hns5_eth_hairpin_bind,
+	.hairpin_unbind = hns5_eth_hairpin_unbind,
 };
+
+bool hns5_eth_dev_is_hns5(uint16_t port_id)
+{
+	struct rte_eth_dev *dev;
+
+	if (!rte_eth_dev_is_valid_port(port_id))
+		return false;
+
+	dev = &rte_eth_devices[port_id];
+	if (dev->data == NULL || dev->data->dev_private == NULL)
+		return false;
+
+	return dev->dev_ops == &hns5_eth_dev_ops;
+}
 
 static struct rte_eth_dev *hns5_eth_dev_create(struct rte_vdev_device *vdev)
 {

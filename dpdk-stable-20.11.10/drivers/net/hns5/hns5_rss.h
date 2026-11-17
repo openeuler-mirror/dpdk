@@ -35,6 +35,7 @@
 extern const uint8_t hns5_default_rss_key[HNS5_RSS_KEY_SIZE];
 
 /* RSS function declarations */
+uint16_t hns5_rss_real_rxq_num(struct rte_eth_dev *dev);
 void hns5_rss_set_default_args(struct hns5_eth_priv *priv);
 void hns5_rss_uninit(struct rte_eth_dev *dev);
 int hns5_rss_apply_conf(struct rte_eth_dev *dev);
