@@ -9,7 +9,6 @@
 
 #include "hns5_crypto_pmd_private.h"
 #include <rte_crypto_sym.h>
-#include <rte_ether.h>
 
 static int
 cipher_setup(struct hns5_session *sess, const struct rte_crypto_cipher_xform *x)

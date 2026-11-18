@@ -50,11 +50,11 @@
 #include "hns5_mempool.h"
 #include "hns5_version.h"
 
-#if defined(RTE_ARCH_ARM)
-#if defined(RTE_ARCH_64)
+#if defined(RTE_ARCH_ARM) && defined(RTE_ARCH_64)
 #define dcbz(p) { asm volatile("dc zva, %0" : : "r" (p) : "memory"); }
 #define dcbz_64(p) dcbz(p)
-#endif
+#else
+#define dcbz_64(p) memset((p), 0, 64)
 #endif
 
 #define HNS5_ETH_CLEAR_PPE_BD(bd)      dcbz_64((void *)(bd))

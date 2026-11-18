@@ -55,6 +55,13 @@ enum HNS5_FD_ACTION {
     HNS5_FD_ACTION_DROP_PACKET,
 };
 
+enum HNS5_LSW_ING_AD_NEXT_STEP {
+	HNS5_LSW_ING_AD_NEXT_STEP_FWD,      /* 2'b00: forward per des_type/des_data */
+    HNS5_LSW_ING_AD_NEXT_STEP_RSV,      /* 2'b01: reserved */
+    HNS5_LSW_ING_AD_NEXT_STEP_L2,
+	HNS5_LSW_ING_AD_NEXT_STEP_DROP,     /* 2'b11: drop the packet */
+};
+
 struct hns5_fd_cfg {
     struct hidrv_ppp_fw_tcam_bit_mode_cfg fd_tcam_mode;
     uint32_t rule_num[HNS5_FD_STAGE_NUM]; /* rule entry number */
@@ -226,6 +233,7 @@ struct fw_action {
     uint32_t next_step;
     uint32_t queue_id;
     uint32_t static_cnt_idx;
+    uint32_t port_id;
 };
 
 struct ppe_fw_fd_key_ad {
@@ -243,6 +251,7 @@ struct ppe_lsw_fd_key_ad {
 
 struct hns5_fdir_rule {
     struct ppe_fw_fd_key_ad key_conf;
+    enum hidrv_ppe_fd_tcam_type type;
     uint32_t entry; // fdir id
     uint32_t tuple_set;
     uint32_t mata_set;

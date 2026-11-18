@@ -173,6 +173,8 @@ struct hns5_eth_rx_queue {
     handle poe_vfhandle;                    // perf: set at queue init
     struct hns5_eth_priv *priv;             /* diag counters live in priv */
     struct hns5_eth_rxq_stats stats;
+    bool is_hairpin;                        // whether this queue is used for hairpin
+    struct rte_eth_hairpin_conf hairpin_conf; // hairpin configuration information of the queue
 } __rte_cache_aligned;
 
 struct hns5_eth_tx_queue {
@@ -185,6 +187,8 @@ struct hns5_eth_tx_queue {
     handle poe_vfhandle;                    // perf: set at queue init
     struct hns5_eth_priv *priv;            /* priv ptr, TX path reads port-level VLAN insert flag */
     struct hns5_eth_txq_stats stats;
+    bool is_hairpin;                        // whether this queue is used for hairpin
+    struct rte_eth_hairpin_conf hairpin_conf; // hairpin configuration information of the queue
 } __rte_cache_aligned;
 
 struct hns5_flow {
@@ -253,6 +257,9 @@ static __rte_always_inline struct rte_eth_dev_data *hns5_eth_get_dev_data(struct
 {
     return (struct rte_eth_dev_data *)dev->data;
 }
+
+/* Is port a hns5 device? */
+bool hns5_eth_dev_is_hns5(uint16_t port_id);
 
 int hns5_get_fixed_mac(struct rte_ether_addr *mac);
 int hns5_lsw_mac_table_write(uint8_t port_id, struct rte_ether_addr *mac);

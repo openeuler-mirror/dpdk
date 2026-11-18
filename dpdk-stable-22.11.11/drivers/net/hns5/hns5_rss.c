@@ -2,6 +2,7 @@
  * Copyright(C) 2026 HiSilicon.
  */
 
+#include "hns5_poe.h"
 #include "hns5_rss.h"
 
 /* Default RSS Toeplitz hash key */
@@ -21,6 +22,43 @@ static int hns5_rss_ipv4_ipv6_enable_to_ppe(struct rte_eth_dev *dev);
 static int hns5_rss_non_ip_enable_to_ppe(struct rte_eth_dev *dev);
 static int hns5_rss_fw_not_hit_actn_to_ppe(struct rte_eth_dev *dev);
 static int hns5_rss_reset_indir_table(struct rte_eth_dev *dev);
+
+/**
+ * @brief Collect queue ids of RX queues with hardware backing
+ * @param dev Ethernet device
+ * @param[out] qid Array to store the queue ids, or NULL to only count.
+ *             Size must be at least dev->data->nb_rx_queues entries.
+ * @return Number of RX queues with hardware backing
+ * @note Hairpin queues occupy queue indexes but have no hardware queue.
+ *       They are skipped so hashed packets are never routed to them.
+ */
+static uint16_t hns5_rss_real_qid_collect(struct rte_eth_dev *dev, uint16_t *qid)
+{
+	struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
+	uint16_t real_num = 0;
+	uint16_t i;
+
+	for (i = 0; i < dev->data->nb_rx_queues; i++) {
+		if (priv->rxq[i].is_hairpin == false) {
+			if (qid != NULL)
+				qid[real_num] = i;
+			real_num++;
+		}
+	}
+
+	return real_num;
+}
+
+/**
+ * @brief Get the number of RX queues with hardware backing
+ * @note Hairpin queues occupy queue indexes but have no hardware queue.
+ *       They must be excluded from RSS distribution, otherwise hashed
+ *       packets routed to them are lost.
+ */
+uint16_t hns5_rss_real_rxq_num(struct rte_eth_dev *dev)
+{
+	return hns5_rss_real_qid_collect(dev, NULL);
+}
 
 /**
  * @brief Send RSS hash config to PPE hardware
@@ -82,6 +120,9 @@ static int hns5_rss_idt_alloc_to_ppe(struct rte_eth_dev *dev)
 /**
  * @brief Send RSS indirect table entries to PPE hardware
  * @note Table has 1024 entries; low 8-bit index maps: block=idx/4, entry=idx%4
+ * @note Each entry takes its queue id from priv->rss.reta, which only holds
+ *       queue ids with hardware backing; hairpin queues are never routed to.
+ *       Entries beyond reta_size reuse the table from the start.
  */
 static int hns5_rss_idt_to_ppe(struct rte_eth_dev *dev)
 {
@@ -89,13 +130,17 @@ static int hns5_rss_idt_to_ppe(struct rte_eth_dev *dev)
     unsigned int ret;
     uint16_t i;
     unsigned int tbl_idx, item_idx;
-    uint16_t nb_rx_queues = RTE_MIN(dev->data->nb_rx_queues, (uint16_t)8);
+
+	if (priv->rss.reta_size == 0) {
+		hns5_err(dev, "rss reta is not initialized, invalid to config RSS IDT table\n");
+		return -EINVAL;
+	}
 
     for (i = 0; i < HNS5_RSS_INDIRECT_TABLE_SIZE; i++) {
         tbl_idx = i / 16;    /* 1024 / 16 = 64 blocks */
         item_idx = i % 16;   /* 16 entries per block */
         ret = ndrv_ppe_ppp_pf_set_rss_idt_table(priv->ppe_pfhandle, tbl_idx, item_idx,
-                                                  i % nb_rx_queues);
+                                                  priv->rss.reta[i % priv->rss.reta_size]);
         if (ret != 0) {
             hns5_err(dev, "failed to set RSS IDT table[%u], ret:%u\n", i, ret);
             return -EINVAL;
@@ -172,7 +217,7 @@ static int hns5_rss_tc_mode_to_ppe(struct rte_eth_dev *dev)
         return 0;
     }
 
-    rss_size_per_tc = dev->data->nb_rx_queues / enabled_tc_count;
+    rss_size_per_tc = hns5_rss_real_rxq_num(dev) / enabled_tc_count;
 
     base_tnl_offset = (priv->fwl_tnl_inited == 1) ? priv->fwl_tnl_conf.base_tnl : 0;
     tc_offset = base_tnl_offset;
@@ -443,18 +488,20 @@ int hns5_rss_apply_conf(struct rte_eth_dev *dev)
 int hns5_config_rss(struct rte_eth_dev *dev)
 {
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
+	uint16_t real_qid[HNS5_POE_CPU_GRP_QUE_NUM];
     int ret;
     uint16_t i;
-    uint16_t nb_rx_queues = dev->data->nb_rx_queues;
+    uint16_t nb_rx_queues;
 
+    nb_rx_queues = hns5_rss_real_qid_collect(dev, real_qid);
     if (nb_rx_queues == 0) {
-        hns5_err(dev, "nb_rx_queues is 0, invalid to config rss\n");
+        hns5_err(dev, "no hardware rx queue, invalid to config rss\n");
         return -EINVAL;
     }
 
     if (priv->rss.reta_size == 0) {
         for (i = 0; i < HNS5_RSS_RETA_SIZE; i++) {
-            priv->rss.reta[i] = i % nb_rx_queues;
+            priv->rss.reta[i] = real_qid[i % nb_rx_queues];
         }
         priv->rss.reta_size = HNS5_RSS_RETA_SIZE;
     }
@@ -510,8 +557,8 @@ int hns5_rss_reta_update(struct rte_eth_dev *dev, struct rte_eth_rss_reta_entry6
         shift = i % HNS5_RSS_RETA_GROUP_SIZE;
         if (reta_conf[idx].mask & (1ULL << shift)) {
             uint16_t queue = (uint16_t)reta_conf[idx].reta[shift];
-            if (queue >= nb_rx_queues) {
-                hns5_err(dev, "reta[%u] queue:%u >= nb_rx_queues:%u\n",
+            if (queue >= nb_rx_queues || priv->rxq[queue].is_hairpin) {
+                hns5_err(dev, "reta[%u] queue:%u is hairpin or out of range, nb_rx_queues:%u\n",
                     i, queue, nb_rx_queues);
                 return -EINVAL;
             }
