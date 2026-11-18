@@ -442,11 +442,7 @@ int hns5_eth_ppe_init_lsw(struct rte_eth_dev *dev)
     if (ret != 0) {
         return ret;
     }
-    /* Packet forwarding must be a-in/b-out: a frame sent on one port has to
-     * leave through the MAC and reach the peer port, so the LSW unicast
-     * loopback on this mport is explicitly disabled instead of inheriting
-     * whatever the previous run or the boot state left behind. */
-    ret = hns5_ppe_lsw_set_ucast_loop(dev, 0);
+    ret = hns5_ppe_lsw_set_ucast_loop(dev, 1);
     if (ret != 0) {
         return ret;
     }
@@ -591,7 +587,7 @@ static int ing_lsw_key_soft_to_hardware(struct rte_eth_dev *dev, uint16_t port_i
         fd_key->key_msk[i] = mask_info.word[i];
     }
 
-    ad->lsw_ing_actn.next_step = 0;
+    ad->lsw_ing_actn.next_step = HNS5_LSW_ING_AD_NEXT_STEP_FWD;
     ad->lsw_ing_actn.des_type = HIDRV_LSW_ING_FD_DES_MPORT_UCAST_NO_TRUNK;
     ad->lsw_ing_actn.des_data.des_ucast_no_trunk.des_port_id = port_id;
     ad->lsw_ing_actn.des_data.des_ucast_no_trunk.des_encode_type = 0;
@@ -775,7 +771,7 @@ static int hns5_ppe_mcast_mode_flow_add(struct rte_eth_dev *dev)
     }
 
     /* Hit frames are multicast: send to CPU port */
-    actn.lsw_ing_actn.next_step = 0;
+    actn.lsw_ing_actn.next_step = HNS5_LSW_ING_AD_NEXT_STEP_FWD;
     actn.lsw_ing_actn.des_type = HIDRV_LSW_ING_FD_DES_CPORT_PORT;
     actn.lsw_ing_actn.des_data.des_cpu_port.des_port_id = priv->param.cport_id;
     actn.lsw_ing_actn.inner_vlan_modify = 0;
