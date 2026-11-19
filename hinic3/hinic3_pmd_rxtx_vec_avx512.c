@@ -43,6 +43,41 @@
 /* 函数级指令集限定：只有探测到 AVX512F 后才会真正执行到下面的向量指令 */
 #define HINIC3_AVX512_TARGET	__attribute__((target("avx512f")))
 
+/*
+ * 队列级常量：sp560 NIC 且 rx_dma_align 使能时，rearm 把 WQE DMA 地址压到
+ * 对齐地址下方 16B，CQE 写在该地址处而 data_off 仍指向对齐地址，因此
+ * CQE 地址 = buf_addr + data_off - 16（与标量路径一致）。
+ * is_sp560_nic 是跨编译单元调用（读 hwdev/port_id/pci id），绝不能放进
+ * 逐包热路径；只在批量入口算一次，其余调用点直接使用现成偏移。
+ */
+static inline s32
+hinic3_vec_cqe_addr_off(struct hinic3_rxq *rxq)
+{
+	if (is_sp560_nic(rxq->nic_dev) && rxq->rx_dma_align)
+		return -(s32)HINIC3_RX_DMA_ALIGN_CQE_OFFSET;
+
+	return 0;
+}
+
+static inline uint8_t *
+hinic3_vec_compact_cqe_addr(struct rte_mbuf *mbuf, s32 cqe_off)
+{
+#ifdef DPDK_21_11
+	return (uint8_t *)rte_mbuf_buf_addr(mbuf, mbuf->pool) +
+	       mbuf->data_off + cqe_off;
+#else
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+	return (uint8_t *)rte_mbuf_buf_addr(mbuf, mbuf->pool) +
+	       mbuf->data_off + cqe_off;
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
+#endif
+}
+
 static u32
 hinic3_rx_alloc_mbuf_bulk_vec_avx(struct hinic3_rxq *rxq,
 				  struct rte_mbuf **mbufs, u32 exp_mbuf_cnt)
@@ -73,6 +108,7 @@ hinic3_rearm_rxq_mbuf_vec_avx(struct hinic3_rxq *rxq)
 	rte_iova_t dma_addr;
 	rte_iova_t align_dma_addr;
 	u16 pi;
+	s32 cqe_fix = hinic3_vec_cqe_addr_off(rxq);
 	struct hinic3_nic_dev *nic_dev = rxq->nic_dev;
 
 	free_wqebbs = rxq->delta - 1;
@@ -126,9 +162,8 @@ hinic3_rearm_rxq_mbuf_vec_avx(struct hinic3_rxq *rxq)
 			/* compact CQE 场景 wqe_type 恒为 COMPACT_RQ_WQE，
 			 * 与 normal_wqe 的地址字段在 union 前 8 字节重叠；
 			 * sp560 DMA 对齐时 WQE 地址同样要下移 16B，与标量
-			 * rearm 一致。 */
-			if (is_sp560_nic(nic_dev) && rxq->rx_dma_align)
-				dma_addr -= HINIC3_RX_DMA_ALIGN_CQE_OFFSET;
+			 * rearm 一致（偏移已在入口算好）。 */
+			dma_addr += cqe_fix;
 			rq_wqe->compact_wqe.buf_hi_addr =
 				hinic3_hw_be32(upper_32_bits(dma_addr));
 			rq_wqe->compact_wqe.buf_lo_addr =
@@ -146,41 +181,11 @@ hinic3_rearm_rxq_mbuf_vec_avx(struct hinic3_rxq *rxq)
 	return 0;
 }
 
-static inline uint8_t *
-hinic3_vec_compact_cqe_addr(struct hinic3_rxq *rxq, struct rte_mbuf *mbuf)
-{
-	uint8_t *addr;
-
-#ifdef DPDK_21_11
-	addr = (uint8_t *)rte_mbuf_buf_addr(mbuf, mbuf->pool) + mbuf->data_off;
-#else
-#ifdef __GNUC__
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-#endif
-	addr = (uint8_t *)rte_mbuf_buf_addr(mbuf, mbuf->pool) + mbuf->data_off;
-#ifdef __GNUC__
-#pragma GCC diagnostic pop
-#endif
-#endif
-
-	/*
-	 * sp560 NIC with DMA alignment enabled: rearm shifts the WQE DMA
-	 * address below the aligned address while data_off still points at
-	 * the aligned address, so the CQE sits 16 bytes below data_off
-	 * (same correction as the scalar path).
-	 */
-	if (is_sp560_nic(rxq->nic_dev) && rxq->rx_dma_align)
-		addr -= HINIC3_RX_DMA_ALIGN_CQE_OFFSET;
-
-	return addr;
-}
-
 /*
  * 批量处理 4 个内嵌 compact CQE。
  *
  * 16B CQE 的字节布局（与 NEON 侧 shuf_mask 逐字节一致）：
- *   dw0: pkt_len=b3,b2 | cqe_len=b2 bit7 | rxdone=b0 bit7
+ *   dw0: pkt_len=b2,b3 | cqe_len=b1 bit7 (raw bit15) | rxdone=b0 bit7 (raw bit7)
  *   dw1: rss hash = b7,b6,b5,b4
  *   dw2: vlan_tci = b10,b9
  * 重排后写入 rx_descriptor_fields1 的前 16B：
@@ -188,7 +193,8 @@ hinic3_vec_compact_cqe_addr(struct hinic3_rxq *rxq, struct rte_mbuf *mbuf)
  */
 static inline HINIC3_AVX512_TARGET u16
 hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
-				      struct rte_mbuf **rx_pkts, u16 nb_pkts)
+				      struct rte_mbuf **rx_pkts, u16 nb_pkts,
+				      s32 cqe_off)
 {
 	struct hinic3_rx_info *rx_info;
 	u16 sw_ci = MASKED_QUEUE_IDX(rxq, rxq->cons_idx);
@@ -221,13 +227,13 @@ hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
 
 		/* B. 逐包 load 16B 内嵌 CQE（地址不连续） */
 		cqe[0] = _mm_loadu_si128((const __m128i *)
-			hinic3_vec_compact_cqe_addr(rxq, rx_pkts[pos + 0]));
+			hinic3_vec_compact_cqe_addr(rx_pkts[pos + 0], cqe_off));
 		cqe[1] = _mm_loadu_si128((const __m128i *)
-			hinic3_vec_compact_cqe_addr(rxq, rx_pkts[pos + 1]));
+			hinic3_vec_compact_cqe_addr(rx_pkts[pos + 1], cqe_off));
 		cqe[2] = _mm_loadu_si128((const __m128i *)
-			hinic3_vec_compact_cqe_addr(rxq, rx_pkts[pos + 2]));
+			hinic3_vec_compact_cqe_addr(rx_pkts[pos + 2], cqe_off));
 		cqe[3] = _mm_loadu_si128((const __m128i *)
-			hinic3_vec_compact_cqe_addr(rxq, rx_pkts[pos + 3]));
+			hinic3_vec_compact_cqe_addr(rx_pkts[pos + 3], cqe_off));
 
 		/* acquire 后重读 status dword：看到新 DD 位即保证数据也是新的
 		 * （i40e/iavf 的 acquire + reload 模式，与 NEON 侧一致） */
@@ -237,13 +243,13 @@ hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
 		__atomic_thread_fence(__ATOMIC_ACQUIRE);
 #endif
 		status_arr[0] = *(volatile u32 *)
-			hinic3_vec_compact_cqe_addr(rxq, rx_pkts[pos + 0]);
+			hinic3_vec_compact_cqe_addr(rx_pkts[pos + 0], cqe_off);
 		status_arr[1] = *(volatile u32 *)
-			hinic3_vec_compact_cqe_addr(rxq, rx_pkts[pos + 1]);
+			hinic3_vec_compact_cqe_addr(rx_pkts[pos + 1], cqe_off);
 		status_arr[2] = *(volatile u32 *)
-			hinic3_vec_compact_cqe_addr(rxq, rx_pkts[pos + 2]);
+			hinic3_vec_compact_cqe_addr(rx_pkts[pos + 2], cqe_off);
 		status_arr[3] = *(volatile u32 *)
-			hinic3_vec_compact_cqe_addr(rxq, rx_pkts[pos + 3]);
+			hinic3_vec_compact_cqe_addr(rx_pkts[pos + 3], cqe_off);
 
 		/* 把重读的 dw0 回写进 cqe 向量：pkt_len/data_len 都在 dw0，
 		 * 保证 shuffle 输出与 status 同批新鲜（对应 NEON 的
@@ -284,7 +290,7 @@ hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
 		for (i = 0; i < valid_pkts; i++) {
 			struct rte_mbuf *mb = rx_pkts[pos + i];
 			volatile u32 *cqe_status = (volatile u32 *)
-				hinic3_vec_compact_cqe_addr(rxq, mb);
+				hinic3_vec_compact_cqe_addr(mb, cqe_off);
 			u16 data_offset = (status_arr[i] & BIT(15)) ? 8 : 16;
 
 			mb->data_off += data_offset;
@@ -294,17 +300,17 @@ hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
 		/* F. 预取下一批的 4 个内嵌 CQE（与 NEON 的窗口一致） */
 		if (likely(pos + 2 * HINIC3_DEFAULT_DESCS_PER_LOOP < nb_pkts)) {
 			rte_prefetch_non_temporal(
-				hinic3_vec_compact_cqe_addr(rxq,
-					rx_info[pos + 4].mbuf));
+				hinic3_vec_compact_cqe_addr(
+					rx_info[pos + 4].mbuf, cqe_off));
 			rte_prefetch_non_temporal(
-				hinic3_vec_compact_cqe_addr(rxq,
-					rx_info[pos + 5].mbuf));
+				hinic3_vec_compact_cqe_addr(
+					rx_info[pos + 5].mbuf, cqe_off));
 			rte_prefetch_non_temporal(
-				hinic3_vec_compact_cqe_addr(rxq,
-					rx_info[pos + 6].mbuf));
+				hinic3_vec_compact_cqe_addr(
+					rx_info[pos + 6].mbuf, cqe_off));
 			rte_prefetch_non_temporal(
-				hinic3_vec_compact_cqe_addr(rxq,
-					rx_info[pos + 7].mbuf));
+				hinic3_vec_compact_cqe_addr(
+					rx_info[pos + 7].mbuf, cqe_off));
 		}
 
 		nb_rx += valid_pkts;
@@ -330,13 +336,14 @@ hinic3_recv_pkts_compact_cqe_vec_avx(void *rx_queue, struct rte_mbuf **rx_pkts,
 	u16 sw_ci;
 	u32 status;
 	u16 nb_rx = 0;
+	s32 cqe_off = hinic3_vec_cqe_addr_off(rxq);
 
 	sw_ci = MASKED_QUEUE_IDX(rxq, rxq->cons_idx);
 	rxm = rxq->rx_info[sw_ci].mbuf;
 
 	/* 预取第一个内嵌 CQE（DMA 写入，非时间局部性） */
 	rx_cqe = (volatile struct hinic3_rq_cqe *)
-		hinic3_vec_compact_cqe_addr(rxq, rxm);
+		hinic3_vec_compact_cqe_addr(rxm, cqe_off);
 	rte_prefetch_non_temporal(rx_cqe);
 
 	nb_pkts = RTE_ALIGN_FLOOR(nb_pkts, HINIC3_DEFAULT_DESCS_PER_LOOP);
@@ -359,7 +366,8 @@ hinic3_recv_pkts_compact_cqe_vec_avx(void *rx_queue, struct rte_mbuf **rx_pkts,
 
 		n = RTE_MIN(nb_pkts, HINIC3_DEFAULT_RX_BURST);
 		ret = hinic3_recv_burst_compact_cqe_vec_avx(rxq,
-							    &rx_pkts[nb_rx], n);
+							    &rx_pkts[nb_rx], n,
+							    cqe_off);
 
 		nb_pkts -= ret;
 		nb_rx += ret;
