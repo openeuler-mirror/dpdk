@@ -50,28 +50,28 @@
 | Speed capabilities | - | RSS hash | Y | Rx descriptor status | - |
 | Link speed configuration | - | RSS key update | Y | Tx descriptor status | - |
 | Link status | Y | RSS reta update | Y | FW version | - |
-| Tx queue count | - | VMDq | - | | |
-| Link status event | - | Basic stats | Y | Stats per queue | Y |
-| Removal event | - | Extended stats | Y | Queue status event | - |
-| Rx interrupt | - | VLAN filter | - | FW version | - |
-| DCB | - | EEPROM dump | - | Lock-free Tx queue | - |
-| SR-IOV | - | Module EEPROM dump | - | Flow control | - |
-| Fast mbuf free | - | Registers dump | - | | |
-| Rate limitation | - | Traffic manager | - | LED | - |
-| Free Tx mbuf on demand | - | Congestion management | - | | |
-| Multiprocess aware | - | Queue start/stop | - | | |
-| Runtime Rx queue setup | - | Inline crypto | - | Linux | Y |
-| Runtime Tx queue setup | - | Inline protocol | - | FreeBSD | - |
-| Shared Rx queue | - | CRC offload | Y | Windows | - |
-| Burst mode info | - | VLAN offload | Y | ARMv8 | Y |
-| Power mgmt address monitor | - | QinQ offload | - | ARMv7 | - |
-| MTU update | Y | FEC | - | Power8 | - |
-| Buffer split on Rx | - | IP reassembly | - | rv64 | - |
-| Scattered Rx | Y | L3 checksum offload | Y | x86-32 | - |
-| LRO | - | L4 checksum offload | Y | x86-64 | - |
-| TSO | - | Timestamp offload | - | Usage doc | - |
-| Promiscuous mode | Y | MACsec offload | - | Design doc | - |
-| Allmulticast mode | Y | Inner L3 checksum | - | Perf doc | - |
+| Tx queue count | - | VMDq | - | Stats per queue | Y |
+| Link status event | - | Basic stats | Y |Queue status event | - |
+| Removal event | - | Extended stats | Y | FW version | - |
+| Rx interrupt | - | VLAN filter | - | Lock-free Tx queue | - |
+| DCB | - | EEPROM dump | - | Flow control | - |
+| SR-IOV | - | Module EEPROM dump | - | LED | - |
+| Fast mbuf free | - | Registers dump | - | Linux | Y |
+| Rate limitation | - | Traffic manager | - | FreeBSD | - |
+| Free Tx mbuf on demand | - | Congestion management | - |Windows | - |
+| Multiprocess aware | - | Queue start/stop | - |ARMv8 | Y |
+| Runtime Rx queue setup | - | Inline crypto | - |  ARMv7 | - |
+| Runtime Tx queue setup | - | Inline protocol | - | Power8 | - |
+| Shared Rx queue | - | CRC offload | Y | rv64 | - |
+| Burst mode info | - | VLAN offload | Y |  x86-32 | - |
+| Power mgmt address monitor | - | QinQ offload | - |x86-64 | - |
+| MTU update | Y | FEC | - | Usage doc | - |
+| Buffer split on Rx | - | IP reassembly | - |  Design doc | - |
+| Scattered Rx | Y | L3 checksum offload | Y |Perf doc | - |
+| LRO | - | L4 checksum offload | Y | 
+| TSO | - | Timestamp offload | - | 
+| Promiscuous mode | Y | MACsec offload | - |
+| Allmulticast mode | Y | Inner L3 checksum | - | 
 | Unicast MAC filter | Y | Inner L4 checksum | - | | |
 | Multicast MAC filter | - | Packet type parsing | Y | | |
 
@@ -100,6 +100,7 @@
 8. **报文类型解析（PTYPE）范围有限**：报文解析目前仅支持 IPv4 / IPv6 / TCP / UDP，其他协议类型不识别。
 9. **xstats 统计口径**：xstats 目前统计的是 **MAC 层**的计数，非以太网端口级统计，数据口径与预期可能不一致。
 10. **非混杂模式下 MAC 地址随机生成**：非混杂模式下 MAC 地址为随机生成，每次启动都会变化，不固定。
+11. **hairpin模式限制**：hairpin功能目前仅支持mode 0，即本端口转发。
 
 ---
 
