@@ -56,11 +56,11 @@
 | Rx interrupt | - | VLAN filter | - | Lock-free Tx queue | - |
 | DCB | - | EEPROM dump | - | Flow control | - |
 | SR-IOV | - | Module EEPROM dump | - | Hairpin | Y |
-| Fast mbuf free | - | Registers dump | - |
-| Rate limitation | - | Traffic manager | - | 
-| Free Tx mbuf on demand | - | Congestion management | - |
-| Multiprocess aware | - | Queue start/stop | - |
-| Runtime Rx queue setup | - | Inline crypto | - |  
+| Fast mbuf free | - | Registers dump | - | | |
+| Rate limitation | - | Traffic manager | - | | |
+| Free Tx mbuf on demand | - | Congestion management | - | | |
+| Multiprocess aware | - | Queue start/stop | - | | |
+| Runtime Rx queue setup | - | Inline crypto | - | | |
 | Runtime Tx queue setup | - | Inline protocol | - | LED | - |
 | Shared Rx queue | - | CRC offload | Y |  Linux | Y |
 | Burst mode info | - | VLAN offload | Y | FreeBSD | - |
