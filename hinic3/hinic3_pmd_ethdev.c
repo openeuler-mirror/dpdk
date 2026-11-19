@@ -18,6 +18,7 @@
 #include <rte_malloc.h>
 #include <rte_mempool.h>
 #include <rte_errno.h>
+#include <rte_cpuflags.h>
 #include <rte_ether.h>
 
 #include "base/hinic3_compat.h"
@@ -5591,6 +5592,16 @@ static int hinic3_dev_init(struct rte_eth_dev *eth_dev)
 #ifdef RTE_ARCH_ARM
 		if (nic_dev->vec_allowed == 1)
 			eth_dev->rx_pkt_burst = hinic3_recv_pkts_compact_cqe_vec;
+#endif
+#ifdef RTE_ARCH_X86_64
+		/* compact CQE 场景：CPU 支持时启用 AVX512 收包。
+		 * vec_allowed 置位后，queue setup 会为向量路径预留跨环尾槽位，
+		 * 与 NEON 路径的开关语义保持一致。 */
+		if (rte_cpu_get_flag_enabled(RTE_CPUFLAG_AVX512F)) {
+			nic_dev->vec_allowed = 1;
+			eth_dev->rx_pkt_burst =
+				hinic3_recv_pkts_compact_cqe_vec_avx;
+		}
 #endif
 	}
 

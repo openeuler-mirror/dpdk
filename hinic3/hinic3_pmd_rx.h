@@ -554,6 +554,11 @@ u16 hinic3_recv_pkts_compact_cqe(void *rx_queue, struct rte_mbuf **rx_pkts, u16 
 
 u16 hinic3_recv_pkts_compact_cqe_vec(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts);
 
+#if defined(RTE_ARCH_X86_64)
+u16 hinic3_recv_pkts_compact_cqe_vec_avx(void *rx_queue, struct rte_mbuf **rx_pkts,
+					 u16 nb_pkts);
+#endif
+
 u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts);
 
 u16 hinic3_recv_pkts_vec(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts);
