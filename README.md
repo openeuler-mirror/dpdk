@@ -55,25 +55,25 @@
 | Removal event | - | Extended stats | Y | FW version | - |
 | Rx interrupt | - | VLAN filter | - | Lock-free Tx queue | - |
 | DCB | - | EEPROM dump | - | Flow control | - |
-| SR-IOV | - | Module EEPROM dump | - | LED | - |
-| Fast mbuf free | - | Registers dump | - | Linux | Y |
-| Rate limitation | - | Traffic manager | - | FreeBSD | - |
-| Free Tx mbuf on demand | - | Congestion management | - |Windows | - |
-| Multiprocess aware | - | Queue start/stop | - |ARMv8 | Y |
-| Runtime Rx queue setup | - | Inline crypto | - |  ARMv7 | - |
-| Runtime Tx queue setup | - | Inline protocol | - | Power8 | - |
-| Shared Rx queue | - | CRC offload | Y | rv64 | - |
-| Burst mode info | - | VLAN offload | Y |  x86-32 | - |
-| Power mgmt address monitor | - | QinQ offload | - |x86-64 | - |
-| MTU update | Y | FEC | - | Usage doc | - |
-| Buffer split on Rx | - | IP reassembly | - |  Design doc | - |
-| Scattered Rx | Y | L3 checksum offload | Y |Perf doc | - |
-| LRO | - | L4 checksum offload | Y | 
-| TSO | - | Timestamp offload | - | 
-| Promiscuous mode | Y | MACsec offload | - |
-| Allmulticast mode | Y | Inner L3 checksum | - | 
-| Unicast MAC filter | Y | Inner L4 checksum | - | | |
-| Multicast MAC filter | - | Packet type parsing | Y | | |
+| SR-IOV | - | Module EEPROM dump | - | Hairpin | Y |
+| Fast mbuf free | - | Registers dump | - |
+| Rate limitation | - | Traffic manager | - | 
+| Free Tx mbuf on demand | - | Congestion management | - |
+| Multiprocess aware | - | Queue start/stop | - |
+| Runtime Rx queue setup | - | Inline crypto | - |  
+| Runtime Tx queue setup | - | Inline protocol | - | LED | - |
+| Shared Rx queue | - | CRC offload | Y |  Linux | Y |
+| Burst mode info | - | VLAN offload | Y | FreeBSD | - |
+| Power mgmt address monitor | - | QinQ offload | - |Windows | - |
+| MTU update | Y | FEC | - | ARMv8 | Y |
+| Buffer split on Rx | - | IP reassembly | - |  ARMv7 | - |
+| Scattered Rx | Y | L3 checksum offload | Y | Power8 | - |
+| LRO | - | L4 checksum offload | Y | rv64 | - |
+| TSO | - | Timestamp offload | - |  x86-32 | - |
+| Promiscuous mode | Y | MACsec offload | - | x86-64 | - |
+| Allmulticast mode | Y | Inner L3 checksum | - | Usage doc | - |
+| Unicast MAC filter | Y | Inner L4 checksum | - |Design doc | - |
+| Multicast MAC filter | - | Packet type parsing | Y |Perf doc | - |
 
 #### Rx Offload 能力
 
