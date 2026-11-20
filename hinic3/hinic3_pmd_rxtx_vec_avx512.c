@@ -8,8 +8,9 @@
  * 本文件只实现 NEON 路径（hinic3_pmd_rxtx_vec_neon.c）中 compact CQE 收包
  * 已有的功能：批量 mbuf 分配 / rearm、内嵌 CQE 地址计算、128bit 字段重排
  * 填充 rx_descriptor_fields1、RXDONE 连续完成计数、data_off 跳过内嵌 CQE、
- * 下一批预取以及 cons_idx/delta/packets 统计。不引入 offload 补全、空队列
- * 退避、诊断日志、8 包批、hw_ci 门控等扩展。
+ * 下一批预取以及 cons_idx/delta/packets 统计。另按实测结论引入了 hw_ci
+ * 门控（与标量路径同口径的硬件确认前缀收窄）。不引入 offload 补全、
+ * 空队列退避、诊断日志、8 包批等扩展。
  *
  * compact CQE 内嵌在每个报文缓冲区的 buf_addr + data_off 处（sp560 DMA
  * 对齐模式下在其下方 16B），4 个 CQE 地址不连续，因此逐包 load 16B；
@@ -304,6 +305,46 @@ hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
 	return nb_rx;
 }
 
+/*
+ * 按 hw_ci 把本轮长度收窄到"硬件确认已完成"的连续前缀。
+ *
+ * compact CQE 的完成位在报文缓冲区里：mbuf 归还 mempool 再补充出来时，
+ * buf + data_off 处仍是上一轮的 CQE，RXDONE 可能残留 1，环回绕后会被
+ * 误判成新包（每包收尾清 DD 只是缩小了窗口，清完到硬件写回之间仍可能
+ * 被误轮询）。与标量路径同一套缓存策略：缓存住上次读到的 hw_ci，
+ * 绝大多数调用不用再摸 CI 写回区那一行（网卡 DMA 写过，每轮无条件读
+ * 就是每轮一个必然 miss 的 load）。
+ *
+ * 但缓存只在"缓存值还能凑出一批"时才可信，这里必须刷新——不能只判
+ * sw_ci == hw_cons_idx：写回值既有 rx_cqe_coalesce_num 的批量触发，
+ * 也有 rx_cqe_timer_loop 的定时触发，后者带下来的计数是任意值。只要
+ * (hw_ci - sw_ci) 不是 4 的整数倍，按 4 对齐收窄就会剩下 1~3 个包，
+ * sw_ci 停在 hw_cons_idx - 1..3 上；若这时不刷新缓存，avail 永远是那
+ * 1~3，永远收窄成 0，队列就此卡死。所以"凑不出一批"必须触发刷新。
+ */
+static inline u16
+hinic3_vec_compact_cqe_limit(struct hinic3_rxq *rxq, u16 sw_ci, u16 vec_pkts)
+{
+	struct hinic3_rq_ci_wb rq_ci;
+	u16 avail;
+	u32 value;
+
+	avail = (u16)((rxq->hw_cons_idx - sw_ci) & rxq->q_mask);
+	if (avail < HINIC3_DEFAULT_DESCS_PER_LOOP) {
+		value = __atomic_load_n(&rxq->rq_ci->dw1.value,
+					__ATOMIC_ACQUIRE);
+		rq_ci.dw1.value = hinic3_hw_cpu32(value);
+		rxq->hw_cons_idx = rq_ci.dw1.bs.hw_ci;
+		avail = (u16)((rxq->hw_cons_idx - sw_ci) & rxq->q_mask);
+	}
+
+	if (avail < vec_pkts)
+		vec_pkts = (u16)RTE_ALIGN_FLOOR(avail,
+					HINIC3_DEFAULT_DESCS_PER_LOOP);
+
+	return vec_pkts;
+}
+
 HINIC3_AVX512_TARGET
 u16
 hinic3_recv_pkts_compact_cqe_vec_avx(void *rx_queue, struct rte_mbuf **rx_pkts,
@@ -318,6 +359,20 @@ hinic3_recv_pkts_compact_cqe_vec_avx(void *rx_queue, struct rte_mbuf **rx_pkts,
 	s32 cqe_off = hinic3_vec_cqe_addr_off(rxq);
 
 	sw_ci = MASKED_QUEUE_IDX(rxq, rxq->cons_idx);
+
+	nb_pkts = RTE_ALIGN_FLOOR(nb_pkts, HINIC3_DEFAULT_DESCS_PER_LOOP);
+
+	if (rxq->delta > rxq->rx_free_thresh)
+		hinic3_rearm_rxq_mbuf_vec_avx(rxq);
+
+	/*
+	 * hw_ci 门控：硬件没确认任何完成时直接返回，连第一个 CQE 的行都
+	 * 不摸——缓存命中的有效轮询在进 burst 前零访存。
+	 */
+	nb_pkts = hinic3_vec_compact_cqe_limit(rxq, sw_ci, nb_pkts);
+	if (unlikely(nb_pkts == 0))
+		return 0;
+
 	rxm = rxq->rx_info[sw_ci].mbuf;
 
 	/* 预取第一个内嵌 CQE（DMA 写入，非时间局部性） */
@@ -325,12 +380,10 @@ hinic3_recv_pkts_compact_cqe_vec_avx(void *rx_queue, struct rte_mbuf **rx_pkts,
 		hinic3_vec_compact_cqe_addr(rxm, cqe_off);
 	rte_prefetch_non_temporal(rx_cqe);
 
-	nb_pkts = RTE_ALIGN_FLOOR(nb_pkts, HINIC3_DEFAULT_DESCS_PER_LOOP);
-
-	if (rxq->delta > rxq->rx_free_thresh)
-		hinic3_rearm_rxq_mbuf_vec_avx(rxq);
-
-	/* 检查第一个 CQE 完成（acquire）。compact RXDONE 是 dw0 byte0 bit7。 */
+	/*
+	 * 检查第一个 CQE 完成（acquire），吸收 CI 写回与 CQE 数据写回之间
+	 * 的可见窗口。compact RXDONE 是 dw0 byte0 bit7。
+	 */
 	status = (u32)__atomic_load_n(&rx_cqe->status, __ATOMIC_ACQUIRE);
 	if (unlikely(!((status >> 7) & 1)))
 		return 0;
