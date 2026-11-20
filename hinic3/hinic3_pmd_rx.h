@@ -563,6 +563,13 @@ u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts);
 
 u16 hinic3_recv_pkts_vec(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts);
 
+/*
+ * 按当前形态（compact 与否、vec_allowed、scattered_rx）选定收包入口。
+ * dev_init 时按"不散包"预选一次；configure 完成后在 hinic3_start_all_rqs()
+ * 里按最终 scattered_rx 再选一次。散包场景一律回落标量。
+ */
+void hinic3_rx_select_pkt_burst(struct rte_eth_dev *eth_dev);
+
 void hinic3_add_rq_to_rx_queue_list(struct hinic3_nic_dev *nic_dev,
 				    u16 queue_id);
 

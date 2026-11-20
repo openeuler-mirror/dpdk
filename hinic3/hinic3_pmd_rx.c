@@ -1259,6 +1259,38 @@ static void hinic3_recv_jumbo_pkt(struct hinic3_rxq *rxq,
 	}
 }
 
+void hinic3_rx_select_pkt_burst(struct rte_eth_dev *eth_dev)
+{
+	struct hinic3_nic_dev *nic_dev =
+		HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
+	bool compact = nic_dev->config.rx_cqe_compact_en ==
+		       HINIC3_RX_CQE_COMPACT_EN;
+	/* 向量路径（AVX512/NEON）不支持跨缓冲区重组：散包（jumbo 超出单个
+	 * mbuf 缓冲区）场景必须回落标量，由标量路径的 recv_jumbo_pkt 完成
+	 * 多段重组。 */
+	bool vec = nic_dev->vec_allowed && !eth_dev->data->scattered_rx;
+
+	if (compact) {
+		eth_dev->rx_pkt_burst = hinic3_recv_pkts_compact_cqe;
+#ifdef RTE_ARCH_ARM
+		if (vec)
+			eth_dev->rx_pkt_burst = hinic3_recv_pkts_compact_cqe_vec;
+#endif
+#if defined(RTE_ARCH_X86_64)
+		if (vec)
+			eth_dev->rx_pkt_burst =
+				hinic3_recv_pkts_compact_cqe_vec_avx;
+#endif
+		return;
+	}
+
+	eth_dev->rx_pkt_burst = hinic3_recv_pkts;
+#ifdef RTE_ARCH_ARM
+	if (vec)
+		eth_dev->rx_pkt_burst = hinic3_recv_pkts_vec;
+#endif
+}
+
 int hinic3_start_all_rqs(struct rte_eth_dev *eth_dev)
 {
 	struct hinic3_nic_dev *nic_dev = NULL;
@@ -1269,6 +1301,10 @@ int hinic3_start_all_rqs(struct rte_eth_dev *eth_dev)
 	int j = 0;
 
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
+
+	/* configure 已完成，scattered_rx 已定：在这里按最终形态选一次
+	 * 收包入口（dev_init 时按"不散包"预选过一次）。 */
+	hinic3_rx_select_pkt_burst(eth_dev);
 
 	for (i = 0; i < nic_dev->num_rqs; i++) {
 		rxq = eth_dev->data->rx_queues[i];
@@ -1283,7 +1319,9 @@ int hinic3_start_all_rqs(struct rte_eth_dev *eth_dev)
 			goto out;
 		}
 
-		if (nic_dev->vec_allowed) {
+		/* 填充槽位只服务向量路径的跨环尾批读：散包回落标量后不需要，
+		 * 不必白白占住 32 个 mbuf。 */
+		if (nic_dev->vec_allowed && !eth_dev->data->scattered_rx) {
 			for (j = 0; j < HINIC3_DEFAULT_RX_BURST; j++) {
 				mbuf = rte_mbuf_raw_alloc(rxq->mb_pool);
 				if (unlikely(mbuf == NULL)) {

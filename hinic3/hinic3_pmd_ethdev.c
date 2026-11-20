@@ -586,9 +586,28 @@ static int hinic3_dev_configure(struct rte_eth_dev *dev)
 	if (dev->data->dev_conf.rxmode.mq_mode & RTE_ETH_MQ_RX_RSS_FLAG)
 		dev->data->dev_conf.rxmode.offloads |= RTE_ETH_RX_OFFLOAD_RSS_HASH;
 
-	if (!nic_dev->hinic3_offload_initialized) {
-		dev->data->dev_conf.rxmode.offloads |= RTE_ETH_RX_OFFLOAD_SCATTER;
+	/*
+	 * 分片收包（SCATTER）不再无条件打开，只跟随应用的请求。
+	 *
+	 * 旧代码在这里无条件 OR 进 RTE_ETH_RX_OFFLOAD_SCATTER，使
+	 * data->scattered_rx 恒为真，而向量收包路径（AVX512/NEON）不支持跨
+	 * 缓冲区重组，选路时（见 hinic3_rx_select_pkt_burst）会因此一律回落
+	 * 标量，向量代码实际上从未执行过。
+	 *
+	 * 分片收包会把一个报文拆到多个 mbuf，发送侧必须支持多段，因此应用
+	 * 打开 SCATTER 时同步打开 TX 的 MULTI_SEGS。
+	 */
+	if (dev->data->dev_conf.rxmode.offloads & RTE_ETH_RX_OFFLOAD_SCATTER)
 		dev->data->dev_conf.txmode.offloads |= RTE_ETH_TX_OFFLOAD_MULTI_SEGS;
+
+	if (!nic_dev->hinic3_offload_initialized) {
+		PMD_DRV_LOG(INFO, "rx scatter %s by app, tx multi-segs %s",
+			    (dev->data->dev_conf.rxmode.offloads &
+			     RTE_ETH_RX_OFFLOAD_SCATTER) ? "requested" :
+							   "not requested",
+			    (dev->data->dev_conf.txmode.offloads &
+			     RTE_ETH_TX_OFFLOAD_MULTI_SEGS) ? "enabled" :
+							      "disabled");
 		nic_dev->hinic3_offload_initialized = true;
 	}
 
@@ -5580,30 +5599,24 @@ static int hinic3_dev_init(struct rte_eth_dev *eth_dev)
 	hinic3_nic_feature_init(nic_dev);
 	
 	if ((nic_dev->config.rx_cqe_compact_en != HINIC3_RX_CQE_COMPACT_EN)) {
-		eth_dev->rx_pkt_burst = hinic3_recv_pkts;
 		eth_dev->tx_pkt_burst = hinic3_xmit_pkts;
-#ifdef RTE_ARCH_ARM
-		if (nic_dev->vec_allowed == 1)
-			eth_dev->rx_pkt_burst = hinic3_recv_pkts_vec;
-#endif
 	} else {
-		eth_dev->rx_pkt_burst = hinic3_recv_pkts_compact_cqe;
 		eth_dev->tx_pkt_burst = hinic3_xmit_pkts_compact_cqe;
-#ifdef RTE_ARCH_ARM
-		if (nic_dev->vec_allowed == 1)
-			eth_dev->rx_pkt_burst = hinic3_recv_pkts_compact_cqe_vec;
-#endif
-#ifdef RTE_ARCH_X86_64
-		/* compact CQE 场景：CPU 支持时启用 AVX512 收包。
-		 * vec_allowed 置位后，queue setup 会为向量路径预留跨环尾槽位，
-		 * 与 NEON 路径的开关语义保持一致。 */
-		if (rte_cpu_get_flag_enabled(RTE_CPUFLAG_AVX512F)) {
-			nic_dev->vec_allowed = 1;
-			eth_dev->rx_pkt_burst =
-				hinic3_recv_pkts_compact_cqe_vec_avx;
-		}
-#endif
 	}
+
+#ifdef RTE_ARCH_X86_64
+	/* compact CQE 场景：CPU 支持时置位向量收包开关。
+	 * vec_allowed 置位后，queue setup 会为向量路径预留跨环尾槽位，
+	 * 与 NEON 路径的开关语义保持一致。
+	 * 注意此时还没 configure，scattered_rx 必为 0，所以先按"不散包"
+	 * 选一次；最终选路在 hinic3_start_all_rqs() 里按配好的
+	 * scattered_rx 再做一次（见 hinic3_rx_select_pkt_burst()），
+	 * 散包场景一律回落标量——向量路径不支持跨缓冲区重组。 */
+	if ((nic_dev->config.rx_cqe_compact_en == HINIC3_RX_CQE_COMPACT_EN) &&
+	    rte_cpu_get_flag_enabled(RTE_CPUFLAG_AVX512F))
+		nic_dev->vec_allowed = 1;
+#endif
+	hinic3_rx_select_pkt_burst(eth_dev);
 
 	return err;
 }
