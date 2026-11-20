@@ -345,6 +345,31 @@ hinic3_vec_compact_cqe_limit(struct hinic3_rxq *rxq, u16 sw_ci, u16 vec_pkts)
 	return vec_pkts;
 }
 
+/*
+ * 整窗预取：compact CQE 的地址要经 rx_info→mbuf→buf_addr/data_off 两级
+ * 依赖才能算出来，只提前 4 个的预取量盖不住访存延迟（批内循环最多只
+ * 能提前一批）。标量路径进来就把窗口内所有 mbuf 和缓冲区头预取掉
+ * （rx.c 的 prefetch_flag 机制），这里对齐它。
+ *
+ * 只预取 hw_ci 确认前缀内的行：未确认的 CQE 行硬件还没写，提前拉进来
+ * 会被写回无效化，白 miss 一次。T0 提示：这些行马上就要读，不做非时间
+ * 局部性提示。
+ */
+static inline void
+hinic3_vec_prefetch_window(struct hinic3_rxq *rxq, u16 sw_ci, u16 nb_pkts,
+			   s32 cqe_off)
+{
+	u16 n = (u16)RTE_MIN(nb_pkts, (u16)HINIC3_DEFAULT_RX_BURST);
+	u16 i;
+
+	for (i = 0; i < n; i++) {
+		struct rte_mbuf *mbuf = rxq->rx_info[sw_ci + i].mbuf;
+
+		rte_prefetch0(mbuf);
+		rte_prefetch0(hinic3_vec_compact_cqe_addr(mbuf, cqe_off));
+	}
+}
+
 HINIC3_AVX512_TARGET
 u16
 hinic3_recv_pkts_compact_cqe_vec_avx(void *rx_queue, struct rte_mbuf **rx_pkts,
@@ -388,10 +413,9 @@ hinic3_recv_pkts_compact_cqe_vec_avx(void *rx_queue, struct rte_mbuf **rx_pkts,
 	if (unlikely(!((status >> 7) & 1)))
 		return 0;
 
-	rte_prefetch0(rxq->rx_info[sw_ci + 0].mbuf);
-	rte_prefetch0(rxq->rx_info[sw_ci + 1].mbuf);
-	rte_prefetch0(rxq->rx_info[sw_ci + 2].mbuf);
-	rte_prefetch0(rxq->rx_info[sw_ci + 3].mbuf);
+	/* 整窗预取：本轮 hw_ci 确认窗口内的 mbuf 与内嵌 CQE 头（T0），
+	 * 覆盖原来只预取 4 个 rx_info 的窗口 */
+	hinic3_vec_prefetch_window(rxq, sw_ci, nb_pkts, cqe_off);
 
 	while (nb_pkts > 0) {
 		u16 n, ret;
