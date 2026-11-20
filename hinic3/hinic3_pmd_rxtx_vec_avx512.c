@@ -277,21 +277,9 @@ hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
 			*cqe_status = 0;
 		}
 
-		/* F. 预取下一批的 4 个内嵌 CQE（与 NEON 的窗口一致） */
-		if (likely(pos + 2 * HINIC3_DEFAULT_DESCS_PER_LOOP < nb_pkts)) {
-			rte_prefetch_non_temporal(
-				hinic3_vec_compact_cqe_addr(
-					rx_info[pos + 4].mbuf, cqe_off));
-			rte_prefetch_non_temporal(
-				hinic3_vec_compact_cqe_addr(
-					rx_info[pos + 5].mbuf, cqe_off));
-			rte_prefetch_non_temporal(
-				hinic3_vec_compact_cqe_addr(
-					rx_info[pos + 6].mbuf, cqe_off));
-			rte_prefetch_non_temporal(
-				hinic3_vec_compact_cqe_addr(
-					rx_info[pos + 7].mbuf, cqe_off));
-		}
+		/* F 段已删除：窗口预取（入口按 chunk 调用）已覆盖本批
+		 * 全部 CQE 行，批内再逐批预取同一批行是纯冗余，还多付
+		 * 每包 1 条 prefetch 指令。 */
 
 		nb_rx += valid_pkts;
 		if (valid_pkts < HINIC3_DEFAULT_DESCS_PER_LOOP)
@@ -400,10 +388,10 @@ hinic3_recv_pkts_compact_cqe_vec_avx(void *rx_queue, struct rte_mbuf **rx_pkts,
 
 	rxm = rxq->rx_info[sw_ci].mbuf;
 
-	/* 预取第一个内嵌 CQE（DMA 写入，非时间局部性） */
+	/* 预取第一个内嵌 CQE（DMA 写入，马上要读，用 T0） */
 	rx_cqe = (volatile struct hinic3_rq_cqe *)
 		hinic3_vec_compact_cqe_addr(rxm, cqe_off);
-	rte_prefetch_non_temporal(rx_cqe);
+	rte_prefetch0(rx_cqe);
 
 	/*
 	 * 检查第一个 CQE 完成（acquire），吸收 CI 写回与 CQE 数据写回之间
@@ -413,14 +401,18 @@ hinic3_recv_pkts_compact_cqe_vec_avx(void *rx_queue, struct rte_mbuf **rx_pkts,
 	if (unlikely(!((status >> 7) & 1)))
 		return 0;
 
-	/* 整窗预取：本轮 hw_ci 确认窗口内的 mbuf 与内嵌 CQE 头（T0），
-	 * 覆盖原来只预取 4 个 rx_info 的窗口 */
-	hinic3_vec_prefetch_window(rxq, sw_ci, nb_pkts, cqe_off);
-
 	while (nb_pkts > 0) {
 		u16 n, ret;
 
 		n = RTE_MIN(nb_pkts, HINIC3_DEFAULT_RX_BURST);
+
+		/*
+		 * 每个分批窗口处理前整窗预取一次（hw_ci 确认前缀内，
+		 * T0）：burst ≤ 32 时窗口预取覆盖全部包，批内的下一批
+		 * 预取不再需要；burst > 32 时后续窗口由这里逐窗覆盖。
+		 */
+		hinic3_vec_prefetch_window(rxq, sw_ci + nb_rx, n, cqe_off);
+
 		ret = hinic3_recv_burst_compact_cqe_vec_avx(rxq,
 							    &rx_pkts[nb_rx], n,
 							    cqe_off);
