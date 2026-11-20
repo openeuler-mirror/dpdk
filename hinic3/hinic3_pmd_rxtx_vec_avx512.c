@@ -9,8 +9,11 @@
  * 已有的功能：批量 mbuf 分配 / rearm、内嵌 CQE 地址计算、128bit 字段重排
  * 填充 rx_descriptor_fields1、RXDONE 连续完成计数、data_off 跳过内嵌 CQE、
  * 下一批预取以及 cons_idx/delta/packets 统计。另按实测结论引入了 hw_ci
- * 门控（与标量路径同口径的硬件确认前缀收窄）。不引入 offload 补全、
- * 空队列退避、诊断日志、8 包批等扩展。
+ * 门控（与标量路径同口径的硬件确认前缀收窄）。另按需求实现了 checksum
+ * offload：compact csum_err（raw dw0 bit[12:11]）→ ol_flags，语义对齐
+ * 标量 hinic3_rx_csum，rx_csum_en 关闭时为零开销 no-op；并补置 RSS
+ * HASH flag（hash 值本就由 shuffle 写入 hash.rss）。仍不引入 ptype
+ * 查表、vlan offload、空队列退避、诊断日志、8 包批等扩展。
  *
  * compact CQE 内嵌在每个报文缓冲区的 buf_addr + data_off 处（sp560 DMA
  * 对齐模式下在其下方 16B），4 个 CQE 地址不连续，因此逐包 load 16B；
@@ -47,6 +50,15 @@
 #define HINIC3_AVX512_TARGET	__attribute__((target("avx512f")))
 
 #define HINIC3_AVX_COMPACT_RXDONE_BIT	7
+
+/*
+ * compact CQE 的 csum_err 位段：主机序 dw0 的 bit[20:19]
+ * （RQ_COMPACT_CQE_STATUS_CSUM_ERR_SHIFT=19, MASK=0x3），换算到 raw
+ * 小端 dword 即 bit[12:11]（H.bit(n) = R.bit(31-n)）。
+ * 值域与标量 get_compact_cqe_info 的映射对应：
+ *   0=无错  1=L3/L4 校验错  2=OTHER(→IPSU_OTHER_ERR)  3=BYPASS(→HW_CHECK_NONE)
+ */
+#define HINIC3_AVX_COMPACT_CSUM_ERR_SHIFT	11
 
 /*
  * 队列级常量：sp560 NIC 且 rx_dma_align 使能时，rearm 把 WQE DMA 地址压到
@@ -202,9 +214,15 @@ hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
 				      s32 cqe_off)
 {
 	struct hinic3_rx_info *rx_info;
+	struct hinic3_nic_dev *nic_dev = rxq->nic_dev;
 	u16 sw_ci = MASKED_QUEUE_IDX(rxq, rxq->cons_idx);
 	u16 pos, valid_pkts, nb_rx = 0;
 	u32 i;
+	/* 队列级开关：每批算一次。csum 关闭时整段为 no-op（UNKNOWN=0，
+	 * ol_flags 已由 rearm 清零），与标量 hinic3_rx_csum 的入口
+	 * 判断同语义。 */
+	u16 csum_en = (nic_dev->rx_csum_en & HINIC3_DEFAULT_RX_CSUM_OFFLOAD) != 0;
+	u16 rss_en = nic_dev->rss_type.val != 0;
 
 	/* ptype=0 | pkt_len=[b3,b2,0,0] | data_len=[b3,b2]
 	 * | vlan_tci=[b10,b9] | rss=[b7,b6,b5,b4] */
@@ -272,8 +290,38 @@ hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
 			struct rte_mbuf *mb = rx_pkts[pos + i];
 			volatile u32 *cqe_status = (volatile u32 *)cqe_addr[i];
 			u16 data_offset = (status_arr[i] & BIT(15)) ? 8 : 16;
+			u16 flags = 0;
 
 			mb->data_off += data_offset;
+
+			/* checksum offload：csum_err 在 raw dw0 的 bit[12:11]，
+			 * 语义与标量 hinic3_rx_csum + compact 映射逐值对齐：
+			 *   0 → IP/L4 GOOD；1 → IP_BAD（csum_errors++）；
+			 *   2 → OTHER_ERR（other_errors++，flag 为 0 即
+			 *       UNKNOWN）；3 → HW BYPASS → UNKNOWN（无操作）。
+			 * GOOD/BAD 位在 ol_flags 上互不冲突，直接 |=。 */
+			if (csum_en) {
+				u32 csum_err = (status_arr[i] >>
+					HINIC3_AVX_COMPACT_CSUM_ERR_SHIFT) & 0x3;
+
+				if (csum_err == 0) {
+					flags = HINIC3_PKT_RX_IP_CKSUM_GOOD |
+						HINIC3_PKT_RX_L4_CKSUM_GOOD;
+				} else if (csum_err == 1) {
+					flags = HINIC3_PKT_RX_IP_CKSUM_BAD;
+					rxq->rxq_stats.csum_errors++;
+				} else if (csum_err == 2) {
+					rxq->rxq_stats.other_errors++;
+				}
+				mb->ol_flags |= flags;
+			}
+
+			/* RSS：hash 值已由 shuffle 写入 hash.rss（dw1），
+			 * 这里按队列级 rss 开关补置 flag，与标量
+			 * hinic3_rx_rss_hash 的语义一致。 */
+			if (rss_en)
+				mb->ol_flags |= HINIC3_PKT_RX_RSS_HASH;
+
 			*cqe_status = 0;
 		}
 
