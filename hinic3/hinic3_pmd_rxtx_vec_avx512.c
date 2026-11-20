@@ -223,6 +223,8 @@ hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
 	 * 判断同语义。 */
 	u16 csum_en = (nic_dev->rx_csum_en & HINIC3_DEFAULT_RX_CSUM_OFFLOAD) != 0;
 	u16 rss_en = nic_dev->rss_type.val != 0;
+	/* RSS flag 批内恒定，与逐包 csum flags 合并成一次 ol_flags 写 */
+	u16 rss_flag = rss_en ? (u16)HINIC3_PKT_RX_RSS_HASH : 0;
 
 	/* ptype=0 | pkt_len=[b3,b2,0,0] | data_len=[b3,b2]
 	 * | vlan_tci=[b10,b9] | rss=[b7,b6,b5,b4] */
@@ -313,14 +315,13 @@ hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
 				} else if (csum_err == 2) {
 					rxq->rxq_stats.other_errors++;
 				}
-				mb->ol_flags |= flags;
 			}
 
-			/* RSS：hash 值已由 shuffle 写入 hash.rss（dw1），
-			 * 这里按队列级 rss 开关补置 flag，与标量
-			 * hinic3_rx_rss_hash 的语义一致。 */
-			if (rss_en)
-				mb->ol_flags |= HINIC3_PKT_RX_RSS_HASH;
+			/* csum 与 RSS 合并为一次 ol_flags 读改写（原来各
+			 * 写一次）；两者都未使能时整体跳过，ol_flags 已
+			 * 由 rearm 清零，无需写入。 */
+			if (csum_en | rss_en)
+				mb->ol_flags |= flags | rss_flag;
 
 			*cqe_status = 0;
 		}
