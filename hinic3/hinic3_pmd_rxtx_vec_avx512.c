@@ -12,8 +12,10 @@
  * 门控（与标量路径同口径的硬件确认前缀收窄）。另按需求实现了 checksum
  * offload：compact csum_err（raw dw0 bit[12:11]）→ ol_flags，语义对齐
  * 标量 hinic3_rx_csum，rx_csum_en 关闭时为零开销 no-op；并补置 RSS
- * HASH flag（hash 值本就由 shuffle 写入 hash.rss）。仍不引入 ptype
- * 查表、vlan offload、空队列退避、诊断日志、8 包批等扩展。
+ * HASH flag（hash 值本就由 shuffle 写入 hash.rss）。另实现了 ptype 查表
+ * （desc-ready 同款方案 A）：从 dw0 提取 12 位 ptype 索引查 ptype_tbl，
+ * _mm_insert_epi32 插进 lane0 后随描述符整块宽存。仍不引入 vlan offload、
+ * 空队列退避、诊断日志、8 包批等扩展。
  *
  * compact CQE 内嵌在每个报文缓冲区的 buf_addr + data_off 处（sp560 DMA
  * 对齐模式下在其下方 16B），4 个 CQE 地址不连续，因此逐包 load 16B；
@@ -59,6 +61,18 @@
  *   0=无错  1=L3/L4 校验错  2=OTHER(→IPSU_OTHER_ERR)  3=BYPASS(→HW_CHECK_NONE)
  */
 #define HINIC3_AVX_COMPACT_CSUM_ERR_SHIFT	11
+
+/*
+ * compact CQE 的 ptype 索引位段：主机序 dw0 的 bit[27:16]
+ * （RQ_COMPACT_CQE_STATUS_PTYPE_SHIFT=16, MASK=0xFFF），查表对象为
+ * nic_dev->ptype_tbl->ptype[4096]，标量 compact 路径每包无条件查表填
+ * packet_type（8B/16B CQE 无差别），这里逐包同语义。
+ * raw 小端 dword 的字节级换算（H 字节 j = B(3-j)）：
+ *   H[27:24] = B0[3:0] → idx[11:8]，H[23:16] = B1 → idx[7:0]
+ *   idx = ((dw0 & 0xF) << 8) | ((dw0 >> 8) & 0xFF)
+ */
+#define HINIC3_AVX_COMPACT_PTYPE_IDX(dw0) \
+	((((dw0) & 0xFu) << 8) | (((dw0) >> 8) & 0xFFu))
 
 /*
  * 队列级常量：sp560 NIC 且 rx_dma_align 使能时，rearm 把 WQE DMA 地址压到
@@ -203,10 +217,12 @@ hinic3_rearm_rxq_mbuf_vec_avx(struct hinic3_rxq *rxq)
  *
  * 16B CQE 的字节布局（与 NEON 侧 shuf_mask 逐字节一致）：
  *   dw0: pkt_len=b2,b3 | cqe_len=b1 bit7 (raw bit15) | rxdone=b0 bit7 (raw bit7)
+ *        | ptype 索引 = b0[3:0]<<8 | b1（host bit[27:16]）
  *   dw1: rss hash = b7,b6,b5,b4
  *   dw2: vlan_tci = b10,b9
  * 重排后写入 rx_descriptor_fields1 的前 16B：
- *   packet_type=0 | pkt_len | data_len | vlan_tci | rss
+ *   packet_type ← ptype 查表（lane0，insert_epi32，desc-ready 同款方案 A）
+ *   | pkt_len | data_len | vlan_tci | rss
  */
 static inline HINIC3_AVX512_TARGET u16
 hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
@@ -225,9 +241,14 @@ hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
 	u16 rss_en = nic_dev->rss_type.val != 0;
 	/* RSS flag 批内恒定，与逐包 csum flags 合并成一次 ol_flags 写 */
 	u16 rss_flag = rss_en ? (u16)HINIC3_PKT_RX_RSS_HASH : 0;
+	/* ptype 查表指针批内恒定。表 16KB（4096 项，cache 对齐分配），真实
+	 * 流量的 ptype 热集通常只有几种，命中行常驻 L1（~4-5 cycle），
+	 * 冷 miss 每种 ptype 只发生一次。 */
+	const struct hinic3_ptype_table *ptype_tbl = nic_dev->ptype_tbl;
 
 	/* ptype=0 | pkt_len=[b3,b2,0,0] | data_len=[b3,b2]
-	 * | vlan_tci=[b10,b9] | rss=[b7,b6,b5,b4] */
+	 * | vlan_tci=[b10,b9] | rss=[b7,b6,b5,b4]
+	 * （lane0 的 ptype 由查表结果 insert_epi32 覆盖，掩码不必置 0） */
 	const __m128i shuf_mask = _mm_setr_epi8(
 		0xFF, 0xFF, 0xFF, 0xFF,
 		3, 2, 0xFF, 0xFF,
@@ -273,11 +294,22 @@ hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
 		if (unlikely(valid_pkts == 0))
 			break;
 
-		/* D. 逐包 128bit shuffle + 16B store 填 mbuf 描述符字段 */
+		/* D. 逐包 128bit shuffle + ptype 查表插 lane0 + 16B 宽存。
+		 * insert 紧跟 shuffle、在宽存之前：packet_type 与其余描述符
+		 * 字段同一次 16B store 交付，宽存后无窄写跟随，不存在
+		 * store-forwarding 停顿（desc-ready 已实证的布局）。
+		 * 未完成的槽位 status_arr 是残留旧值，索引经 12 位掩码恒在
+		 * 表界内，查出的垃圾 ptype 只写进不会被交付的槽位，无害。 */
 		for (i = 0; i < HINIC3_DEFAULT_DESCS_PER_LOOP; i++) {
+			u32 ptype_idx = HINIC3_AVX_COMPACT_PTYPE_IDX(
+							status_arr[i]);
+
 			pkt_mb = _mm_shuffle_epi8(cqe[i], shuf_mask);
+			pkt_mb = _mm_insert_epi32(pkt_mb,
+					(int)ptype_tbl->ptype[ptype_idx], 0);
 			_mm_storeu_si128((__m128i *)
-				&rx_pkts[pos + i]->rx_descriptor_fields1, pkt_mb);
+				&rx_pkts[pos + i]->rx_descriptor_fields1,
+				pkt_mb);
 		}
 
 		/* E. 跳过内嵌 CQE 并清 RXDONE 握手位。
