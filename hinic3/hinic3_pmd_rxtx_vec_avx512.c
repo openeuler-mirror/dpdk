@@ -2,34 +2,6 @@
  * Copyright(c) 2026 Huawei Technologies Co., Ltd
  */
 
-/*
- * hinic3 compact CQE 收包路径的 AVX512 实现。
- *
- * 本文件只实现 NEON 路径（hinic3_pmd_rxtx_vec_neon.c）中 compact CQE 收包
- * 已有的功能：批量 mbuf 分配 / rearm、内嵌 CQE 地址计算、128bit 字段重排
- * 填充 rx_descriptor_fields1、RXDONE 连续完成计数、data_off 跳过内嵌 CQE、
- * 下一批预取以及 cons_idx/delta/packets 统计。另按实测结论引入了 hw_ci
- * 门控（与标量路径同口径的硬件确认前缀收窄）。另按需求实现了 checksum
- * offload：compact csum_err（raw dw0 bit[12:11]）→ ol_flags，语义对齐
- * 标量 hinic3_rx_csum，rx_csum_en 关闭时为零开销 no-op；并补置 RSS
- * HASH flag（hash 值本就由 shuffle 写入 hash.rss）。另实现了 ptype 查表
- * （desc-ready 同款方案 A）：从 dw0 提取 12 位 ptype 索引查 ptype_tbl，
- * _mm_insert_epi32 插进 lane0 后随描述符整块宽存。仍不引入 vlan offload、
- * 空队列退避、诊断日志、8 包批等扩展。
- *
- * compact CQE 内嵌在每个报文缓冲区的 buf_addr + data_off 处（sp560 DMA
- * 对齐模式下在其下方 16B），4 个 CQE 地址不连续，因此逐包 load 16B；
- * 字段重排用 _mm_shuffle_epi8（对应 NEON 的 vqtbl1q_u8），完成检查对
- * 每次 load 到的 dw0 做标量位测试（RXDONE = raw bit7）后用
- * __builtin_ctz 取连续完成数：RXDONE、pkt_len、cqe_len 同在 dw0，
- * 一次 load 同时得到判定与数据，x86 TSO 下无需 fence + 重读。
- * 收包后必须清 CQE 的 RXDONE 握手位（与标量路径 rx_cqe->status = 0
- * 一致），否则硬件写新 CQE 前轮询会把残留 DD 误判为新包完成。
- *
- * 所有使用向量指令的函数用函数级 target("avx512f") 限定，构建系统不需要
- * 给本文件加 -mavx512f；只有运行期确认 CPU 支持后才会选中这条路径。
- */
-
 #include <immintrin.h>
 
 #include <rte_ether.h>

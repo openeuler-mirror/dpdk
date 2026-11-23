@@ -523,11 +523,6 @@ int hinic3_alloc_rxq_padding(struct hinic3_rxq *rxq)
 	u16 cqe_off, zero_len;
 	u16 i;
 
-	/* 只有 vec_allowed 且非 hairpin 的队列才有填充区（rx_info 多分配的
-	 * RX_BURST 个槽位）；其它队列没有这块内存，不能往里写。 */
-	if (!nic_dev->vec_allowed || rxq->is_hairpin)
-		return 0;
-
 	for (i = 0; i < HINIC3_DEFAULT_RX_BURST; i++) {
 		if (rxq->rx_info[rxq->q_depth + i].mbuf != NULL)
 			continue;
@@ -580,9 +575,7 @@ void hinic3_free_rxq_padding(struct hinic3_rxq *rxq)
 {
 	u16 i;
 
-	/* 填充区只存在于 vec_allowed 的非 hairpin 队列，其它队列的 rx_info
-	 * 到 q_depth 就结束了。 */
-	if (rxq->rx_info == NULL || !rxq->nic_dev->vec_allowed)
+	if (rxq->rx_info == NULL)
 		return;
 
 	/* 填充区要么整段连着分配，要么一开始就是 NULL，遇到空槽位即可停 */
@@ -1232,17 +1225,17 @@ int hinic3_start_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq)
 	hinic3_rearm_rxq_mbuf(rxq);
 
 	/*
-	 * 单独启动队列同样要在跑流量之前填好环尾填充槽位：之前只有
-	 * hinic3_start_all_rqs() 填填充区，单独启动时这些槽位是 NULL，
-	 * 向量尾批跨环尾会踩空指针。
+	 * 向量场景尾批跨环尾会踩空指针，需要额外分配padding内存。
 	 */
-	err = hinic3_alloc_rxq_padding(rxq);
-	if (err) {
-		PMD_DRV_LOG(ERR, "Fail to alloc padding mbuf, qid = %u, local_qid = %u",
-			    rxq->q_id, rxq->local_qid);
-		hinic3_remove_rq_from_rx_queue_list(nic_dev, rxq->q_id);
-		rte_spinlock_unlock(&nic_dev->queue_list_lock);
-		return err;
+	if (nic_dev->vec_allowed) {
+		err = hinic3_alloc_rxq_padding(rxq);
+		if (err) {
+			PMD_DRV_LOG(ERR, "Fail to alloc padding mbuf, qid = %u, local_qid = %u",
+					rxq->q_id, rxq->local_qid);
+			hinic3_remove_rq_from_rx_queue_list(nic_dev, rxq->q_id);
+			rte_spinlock_unlock(&nic_dev->queue_list_lock);
+			return err;
+		}
 	}
 
 	if (rxq->nic_dev->num_rss == 1) {
@@ -1386,13 +1379,17 @@ int hinic3_start_all_rqs(struct rte_eth_dev *eth_dev)
 			goto out;
 		}
 
-		/* 只有真正绑到向量入口时才需要填充槽位：填充区供向量路径
-		 * 尾批跨环尾读取（dummy 槽位 RXDONE=0），见 alloc 函数注释。 */
-		err = hinic3_alloc_rxq_padding(rxq);
-		if (err) {
-			PMD_DRV_LOG(ERR, "Fail to alloc padding mbuf for Rx queue %d, qid = %u",
-				    i, rxq->q_id);
-			goto out;
+		/* 
+		 * 向量指令集场景需要填充槽位：填充区供向量路径
+		 * 尾批跨环尾读取（dummy 槽位 RXDONE=0），见 alloc 函数注释。 
+		 */
+		if (nic_dev->vec_allowed) {
+			err = hinic3_alloc_rxq_padding(rxq);
+			if (err) {
+				PMD_DRV_LOG(ERR, "Fail to alloc padding mbuf for Rx queue %d, qid = %u",
+						i, rxq->q_id);
+				goto out;
+			}
 		}
 
 		if (!IS_QPOOL_MODE(nic_dev->hwdev))
