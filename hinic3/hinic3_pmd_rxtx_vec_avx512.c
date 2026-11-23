@@ -30,6 +30,8 @@
  * 给本文件加 -mavx512f；只有运行期确认 CPU 支持后才会选中这条路径。
  */
 
+#include <immintrin.h>
+
 #include <rte_ether.h>
 #include <rte_mbuf.h>
 #include <rte_prefetch.h>
@@ -45,8 +47,6 @@
 #include "hinic3_pmd_ethdev.h"
 #include "hinic3_pmd_tx.h"
 #include "hinic3_pmd_rx.h"
-
-#include <immintrin.h>
 
 /* 函数级指令集限定：只有探测到 AVX512F 后才会真正执行到下面的向量指令 */
 #define HINIC3_AVX512_TARGET	__attribute__((target("avx512f")))
@@ -479,7 +479,7 @@ hinic3_recv_pkts_compact_cqe_vec_avx(void *rx_queue, struct rte_mbuf **rx_pkts,
 	 * 的可见窗口。compact RXDONE 是 dw0 byte0 bit7。
 	 */
 	status = (u32)__atomic_load_n(&rx_cqe->status, __ATOMIC_ACQUIRE);
-	if (unlikely(!((status >> 7) & 1)))
+	if (unlikely(!((status >> HINIC3_AVX_COMPACT_RXDONE_BIT) & 1)))
 		return 0;
 
 	while (nb_pkts > 0) {

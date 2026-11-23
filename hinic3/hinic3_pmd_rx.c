@@ -534,7 +534,7 @@ int hinic3_alloc_rxq_padding(struct hinic3_rxq *rxq)
 
 		mbuf = rte_pktmbuf_alloc(rxq->mb_pool);
 		if (unlikely(mbuf == NULL)) {
-			PMD_DRV_LOG(ERR, "Fail to alloc padding mbuf for rxq %u, qid = %u",
+			PMD_DRV_LOG(ERR, "Fail to alloc padding mbuf, qid = %u, local_qid = %u",
 				    rxq->q_id, rxq->local_qid);
 			return -ENOMEM;
 		}
@@ -1238,7 +1238,7 @@ int hinic3_start_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq)
 	 */
 	err = hinic3_alloc_rxq_padding(rxq);
 	if (err) {
-		PMD_DRV_LOG(ERR, "Fail to alloc padding mbuf for rxq %u, qid = %u",
+		PMD_DRV_LOG(ERR, "Fail to alloc padding mbuf, qid = %u, local_qid = %u",
 			    rxq->q_id, rxq->local_qid);
 		hinic3_remove_rq_from_rx_queue_list(nic_dev, rxq->q_id);
 		rte_spinlock_unlock(&nic_dev->queue_list_lock);
