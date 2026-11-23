@@ -504,6 +504,96 @@ void hinic3_free_all_rxq_mbufs(struct hinic3_nic_dev *nic_dev)
 	}
 }
 
+/*
+ * 向量收包（AVX512）一批最多 HINIC3_DEFAULT_RX_BURST 个，允许越过环尾：
+ * rx_info 用线性下标访问，越界槽位落在 ethdev 按 q_depth + RX_BURST 预留的
+ * 填充区里。这里把填充区填上正常初始化的 dummy mbuf，并显式清零内嵌的
+ * compact CQE，保证越界槽位读到的 RXDONE 恒为 0：尾批在真实尾包之后自然
+ * 提前收尾，cons_idx 到环尾后由 MASKED_QUEUE_IDX 回绕。
+ *
+ * 不用 rte_mbuf_raw_alloc：它的缓冲区不清零、refcnt 也不置 1，残留的
+ * RXDONE 可能把 dummy 槽位误判成已完成包，refcnt=0 的 mbuf 交给应用会
+ * 破坏 mempool。重复启动用 NULL 之外的槽位跳过，避免泄漏。
+ */
+int hinic3_alloc_rxq_padding(struct hinic3_rxq *rxq)
+{
+	struct hinic3_nic_dev *nic_dev = rxq->nic_dev;
+	struct rte_mbuf *mbuf;
+	uint8_t *cqe;
+	u16 cqe_off, zero_len;
+	u16 i;
+
+	/* 只有 vec_allowed 且非 hairpin 的队列才有填充区（rx_info 多分配的
+	 * RX_BURST 个槽位）；其它队列没有这块内存，不能往里写。 */
+	if (!nic_dev->vec_allowed || rxq->is_hairpin)
+		return 0;
+
+	for (i = 0; i < HINIC3_DEFAULT_RX_BURST; i++) {
+		if (rxq->rx_info[rxq->q_depth + i].mbuf != NULL)
+			continue;
+
+		mbuf = rte_pktmbuf_alloc(rxq->mb_pool);
+		if (unlikely(mbuf == NULL)) {
+			PMD_DRV_LOG(ERR, "Fail to alloc padding mbuf for rxq %u, qid = %u",
+				    rxq->q_id, rxq->local_qid);
+			return -ENOMEM;
+		}
+
+		mbuf->port = rxq->port_id;
+		mbuf->ol_flags = 0;
+
+		/*
+		 * compact CQE 内嵌在缓冲区头部：清零 CQE 所在段，保证填充槽位
+		 * 的 RXDONE 恒为 0（rte_pktmbuf_alloc 不保证缓冲区内容干净）。
+		 * sp560 打开 DMA 对齐时向量路径从 data_off - 16 读 CQE，两种
+		 * 口径都覆盖，这里把对齐地址前后各 16B 一并清零。
+		 */
+		cqe_off = mbuf->data_off;
+		if (is_sp560_nic(nic_dev) && rxq->rx_dma_align) {
+			cqe_off -= HINIC3_RX_DMA_ALIGN_CQE_OFFSET;
+			zero_len = 2 * HINIC3_RX_DMA_ALIGN_CQE_OFFSET;
+		} else {
+			zero_len = HINIC3_RX_DMA_ALIGN_CQE_OFFSET;
+		}
+
+#ifdef DPDK_21_11
+		cqe = (uint8_t *)rte_mbuf_buf_addr(mbuf, mbuf->pool) + cqe_off;
+#else
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+		cqe = (uint8_t *)rte_mbuf_buf_addr(mbuf, mbuf->pool) + cqe_off;
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
+#endif
+		memset(cqe, 0, zero_len);
+
+		rxq->rx_info[rxq->q_depth + i].mbuf = mbuf;
+	}
+
+	return 0;
+}
+
+void hinic3_free_rxq_padding(struct hinic3_rxq *rxq)
+{
+	u16 i;
+
+	/* 填充区只存在于 vec_allowed 的非 hairpin 队列，其它队列的 rx_info
+	 * 到 q_depth 就结束了。 */
+	if (rxq->rx_info == NULL || !rxq->nic_dev->vec_allowed)
+		return;
+
+	/* 填充区要么整段连着分配，要么一开始就是 NULL，遇到空槽位即可停 */
+	for (i = 0; i < HINIC3_DEFAULT_RX_BURST; i++) {
+		if (rxq->rx_info[rxq->q_depth + i].mbuf == NULL)
+			break;
+		rte_pktmbuf_free(rxq->rx_info[rxq->q_depth + i].mbuf);
+		rxq->rx_info[rxq->q_depth + i].mbuf = NULL;
+	}
+}
+
 static u32 hinic3_rx_alloc_mbuf_bulk(struct hinic3_rxq *rxq,
 				     struct rte_mbuf **mbufs,
 				     u32 exp_mbuf_cnt)
@@ -1140,6 +1230,21 @@ int hinic3_start_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq)
 		}
 	}
 	hinic3_rearm_rxq_mbuf(rxq);
+
+	/*
+	 * 单独启动队列同样要在跑流量之前填好环尾填充槽位：之前只有
+	 * hinic3_start_all_rqs() 填填充区，单独启动时这些槽位是 NULL，
+	 * 向量尾批跨环尾会踩空指针。
+	 */
+	err = hinic3_alloc_rxq_padding(rxq);
+	if (err) {
+		PMD_DRV_LOG(ERR, "Fail to alloc padding mbuf for rxq %u, qid = %u",
+			    rxq->q_id, rxq->local_qid);
+		hinic3_remove_rq_from_rx_queue_list(nic_dev, rxq->q_id);
+		rte_spinlock_unlock(&nic_dev->queue_list_lock);
+		return err;
+	}
+
 	if (rxq->nic_dev->num_rss == 1) {
 		err = hinic3_set_vport_enable(nic_dev->hwdev, true);
 		if (err)
@@ -1263,10 +1368,8 @@ int hinic3_start_all_rqs(struct rte_eth_dev *eth_dev)
 {
 	struct hinic3_nic_dev *nic_dev = NULL;
 	struct hinic3_rxq *rxq = NULL;
-	struct rte_mbuf *mbuf = NULL;
 	int err = 0;
 	int i = 0;
-	int j = 0;
 
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
 
@@ -1283,18 +1386,15 @@ int hinic3_start_all_rqs(struct rte_eth_dev *eth_dev)
 			goto out;
 		}
 
-		if (nic_dev->vec_allowed) {
-			for (j = 0; j < HINIC3_DEFAULT_RX_BURST; j++) {
-				mbuf = rte_mbuf_raw_alloc(rxq->mb_pool);
-				if (unlikely(mbuf == NULL)) {
-					PMD_DRV_LOG(ERR, "Fail to alloc mbuf for rxq %u, qid = %u",
-						i, rxq->q_id);
-					return -ENOMEM;
-				}
-				rxq->rx_info[rxq->q_depth + j].mbuf = mbuf;
-			}
+		/* 只有真正绑到向量入口时才需要填充槽位：填充区供向量路径
+		 * 尾批跨环尾读取（dummy 槽位 RXDONE=0），见 alloc 函数注释。 */
+		err = hinic3_alloc_rxq_padding(rxq);
+		if (err) {
+			PMD_DRV_LOG(ERR, "Fail to alloc padding mbuf for Rx queue %d, qid = %u",
+				    i, rxq->q_id);
+			goto out;
 		}
-		
+
 		if (!IS_QPOOL_MODE(nic_dev->hwdev))
 			hinic3_dev_rx_queue_intr_enable(eth_dev, rxq->q_id);
 		eth_dev->data->rx_queue_state[i] = RTE_ETH_QUEUE_STATE_STARTED;

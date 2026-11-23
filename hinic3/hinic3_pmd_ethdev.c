@@ -1792,6 +1792,8 @@ static void hinic3_rx_queue_release(struct rte_eth_dev *dev, uint16_t queue_id)
 	nic_dev = rxq->nic_dev;
 
 	hinic3_free_rxq_mbufs(rxq);
+	/* 向量路径预填的环尾 dummy 槽位，必须在释放 rx_info 之前归还 */
+	hinic3_free_rxq_padding(rxq);
 
 	if (IS_QPOOL_MODE(nic_dev->hwdev)) {
 		if (nic_dev->fd < 0) {

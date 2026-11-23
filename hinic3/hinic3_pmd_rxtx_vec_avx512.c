@@ -491,8 +491,13 @@ hinic3_recv_pkts_compact_cqe_vec_avx(void *rx_queue, struct rte_mbuf **rx_pkts,
 		 * 每个分批窗口处理前整窗预取一次（hw_ci 确认前缀内，
 		 * T0）：burst ≤ 32 时窗口预取覆盖全部包，批内的下一批
 		 * 预取不再需要；burst > 32 时后续窗口由这里逐窗覆盖。
+		 * 窗口起点必须按 q_depth 掩码：nb_pkts 可以是 512（testpmd
+		 * flush 用 MAX_PKT_BURST 收包），nb_rx 跨窗口累积后
+		 * sw_ci + nb_rx 会越过 rx_info 的 q_depth + RX_BURST
+		 * 填充区，把堆上的垃圾读成 mbuf 指针（SIGSEGV @ mbuf->pool）。
 		 */
-		hinic3_vec_prefetch_window(rxq, sw_ci + nb_rx, n, cqe_off);
+		hinic3_vec_prefetch_window(rxq,
+			(u16)((sw_ci + nb_rx) & rxq->q_mask), n, cqe_off);
 
 		ret = hinic3_recv_burst_compact_cqe_vec_avx(rxq,
 							    &rx_pkts[nb_rx], n,

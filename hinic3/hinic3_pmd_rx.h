@@ -539,6 +539,9 @@ u32 hinic3_rx_fill_buffers(struct hinic3_rxq *rxq);
 
 void hinic3_free_rxq_mbufs(struct hinic3_rxq *rxq);
 
+int hinic3_alloc_rxq_padding(struct hinic3_rxq *rxq);
+void hinic3_free_rxq_padding(struct hinic3_rxq *rxq);
+
 void hinic3_free_all_rxq_mbufs(struct hinic3_nic_dev *nic_dev);
 
 int hinic3_update_rss_config(struct rte_eth_dev *dev,
