@@ -517,10 +517,8 @@ void hinic3_free_all_rxq_mbufs(struct hinic3_nic_dev *nic_dev)
  */
 int hinic3_alloc_rxq_padding(struct hinic3_rxq *rxq)
 {
-	struct hinic3_nic_dev *nic_dev = rxq->nic_dev;
 	struct rte_mbuf *mbuf;
 	uint8_t *cqe;
-	u16 cqe_off, zero_len;
 	u16 i;
 
 	for (i = 0; i < HINIC3_DEFAULT_RX_BURST; i++) {
@@ -540,30 +538,20 @@ int hinic3_alloc_rxq_padding(struct hinic3_rxq *rxq)
 		/*
 		 * compact CQE 内嵌在缓冲区头部：清零 CQE 所在段，保证填充槽位
 		 * 的 RXDONE 恒为 0（rte_pktmbuf_alloc 不保证缓冲区内容干净）。
-		 * sp560 打开 DMA 对齐时向量路径从 data_off - 16 读 CQE，两种
-		 * 口径都覆盖，这里把对齐地址前后各 16B 一并清零。
 		 */
-		cqe_off = mbuf->data_off;
-		if (is_sp560_nic(nic_dev) && rxq->rx_dma_align) {
-			cqe_off -= HINIC3_RX_DMA_ALIGN_CQE_OFFSET;
-			zero_len = 2 * HINIC3_RX_DMA_ALIGN_CQE_OFFSET;
-		} else {
-			zero_len = HINIC3_RX_DMA_ALIGN_CQE_OFFSET;
-		}
-
 #ifdef DPDK_21_11
-		cqe = (uint8_t *)rte_mbuf_buf_addr(mbuf, mbuf->pool) + cqe_off;
+		cqe = (uint8_t *)rte_mbuf_buf_addr(mbuf, mbuf->pool) + mbuf->data_off;
 #else
 #ifdef __GNUC__
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #endif
-		cqe = (uint8_t *)rte_mbuf_buf_addr(mbuf, mbuf->pool) + cqe_off;
+		cqe = (uint8_t *)rte_mbuf_buf_addr(mbuf, mbuf->pool) + mbuf->data_off;
 #ifdef __GNUC__
 #pragma GCC diagnostic pop
 #endif
 #endif
-		memset(cqe, 0, zero_len);
+		memset(cqe, 0, HINIC3_RX_DMA_ALIGN_CQE_OFFSET);
 
 		rxq->rx_info[rxq->q_depth + i].mbuf = mbuf;
 	}
