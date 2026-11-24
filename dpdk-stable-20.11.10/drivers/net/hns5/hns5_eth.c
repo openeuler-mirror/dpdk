@@ -21,6 +21,8 @@
 #include <rte_bus_pci.h>
 #include <rte_kvargs.h>
 #include <rte_errno.h>
+#include <rte_cycles.h>
+#include <rte_alarm.h>
 #include <rte_bitops.h>
 #include <rte_ethdev_vdev.h>
 
@@ -74,6 +76,9 @@
 #define HNS5_ETH_DEFAULT_HW_TXQ_NUM    8
 #define HNS5_ETH_POOL_MAX              64      // global max pool count
 #define HNS5_ETH_MAX_RX_MEMPOOLS       8       // max mempools per rxq
+#define HNS5_LSC_POLL_INTERVAL_US      250000  // lsc polling interval: 250ms, also the only source reporting link up
+#define HNS5_LSC_CB_UNREG_MAX_RETRIES  5       // lsc callback unregister retry count
+#define HNS5_LSC_CB_UNREG_RETRY_MS     100     // lsc callback unregister retry interval
 
 static const char *g_mag_mode_maps[] = {
     [HIDRV_MAG_PORT_MODE_100BASE_FX] = "100BASE_FX",
@@ -283,11 +288,261 @@ static void hns5_stop_rx_queues(struct rte_eth_dev *dev, uint32_t vcpu)
     }
 }
 
+/*
+ * A link in local/remote fault cannot carry traffic even if the mac reports
+ * it up, which happens when the link keeps flapping during a fault.
+ */
+static bool hns5_eth_link_faulted(struct hns5_eth_priv *priv)
+{
+    uint32_t local = 0;
+    uint32_t remote = 0;
+
+    if (hidrv_mag_mac_get_local_fault_status(priv->mag_pf_devid, priv->param.mport_id, &local) != 0)
+        return false;
+    if (hidrv_mag_mac_get_remote_fault_status(priv->mag_pf_devid, priv->param.mport_id, &remote) != 0)
+        return false;
+
+    return (local != 0 || remote != 0);
+}
+
+static int hns5_eth_link_update(struct rte_eth_dev *dev, int wait_to_complete __rte_unused)
+{
+    int ret = 0;
+    struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
+    struct rte_eth_link *link = &(dev->data->dev_link);
+    enum hidrv_mag_link_status link_status = HIDRV_MAG_LINK_INVALID;
+
+    ret = hidrv_mag_mac_get_link_status(priv->mag_pf_devid, priv->param.mport_id, &link_status);
+    if (ret != 0) {
+        hns5_err(dev, "failed to hidrv_mag_mac_get_link_status, ret:%d\n", ret);
+        return ret;
+    }
+    if (hns5_eth_link_faulted(priv))
+        link_status = HIDRV_MAG_LINK_DOWN;
+    link->link_status = (link_status == HIDRV_MAG_LINK_UP) ? ETH_LINK_UP : ETH_LINK_DOWN;
+    return 0;
+}
+
+/* Fill and report the link info after the new status survived its confirm window. */
+static void hns5_lsc_report_link(struct rte_eth_dev *dev, uint32_t cur_status)
+{
+    struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
+
+    /*
+     * Only refresh the reported link info here. Do not toggle the MAC rx/tx
+     * enable in the lsc path, otherwise a persistent fault irq may trigger
+     * repeated enable/disable and make the link flap.
+     */
+    if (cur_status == ETH_LINK_UP) {
+        if (priv->param.port_speed < RTE_DIM(g_mag_speed_hidrv_to_rte))
+            dev->data->dev_link.link_speed = g_mag_speed_hidrv_to_rte[priv->param.port_speed];
+        else
+            dev->data->dev_link.link_speed = ETH_SPEED_NUM_NONE;
+        dev->data->dev_link.link_duplex = (priv->param.duplex_mode == HIDRV_MAG_DUPLEX_MODE_FULL) ?
+            ETH_LINK_FULL_DUPLEX : ETH_LINK_HALF_DUPLEX;
+        dev->data->dev_link.link_autoneg = (priv->param.autoneg == 0) ?
+            ETH_LINK_FIXED : ETH_LINK_AUTONEG;
+    } else {
+        dev->data->dev_link.link_speed = ETH_SPEED_NUM_UNKNOWN;
+    }
+
+    hns5_info(dev, "port:%u link status changed to %s\n", dev->data->port_id,
+        (cur_status == ETH_LINK_UP) ? "up" : "down");
+    rte_eth_dev_callback_process(dev, RTE_ETH_EVENT_INTR_LSC, NULL);
+}
+
+/*
+ * The mac only raises an irq on link down, polling reports link up, so both
+ * paths call in here to sample the status and report it as soon as it changes.
+ */
+static void hns5_lsc_update_link_report(struct rte_eth_dev *dev)
+{
+    struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
+    uint32_t status;
+
+    if (hns5_eth_link_update(dev, 0) != 0) {
+        hns5_warn(dev, "failed to update link status\n");
+        return;
+    }
+
+    status = dev->data->dev_link.link_status;
+
+    /* only report a real change */
+    if (status == priv->last_link_status)
+        return;
+
+    priv->last_link_status = status;
+    hns5_lsc_report_link(dev, status);
+}
+
+static void hns5_intr_lsc_handler(void *cb_arg)
+{
+    struct rte_eth_dev *dev = (struct rte_eth_dev *)cb_arg;
+    struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
+    union hidrv_mag_mac_int_status int_status = {0};
+    int ret;
+
+    /* a stale callback may still fire after teardown, just bail out */
+    if (priv == NULL || priv->intr_fd < 0 ||
+        __atomic_load_n(&priv->alarm_cancel, __ATOMIC_ACQUIRE))
+        return;
+
+    /* mask during handling, unmasked before return only if still active */
+    (void)hidrv_mag_mac_enable_interrupt(priv->mag_pf_devid, priv->intr_fd, 0);
+
+    /* teardown may start after the entry check, stop touching the hw here */
+    if (__atomic_load_n(&priv->alarm_cancel, __ATOMIC_ACQUIRE))
+        return;
+
+    /* eal has read the uio fd, only the mac status needs clearing here */
+    ret = hidrv_mag_mac_get_int_status(priv->mag_pf_devid, priv->param.mport_id, &int_status);
+    if (ret != 0) {
+        hns5_warn(dev, "failed to get mac int status, ret:%d\n", ret);
+    } else if (int_status.u64 != 0) {
+        ret = hidrv_mag_mac_clr_int_status(priv->mag_pf_devid, priv->param.mport_id, &int_status);
+        if (ret != 0) {
+            hns5_warn(dev, "failed to clear mac int status:0x%llx, ret:%d\n",
+                (unsigned long long)int_status.u64, ret);
+        }
+    }
+
+    hns5_lsc_update_link_report(dev);
+
+    /* never re-enable during teardown, otherwise unregister keeps seeing a busy irq;
+     * the app callback may also have stopped or released the port */
+    priv = hns5_eth_priv_get(dev);
+    if (priv == NULL || __atomic_load_n(&priv->alarm_cancel, __ATOMIC_ACQUIRE) ||
+        priv->intr_fd < 0)
+        return;
+    ret = hidrv_mag_mac_enable_interrupt(priv->mag_pf_devid, priv->intr_fd, 1);
+    if (ret != 0)
+        hns5_err(dev, "failed to re-enable lsc interrupt, ret:%d\n", ret);
+}
+
+static void hns5_intr_lsc_poll(void *arg)
+{
+    struct rte_eth_dev *dev = (struct rte_eth_dev *)arg;
+    struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
+
+    if (priv == NULL || __atomic_load_n(&priv->alarm_cancel, __ATOMIC_ACQUIRE))
+        return;
+
+    hns5_lsc_update_link_report(dev);
+
+    /* the lsc callback may have stopped or released the port, re-arm only if alive */
+    priv = hns5_eth_priv_get(dev);
+    if (priv == NULL || __atomic_load_n(&priv->alarm_cancel, __ATOMIC_ACQUIRE))
+        return;
+
+    if (rte_eal_alarm_set(HNS5_LSC_POLL_INTERVAL_US, hns5_intr_lsc_poll, dev) != 0)
+        hns5_err(dev, "failed to re-arm lsc poll alarm\n");
+}
+
+static void hns5_intr_lsc_teardown(struct rte_eth_dev *dev)
+{
+    struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
+    int ret = 0;
+    int retries = 0;
+
+    __atomic_store_n(&priv->alarm_cancel, 1, __ATOMIC_RELEASE);
+    (void)rte_eal_alarm_cancel(hns5_intr_lsc_poll, dev);
+
+    if (priv->intr_fd < 0)
+        return;
+
+    (void)hidrv_mag_mac_enable_interrupt(priv->mag_pf_devid, priv->intr_fd, 0);
+
+    do {
+        ret = rte_intr_callback_unregister(&priv->intr_handle, hns5_intr_lsc_handler, dev);
+        if (ret >= 0) {
+            break;
+        } else if (ret == -EAGAIN) {
+            rte_delay_ms(HNS5_LSC_CB_UNREG_RETRY_MS);
+            retries++;
+        } else {
+            hns5_warn(dev, "failed to unregister lsc callback, ret:%d\n", ret);
+            break;
+        }
+    } while (retries < HNS5_LSC_CB_UNREG_MAX_RETRIES);
+    if (retries == HNS5_LSC_CB_UNREG_MAX_RETRIES)
+        hns5_warn(dev, "unregister lsc callback timeout after %d retries\n", retries);
+
+    /* a handler that was already running may have re-enabled the irq */
+    (void)hidrv_mag_mac_enable_interrupt(priv->mag_pf_devid, priv->intr_fd, 0);
+
+    (void)hidrv_mag_mac_free_irq(priv->mag_pf_devid, priv->intr_fd);
+    priv->intr_fd = -1;
+    memset(&priv->intr_handle, 0, sizeof(priv->intr_handle));
+}
+
+static int hns5_intr_lsc_setup(struct rte_eth_dev *dev)
+{
+    struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
+    int ret;
+
+    /* release the leftover irq from a previous start, keep setup idempotent */
+    hns5_intr_lsc_teardown(dev);
+    __atomic_store_n(&priv->alarm_cancel, 0, __ATOMIC_RELEASE);
+
+    priv->intr_fd = hidrv_mag_mac_request_port_irq(priv->mag_pf_devid, priv->param.mport_id);
+    if (priv->intr_fd < 0) {
+        hns5_warn(dev, "failed to request lsc irq, ret:%d, fallback to polling\n", priv->intr_fd);
+        priv->intr_fd = -1;
+        goto start_poll;
+    }
+
+    memset(&priv->intr_handle, 0, sizeof(priv->intr_handle));
+    priv->intr_handle.type = RTE_INTR_HANDLE_UIO;
+    priv->intr_handle.fd = priv->intr_fd;
+    priv->intr_handle.uio_cfg_fd = -1;
+
+    ret = rte_intr_callback_register(&priv->intr_handle, hns5_intr_lsc_handler, dev);
+    if (ret != 0) {
+        hns5_warn(dev, "failed to register lsc callback, ret:%d, fallback to polling\n", ret);
+        goto free_irq;
+    }
+
+    /* request_port_irq has enabled the interrupt, enable again to make the state explicit */
+    ret = hidrv_mag_mac_enable_interrupt(priv->mag_pf_devid, priv->intr_fd, 1);
+    if (ret != 0) {
+        hns5_warn(dev, "failed to enable lsc interrupt, ret:%d, fallback to polling\n", ret);
+        (void)rte_intr_callback_unregister(&priv->intr_handle, hns5_intr_lsc_handler, dev);
+        goto free_irq;
+    }
+
+    hns5_info(dev, "port:%u lsc interrupt registered, fd:%d\n", dev->data->port_id, priv->intr_fd);
+    goto start_poll;
+
+free_irq:
+    (void)hidrv_mag_mac_free_irq(priv->mag_pf_devid, priv->intr_fd);
+    priv->intr_fd = -1;
+    memset(&priv->intr_handle, 0, sizeof(priv->intr_handle));
+
+start_poll:
+    /* sync the current status so the first poll only reports a real change */
+    (void)hns5_eth_link_update(dev, 0);
+    priv->last_link_status = dev->data->dev_link.link_status;
+
+    /*
+     * the mac only raises an irq on link down, polling is what reports link up,
+     * it also keeps the link status fresh for the application
+     */
+    ret = rte_eal_alarm_set(HNS5_LSC_POLL_INTERVAL_US, hns5_intr_lsc_poll, dev);
+    if (ret != 0) {
+        hns5_err(dev, "failed to start lsc poll alarm, ret:%d\n", ret);
+        return ret;
+    }
+    return 0;
+}
+
 static int hns5_eth_dev_stop(struct rte_eth_dev *dev)
 {
     uint32_t lcore_id = hns5_get_lcore_id();
     uint32_t vcpu = lcore_id * 2 + 1;
     int ret;
+
+    /* hw is going down: the lsc irq would otherwise report on stale state */
+    hns5_intr_lsc_teardown(dev);
 
     ret = hns5_eth_dev_set_link_down(dev);
     if (ret != 0) {
@@ -405,6 +660,11 @@ static int hns5_eth_dev_start(struct rte_eth_dev *dev)
         hns5_err(dev, "failed to linkup, ret:%d\n", ret);
         return ret;
     }
+
+    /* hw is up: register the link status change interrupt (polling fallback inside) */
+    ret = hns5_intr_lsc_setup(dev);
+    if (ret != 0)
+        hns5_warn(dev, "failed to setup lsc, link status will not be notified, ret:%d\n", ret);
 
     hns5_info(dev, "port:%u succeed to start\n", dev->data->port_id);
     return 0;
@@ -815,22 +1075,6 @@ static int hns5_eth_tx_queue_setup(struct rte_eth_dev *dev, uint16_t tx_queue_id
     return 0;
 }
 
-static int hns5_eth_link_update(struct rte_eth_dev *dev, int wait_to_complete __rte_unused)
-{
-    int ret = 0;
-    struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
-    struct rte_eth_link *link = &(dev->data->dev_link);
-    enum hidrv_mag_link_status link_status = HIDRV_MAG_LINK_INVALID;
-
-    ret = hidrv_mag_mac_get_link_status(priv->mag_pf_devid, priv->param.mport_id, &link_status);
-    if (ret != 0) {
-        hns5_err(dev, "failed to hidrv_mag_mac_get_link_status, ret:%d\n", ret);
-        return ret;
-    }
-    link->link_status = (link_status == HIDRV_MAG_LINK_UP) ? ETH_LINK_UP : ETH_LINK_DOWN;
-    return 0;
-}
-
 static int hns5_eth_fec_get_capability(struct rte_eth_dev *dev, struct rte_eth_fec_capa *speed_fec_capa,
     unsigned int num)
 {
@@ -1134,6 +1378,7 @@ static struct rte_eth_dev *hns5_eth_dev_create(struct rte_vdev_device *vdev)
     hns5_info(dev, "[BIND] eth_dev allocated: port_id = %u, device_name = %s\n", dev->data->port_id, rte_vdev_device_name(vdev));
     data = dev->data;
     priv = data->dev_private;
+    priv->intr_fd = -1; /* lsc irq not requested yet */
 
     data->mac_addrs = &priv->address;
     snprintf(dev_name, sizeof(dev_name), "%s_%d", MZ_RTE_ETH_DEV_RX_QUEUE, dev->data->port_id);
