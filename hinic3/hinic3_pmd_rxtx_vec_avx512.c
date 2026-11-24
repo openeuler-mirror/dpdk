@@ -4,20 +4,12 @@
 
 #include <immintrin.h>
 
-#include <rte_ether.h>
 #include <rte_mbuf.h>
 #include <rte_prefetch.h>
 
 #include "base/hinic3_compat.h"
-#include "base/hinic3_pmd_hwif.h"
-#include "base/hinic3_pmd_hwdev.h"
-#include "base/hinic3_pmd_wq.h"
-#include "base/hinic3_pmd_mgmt.h"
-#include "base/hinic3_pmd_nic_cfg.h"
 #include "hinic3_pmd_nic_io.h"
-#include "hinic3_pmd_dcb.h"
 #include "hinic3_pmd_ethdev.h"
-#include "hinic3_pmd_tx.h"
 #include "hinic3_pmd_rx.h"
 #include "hinic3_pmd_rxtx_vec_common.h"
 

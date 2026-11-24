@@ -19,7 +19,6 @@
 #include <rte_malloc.h>
 #include <rte_mempool.h>
 #include <rte_errno.h>
-#include <rte_cpuflags.h>
 #include <rte_ether.h>
 #include <rte_interrupts.h>
 #include <rte_ring.h>
