@@ -173,6 +173,11 @@ struct hns5_eth_priv {
     handle poe_vfhandle;
     int mag_pf_devid;
     handle mag_handle;
+    /* link status interrupts */
+    int intr_fd;                        /* LSC中断fd，小于0表示未申请 */
+    struct rte_intr_handle intr_handle; /* LSC中断句柄 */
+    uint32_t last_link_status;          /* 已上报的链路状态 */
+    int alarm_cancel;                   /* teardown flag, accessed via __atomic */
     /* promiscuous mode */
     uint8_t promisc_mode;
     /* flow */
