@@ -6241,6 +6241,9 @@ static int hinic3_dev_init(struct rte_eth_dev *eth_dev)
 #ifdef RTE_ARCH_X86_64
 		if (nic_dev->vec_allowed == 1) {
 			eth_dev->rx_pkt_burst = hinic3_recv_pkts_compact_cqe_vec_avx;
+		if (nic_dev->vec_allowed == 1 &&
+		    rte_cpu_get_flag_enabled(RTE_CPUFLAG_AVX512F)) {
+			eth_dev->rx_pkt_burst = hinic3_recv_pkts_compact_cqe_vec_avx;
 		}
 #endif
 	}
