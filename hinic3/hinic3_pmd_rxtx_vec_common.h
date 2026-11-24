@@ -119,7 +119,7 @@ hinic3_rearm_rxq_mbuf_vec(struct hinic3_rxq *rxq)
 	if (unlikely(rearm_wqebbs == 0))
 		return -ENOMEM;
 
-	/* compact CQE 内嵌在报文缓冲区头部，独立的 CQE ring 未分配，不能碰 */
+	/* CQE is integrated in the packet buffer; the separate CQE ring is unallocated, do not touch it. */
 	if (rxq->rx_cqe)
 		for (i = 0; i < rearm_wqebbs; i++)
 			rx_cqe[i].status = 0;

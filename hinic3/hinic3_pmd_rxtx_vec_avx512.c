@@ -13,42 +13,37 @@
 #include "hinic3_pmd_rx.h"
 #include "hinic3_pmd_rxtx_vec_common.h"
 
-/* 函数级指令集限定：只有探测到 AVX512F 后才会真正执行到下面的向量指令 */
+/* Function-level ISA attribute; only reached after the AVX512F runtime probe. */
 #define HINIC3_AVX512_TARGET	__attribute__((target("avx512f")))
 
 #define HINIC3_AVX_COMPACT_RXDONE_BIT	7
 
 /*
- * compact CQE 的 csum_err 位段：主机序 dw0 的 bit[20:19]
- * （RQ_COMPACT_CQE_STATUS_CSUM_ERR_SHIFT=19, MASK=0x3），换算到 raw
- * 小端 dword 即 bit[12:11]（H.bit(n) = R.bit(31-n)）。
- * 值域与标量 get_compact_cqe_info 的映射对应：
- *   0=无错  1=L3/L4 校验错  2=OTHER(→IPSU_OTHER_ERR)  3=BYPASS(→HW_CHECK_NONE)
+ * csum_err field: host dw0 bit[20:19] -> raw dword bit[12:11].
+ * Values match the scalar compact mapping:
+ *   0=OK  1=L3/L4 error  2=OTHER  3=BYPASS
  */
 #define HINIC3_AVX_COMPACT_CSUM_ERR_SHIFT	11
 
 /*
- * compact CQE 的 ptype 索引位段：主机序 dw0 的 bit[27:16]
- * （RQ_COMPACT_CQE_STATUS_PTYPE_SHIFT=16, MASK=0xFFF），查表对象为
- * nic_dev->ptype_tbl->ptype[4096]，标量 compact 路径每包无条件查表填
- * packet_type（8B/16B CQE 无差别），这里逐包同语义。
- * raw 小端 dword 的字节级换算（H 字节 j = B(3-j)）：
- *   H[27:24] = B0[3:0] → idx[11:8]，H[23:16] = B1 → idx[7:0]
+ * ptype index: host dw0 bit[27:16] -> raw bytes
  *   idx = ((dw0 & 0xF) << 8) | ((dw0 >> 8) & 0xFF)
+ * indexing ptype_tbl->ptype[4096], same per-packet lookup as the
+ * scalar compact path.
  */
 #define HINIC3_AVX_COMPACT_PTYPE_IDX(dw0) \
 	((((dw0) & 0xFu) << 8) | (((dw0) >> 8) & 0xFFu))
 
 /*
- * 批量处理 4 个内嵌 compact CQE。
+ * Process 4 integrated compact CQEs per iteration.
  *
- * 16B CQE 的字节布局（与 NEON 侧 shuf_mask 逐字节一致）：
+ * 16B CQE layout (identical to the NEON shuf_mask):
  *   dw0: pkt_len=b2,b3 | cqe_len=b1 bit7 (raw bit15) | rxdone=b0 bit7 (raw bit7)
- *        | ptype 索引 = b0[3:0]<<8 | b1（host bit[27:16]）
- *   dw1: rss hash = b7,b6,b5,b4
+ *        | ptype idx = b0[3:0]<<8 | b1 (host bit[27:16])
+ *   dw1: rss hash = b7..b4
  *   dw2: vlan_tci = b10,b9
- * 重排后写入 rx_descriptor_fields1 的前 16B：
- *   packet_type ← ptype 查表（lane0，insert_epi32，desc-ready 同款方案 A）
+ * After the shuffle, the 16B written to rx_descriptor_fields1 holds:
+ *   packet_type (from the ptype table, inserted into lane0)
  *   | pkt_len | data_len | vlan_tci | rss
  */
 static inline HINIC3_AVX512_TARGET u16
@@ -60,21 +55,22 @@ hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
 	u16 sw_ci = MASKED_QUEUE_IDX(rxq, rxq->cons_idx);
 	u16 pos, valid_pkts, nb_rx = 0;
 	u32 i;
-	/* 队列级开关：每批算一次。csum 关闭时整段为 no-op（UNKNOWN=0，
-	 * ol_flags 已由 rearm 清零），与标量 hinic3_rx_csum 的入口
-	 * 判断同语义。 */
+	/* Queue-level switches, computed once per burst. No-op when csum
+	 * offload is off (UNKNOWN=0, ol_flags cleared by rearm), same as
+	 * the scalar hinic3_rx_csum entry check. */
 	u16 csum_en = (nic_dev->rx_csum_en & HINIC3_DEFAULT_RX_CSUM_OFFLOAD) != 0;
 	u16 rss_en = nic_dev->rss_type.val != 0;
-	/* RSS flag 批内恒定，与逐包 csum flags 合并成一次 ol_flags 写 */
+	/* RSS flag is burst-wide constant; folded with the per-packet csum
+	 * flags into a single ol_flags write. */
 	u16 rss_flag = rss_en ? (u16)HINIC3_PKT_RX_RSS_HASH : 0;
-	/* ptype 查表指针批内恒定。表 16KB（4096 项，cache 对齐分配），真实
-	 * 流量的 ptype 热集通常只有几种，命中行常驻 L1（~4-5 cycle），
-	 * 冷 miss 每种 ptype 只发生一次。 */
+	/* ptype table pointer is burst-wide constant. The 4K-entry table is
+	 * cache-aligned; hot ptypes stay resident in L1 and cold misses
+	 * happen once per ptype. */
 	const struct hinic3_ptype_table *ptype_tbl = nic_dev->ptype_tbl;
 
 	/* ptype=0 | pkt_len=[b3,b2,0,0] | data_len=[b3,b2]
-	 * | vlan_tci=[b10,b9] | rss=[b7,b6,b5,b4]
-	 * （lane0 的 ptype 由查表结果 insert_epi32 覆盖，掩码不必置 0） */
+	 * | vlan_tci=[b10,b9] | rss=[b7..b4]
+	 * (lane0 is overwritten by the table lookup, no need to zero it) */
 	const __m128i shuf_mask = _mm_setr_epi8(
 		0xFF, 0xFF, 0xFF, 0xFF,
 		3, 2, 0xFF, 0xFF,
@@ -91,13 +87,15 @@ hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
 		u32 status_arr[HINIC3_DEFAULT_DESCS_PER_LOOP];
 		u32 not_done = 0;
 
-		/* A. 4 个 mbuf 指针搬到调用者数组（4*8B，两条 128bit 搬移） */
+		/* A. copy the 4 mbuf pointers to the caller array (two
+		 * 128-bit moves) */
 		_mm_storeu_si128((__m128i *)&rx_pkts[pos],
 			_mm_loadu_si128((const __m128i *)&rx_info[pos]));
 		_mm_storeu_si128((__m128i *)&rx_pkts[pos + 2],
 			_mm_loadu_si128((const __m128i *)&rx_info[pos + 2]));
 
-		/* B. 逐包 load 16B 内嵌 CQE（地址不连续）。 */
+		/* B. load the 16B integrated CQE of each packet (non-contiguous
+		 * addresses). */
 		for (i = 0; i < HINIC3_DEFAULT_DESCS_PER_LOOP; i++) {
 			cqe_addr[i] =
 				hinic3_vec_compact_cqe_addr(rx_pkts[pos + i]);
@@ -116,12 +114,15 @@ hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
 		if (unlikely(valid_pkts == 0))
 			break;
 
-		/* D. 逐包 128bit shuffle + ptype 查表插 lane0 + 16B 宽存。
-		 * insert 紧跟 shuffle、在宽存之前：packet_type 与其余描述符
-		 * 字段同一次 16B store 交付，宽存后无窄写跟随，不存在
-		 * store-forwarding 停顿。
-		 * 未完成的槽位 status_arr 是残留旧值，索引经 12 位掩码恒在
-		 * 表界内，查出的垃圾 ptype 只写进不会被交付的槽位，无害。 */
+		/* D. per-packet 128-bit shuffle + ptype table insert into
+		 * lane0 + 16B wide store. The insert sits between the
+		 * shuffle and the wide store so packet_type is delivered by
+		 * the same 16B store, with no narrow write after it (no
+		 * store-forwarding stall).
+		 * For not-yet-done slots status_arr holds stale values; the
+		 * 12-bit masked index keeps the lookup in bounds and the
+		 * garbage ptype only lands in slots that are never
+		 * delivered. */
 		for (i = 0; i < HINIC3_DEFAULT_DESCS_PER_LOOP; i++) {
 			u32 ptype_idx = HINIC3_AVX_COMPACT_PTYPE_IDX(
 							status_arr[i]);
@@ -134,15 +135,15 @@ hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
 				pkt_mb);
 		}
 
-		/* E. 跳过内嵌 CQE 并清 RXDONE 握手位。
-		 * cqe_len 位段在 be32 后的主机位 23，对应 raw dword 的
-		 * bit15（主机位 23 = 字节2位7 → raw 字节1位7；raw BIT(23)
-		 * 命中的是 pkt_len 最高位），见 vec_common.h 的推导注释：
-		 * cqe_len=1 时 8B，否则 16B。
-		 * RXDONE 是"硬件置位、软件清零"的握手位，与标量路径
-		 * rx_cqe->status = 0 一致；不清零的话硬件写新 CQE 前
-		 * 轮询会把残留 DD 当作新包完成，收到垃圾数据。
-		 * CQE 地址必须在 data_off 被修改之前计算。 */
+		/* E. skip the integrated CQE and clear the RXDONE handshake
+		 * bit. cqe_len is host bit 23 of the BE status word, i.e.
+		 * raw bit15 (raw BIT(23) would hit pkt_len's MSB); see
+		 * vec_common.h. cqe_len=1 -> 8B CQE, else 16B.
+		 * RXDONE is a hardware-set/software-clear handshake, same
+		 * as the scalar rx_cqe->status = 0; leaving it set would
+		 * make the poll treat stale DD as a new completion before
+		 * the NIC writes the next CQE.
+		 * The CQE address must be computed before data_off changes. */
 		for (i = 0; i < valid_pkts; i++) {
 			struct rte_mbuf *mb = rx_pkts[pos + i];
 			volatile u32 *cqe_status = (volatile u32 *)cqe_addr[i];
@@ -152,13 +153,13 @@ hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
 
 			mb->data_off += data_offset;
 
-			/* checksum offload：csum_err 在 raw dw0 的 bit[12:11]，
-			 * 语义与标量 hinic3_rx_csum + compact 映射逐值对齐：
-			 *   0 → IP/L4 GOOD；
-			 *   1 → IP_BAD（csum_errors++）；
-			 *   2 → OTHER_ERR（other_errors++，flag 为 0 即
-			 *       UNKNOWN）；
-			 *   3 → HW BYPASS → UNKNOWN（无操作）。 */
+			/* checksum offload: csum_err is raw dw0 bit[12:11],
+			 * aligned with the scalar hinic3_rx_csum compact
+			 * mapping:
+			 *   0 -> IP/L4 GOOD;
+			 *   1 -> IP_BAD (csum_errors++);
+			 *   2 -> OTHER_ERR (other_errors++);
+			 *   3 -> HW BYPASS -> UNKNOWN (no-op). */
 			if (csum_en) {
 				u32 csum_err = (status_arr[i] >>
 					HINIC3_AVX_COMPACT_CSUM_ERR_SHIFT) & 0x3;
@@ -193,12 +194,13 @@ hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
 }
 
 /*
- * 按 hw_ci 把本轮长度收窄到"硬件确认已完成"的连续前缀。
+ * Narrow the burst to the prefix confirmed done by the NIC via hw_ci.
  *
- * compact CQE 的完成位在报文缓冲区里：mbuf 归还 mempool 再补充出来时，
- * buf + data_off 处仍是上一轮的 CQE，RXDONE 可能残留 1，环回绕后会被
- * 误判成新包。与标量路径同一套缓存策略：缓存住上次读到的 hw_ci，
- * 绝大多数调用不用再摸 CI 写回区那一行，缓存数量小于一批时刷新。
+ * The completion bit lives in the packet buffer: after an mbuf returns to
+ * the mempool and is reused, the CQE at buf + data_off may still carry a
+ * stale RXDONE=1 from the previous round, which would be mistaken for a
+ * new packet after ring wraparound. Cache hw_ci like the scalar path and
+ * refresh the cache when it covers less than one burst.
  */
 static inline u16
 hinic3_vec_compact_cqe_limit(struct hinic3_rxq *rxq, u16 sw_ci, u16 vec_pkts)
@@ -224,10 +226,10 @@ hinic3_vec_compact_cqe_limit(struct hinic3_rxq *rxq, u16 sw_ci, u16 vec_pkts)
 }
 
 /*
- * 整窗预取：compact CQE 的地址要经 rx_info→mbuf→buf_addr/data_off 两级
- * 依赖才能算出来，只提前 4 个的预取量盖不住访存延迟（批内循环最多只
- * 能提前一批）。标量路径进来就把窗口内所有 mbuf 和缓冲区头预取掉
- * （rx.c 的 prefetch_flag 机制），这里对齐它。
+ * Prefetch the whole window: computing a compact CQE address takes two
+ * dependent loads (rx_info -> mbuf -> buf_addr/data_off), so prefetching
+ * only 4 ahead cannot hide the latency. Mirror the scalar path, which
+ * prefetches all mbufs and buffer heads up front (rx.c prefetch_flag).
  */
 static inline void
 hinic3_vec_prefetch_window(struct hinic3_rxq *rxq, u16 sw_ci, u16 nb_pkts)
@@ -282,13 +284,14 @@ hinic3_recv_pkts_compact_cqe_vec_avx(void *rx_queue, struct rte_mbuf **rx_pkts,
 		n = RTE_MIN(nb_pkts, HINIC3_DEFAULT_RX_BURST);
 
 		/*
-		 * 每个分批窗口处理前整窗预取一次（hw_ci 确认前缀内，
-		 * T0）：burst ≤ 32 时窗口预取覆盖全部包，批内的下一批
-		 * 预取不再需要；burst > 32 时后续窗口由这里逐窗覆盖。
-		 * 窗口起点必须按 q_depth 掩码：nb_pkts 可以是 512（testpmd
-		 * flush 用 MAX_PKT_BURST 收包），nb_rx 跨窗口累积后
-		 * sw_ci + nb_rx 会越过 rx_info 的 q_depth + RX_BURST
-		 * 填充区，把堆上的垃圾读成 mbuf 指针（SIGSEGV @ mbuf->pool）。
+		 * Prefetch the whole window before each burst (within the
+		 * hw_ci-confirmed prefix). With burst <= 32 this covers
+		 * all packets; larger bursts are covered window by window.
+		 * The window start must be masked by q_depth: nb_pkts can
+		 * be 512 (testpmd flush uses MAX_PKT_BURST), and the
+		 * accumulated sw_ci + nb_rx would otherwise run past the
+		 * rx_info padding area and read heap garbage as mbuf
+		 * pointers (SIGSEGV at mbuf->pool).
 		 */
 		hinic3_vec_prefetch_window(rxq,
 			(u16)((sw_ci + nb_rx) & rxq->q_mask), n);

@@ -508,15 +508,15 @@ void hinic3_free_all_rxq_mbufs(struct hinic3_nic_dev *nic_dev)
 }
 
 /*
- * 向量收包（AVX512）一批最多 HINIC3_DEFAULT_RX_BURST 个，允许越过环尾：
- * rx_info 用线性下标访问，越界槽位落在 ethdev 按 q_depth + RX_BURST 预留的
- * 填充区里。这里把填充区填上正常初始化的 dummy mbuf，并显式清零内嵌的
- * compact CQE，保证越界槽位读到的 RXDONE 恒为 0：尾批在真实尾包之后自然
- * 提前收尾，cons_idx 到环尾后由 MASKED_QUEUE_IDX 回绕。
+ * Fill the rx_info padding slots reserved by ethdev (q_depth + RX_BURST).
+ * The vector RX path may overrun the ring tail by up to one burst with
+ * linear indexing; padding slots carry initialized dummy mbufs with the
+ * integrated compact CQE zeroed so RXDONE reads 0 and the tail burst
+ * terminates right after the last real packet.
  *
- * 不用 rte_mbuf_raw_alloc：它的缓冲区不清零、refcnt 也不置 1，残留的
- * RXDONE 可能把 dummy 槽位误判成已完成包，refcnt=0 的 mbuf 交给应用会
- * 破坏 mempool。重复启动用 NULL 之外的槽位跳过，避免泄漏。
+ * rte_pktmbuf_alloc is required: raw_alloc neither zeroes the buffer nor
+ * sets refcnt=1, which would corrupt the mempool. Already-filled slots
+ * are skipped so repeated starts do not leak.
  */
 int hinic3_alloc_rxq_padding(struct hinic3_rxq *rxq)
 {
@@ -539,8 +539,8 @@ int hinic3_alloc_rxq_padding(struct hinic3_rxq *rxq)
 		mbuf->ol_flags = 0;
 
 		/*
-		 * compact CQE 内嵌在缓冲区头部：清零 CQE 所在段，保证填充槽位
-		 * 的 RXDONE 恒为 0（rte_pktmbuf_alloc 不保证缓冲区内容干净）。
+		 * Zero the integrated compact CQE so RXDONE stays 0:
+		 * rte_pktmbuf_alloc does not guarantee clean contents.
 		 */
 #ifdef DPDK_21_11
 		cqe = (uint8_t *)rte_mbuf_buf_addr(mbuf, mbuf->pool) + mbuf->data_off;
@@ -569,7 +569,7 @@ void hinic3_free_rxq_padding(struct hinic3_rxq *rxq)
 	if (rxq->rx_info == NULL)
 		return;
 
-	/* 填充区要么整段连着分配，要么一开始就是 NULL，遇到空槽位即可停 */
+	/* Padding is either filled contiguously or all NULL; stop at the first empty slot. */
 	for (i = 0; i < HINIC3_DEFAULT_RX_BURST; i++) {
 		if (rxq->rx_info[rxq->q_depth + i].mbuf == NULL)
 			break;
@@ -1178,10 +1178,10 @@ int hinic3_start_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq)
 	rte_spinlock_lock(&nic_dev->queue_list_lock);
 
 	/*
-	 * 向量场景尾批跨环尾会踩空指针，需要额外分配padding内存。
-	 * 分配必须先于入链/refill/rearm：一旦失败，队列尚未进入驱动
-	 * 链表与硬件 RSS 间接表，WQE 也未下发，无需回滚，直接返回；
-	 * 否则队列会停留在“驱动已移除、硬件仍投递”的中间态。
+	 * Allocate padding before the queue joins the driver list, the RSS
+	 * indirection table and the hardware: on failure nothing needs to be
+	 * rolled back. Allocating later would leave a half-started queue on
+	 * failure.
 	 */
 	if (nic_dev->vec_allowed) {
 		err = hinic3_alloc_rxq_padding(rxq);
@@ -1353,10 +1353,7 @@ int hinic3_start_all_rqs(struct rte_eth_dev *eth_dev)
 			goto out;
 		}
 
-		/* 
-		 * 向量指令集场景需要填充槽位：填充区供向量路径
-		 * 尾批跨环尾读取（dummy 槽位 RXDONE=0），见 alloc 函数注释。 
-		 */
+		/* Padding slots serve the vector path tail overrun; see hinic3_alloc_rxq_padding(). */
 		if (nic_dev->vec_allowed) {
 			err = hinic3_alloc_rxq_padding(rxq);
 			if (err) {
@@ -1389,7 +1386,7 @@ out:
 			continue;
 		hinic3_remove_rq_from_rx_queue_list(nic_dev, rxq->q_id);
 		hinic3_free_rxq_mbufs(rxq);
-		/* free_rxq_mbufs 只回收活跃槽位，padding 槽位在这里归还 */
+		/* free_rxq_mbufs only reclaims active slots; return the padding here. */
 		hinic3_free_rxq_padding(rxq);
 		hinic3_dev_rx_queue_intr_disable(eth_dev, rxq->q_id);
 		eth_dev->data->rx_queue_state[i] = RTE_ETH_QUEUE_STATE_STOPPED;

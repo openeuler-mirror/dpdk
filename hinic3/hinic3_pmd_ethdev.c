@@ -1835,7 +1835,7 @@ static void hinic3_rx_queue_release(struct rte_eth_dev *dev, uint16_t queue_id)
 
 	hinic3_free_rxq_mbufs(rxq);
 
-	/* 向量路径额外分配的padding需要free。 */
+	/* Free the padding allocated for the vector RX path. */
 	if (rxq->nic_dev->vec_allowed)
 		hinic3_free_rxq_padding(rxq);
 
