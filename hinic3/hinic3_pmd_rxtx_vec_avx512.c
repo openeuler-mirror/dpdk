@@ -19,6 +19,7 @@
 #include "hinic3_pmd_ethdev.h"
 #include "hinic3_pmd_tx.h"
 #include "hinic3_pmd_rx.h"
+#include "hinic3_pmd_rxtx_vec_common.h"
 
 /* 函数级指令集限定：只有探测到 AVX512F 后才会真正执行到下面的向量指令 */
 #define HINIC3_AVX512_TARGET	__attribute__((target("avx512f")))
@@ -45,122 +46,6 @@
  */
 #define HINIC3_AVX_COMPACT_PTYPE_IDX(dw0) \
 	((((dw0) & 0xFu) << 8) | (((dw0) >> 8) & 0xFFu))
-
-static inline uint8_t *
-hinic3_vec_compact_cqe_addr(struct rte_mbuf *mbuf)
-{
-#ifdef DPDK_21_11
-	return (uint8_t *)rte_mbuf_buf_addr(mbuf, mbuf->pool) + mbuf->data_off;
-#else
-#ifdef __GNUC__
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-#endif
-	return (uint8_t *)rte_mbuf_buf_addr(mbuf, mbuf->pool) + mbuf->data_off;
-#ifdef __GNUC__
-#pragma GCC diagnostic pop
-#endif
-#endif
-}
-
-static u32
-hinic3_rx_alloc_mbuf_bulk_vec_avx(struct hinic3_rxq *rxq,
-				  struct rte_mbuf **mbufs, u32 exp_mbuf_cnt)
-{
-	u32 avail_cnt;
-	int err;
-
-	err = rte_pktmbuf_alloc_bulk(rxq->mb_pool, mbufs, exp_mbuf_cnt);
-	if (likely(err == 0)) {
-		avail_cnt = exp_mbuf_cnt;
-	} else {
-		avail_cnt = 0;
-		rxq->rxq_stats.rx_nombuf += exp_mbuf_cnt;
-	}
-#ifdef HINIC3_XSTAT_MBUF_USE
-	rxq->rxq_stats.alloc_mbuf += avail_cnt;
-#endif
-	return avail_cnt;
-}
-
-static int
-hinic3_rearm_rxq_mbuf_vec_avx(struct hinic3_rxq *rxq)
-{
-	struct hinic3_rq_wqe *rq_wqe = NULL;
-	volatile struct hinic3_rq_cqe *rx_cqe = NULL;
-	struct rte_mbuf **rearm_mbufs;
-	u32 i, free_wqebbs, rearm_wqebbs, exp_wqebbs;
-	rte_iova_t dma_addr;
-	rte_iova_t align_dma_addr;
-	u16 pi;
-	struct hinic3_nic_dev *nic_dev = rxq->nic_dev;
-
-	free_wqebbs = rxq->delta - 1;
-	if (unlikely(free_wqebbs < rxq->rx_free_thresh))
-		return -ENOMEM;
-
-	pi = MASKED_QUEUE_IDX(rxq, rxq->prod_idx);
-	rearm_mbufs = (struct rte_mbuf **)(&rxq->rx_info[pi]);
-	rx_cqe = &rxq->rx_cqe[pi];
-
-	exp_wqebbs = rxq->q_depth - pi;
-	if (free_wqebbs < exp_wqebbs)
-		exp_wqebbs = free_wqebbs;
-
-	rearm_wqebbs = hinic3_rx_alloc_mbuf_bulk_vec_avx(rxq, rearm_mbufs,
-							 exp_wqebbs);
-	if (unlikely(rearm_wqebbs == 0))
-		return -ENOMEM;
-
-	/* compact CQE 内嵌在报文缓冲区头部，独立的 CQE ring 未分配，不能碰 */
-	if (rxq->rx_cqe)
-		for (i = 0; i < rearm_wqebbs; i++)
-			rx_cqe[i].status = 0;
-
-	rq_wqe = NIC_WQE_ADDR(rxq, pi);
-	for (i = 0; i < rearm_wqebbs; i++) {
-		dma_addr = rte_mbuf_data_iova_default(rearm_mbufs[i]);
-		if (rxq->rx_dma_align) {
-			if (hinic3_rx_dma_align_is_offset(rxq->rx_dma_align))
-				align_dma_addr = dma_addr + rxq->rx_dma_align;
-			else
-				align_dma_addr = RTE_ALIGN(dma_addr,
-							  rxq->rx_dma_align);
-			rearm_mbufs[i]->data_off = (u16)(RTE_PKTMBUF_HEADROOM +
-					(align_dma_addr - dma_addr));
-			dma_addr = align_dma_addr;
-		} else {
-			rearm_mbufs[i]->data_off = RTE_PKTMBUF_HEADROOM;
-		}
-		rearm_mbufs[i]->port = rxq->port_id;
-		rearm_mbufs[i]->ol_flags = 0;
-
-		if (rxq->wqe_type == HINIC3_EXTEND_RQ_WQE) {
-			rq_wqe->extend_wqe.buf_desc.sge.hi_addr =
-				hinic3_hw_be32(upper_32_bits(dma_addr));
-			rq_wqe->extend_wqe.buf_desc.sge.lo_addr =
-				hinic3_hw_be32(lower_32_bits(dma_addr));
-			rq_wqe->extend_wqe.buf_desc.sge.len =
-				nic_dev->rx_buff_len;
-		} else {
-			/* compact CQE 场景 wqe_type 恒为 COMPACT_RQ_WQE，
-			 * 与 normal_wqe 的地址字段在 union 前 8 字节重叠。 */
-			rq_wqe->compact_wqe.buf_hi_addr =
-				hinic3_hw_be32(upper_32_bits(dma_addr));
-			rq_wqe->compact_wqe.buf_lo_addr =
-				hinic3_hw_be32(lower_32_bits(dma_addr));
-		}
-
-		rq_wqe = (struct hinic3_rq_wqe *)((u64)rq_wqe + rxq->wqebb_size);
-	}
-	rxq->prod_idx += rearm_wqebbs;
-	rxq->delta -= rearm_wqebbs;
-
-	hinic3_write_db(rxq->db_addr, rxq->local_qid, 0, RQ_CFLAG_DP,
-		((pi + rearm_wqebbs) & rxq->q_mask) << rxq->wqe_type);
-
-	return 0;
-}
 
 /*
  * 批量处理 4 个内嵌 compact CQE。
@@ -404,7 +289,7 @@ hinic3_recv_pkts_compact_cqe_vec_avx(void *rx_queue, struct rte_mbuf **rx_pkts,
 	nb_pkts = RTE_ALIGN_FLOOR(nb_pkts, HINIC3_DEFAULT_DESCS_PER_LOOP);
 
 	if (rxq->delta > rxq->rx_free_thresh)
-		hinic3_rearm_rxq_mbuf_vec_avx(rxq);
+		hinic3_rearm_rxq_mbuf_vec(rxq);
 
 	/*
 	 * hw_ci 门控：硬件没确认任何完成时直接返回，连第一个 CQE 的行都
@@ -456,7 +341,7 @@ hinic3_recv_pkts_compact_cqe_vec_avx(void *rx_queue, struct rte_mbuf **rx_pkts,
 			break;
 
 		if (rxq->delta > rxq->rx_free_thresh)
-			hinic3_rearm_rxq_mbuf_vec_avx(rxq);
+			hinic3_rearm_rxq_mbuf_vec(rxq);
 	}
 
 	return nb_rx;

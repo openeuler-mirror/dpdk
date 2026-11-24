@@ -15,6 +15,7 @@
 #include "hinic3_pmd_ethdev.h"
 #include "hinic3_pmd_tx.h"
 #include "hinic3_pmd_rx.h"
+#include "hinic3_pmd_rxtx_vec_common.h"
 
 static uint32_t
 hinic3_get_l3_ptype(uint32_t ip_type)
@@ -573,26 +574,6 @@ void hinic3_free_rxq_padding(struct hinic3_rxq *rxq)
 		rte_pktmbuf_free(rxq->rx_info[rxq->q_depth + i].mbuf);
 		rxq->rx_info[rxq->q_depth + i].mbuf = NULL;
 	}
-}
-
-static u32 hinic3_rx_alloc_mbuf_bulk(struct hinic3_rxq *rxq,
-				     struct rte_mbuf **mbufs,
-				     u32 exp_mbuf_cnt)
-{
-	u32 avail_cnt;
-	int err;
-
-	err = rte_pktmbuf_alloc_bulk(rxq->mb_pool, mbufs, exp_mbuf_cnt);
-	if (likely(err == 0)) {
-		avail_cnt = exp_mbuf_cnt;
-	} else {
-		avail_cnt = 0;
-		rxq->rxq_stats.rx_nombuf += exp_mbuf_cnt;
-	}
-#ifdef HINIC3_XSTAT_MBUF_USE
-	rxq->rxq_stats.alloc_mbuf += avail_cnt;
-#endif
-	return avail_cnt;
 }
 
 static int hinic3_rearm_rxq_mbuf(struct hinic3_rxq *rxq)
