@@ -30,3 +30,10 @@ Set the threshold for the number of coalesced time in the Rx queue, unit is us.
 Note: The configured value must be a multiple of 5.
 - ``rx_cqe_compact_en`` parameter [int]
 Set to 0 to disable RX CQE and packet coalescing delivery. This feature is enabled by default.
+- ``rx_sw_rss`` parameter [int]
+Set to non-zero to enable software RSS dispatch: packets are received from hardware
+first, then hashed and spread into target queues by software. The hardware receive path
+is chosen by ``rx_cqe_compact_en`` (compact cqe or separate cqe). Disabled by default.
+- ``sw_rss_flush_us`` parameter [int]
+Set the threshold for the number of coalesced time in the SW RSS cache, unit is us.
+Default value is 10us. Note: The configured value must be a multiple of 5.

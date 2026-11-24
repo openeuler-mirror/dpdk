@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <poll.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
@@ -20,6 +21,17 @@
 #include <rte_errno.h>
 #include <rte_cpuflags.h>
 #include <rte_ether.h>
+#include <rte_interrupts.h>
+#include <rte_ring.h>
+#include <rte_cycles.h>
+#include <rte_thash.h>
+#include <rte_ip.h>
+#include <rte_hash_crc.h>
+#include <rte_version.h>
+#include <stdint.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <rte_eal.h>
 
 #include "base/hinic3_compat.h"
 #include "base/hinic3_pmd_csr.h"
@@ -83,6 +95,34 @@
 #endif
 /* Driver-specific log messages type */
 int hinic3_logtype;
+
+/**
+ * Rate-limited driver log.
+ *
+ * Emits at most one message per @p interval_tsc cycles for all callers that
+ * share @p last_tsc. The emitted line carries the driver name prefix and a
+ * trailing newline, consistent with PMD_DRV_LOG(). The level check happens
+ * before the rate-limit accounting, so disabled levels cost almost nothing.
+ */
+void hinic3_log_limited(uint32_t level, uint64_t *last_tsc,
+			uint64_t interval_tsc, const char *fmt, ...)
+{
+	va_list ap;
+	uint64_t now;
+
+	if ((int)level > rte_log_get_level((uint32_t)hinic3_logtype))
+		return;
+
+	now = rte_get_tsc_cycles();
+	if (now - *last_tsc < interval_tsc)
+		return;
+	*last_tsc = now;
+
+	va_start(ap, fmt);
+	rte_vlog(level, (uint32_t)hinic3_logtype, fmt, ap);
+	va_end(ap);
+}
+
 enum hinic3_rx_mod {
 	HINIC3_RX_MODE_UC = 1 << 0,
 	HINIC3_RX_MODE_MC = 1 << 1,
@@ -272,6 +312,8 @@ static const struct hinic3_xstats_name_off hinic3_phyport_stats_strings[] = {
 static const struct hinic3_xstats_name_off hinic3_rxq_stats_strings[] = {
 	{"rx_nombuf", offsetof(struct hinic3_rxq_stats, rx_nombuf)},
 	{"burst_pkt", offsetof(struct hinic3_rxq_stats, burst_pkts)},
+	{"sw_rss_pkts", offsetof(struct hinic3_rxq_stats, sw_rss_pkts)},
+	{"sw_rss_drop_pkts", offsetof(struct hinic3_rxq_stats, sw_rss_drop_pkts)},
 	{"errors", offsetof(struct hinic3_rxq_stats, errors)},
 	{"csum_errors", offsetof(struct hinic3_rxq_stats, csum_errors)},
 	{"other_errors", offsetof(struct hinic3_rxq_stats, other_errors)},
@@ -2477,6 +2519,545 @@ static void hinic3_print_hairpin_map(struct rte_eth_dev *dev)
 	}
 }
 
+
+/**
+ * SW RSS parse failure log (debug only).
+ *
+ * A -1 return includes the normal fallback case of "not a VXLAN-GPE packet",
+ * so per-packet logging would flood the log under mixed traffic. Delegate to
+ * the common rate-limited log with a private limit of one message per second.
+ */
+static void hinic3_sw_rss_parse_fail_log(const char *reason,
+					 uint16_t pkt_len,
+					 uint16_t offset)
+{
+	static uint64_t last_tsc;
+	static uint64_t interval_tsc = 0;
+
+	if (unlikely(interval_tsc == 0))
+		interval_tsc = rte_get_tsc_hz();
+
+	HINIC3_LOG_LIMITED(RTE_LOG_DEBUG, &last_tsc, interval_tsc,
+			   "SW RSS parse failed: %s, pkt_len: %u, offset: %u",
+			   reason, (unsigned int)pkt_len, (unsigned int)offset);
+}
+
+/**
+ * Parse the 4-tuple following the IP header and compute the SW RSS hash.
+ *
+ * Compared with the old implementation that first filled a full-length tuple
+ * (HINIC3_SW_RSS_HASH_KEY_MAX_LEN) and then hashed it as a whole, only the
+ * valid fields are hashed here per address family:
+ *   IPv4: src(4)+dst(4)+sport(2)+dport(2) = 12B
+ *   IPv6: src(16)+dst(16)+sport(2)+dport(2) = 36B
+ * This shortens the CRC input and avoids zero padding / uninitialized reads of
+ * the high part of the tuple in the IPv4 case.
+ *
+ * @return 0 on success (*hash is valid), -1 on parse failure
+ */
+static int hinic3_sw_rss_parse_transport(const uint8_t *pkt,
+						uint16_t pkt_len, uint16_t offset,
+						uint32_t *hash)
+{
+	uint8_t key[HINIC3_SW_RSS_HASH_KEY_MAX_LEN];
+	uint8_t version;
+	uint8_t next_proto;
+	uint16_t ip_hdr_len;
+	uint16_t key_len;
+	uint16_t l4_off;
+
+	/* The minimum IPv4 header is 20B; one bounds check covers both the
+	 * version byte and the port read. */
+	if (unlikely(offset + sizeof(struct rte_ipv4_hdr) > pkt_len)) {
+		hinic3_sw_rss_parse_fail_log("L3 header truncated",
+					     pkt_len, offset);
+		return -1;
+	}
+
+	version = pkt[offset] >> HINIC3_SW_RSS_IP_VERSION_SHIFT;
+	if (likely(version == IPV4_VERSION)) {
+		const struct rte_ipv4_hdr *ip4 =
+			(const struct rte_ipv4_hdr *)(pkt + offset);
+		ip_hdr_len = HINIC3_SW_RSS_IPV4_HDR_LEN(ip4);
+		if (unlikely(ip_hdr_len < sizeof(struct rte_ipv4_hdr))) {
+			hinic3_sw_rss_parse_fail_log("invalid IPv4 IHL",
+						     pkt_len, offset);
+			return -1;
+		}
+		/* src/dst are contiguous in the IPv4 header, fetch both at once */
+		rte_memcpy(key, &ip4->src_addr,
+			   HINIC3_SW_RSS_IPV4_ADDR_PAIR_LEN);
+		key_len = HINIC3_SW_RSS_IPV4_ADDR_PAIR_LEN;
+		next_proto = ip4->next_proto_id;
+	} else if (version == IPV6_VERSION) {
+		const struct rte_ipv6_hdr *ip6 =
+			(const struct rte_ipv6_hdr *)(pkt + offset);
+		if (unlikely(offset + sizeof(struct rte_ipv6_hdr) > pkt_len)) {
+			hinic3_sw_rss_parse_fail_log("IPv6 header truncated",
+						     pkt_len, offset);
+			return -1;
+		}
+		rte_memcpy(key, HINIC3_IPV6_HDR_SRC_ADDR(ip6),
+			   HINIC3_SW_RSS_IPV6_ADDR_LEN);
+		rte_memcpy(key + HINIC3_SW_RSS_IPV6_ADDR_LEN,
+			   HINIC3_IPV6_HDR_DST_ADDR(ip6),
+			   HINIC3_SW_RSS_IPV6_ADDR_LEN);
+		key_len = HINIC3_SW_RSS_IPV6_ADDR_PAIR_LEN;
+		next_proto = ip6->proto;
+		ip_hdr_len = sizeof(struct rte_ipv6_hdr);
+	} else {
+		hinic3_sw_rss_parse_fail_log("unsupported IP version",
+					     pkt_len, offset);
+		return -1;
+	}
+
+	l4_off = offset + ip_hdr_len;
+	/* TCP/UDP ports sit at the same offset in the transport header, so only
+	 * the port pair is fetched */
+	if (next_proto == IPPROTO_TCP || next_proto == IPPROTO_UDP) {
+		if (unlikely(l4_off + HINIC3_SW_RSS_L4_PORT_PAIR_LEN >
+			     pkt_len)) {
+			hinic3_sw_rss_parse_fail_log("L4 ports truncated",
+						     pkt_len, l4_off);
+			return -1;
+		}
+		rte_memcpy(key + key_len, pkt + l4_off,
+			   HINIC3_SW_RSS_L4_PORT_PAIR_LEN);
+		key_len += HINIC3_SW_RSS_L4_PORT_PAIR_LEN;
+	}
+
+	*hash = rte_hash_crc(key, key_len, 0);
+	return 0;
+}
+
+/**
+ * Parse the inner header of a VXLAN-GPE packet and compute the SW RSS hash.
+ *
+ * Supports any combination of outer/inner IPv4 and IPv6:
+ *   VXLAN-GPE next_protocol: 0x01=IPv4, 0x02=IPv6, 0x03=Ethernet (containing
+ *   IPv4/IPv6), 0x04=NSH (containing IPv4/IPv6)
+ *
+ * @param m        mbuf pointer
+ * @param hash     output: hash value used for distribution
+ * @return         0 on success, -1 on parse failure (not VXLAN-GPE or invalid
+ *                 packet)
+ */
+static inline int hinic3_parse_vxlan_gpe_inner(struct rte_mbuf *m,
+					       uint32_t *hash)
+{
+	const uint8_t *pkt = rte_pktmbuf_mtod(m, const uint8_t *);
+	uint16_t pkt_len = rte_pktmbuf_data_len(m);
+	uint16_t offset = sizeof(struct rte_ether_hdr);
+	uint8_t version;
+	uint8_t next_protocol;
+
+	/* Outer IP header: IPv4 or IPv6. Check bounds once using the minimum
+	 * IPv4 header length; this covers both the version byte read and the full
+	 * header access of the IPv4 branch. */
+	if (unlikely(pkt_len < offset + sizeof(struct rte_ipv4_hdr))) {
+		hinic3_sw_rss_parse_fail_log("outer L3 truncated",
+					     pkt_len, offset);
+		return -1;
+	}
+
+	version = pkt[offset] >> HINIC3_SW_RSS_IP_VERSION_SHIFT;
+	if (likely(version == IPV4_VERSION)) {
+		const struct rte_ipv4_hdr *ip4 =
+			(const struct rte_ipv4_hdr *)(pkt + offset);
+		uint16_t ihl = HINIC3_SW_RSS_IPV4_HDR_LEN(ip4);
+
+		if (unlikely(ihl < sizeof(struct rte_ipv4_hdr))) {
+			hinic3_sw_rss_parse_fail_log("outer IPv4 IHL invalid",
+						     pkt_len, offset);
+			return -1;
+		}
+		if (unlikely(ip4->next_proto_id != IPPROTO_UDP)) {
+			hinic3_sw_rss_parse_fail_log("outer proto not UDP",
+						     pkt_len, offset);
+			return -1;
+		}
+		offset += ihl;
+	/* Fixed ipv6 len, not available for variable len */
+	} else if (version == IPV6_VERSION) {
+		const struct rte_ipv6_hdr *ip6 =
+			(const struct rte_ipv6_hdr *)(pkt + offset);
+
+		if (unlikely(pkt_len < offset + sizeof(struct rte_ipv6_hdr))) {
+			hinic3_sw_rss_parse_fail_log("outer IPv6 truncated",
+						     pkt_len, offset);
+			return -1;
+		}
+		if (unlikely(ip6->proto != IPPROTO_UDP)) {
+			hinic3_sw_rss_parse_fail_log("outer proto not UDP",
+						     pkt_len, offset);
+			return -1;
+		}
+		offset += sizeof(struct rte_ipv6_hdr);
+	} else {
+		hinic3_sw_rss_parse_fail_log("outer L3 version unsupported",
+					     pkt_len, offset);
+		return -1;
+	}
+
+	/* Outer UDP header + VXLAN-GPE header; one bounds check covers both.
+	 * next_protocol is at byte [3] of the VXLAN-GPE header. */
+	if (unlikely(pkt_len < offset + sizeof(struct rte_udp_hdr) +
+		     HINIC3_VXLAN_GPE_HDR_LEN)) {
+		hinic3_sw_rss_parse_fail_log("VXLAN-GPE header truncated",
+					     pkt_len, offset);
+		return -1;
+	}
+	offset += sizeof(struct rte_udp_hdr);
+	next_protocol = pkt[offset + HINIC3_VXLAN_GPE_NEXT_PROTO_OFFSET];
+	offset += HINIC3_VXLAN_GPE_HDR_LEN;
+
+	/* Locate the inner IP according to the VXLAN-GPE next_protocol:
+	 *   0x01=IPv4, 0x02=IPv6, 0x03=Ethernet (containing IPv4/IPv6),
+	 *   0x04=NSH (containing IPv4/IPv6)
+	 */
+	if (next_protocol == HINIC3_SW_RSS_VXLAN_GPE_NEXT_PROTO_ETHERNET) {
+		if (unlikely(pkt_len < offset + sizeof(struct rte_ether_hdr))) {
+			hinic3_sw_rss_parse_fail_log("inner Ethernet truncated",
+						     pkt_len, offset);
+			return -1;
+		}
+		offset += sizeof(struct rte_ether_hdr);
+	} else if (next_protocol == HINIC3_SW_RSS_VXLAN_GPE_NEXT_PROTO_NSH) {
+		/* NSH (RFC 8300): the Length field is the low 6 bits of the 16-bit
+		 * ver_flags_ttl_len and describes the length of the whole NSH header
+		 * (base header + SPH + context headers) in 4-byte units. Use it to
+		 * skip the NSH header and locate the inner IPv4/IPv6.
+		 */
+		if (unlikely(pkt_len < offset + HINIC3_NSH_BASE_HDR_LEN)) {
+			hinic3_sw_rss_parse_fail_log("NSH header truncated",
+						     pkt_len, offset);
+			return -1;
+		}
+		if (unlikely((pkt[offset + HINIC3_NSH_LEN_OFFSET] &
+			      HINIC3_NSH_LEN_MASK) < HINIC3_NSH_MIN_LEN_WORDS)) {
+			hinic3_sw_rss_parse_fail_log("NSH length invalid",
+						     pkt_len, offset);
+			return -1;
+		}
+		offset += (uint16_t)(pkt[offset + HINIC3_NSH_LEN_OFFSET] &
+				     HINIC3_NSH_LEN_MASK) << HINIC3_NSH_LEN_SHIFT;
+		if (unlikely(offset > pkt_len)) {
+			hinic3_sw_rss_parse_fail_log("NSH length exceeds packet",
+						     pkt_len, offset);
+			return -1;
+		}
+	}
+
+	/* Inner IP + transport 4-tuple, produce the hash directly */
+	return hinic3_sw_rss_parse_transport(pkt, pkt_len, offset, hash);
+}
+
+/* Forward declaration: used by trace_hook */
+static void hinic3_sw_rss_flush(struct hinic3_nic_dev *nic_dev,
+                                struct hinic3_sw_rss_cache *cache,
+                                uint16_t target_q);
+
+/**
+ * VXLAN-GPE trace hook -- packet parsing + hash distribution
+ *
+ * Every DPDK core calls this hook after receiving packets; it parses the inner
+ * header and distributes the packet to the target queue by hash.
+ * Non-VXLAN-GPE packets are distributed to the current core (keeping the
+ * original RSS distribution).
+ * Distribution is batched: packets are first put into the cache indexed by
+ * target queue, and once HINIC3_SW_RSS_CACHE_THRESH is reached they are
+ * enqueued in one rte_ring_enqueue_burst, amortizing the contention cost of
+ * each enqueue. This hook never frees mbufs; mbufs left over from a failed
+ * enqueue are freed by the flush helper.
+ * Note: all cores perform HW RX + hash, no longer limited to one dedicated RX
+ * core.
+ *
+ * @param m        mbuf to process
+ * @param nic_dev  NIC device structure
+ * @param my_qid   queue ID of the current core
+ * @param cache    per-target-queue batch caches of this core (num_rqs entries)
+ * @return         0 on success
+ */
+int hinic3_sw_rss_trace_hook(struct rte_mbuf *m,
+							 struct hinic3_nic_dev *nic_dev,
+							 uint16_t my_qid,
+							 struct hinic3_sw_rss_cache *cache)
+{
+    uint32_t hash;
+    uint16_t target_q;
+
+    /* Try to parse the VXLAN-GPE inner header and get the hash directly (no
+     * intermediate tuple copy) */
+    if (hinic3_parse_vxlan_gpe_inner(m, &hash) == 0) {
+        /* Use a bitmask instead of an expensive udiv when num_rqs is a power
+         * of 2 */
+        if (nic_dev->rss_q_pow2)
+            target_q = hash & nic_dev->rss_q_mask;
+        else
+            target_q = hash % nic_dev->num_rqs;
+        m->hash.rss = hash;
+        m->ol_flags |= HINIC3_PKT_RX_RSS_HASH;
+    } else {
+        /* Not a VXLAN-GPE packet, keep distributing to the current core */
+        target_q = my_qid;
+    }
+
+    /* Cache first: record the timestamp of the first mbuf in this batch, and
+     * enqueue the whole batch once the threshold is reached; a cache below the
+     * threshold is flushed immediately by the RX exit when the ring is empty
+     * (low traffic), and extreme cases are covered by the low-frequency
+     * timeout safety net. */
+    if (cache[target_q].cnt == 0)
+        cache[target_q].last_tsc = rte_get_tsc_cycles();
+    cache[target_q].mbufs[cache[target_q].cnt++] = m;
+    if (cache[target_q].cnt == HINIC3_SW_RSS_CACHE_THRESH)
+        hinic3_sw_rss_flush(nic_dev, &cache[target_q], target_q);
+
+    return 0;
+}
+
+/**
+ * Enqueue the mbufs of one target queue cache to its ring in a batch.
+ * Mbufs that cannot be enqueued because the ring is full are freed.
+ */
+static void hinic3_sw_rss_flush(struct hinic3_nic_dev *nic_dev,
+                                struct hinic3_sw_rss_cache *cache,
+                                uint16_t target_q)
+{
+    /* Load into a local variable first: this prevents the compiler from
+     * reloading cache->cnt from memory repeatedly after calls such as
+     * rte_pktmbuf_free_bulk. */
+    uint16_t cnt = cache->cnt;
+    uint16_t n;
+
+    if (cnt == 0)
+        return;
+
+    n = rte_ring_enqueue_burst(nic_dev->sw_rss_rings[target_q],
+                               (void **)cache->mbufs, cnt, NULL);
+    /* Free the mbufs that were not enqueued (in bulk, avoiding the loop cost
+     * of per-packet free) and account the drops to the target queue's xstat.
+     * Enqueue failure is an abnormal path and multiple RX cores may drop to
+     * the same target queue, so accumulate atomically. */
+    if (unlikely(n < cnt)) {
+        struct hinic3_rxq *target_rxq = nic_dev->rxqs[target_q];
+
+        if (target_rxq)
+            __atomic_fetch_add(&target_rxq->rxq_stats.sw_rss_drop_pkts,
+                               cnt - n, __ATOMIC_RELAXED);
+#ifdef DPDK_21_11
+        rte_pktmbuf_free_bulk(&cache->mbufs[n], cnt - n);
+#else
+        /* rte_pktmbuf_free_bulk() is experimental before DPDK 21.11, so
+         * fall back to a plain loop to keep -Werror=deprecated-declarations
+         * builds clean. */
+        {
+            uint16_t i;
+
+            for (i = n; i < cnt; i++)
+                rte_pktmbuf_free(cache->mbufs[i]);
+        }
+#endif
+    }
+
+    cache->cnt = 0;
+}
+
+/**
+ * Flush the expired target queue caches of this core (low-traffic delivery
+ * guarantee).
+ *
+ * Only caches with cnt > 0 whose first mbuf timestamp is older than
+ * sw_rss_flush_us are enqueued. Under high traffic the cache reaches
+ * HINIC3_SW_RSS_CACHE_THRESH first and is enqueued by trace_hook in a batch;
+ * this function only serves low-traffic / traffic-stopped scenarios where the
+ * cache cannot reach 32 packets, preventing packets from lingering.
+ *
+ * The call frequency is reduced by the RX entry using
+ * HINIC3_SW_RSS_FLUSH_CHK_MASK (once every 64 receives) and does not affect
+ * the batch enqueue behavior under high traffic.
+ */
+void hinic3_sw_rss_flush_expired(struct hinic3_nic_dev *nic_dev,
+                                 struct hinic3_sw_rss_cache *cache)
+{
+    uint16_t q_id;
+    uint64_t now = rte_get_tsc_cycles();
+
+    for (q_id = 0; q_id < nic_dev->num_rqs; q_id++) {
+        if (cache[q_id].cnt == 0)
+            continue;
+        if (now - cache[q_id].last_tsc >= nic_dev->sw_rss_flush_tsc)
+            hinic3_sw_rss_flush(nic_dev, &cache[q_id], q_id);
+    }
+}
+
+/**
+ * Flush all target queue caches of this core (no timeout check; only used by
+ * the device stop / release path).
+ */
+void hinic3_sw_rss_flush_all(struct hinic3_nic_dev *nic_dev,
+                             struct hinic3_sw_rss_cache *cache)
+{
+    uint16_t q_id;
+
+    for (q_id = 0; q_id < nic_dev->num_rqs; q_id++)
+        hinic3_sw_rss_flush(nic_dev, &cache[q_id], q_id);
+}
+
+
+static int hinic3_sw_rss_init(struct hinic3_nic_dev *nic_dev)
+{
+    char ring_name[RTE_RING_NAMESIZE];
+    uint16_t q_id;
+    uint32_t ring_size;
+    /* Note: the enqueue side is multi-producer, so MP_ENQ (default) is
+     * required; SC_DEQ is used since each core performs a single dequeue.
+     * RING_F_MP_RTS_ENQ (relaxed tail sync) only exists since DPDK 20.11. */
+#ifdef DPDK_20_11
+    unsigned int mp_sc_flags = RING_F_MP_RTS_ENQ | RING_F_SC_DEQ;
+#else
+    unsigned int mp_sc_flags = RING_F_SC_DEQ;
+#endif
+
+    /* When SW RSS is disabled no resource is allocated, avoiding extra
+     * hugepage usage on spurious calls and adding no new failure point to
+     * dev_start.
+     */
+    if (!nic_dev->config.rx_sw_rss)
+        return 0;
+
+    /* MP/SC mode: multiple RX cores (multi-producer) enqueue and each ring is
+     * dequeued by a single core; a larger ring is needed to absorb bursts,
+     * typically q_depth 1024 */
+    ring_size = (uint32_t)nic_dev->rxqs[0]->q_depth * 4;
+
+    /* Precompute the fast target_q modulo mask: use & instead of an expensive
+     * udiv when num_rqs is a power of 2 */
+    if (nic_dev->num_rqs > 0 &&
+        (nic_dev->num_rqs & (nic_dev->num_rqs - 1)) == 0) {
+        nic_dev->rss_q_pow2 = true;
+        nic_dev->rss_q_mask = nic_dev->num_rqs - 1;
+    } else {
+        nic_dev->rss_q_pow2 = false;
+        nic_dev->rss_q_mask = 0;
+    }
+
+    /* Convert the cache timeout flush threshold: us -> tsc cycles
+     * (1s = 1000000us) */
+    nic_dev->sw_rss_flush_tsc = (uint64_t)nic_dev->config.sw_rss_flush_us *
+                                rte_get_tsc_hz() / 1000000;
+
+    /* 1. Allocate the MP/SC ring pointer array */
+    nic_dev->sw_rss_rings = rte_zmalloc_socket("sw_rss_rings",
+        nic_dev->num_rqs * sizeof(struct rte_ring *), RTE_CACHE_LINE_SIZE, rte_socket_id());
+    if (!nic_dev->sw_rss_rings) {
+        PMD_DRV_LOG(ERR,
+                    "SW RSS: failed to allocate rings array, dev_name: %s, "
+                    "num_rqs: %u, errno: %d",
+                    nic_dev->dev_name, (unsigned int)nic_dev->num_rqs,
+                    rte_errno);
+        return -ENOMEM;
+    }
+
+    /* 2. Create one MP/SC ring per queue (each core finally dequeues from
+     * here) */
+    for (q_id = 0; q_id < nic_dev->num_rqs; q_id++) {
+        snprintf(ring_name, sizeof(ring_name), "sw_rss_q%d_%s",
+                 q_id, nic_dev->dev_name);
+        nic_dev->sw_rss_rings[q_id] = rte_ring_create(ring_name, ring_size,
+            rte_socket_id(), mp_sc_flags);
+        if (!nic_dev->sw_rss_rings[q_id]) {
+            PMD_DRV_LOG(ERR,
+                        "SW RSS: failed to create ring %s, q_id: %u, "
+                        "size: %u, errno: %d",
+                        ring_name, (unsigned int)q_id,
+                        (unsigned int)ring_size, rte_errno);
+            goto free_rings;
+        }
+
+        nic_dev->rxqs[q_id]->sw_rss_ring = nic_dev->sw_rss_rings[q_id];
+    }
+
+    /* 3. Allocate the per-target-queue batch cache for each RX core (rxq) */
+    for (q_id = 0; q_id < nic_dev->num_rqs; q_id++) {
+        struct hinic3_rxq *rxq = nic_dev->rxqs[q_id];
+        if (!rxq)
+            continue;
+        rxq->sw_rss_cache = rte_zmalloc_socket("sw_rss_cache",
+            nic_dev->num_rqs * sizeof(struct hinic3_sw_rss_cache),
+            RTE_CACHE_LINE_SIZE, rte_socket_id());
+        if (!rxq->sw_rss_cache) {
+            PMD_DRV_LOG(ERR,
+                        "SW RSS: failed to allocate cache, dev_name: %s, "
+                        "q_id: %u, num_rqs: %u, errno: %d",
+                        nic_dev->dev_name, (unsigned int)q_id,
+                        (unsigned int)nic_dev->num_rqs, rte_errno);
+            goto free_caches;
+        }
+    }
+
+    nic_dev->sw_rss_enabled = true;
+    return 0;
+
+free_caches:
+    for (q_id = 0; q_id < nic_dev->num_rqs; q_id++) {
+        if (nic_dev->rxqs[q_id]) {
+            rte_free(nic_dev->rxqs[q_id]->sw_rss_cache);
+            nic_dev->rxqs[q_id]->sw_rss_cache = NULL;
+        }
+    }
+
+free_rings:
+    for (q_id = 0; q_id < nic_dev->num_rqs; q_id++) {
+        if (nic_dev->sw_rss_rings[q_id]) {
+            rte_ring_free(nic_dev->sw_rss_rings[q_id]);
+            nic_dev->sw_rss_rings[q_id] = NULL;
+        }
+    }
+    rte_free(nic_dev->sw_rss_rings);
+    nic_dev->sw_rss_rings = NULL;
+    return -ENOMEM;
+}
+
+static void hinic3_sw_rss_uninit(struct hinic3_nic_dev *nic_dev)
+{
+    struct rte_mbuf *m;
+    uint16_t q_id;
+
+    if (!nic_dev->sw_rss_enabled)
+        return;
+
+    /* First flush and free the batch caches of all rxqs (in case mbufs
+     * remain) */
+    for (q_id = 0; q_id < nic_dev->num_rqs; q_id++) {
+        struct hinic3_rxq *rxq = nic_dev->rxqs[q_id];
+        if (rxq && rxq->sw_rss_cache) {
+            hinic3_sw_rss_flush_all(nic_dev, rxq->sw_rss_cache);
+            rte_free(rxq->sw_rss_cache);
+            rxq->sw_rss_cache = NULL;
+        }
+    }
+
+    /* Drain and free the mbufs remaining in all MP/SC rings */
+    for (q_id = 0; q_id < nic_dev->num_rqs; q_id++) {
+        if (nic_dev->sw_rss_rings[q_id]) {
+            while (rte_ring_sc_dequeue(nic_dev->sw_rss_rings[q_id],
+                                        (void **)&m) == 0)
+                rte_pktmbuf_free(m);
+            rte_ring_free(nic_dev->sw_rss_rings[q_id]);
+            nic_dev->sw_rss_rings[q_id] = NULL;
+        }
+        if (nic_dev->rxqs[q_id])
+            nic_dev->rxqs[q_id]->sw_rss_ring = NULL;
+    }
+
+    /* Free the ring pointer array */
+    rte_free(nic_dev->sw_rss_rings);
+    nic_dev->sw_rss_rings = NULL;
+
+    nic_dev->sw_rss_enabled = false;
+}
+
 /**
  * Start the device.
  *
@@ -2603,6 +3184,37 @@ static int hinic3_dev_start(struct rte_eth_dev *eth_dev)
 	 */
 	nic_features &= DEFAULT_DRV_FEATURE;
 	hinic3_update_driver_feature(nic_dev, nic_features);
+
+	/* Init SW RSS before QPOOL mode check, so that it is available
+	 * in both QPOOL and non-QPOOL modes.
+	 * Allocate rings/caches only when rx_sw_rss is explicitly enabled:
+	 * existing users without it should not pay extra hugepage cost, nor
+	 * should this add a new dev_start failure point.
+	 */
+	if (nic_dev->config.rx_sw_rss) {
+		if (nic_dev->num_rqs > 1) {
+			err = hinic3_sw_rss_init(nic_dev);
+			if (err) {
+				PMD_DRV_LOG(ERR, "Init SW RSS failed, dev_name: %s",
+					    eth_dev->data->name);
+				goto sw_rss_init_fail;
+			}
+		} else {
+			PMD_DRV_LOG(WARNING,
+				    "SW RSS enabled but num_rqs: %u < 2, "
+				    "fallback to HW receive, dev_name: %s",
+				    (unsigned int)nic_dev->num_rqs,
+				    eth_dev->data->name);
+			/* A single RX queue cannot be distributed by SW RSS, so
+			 * install the plain hardware RX burst directly instead of
+			 * taking the per-burst fallback path in
+			 * hinic3_recv_pkts_sw_rss().
+			 */
+			eth_dev->rx_pkt_burst =
+				nic_dev->config.rx_cqe_compact_en ?
+				hinic3_recv_pkts_compact_cqe : hinic3_recv_pkts;
+		}
+	}
 
 	if (IS_QPOOL_MODE(nic_dev->hwdev))
  		return hinic3_dev_start_qpool(eth_dev);
@@ -2733,6 +3345,7 @@ en_vport_fail:
 		eth_dev->data->rx_queue_state[i] = RTE_ETH_QUEUE_STATE_STOPPED;
 		eth_dev->data->tx_queue_state[i] = RTE_ETH_QUEUE_STATE_STOPPED;
 	}
+
 start_rqs_fail:
 	hinic3_remove_rxtx_configure(eth_dev);
 scatter_mtu_conflict:
@@ -2747,6 +3360,8 @@ init_func_tbl_fail:
 init_rxq_intr_fail:
 refill_hairpin_fail:
 	hinic3_copy_mempool_uninit(nic_dev);
+sw_rss_init_fail:
+	hinic3_sw_rss_uninit(nic_dev);
 init_mpool_fail:
 	return err;
 }
@@ -2858,6 +3473,7 @@ static void hinic3_dev_stop(struct rte_eth_dev *dev)
 
 	/* Free all tx and rx mbufs */
 	hinic3_free_all_txq_mbufs(nic_dev);
+	hinic3_sw_rss_uninit(nic_dev);
 	hinic3_free_all_rxq_mbufs(nic_dev);
 
 	/* Free mempool */
@@ -3717,6 +4333,8 @@ hinic3_dev_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 	q_num = (nic_dev->num_rqs < RTE_ETHDEV_QUEUE_STAT_CNTRS) ?
 			nic_dev->num_rqs : RTE_ETHDEV_QUEUE_STAT_CNTRS;
 	for (i = 0; i < q_num; i++) {
+		u64 q_ipackets;
+
 		rxq = nic_dev->rxqs[i];
 		if (rxq == NULL)
 			continue;
@@ -3725,14 +4343,22 @@ hinic3_dev_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 #endif
 		rxq->rxq_stats.errors = rxq->rxq_stats.other_errors;
 
+		/* With SW RSS enabled, what queue i actually delivers to the
+		 * application are the packets sent up by SW RSS, so use sw_rss_pkts
+		 * as the per-queue RX count to make /ethdev/stats reflect the queue
+		 * distribution after SW RSS; keep the hardware RX count otherwise. */
+		q_ipackets = nic_dev->config.rx_sw_rss ?
+			     rxq->rxq_stats.sw_rss_pkts :
+			     rxq->rxq_stats.packets;
+
 #ifdef DPDK_25_11
 		if (qstats) {
-			qstats->q_ipackets[i] = rxq->rxq_stats.packets;
+			qstats->q_ipackets[i] = q_ipackets;
 			qstats->q_ibytes[i] = rxq->rxq_stats.bytes;
 			qstats->q_errors[i] = rxq->rxq_stats.errors;
 		}
 #else
-		stats->q_ipackets[i] = rxq->rxq_stats.packets;
+		stats->q_ipackets[i] = q_ipackets;
 		stats->q_ibytes[i] = rxq->rxq_stats.bytes;
 		stats->q_errors[i] = rxq->rxq_stats.errors;
 #endif
@@ -5225,6 +5851,10 @@ hinic3_nic_common_args_check_handler(const char *key, const char *val, void *opa
 	}
 	else if (strcmp(key, "rx_empty_loop") == 0)
 		config->rx_empty_loop = (unsigned int)tmp;
+	else if (strcmp(key, "rx_sw_rss") == 0)
+		config->rx_sw_rss = !!tmp;
+	else if (strcmp(key, "sw_rss_flush_us") == 0)
+		config->sw_rss_flush_us = (unsigned int)tmp;
 	else {
 		PMD_DRV_LOG(ERR, "Unknown parameter: %s", key);
 		return -EINVAL;
@@ -5251,6 +5881,8 @@ hinic3_nic_common_config_get(struct rte_pci_device *pci_dev,
 	config->rx_cqe_timer_loop = HINIC3_RX_CQE_TIMER_LOOP;
 	config->rx_dma_align = 0;	/* disabled by default */
 	config->rx_empty_loop = 0;	/* disabled by default */
+	config->rx_sw_rss = 0; /* default disable sw rss */
+	config->sw_rss_flush_us = 10; /* cache timeout flush threshold: 10us, balancing batching and low-traffic delivery latency */
 
 	if (eal_dev->devargs == NULL)
 		return 0;
@@ -5583,7 +6215,17 @@ static int hinic3_dev_init(struct rte_eth_dev *eth_dev)
 
 	hinic3_nic_feature_init(nic_dev);
 	
-	if ((nic_dev->config.rx_cqe_compact_en != HINIC3_RX_CQE_COMPACT_EN)) {
+	if (nic_dev->config.rx_sw_rss) {
+		/* SW RSS enabled: RX packets are distributed through
+		 * hinic3_recv_pkts_sw_rss, which internally selects the hardware RX
+		 * function based on rx_cqe_compact_en; the TX mode follows suit.
+		 */
+		eth_dev->rx_pkt_burst = hinic3_recv_pkts_sw_rss;
+		if (nic_dev->config.rx_cqe_compact_en)
+			eth_dev->tx_pkt_burst = hinic3_xmit_pkts_compact_cqe;
+		else
+			eth_dev->tx_pkt_burst = hinic3_xmit_pkts;
+	} else if ((nic_dev->config.rx_cqe_compact_en != HINIC3_RX_CQE_COMPACT_EN)) {
 		eth_dev->rx_pkt_burst = hinic3_recv_pkts;
 		eth_dev->tx_pkt_burst = hinic3_xmit_pkts;
 #ifdef RTE_ARCH_ARM

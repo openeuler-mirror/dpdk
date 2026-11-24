@@ -357,6 +357,8 @@ struct hinic3_rxq_stats {
 	u64 rx_nombuf;
 	u64 rx_discards;
 	u64 burst_pkts;
+	u64 sw_rss_pkts; /* packets dequeued from this queue's ring and delivered by SW RSS */
+	u64 sw_rss_drop_pkts; /* packets dropped because the SW RSS target ring was full */
 	u64 empty;
 	u64 tsc;
 #ifdef HINIC3_XSTAT_MBUF_USE
@@ -531,6 +533,9 @@ struct hinic3_rxq {
 	/* performance profiling */
 	uint64_t prof_rx_end_tsc;
 #endif
+	struct rte_ring *sw_rss_ring;           /* MP/SC ring this core finally dequeues from */
+	struct hinic3_sw_rss_cache *sw_rss_cache; /* per-target-queue batch caches of this core (num_rqs entries) */
+	uint32_t sw_rss_flush_chk;              /* RX counter used to trigger the low-frequency timeout flush */
 } __rte_cache_aligned;
 
 int hinic3_rx_fill_wqe(struct hinic3_rxq *rxq);
@@ -561,6 +566,8 @@ u16 hinic3_recv_pkts_compact_cqe_vec(void *rx_queue, struct rte_mbuf **rx_pkts, 
 u16 hinic3_recv_pkts_compact_cqe_vec_avx(void *rx_queue, struct rte_mbuf **rx_pkts,
 					 u16 nb_pkts);
 #endif
+
+u16 hinic3_recv_pkts_sw_rss(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts);
 
 u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts);
 

@@ -197,7 +197,13 @@ struct hinic3_nic_common_dev_config {
 	unsigned int rx_cqe_compact_en; /* cqe mode, 0 -- separate cqe, 1 -- compact cqe. */
 	unsigned int rx_cqe_coalesce_num; /* RX CQE parameter coalesce_num. */
 	unsigned int rx_cqe_timer_loop; /* RX CQE parameter time_loop. */
-	unsigned int rx_dma_align; /* RX DMA align (0/64/128/256/512) or direct offset (1-15). 0 disables. */
+	unsigned int rx_dma_align; /* RX DMA buffer alignment (0/64/128/256/512). 0 disables. */
+	unsigned int rx_sw_rss; /* SW RSS switch, 0 -- disable, non-zero -- enable. */
+	unsigned int sw_rss_flush_us; /* SW RSS cache timeout flush threshold (us),
+				       * default 10us. A smaller value lowers delivery
+				       * latency but causes more small-batch enqueues and
+				       * heavier ring CAS contention.
+				       */
 };
 
 struct hinic3_nic_dev {
@@ -211,6 +217,9 @@ struct hinic3_nic_dev {
 	u16 num_rqs;
 	u16 max_sqs;
 	u16 max_rqs;
+	u16 rss_q_mask;                     /* num_rqs-1, for fast modulo when num_rqs is a power of 2 */
+	bool rss_q_pow2;                    /* whether num_rqs is a power of 2 */
+	uint64_t sw_rss_flush_tsc;          /* cache timeout flush threshold (tsc cycles), converted from sw_rss_flush_us at init */
 
  	u16 rxq_depth;
 	u16 txq_depth;
@@ -275,6 +284,9 @@ struct hinic3_nic_dev {
 
 	bool hinic3_offload_initialized;
 	bool vec_allowed;
+		/* ===== VXLAN-GPE SW RSS fields ===== */
+	struct rte_ring **sw_rss_rings;        /* array of num_rqs pointers to MP/SC rings */
+	bool sw_rss_enabled;  
 };
 
 enum netdev_event_type {
@@ -303,6 +315,82 @@ struct netdev_event {
 	u16 rsvd;
 };
 
+/* ===== VXLAN-GPE SW RSS batch cache ===== */
+#define HINIC3_SW_RSS_CACHE_THRESH 32
+/* Timeout check interval mask: scan for expired caches once every 64 receives
+ * so that the scan cost is amortized.
+ */
+#define HINIC3_SW_RSS_FLUSH_CHK_MASK 0x3F
+/* Length of the temporary array for a single hardware RX burst in the SW RSS
+ * entry (nb_pkts is u16, so this length covers all of its values).
+ */
+#define HINIC3_SW_RSS_HW_PKTS_MAX 65536
+
+/* IP version: the high 4 bits of the first IP byte. */
+#define HINIC3_SW_RSS_IP_VERSION_SHIFT		4
+/* IPv4 IHL: the low 4 bits of version_ihl, expressed in 4-byte words. */
+#define HINIC3_SW_RSS_IPV4_IHL_MASK		0x0F
+#define HINIC3_SW_RSS_IPV4_IHL_SHIFT		2
+/* Byte length of an IPv4 header, derived from its IHL field. */
+#define HINIC3_SW_RSS_IPV4_HDR_LEN(ip4) \
+	((uint16_t)(((ip4)->version_ihl & HINIC3_SW_RSS_IPV4_IHL_MASK) << \
+		    HINIC3_SW_RSS_IPV4_IHL_SHIFT))
+
+/* SW RSS hash key layout: IPv6 src + dst (32B) + L4 ports (4B). */
+#define HINIC3_SW_RSS_HASH_KEY_MAX_LEN		36
+/* IPv4 src_addr and dst_addr are contiguous, so both are fetched at once. */
+#define HINIC3_SW_RSS_IPV4_ADDR_PAIR_LEN	8
+#define HINIC3_SW_RSS_IPV6_ADDR_LEN		16
+/* IPv6 src + dst address, used as the leading part of the hash key. */
+#define HINIC3_SW_RSS_IPV6_ADDR_PAIR_LEN	32
+/* TCP/UDP source port + destination port. */
+#define HINIC3_SW_RSS_L4_PORT_PAIR_LEN		4
+
+/* VXLAN-GPE header: flags(1) + reserved(1) + next_protocol(1) + vni(3). */
+#define HINIC3_VXLAN_GPE_HDR_LEN		8
+#define HINIC3_VXLAN_GPE_NEXT_PROTO_OFFSET	3
+
+/* NSH header (RFC 8300): the base header is 8B and the Length field is the low
+ * 6 bits of the 16-bit ver_flags_ttl_len, counting 4-byte words for the whole
+ * NSH header (base header + SPH + context headers).
+ */
+#define HINIC3_NSH_BASE_HDR_LEN			8
+#define HINIC3_NSH_LEN_OFFSET			1
+#define HINIC3_NSH_LEN_MASK			0x3F
+#define HINIC3_NSH_LEN_SHIFT			2
+/* Minimum valid NSH length, in 4-byte words (base header only). */
+#define HINIC3_NSH_MIN_LEN_WORDS		2
+
+/* VXLAN-GPE next_protocol values, describing the encapsulated payload. */
+enum hinic3_sw_rss_vxlan_gpe_next_proto {
+	HINIC3_SW_RSS_VXLAN_GPE_NEXT_PROTO_IPV4 = 0x01,
+	HINIC3_SW_RSS_VXLAN_GPE_NEXT_PROTO_IPV6 = 0x02,
+	HINIC3_SW_RSS_VXLAN_GPE_NEXT_PROTO_ETHERNET = 0x03,
+	HINIC3_SW_RSS_VXLAN_GPE_NEXT_PROTO_NSH = 0x04,
+};
+
+/* Per RX-core batch cache indexed by target queue.
+ * cnt is placed first so that it shares the first cache line with the early
+ * mbuf pointers; __rte_cache_aligned aligns each array element to 64B so that
+ * adjacent entries never overlap across cache lines.
+ */
+struct hinic3_sw_rss_cache {
+	uint16_t cnt;
+	uint16_t reserved;
+	uint64_t last_tsc;	/* tsc when the first mbuf of this batch was cached, used for the timeout flush decision */
+	struct rte_mbuf *mbufs[HINIC3_SW_RSS_CACHE_THRESH];
+} __rte_cache_aligned;
+
+/* VXLAN-GPE SW RSS function declarations */
+int hinic3_sw_rss_trace_hook(struct rte_mbuf *m,
+			      struct hinic3_nic_dev *nic_dev,
+			      uint16_t my_qid,
+			      struct hinic3_sw_rss_cache *cache);
+void hinic3_sw_rss_flush_expired(struct hinic3_nic_dev *nic_dev,
+				 struct hinic3_sw_rss_cache *cache);
+void hinic3_sw_rss_flush_all(struct hinic3_nic_dev *nic_dev,
+			     struct hinic3_sw_rss_cache *cache);
+
 extern const struct rte_flow_ops hinic3_flow_ops;
 
 bool is_sp230_nic(struct hinic3_nic_dev *nic_dev);
@@ -316,5 +404,31 @@ void hinic3_dev_info_get(struct rte_eth_dev_info *info,
 			 struct hinic3_nic_dev *nic_dev);
 
 int hinic3_get_group_num_qpool(struct hinic3_nic_dev *nic_dev, u8 *num_tc);
+
+/**
+ * Rate-limited driver log.
+ *
+ * Emits at most one message per @p interval_tsc cycles for all callers sharing
+ * @p last_tsc. The emitted line carries the driver name prefix and a trailing
+ * newline, consistent with PMD_DRV_LOG(). The level check is done before the
+ * rate-limit accounting, so a disabled level costs almost nothing.
+ *
+ * @param level
+ *   RTE_LOG_* level, passed as a runtime value.
+ * @param last_tsc
+ *   Caller-owned limiter state, statically initialized to 0.
+ * @param interval_tsc
+ *   Minimum interval between two messages, in tsc cycles.
+ * @param fmt
+ *   printf format of the message body (without prefix and newline).
+ */
+void hinic3_log_limited(uint32_t level, uint64_t *last_tsc,
+			uint64_t interval_tsc, const char *fmt, ...)
+	__rte_format_printf(4, 5);
+
+/* Convenience wrapper adding the driver name prefix and a trailing newline. */
+#define HINIC3_LOG_LIMITED(level, last_tsc, interval_tsc, fmt, args...) \
+	hinic3_log_limited((level), (last_tsc), (interval_tsc), \
+			   HINIC3_DRIVER_NAME ": " fmt "\n", ##args)
 
 #endif /* _HINIC3_PMD_ETHDEV_H_ */

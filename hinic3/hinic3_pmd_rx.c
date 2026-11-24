@@ -3,6 +3,8 @@
  */
 #include <rte_ether.h>
 #include <rte_mbuf.h>
+#include <rte_thash.h>
+#include <rte_ring.h>
 
 #include "base/hinic3_compat.h"
 #include "base/hinic3_pmd_hwif.h"
@@ -110,7 +112,7 @@ hinic3_calc_rx_ptype_table(uint32_t offload_type, struct hinic3_nic_dev *nic_dev
 		}
 		break;
 	default:
-	/* VXLAN 、NVGRE 、VXLAN_GPE 、GENEVE*/
+	/* VXLAN, NVGRE, VXLAN_GPE, GENEVE */
 		ptype |= RTE_PTYPE_L2_ETHER;
 		ptype |= hinic3_get_l3_ptype(enc_l3_type);
 
@@ -175,7 +177,7 @@ hinic3_calc_rx_ptype_compact_table(uint32_t offload_type)
 		ptype |= RTE_PTYPE_L2_ETHER_NSH;
 		break;
 	default:
-	/* VXLAN 、NVGRE 、VXLAN_GPE 、GENEVE 、IPinIP */
+	/* VXLAN, NVGRE, VXLAN_GPE, GENEVE, IPinIP */
 		ptype |= RTE_PTYPE_L2_ETHER;
 
 		switch (pkt_fmt) {
@@ -1009,7 +1011,7 @@ static int hinic3_poll_integrated_cqe_rq_empty(struct hinic3_rxq *rxq)
 	sw_pi = hinic3_get_rq_local_pi(rxq);
 	hw_ci = hinic3_get_rq_hw_ci(rxq);
 
-	/* 等待硬件排空 */
+	/* Wait for the hardware to drain */
 	if (is_sp560_nic(rxq->nic_dev)) {
 		timeout = msecs_to_jiffies(HINIC3_FLUSH_QUEUE_TIMEOUT) + jiffies;
 		do {
@@ -1024,7 +1026,7 @@ static int hinic3_poll_integrated_cqe_rq_empty(struct hinic3_rxq *rxq)
 			return -EFAULT;
 	}
 
-	/* rx流程还未结束 */
+	/* The RX flow has not finished yet */
 	while (sw_ci != hw_ci) {
 		rx_info = &rxq->rx_info[sw_ci];
 		rte_pktmbuf_free(rx_info->mbuf);
@@ -1778,4 +1780,48 @@ out:
 #endif
 
 	return pkts;
+}
+
+u16 hinic3_recv_pkts_sw_rss(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
+{
+    struct hinic3_rxq *rxq = rx_queue;
+    struct hinic3_nic_dev *nic_dev = rxq->nic_dev;
+    static struct rte_mbuf *hw_pkts[HINIC3_SW_RSS_HW_PKTS_MAX];
+    u16 hw_nb, nb_rx, i;
+
+    /* Timeout cache check (low-traffic delivery guarantee).
+     * Do not scan on every receive: sw_rss_flush_us is much larger than one RX
+     * period, so scanning once every 64 receives keeps enough timeout accuracy
+     * while amortizing the scan cost off the hot path.
+     * Note that the threshold must be significantly larger than the time to
+     * fill the cache with 32 packets, otherwise it degrades to per-packet or
+     * small-batch enqueue and the ring enqueue CAS contention becomes hot. */
+    if (unlikely((++rxq->sw_rss_flush_chk &
+                  HINIC3_SW_RSS_FLUSH_CHK_MASK) == 0))
+        hinic3_sw_rss_flush_expired(nic_dev, rxq->sw_rss_cache);
+
+    if (nic_dev->config.rx_cqe_compact_en)
+        hw_nb = hinic3_recv_pkts_compact_cqe(rx_queue, hw_pkts, nb_pkts);
+    else
+        hw_nb = hinic3_recv_pkts(rx_queue, hw_pkts, nb_pkts);
+
+    /* Parse each packet's hash and distribute it to the target queue cache
+     * (batch enqueue when the threshold is reached) */
+    for (i = 0; i < hw_nb; i++)
+        hinic3_sw_rss_trace_hook(hw_pkts[i], nic_dev, rxq->q_id,
+                                 rxq->sw_rss_cache);
+
+    /* ===== Best-effort dequeue from this core's own MP/SC ring =====
+     * Use burst rather than bulk: bulk fails as a whole and returns 0 when
+     * fewer than nb_pkts packets are available, which breaks the RX rhythm
+     * under low traffic; burst's best-effort behavior better matches RX
+     * semantics. */
+    nb_rx = rte_ring_dequeue_burst(rxq->sw_rss_ring,
+                                   (void **)rx_pkts, nb_pkts, NULL);
+
+    /* Observe how many packets each queue actually receives via SW RSS.
+     * Counting is done on the owning core of this queue, so there is no
+     * cross-core contention. */
+    rxq->rxq_stats.sw_rss_pkts += nb_rx;
+    return nb_rx;
 }
