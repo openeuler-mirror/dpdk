@@ -1176,6 +1176,23 @@ int hinic3_start_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq)
 
 	/* lock dev queue switch  */
 	rte_spinlock_lock(&nic_dev->queue_list_lock);
+
+	/*
+	 * 向量场景尾批跨环尾会踩空指针，需要额外分配padding内存。
+	 * 分配必须先于入链/refill/rearm：一旦失败，队列尚未进入驱动
+	 * 链表与硬件 RSS 间接表，WQE 也未下发，无需回滚，直接返回；
+	 * 否则队列会停留在“驱动已移除、硬件仍投递”的中间态。
+	 */
+	if (nic_dev->vec_allowed) {
+		err = hinic3_alloc_rxq_padding(rxq);
+		if (err) {
+			PMD_DRV_LOG(ERR, "Fail to alloc padding mbuf, qid = %u, local_qid = %u",
+				    rxq->q_id, rxq->local_qid);
+			rte_spinlock_unlock(&nic_dev->queue_list_lock);
+			return err;
+		}
+	}
+
 	hinic3_add_rq_to_rx_queue_list(nic_dev, rxq->q_id);
 
 	if (nic_dev->rss_state == HINIC3_RSS_ENABLE) {
@@ -1194,20 +1211,6 @@ int hinic3_start_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq)
 		}
 	}
 	hinic3_rearm_rxq_mbuf(rxq);
-
-	/*
-	 * 向量场景尾批跨环尾会踩空指针，需要额外分配padding内存。
-	 */
-	if (nic_dev->vec_allowed) {
-		err = hinic3_alloc_rxq_padding(rxq);
-		if (err) {
-			PMD_DRV_LOG(ERR, "Fail to alloc padding mbuf, qid = %u, local_qid = %u",
-					rxq->q_id, rxq->local_qid);
-			hinic3_remove_rq_from_rx_queue_list(nic_dev, rxq->q_id);
-			rte_spinlock_unlock(&nic_dev->queue_list_lock);
-			return err;
-		}
-	}
 
 	if (rxq->nic_dev->num_rss == 1) {
 		err = hinic3_set_vport_enable(nic_dev->hwdev, true);
@@ -1386,6 +1389,8 @@ out:
 			continue;
 		hinic3_remove_rq_from_rx_queue_list(nic_dev, rxq->q_id);
 		hinic3_free_rxq_mbufs(rxq);
+		/* free_rxq_mbufs 只回收活跃槽位，padding 槽位在这里归还 */
+		hinic3_free_rxq_padding(rxq);
 		hinic3_dev_rx_queue_intr_disable(eth_dev, rxq->q_id);
 		eth_dev->data->rx_queue_state[i] = RTE_ETH_QUEUE_STATE_STOPPED;
 	}
