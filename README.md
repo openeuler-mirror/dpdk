@@ -9,7 +9,7 @@ hinic3 driver是华为SPx系列网卡在DPDK框架下的用户态驱动，旨在
 ## 2. 版本配套关系
 | 版本号 | commit id | 配套固件版本 | 发布日期 | 版本特性 |
 |--|--|--|--|--|
-| [hinic3-26.2.rc1-0930.r1](链接待更新) | 待更新 | [待更新](链接待更新) | 2026.09.30 | [待更新](链接待更新) |
+| [hinic3-26.2.0-1030.r1](https://gitcode.com/openeuler/dpdk/tags/hinic3-26.2.0-1030.r1) | 9f2a2a98a | [IN220 2.6.3](https://support.huawei.com/enterprise/zh/computing-module/in220-pid-253287505/software/269870002) | 2026.10.30 | [release note](./release_note.md#hinic3-26.1.rc1-0930.r1) |
 | [hinic3-26.1.rc1-0630.r1](https://atomgit.com/openeuler/dpdk/tags/hinic3-26.1.rc1-0630.r1) | 0d6bdb79 | [IN220 2.6.1](https://support.huawei.com/enterprise/zh/huawei-computing-components/in220-pid-253287505/software/268628573?idAbsPath=fixnode01&#124;23710424&#124;251364417&#124;9856629&#124;253287505) | 2026.06.30 | [release note](./release_note.md#hinic3-26.1.rc1-0630.r1) |
 | [hinic3-26.0.rc2-0507.r1](https://atomgit.com/openeuler/dpdk/tags/hinic3-26.0.rc2-0507.r1) | 03e2cd6a | 请咨询技术支撑 | 2026.05.07 | 请咨询技术支撑 |
 | [hinic3-26.0.rc1-0331.r1](https://atomgit.com/openeuler/dpdk/tags/hinic3-26.0.rc1-0331.r1) | 6601cc18 | [IN220 2.6.RC4](https://support.huawei.com/enterprise/zh/huawei-computing-components/in220-pid-253287505/software/268283889?idAbsPath=fixnode01&#124;23710424&#124;251364417&#124;9856629&#124;253287505) | 2026.03.31 | [release note](./release_note.md#hinic3-260rc1-0331r1) |
