@@ -79,8 +79,6 @@ if arch_subdir == 'arm'
 endif
 
 if arch_subdir == 'x86'
-	# AVX512 指令用函数级 __attribute__((target("avx512f"))) 限定，
-	# 这里不加文件级 -mavx512f，避免整个驱动被强制要求该指令集。
 	sources += files('hinic3_pmd_rxtx_vec_avx512.c')
 endif
 
