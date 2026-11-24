@@ -54,6 +54,7 @@ hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
 	struct hinic3_nic_dev *nic_dev = rxq->nic_dev;
 	u16 sw_ci = MASKED_QUEUE_IDX(rxq, rxq->cons_idx);
 	u16 pos, valid_pkts, nb_rx = 0;
+	u64 rx_bytes = 0;
 	u32 i;
 	/* Queue-level switches, computed once per burst. No-op when csum
 	 * offload is off (UNKNOWN=0, ol_flags cleared by rearm), same as
@@ -153,6 +154,10 @@ hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
 
 			mb->data_off += data_offset;
 
+			/* pkt_len was filled by the D. wide store, same
+			 * source as the scalar path (CQE dw0 b2,b3). */
+			rx_bytes += mb->pkt_len;
+
 			/* checksum offload: csum_err is raw dw0 bit[12:11],
 			 * aligned with the scalar hinic3_rx_csum compact
 			 * mapping:
@@ -189,6 +194,7 @@ hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
 	rxq->cons_idx += nb_rx;
 	rxq->delta += nb_rx;
 	rxq->rxq_stats.packets += nb_rx;
+	rxq->rxq_stats.bytes += rx_bytes;
 
 	return nb_rx;
 }
