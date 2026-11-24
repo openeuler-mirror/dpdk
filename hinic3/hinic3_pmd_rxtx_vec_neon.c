@@ -163,7 +163,7 @@ hinic3_recv_pkts_vec(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts)
  * completion check follow the reference vec implementations.
  *
  * CQE (16B, big-endian words):
- *   dw0: PKT_LEN=b2,b3 | CQE_LEN=b2 bit7 | RXDONE=b0 bit7
+ *   dw0: PKT_LEN=b2,b3 | CQE_LEN=b1 bit7 (raw bit15) | RXDONE=b0 bit7
  *   dw1: rss hash
  *   dw2: VLAN_TAG=b9,b10
  * Packet data follows at buf_addr + data_off + data_offset.
@@ -278,9 +278,15 @@ hinic3_recv_burst_compact_cqe_vec(struct hinic3_rxq *rxq,
                          pkt_mb3);
 
                 /* E. skip the integrated CQE: data_off += 16 (16B CQE) or 8
-                 * (8B CQE); cqe_len bit = dw0 bit23 (raw LE bit23) */
+                 * (8B CQE); cqe_len is host bit 23 of the big-endian status
+                 * word (scalar RQ_COMPACT_CQE_STATUS_CQE_LEN_SHIFT), which
+                 * maps to raw bit 15 after the pure byte permutation of
+                 * be32_to_cpu (host byte j = raw byte 3 - j, bits inside
+                 * each byte preserved) */
                 for (i = 0; i < valid_pkts; i++) {
-                        u16 data_offset = (status_arr[i] & BIT(23)) ? 8 : 16;
+                        u16 data_offset =
+                                (status_arr[i] &
+                                 BIT(HINIC3_COMPACT_CQE_LEN_BIT)) ? 8 : 16;
 
                         rx_pkts[pos + i]->data_off += data_offset;
                 }

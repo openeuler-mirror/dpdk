@@ -19,6 +19,19 @@
  */
 
 /*
+ * Compact CQE cqe_len bit position in the raw (in-memory, little-endian
+ * loaded) dw0 of the CQE status word. The status word is big-endian and
+ * the scalar path reads it through be32_to_cpu() with host-order shifts
+ * (RQ_COMPACT_CQE_STATUS_CQE_LEN_SHIFT == 23); be32_to_cpu() is a pure
+ * byte permutation (host byte j = raw byte 3 - j, bit order inside each
+ * byte preserved), so host bit 23 (byte 2, bit 7) maps to raw bit 15
+ * (byte 1, bit 7). Both vector paths test the raw value directly, so
+ * they must all use this constant; testing BIT(23) on the raw word hits
+ * pkt_len's MSB instead.
+ */
+#define HINIC3_COMPACT_CQE_LEN_BIT	15
+
+/*
  * Address of the compact CQE integrated at the head of the packet buffer.
  * rte_mbuf_buf_addr() is deprecated since DPDK 20.11 (mbuf->pool is always
  * valid in this driver), silence the warning for the direct use here.
