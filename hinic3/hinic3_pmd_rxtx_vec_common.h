@@ -31,6 +31,9 @@
  */
 #define HINIC3_COMPACT_CQE_LEN_BIT	15
 
+#define HINIC3_MBUF_CQE_ADDR(mbuf) \
+	((uint8_t *)rte_mbuf_buf_addr(mbuf, mbuf->pool) + mbuf->data_off)
+
 /*
  * Address of the compact CQE integrated at the head of the packet buffer.
  * rte_mbuf_buf_addr() is deprecated since DPDK 20.11 (mbuf->pool is always
@@ -40,13 +43,13 @@ static inline uint8_t *
 hinic3_vec_compact_cqe_addr(struct rte_mbuf *mbuf)
 {
 #ifdef DPDK_21_11
-	return (uint8_t *)rte_mbuf_buf_addr(mbuf, mbuf->pool) + mbuf->data_off;
+	return HINIC3_MBUF_CQE_ADDR(mbuf);
 #else
 #ifdef __GNUC__
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #endif
-	return (uint8_t *)rte_mbuf_buf_addr(mbuf, mbuf->pool) + mbuf->data_off;
+	return HINIC3_MBUF_CQE_ADDR(mbuf);
 #ifdef __GNUC__
 #pragma GCC diagnostic pop
 #endif
