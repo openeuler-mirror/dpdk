@@ -542,7 +542,7 @@ int hinic3_alloc_rxq_padding(struct hinic3_rxq *rxq)
 		 * Zero the integrated compact CQE so RXDONE stays 0:
 		 * rte_pktmbuf_alloc does not guarantee clean contents.
 		 */
-		cqe = hinic3_vec_compact_cqe_addr(mbuf)
+		cqe = hinic3_vec_compact_cqe_addr(mbuf);
 		memset(cqe, 0, HINIC3_RX_DMA_ALIGN_CQE_OFFSET);
 
 		rxq->rx_info[rxq->q_depth + i].mbuf = mbuf;
