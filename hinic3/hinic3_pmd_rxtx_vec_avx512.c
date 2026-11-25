@@ -279,9 +279,15 @@ hinic3_recv_pkts_compact_cqe_vec_avx(void *rx_queue, struct rte_mbuf **rx_pkts,
 
 	rxm = rxq->rx_info[sw_ci].mbuf;
 
+	/*
+	 * No prefetch before this load, on purpose: the CQE address is a
+	 * three-level dependent chain (rx_info -> mbuf -> address), so a
+	 * prefetch can only be issued once the address is known -- back to
+	 * back with the demand load, with no travel time to hide a miss.
+	 * The demand load itself warms the line for the burst's CQE reads.
+	 */
 	rx_cqe = (volatile struct hinic3_rq_cqe *)
 		hinic3_vec_compact_cqe_addr(rxm);
-	rte_prefetch0(rx_cqe);
 
 	status = (u32)__atomic_load_n(&rx_cqe->status, __ATOMIC_ACQUIRE);
 	if (unlikely(!((status >> HINIC3_AVX_COMPACT_RXDONE_BIT) & 1)))
