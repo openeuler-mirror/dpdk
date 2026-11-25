@@ -510,13 +510,23 @@ void hinic3_free_all_rxq_mbufs(struct hinic3_nic_dev *nic_dev)
 /*
  * Fill the rx_info padding slots reserved by ethdev (q_depth + RX_BURST).
  * The vector RX path may overrun the ring tail by up to one burst with
- * linear indexing; padding slots carry initialized dummy mbufs with the
- * integrated compact CQE zeroed so RXDONE reads 0 and the tail burst
- * terminates right after the last real packet.
+ * linear indexing; padding slots carry a dummy mbuf whose integrated
+ * compact CQE is zeroed so RXDONE reads 0 and the tail burst terminates
+ * right after the last real packet.
  *
- * rte_pktmbuf_alloc is required: raw_alloc neither zeroes the buffer nor
- * sets refcnt=1, which would corrupt the mempool. Already-filled slots
- * are skipped so repeated starts do not leak.
+ * All padding slots share ONE dummy mbuf per queue. The invariants that
+ * make sharing safe (do not break them):
+ *   - a padding slot is never valid: RXDONE stays 0, so the burst
+ *     terminates before delivering it and the fill/RXDONE-clear path
+ *     never touches it;
+ *   - a padding slot is never rearmed and its data_off never changes,
+ *     so the dummy CQE address is constant and the zeroed CQE is
+ *     read-only;
+ *   - the vector descriptor store does write the dummy's
+ *     rx_descriptor_fields1 from stale lanes (possibly from several
+ *     RX cores concurrently), but that area is never read.
+ * rte_pktmbuf_alloc is required: raw_alloc neither zeroes the buffer
+ * nor sets refcnt=1, which would corrupt the mempool.
  */
 int hinic3_alloc_rxq_padding(struct hinic3_rxq *rxq)
 {
@@ -524,47 +534,53 @@ int hinic3_alloc_rxq_padding(struct hinic3_rxq *rxq)
 	uint8_t *cqe;
 	u16 i;
 
-	for (i = 0; i < HINIC3_DEFAULT_RX_BURST; i++) {
-		if (rxq->rx_info[rxq->q_depth + i].mbuf != NULL)
-			continue;
+	if (rxq->rx_info[rxq->q_depth].mbuf != NULL)
+		return 0;
 
-		mbuf = rte_pktmbuf_alloc(rxq->mb_pool);
-		if (unlikely(mbuf == NULL)) {
-			PMD_DRV_LOG(ERR, "Fail to alloc padding mbuf, qid = %u, local_qid = %u",
-				    rxq->q_id, rxq->local_qid);
-			return -ENOMEM;
-		}
-
-		mbuf->port = rxq->port_id;
-		mbuf->ol_flags = 0;
-
-		/*
-		 * Zero the integrated compact CQE so RXDONE stays 0:
-		 * rte_pktmbuf_alloc does not guarantee clean contents.
-		 */
-		cqe = hinic3_vec_compact_cqe_addr(mbuf);
-		memset(cqe, 0, HINIC3_RX_DMA_ALIGN_CQE_OFFSET);
-
-		rxq->rx_info[rxq->q_depth + i].mbuf = mbuf;
+	mbuf = rte_pktmbuf_alloc(rxq->mb_pool);
+	if (unlikely(mbuf == NULL)) {
+		PMD_DRV_LOG(ERR, "Fail to alloc padding mbuf, qid = %u, local_qid = %u",
+			    rxq->q_id, rxq->local_qid);
+		return -ENOMEM;
 	}
+
+	mbuf->port = rxq->port_id;
+	mbuf->ol_flags = 0;
+
+	/*
+	 * Zero the integrated compact CQE so RXDONE stays 0:
+	 * rte_pktmbuf_alloc does not guarantee clean contents.
+	 */
+	cqe = hinic3_vec_compact_cqe_addr(mbuf);
+	memset(cqe, 0, HINIC3_RX_DMA_ALIGN_CQE_OFFSET);
+
+	for (i = 0; i < HINIC3_DEFAULT_RX_BURST; i++)
+		rxq->rx_info[rxq->q_depth + i].mbuf = mbuf;
 
 	return 0;
 }
 
 void hinic3_free_rxq_padding(struct hinic3_rxq *rxq)
 {
+	struct rte_mbuf *mbuf;
 	u16 i;
 
 	if (rxq->rx_info == NULL)
 		return;
 
-	/* Padding is either filled contiguously or all NULL; stop at the first empty slot. */
-	for (i = 0; i < HINIC3_DEFAULT_RX_BURST; i++) {
-		if (rxq->rx_info[rxq->q_depth + i].mbuf == NULL)
-			break;
-		rte_pktmbuf_free(rxq->rx_info[rxq->q_depth + i].mbuf);
+	/*
+	 * All padding slots share one dummy mbuf: free it exactly once.
+	 * Freeing per slot would release the same mbuf 64 times and
+	 * corrupt the mempool.
+	 */
+	mbuf = rxq->rx_info[rxq->q_depth].mbuf;
+	if (mbuf == NULL)
+		return;
+
+	for (i = 0; i < HINIC3_DEFAULT_RX_BURST; i++)
 		rxq->rx_info[rxq->q_depth + i].mbuf = NULL;
-	}
+
+	rte_pktmbuf_free(mbuf);
 }
 
 static int hinic3_rearm_rxq_mbuf(struct hinic3_rxq *rxq)
