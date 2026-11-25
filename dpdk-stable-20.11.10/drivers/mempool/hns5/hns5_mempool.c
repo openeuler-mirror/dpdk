@@ -121,7 +121,7 @@ typedef struct {
 static int hns5_udev_map_res(const char *dev_base_name, struct device_id_info *id,
     enum hidrv_urm_id module_id, enum hidrv_urm_dev_type dev_type, const char *res_name, struct hidrv_urm_res *res)
 {
-    struct hidrv_urm_dev_info info;
+    struct hidrv_urm_dev_info info = {0};
     int ret;
 
     info.dev_base_name = dev_base_name;
@@ -239,11 +239,11 @@ static __rte_always_inline handle hns5_mp_get_pf_handle(struct hns5_mp_bmu_dev *
             return NULL;
         }
         dev->pfhandle = pfhandle;
-        RTE_LOG(INFO, PMD, "[hns5_bmu] hns5_mp_get_pf_handle: FIRST get pfhandle=%p, die_id=%u, pf_id=%u\n",
-            pfhandle, dev->id.die_id, dev->id.pf_id);
+        RTE_LOG(DEBUG, PMD, "[hns5_bmu] hns5_mp_get_pf_handle: FIRST get, die_id=%u, pf_id=%u\n",
+            dev->id.die_id, dev->id.pf_id);
         return pfhandle;
     }
-    RTE_LOG(INFO, PMD, "[hns5_bmu] hns5_mp_get_pf_handle: REUSE cached pfhandle=%p\n", dev->pfhandle);
+    RTE_LOG(DEBUG, PMD, "[hns5_bmu] hns5_mp_get_pf_handle: REUSE cached pfhandle\n");
     return dev->pfhandle;
 }
 
@@ -258,9 +258,8 @@ static int hns5_get_mempool_block_size(uint32_t *block_size)
         return 0;
     }
     pfhandle = hns5_mp_get_pf_handle(&g_mp_bmu_dev);
-    if (pfhandle == NULL) {
+    if (pfhandle == NULL)
         return E_BMU_GET_HANDLE_FAIL;
-    }
     ret = ndrv_bmu_pf_get_blk_size(pfhandle, &size);
     if (ret != 0) {
         RTE_LOG(ERR, PMD, "[hns5_bmu] ndrv bmu pf get blk size err ret %u\n", ret);
@@ -461,7 +460,7 @@ static int hns5_align_mp_size(struct rte_mempool *mp)
     }
     elt_num_per_block = block_size / bmu_buf_size;
     if (mp->size % elt_num_per_block != 0) { // mp->size not block-aligned, print warning, no return
-        RTE_LOG(INFO, PMD, "[hns5_bmu] mp->size %u is not an integer multiple of the block's buffer size %u.\n", mp->size, elt_num_per_block);
+        RTE_LOG(WARNING, PMD, "[hns5_bmu] mp->size %u is not an integer multiple of the block's buffer size %u.\n", mp->size, elt_num_per_block);
     }
     mp->size = (mp->size + elt_num_per_block - 1) / elt_num_per_block * elt_num_per_block;
 
@@ -544,9 +543,8 @@ static int hns5_bmu_create_pool(struct rte_mempool *mp)
 
 static void hns5_bmu_free_pool(struct rte_mempool* mp)
 {
-    if (mp->pool_config == NULL) {
+    if (mp->pool_config == NULL)
         return;
-    }
     rte_free(mp->pool_config);
     mp->pool_config = NULL;
 
@@ -563,9 +561,8 @@ static int hns5_bmu_free_bulk(struct rte_mempool *mp __rte_unused, void * const 
     handle vfhandle;
 
     vfhandle = hns5_mp_get_vf_handle(&g_mp_bmu_dev);
-    if (vfhandle == NULL) {
+    if (vfhandle == NULL)
         return E_BMU_GET_HANDLE_FAIL;
-    }
 
     // RTE_LOG(INFO, PMD, "[hns5_bmu] free_bulk called, n=%u, mp=%s\n", n, mp->name);
 
@@ -579,7 +576,7 @@ static int hns5_bmu_free_bulk(struct rte_mempool *mp __rte_unused, void * const 
             continue;
         }
         if (bmu_hdr->udata[0] != BMU_HDR_MAGIC_VALUE) {
-            RTE_LOG(ERR, PMD, "[hns5_bmu] bmu free failed, Invalid buf %p\n", obj_table[i]);
+            RTE_LOG(ERR, PMD, "[hns5_bmu] bmu free failed, Invalid buf\n");
             continue;
         }
         bmu_hdr->udata[2]++;
@@ -607,9 +604,8 @@ static int hns5_bmu_alloc_bulk(struct rte_mempool *mp, void **obj_table, unsigne
     handle vfhandle;
 
     vfhandle = hns5_mp_get_vf_handle(&g_mp_bmu_dev);
-    if (vfhandle == NULL) {
+    if (vfhandle == NULL)
         return E_BMU_GET_HANDLE_FAIL;
-    }
 
     for (i = 0; i < count; i++) {
         paddr = ndrv_bmu_vf_alloc(vfhandle, mp->pool_id, udf);
@@ -619,18 +615,17 @@ static int hns5_bmu_alloc_bulk(struct rte_mempool *mp, void **obj_table, unsigne
         }
         obj = (void *)hns5_bmu_phys2virt(paddr + MBUFF_FROM_PPE_OFFSET);
         if (obj == NULL) {
-            RTE_LOG(ERR, PMD, "[hns5_bmu] bmu alloc phys2virt fail, pool id:%ld paddr:0x%lx\n", mp->pool_id, paddr);
+            RTE_LOG(ERR, PMD, "[hns5_bmu] bmu alloc phys2virt fail, pool id:%ld\n", mp->pool_id);
             goto fail_do_cur;
         }
 #ifdef HNS5_BMU_POOL_HEAD_DFX_DEBUG
         bmu_buff_hdr_t *bmu_hdr;
         bmu_hdr = (bmu_buff_hdr_t *)RTE_PTR_SUB(obj_table[i], MBUFF_FROM_BMU_OFFSET);
-        if (bmu_hdr->udata[0] == BMU_HDR_MAGIC_VALUE_INIT) {
+        if (bmu_hdr->udata[0] == BMU_HDR_MAGIC_VALUE_INIT)
             bmu_hdr->udata[0] = BMU_HDR_MAGIC_VALUE;
-        }
         if (bmu_hdr->udata[0] != BMU_HDR_MAGIC_VALUE) {
-            RTE_LOG(ERR, PMD, "[hns5_bmu] bmu alloc a error buf, pool id:%ld, Invalid buf %p, bmu_hdr:%p, magic:0x%x\n",
-                mp->pool_id, obj_table[i], (void *)bmu_hdr, bmu_hdr->udata[0]);
+            RTE_LOG(ERR, PMD, "[hns5_bmu] bmu alloc a error buf, pool id:%ld, magic:0x%x\n",
+                mp->pool_id, bmu_hdr->udata[0]);
             goto fail_do_cur;
         }
 #endif
@@ -659,9 +654,8 @@ static uint32_t hns5_bmu_get_count(const struct rte_mempool *mp)
     handle vfhandle;
 
     vfhandle = hns5_mp_get_vf_handle(&g_mp_bmu_dev);
-    if (vfhandle == NULL) {
+    if (vfhandle == NULL)
         return E_BMU_GET_HANDLE_FAIL;
-    }
 
     ret = ndrv_bmu_vf_get_vlp_buf_cnt(vfhandle, mp->pool_id, &free_buffer_num);
     if (ret != 0) {
@@ -718,14 +712,13 @@ static int hns5_mp_phy_pool_inject_block(struct rte_mempool *mp __rte_unused, ui
     /* Record addr translation info (software table, not limited to 16 hw entries) */
     ret = hns5_bmu_add_addr_trans((uint64_t)vaddr, iova, len, pool_id);
     if (ret != 0) {
-        RTE_LOG(ERR, PMD, "[hns5_bmu] BMU add_block add trans tbl fail, ret:%d, vaddr:%p, iova:%p, size:%ld\n", ret, (void *)vaddr, (void *)iova, len);
+        RTE_LOG(ERR, PMD, "[hns5_bmu] BMU add_block add trans tbl fail, ret:%d, size:%ld\n", ret, len);
         return ret;
     }
 
     vfhandle = hns5_mp_get_vf_handle(&g_mp_bmu_dev);
-    if (vfhandle == NULL) {
+    if (vfhandle == NULL)
         return E_BMU_GET_HANDLE_FAIL;
-    }
 
     u_ret = ndrv_bmu_vf_get_pp_map_vpp(vfhandle, pool_id, &vfid, &vpp_id);
     if (u_ret != 0) {
@@ -733,8 +726,8 @@ static int hns5_mp_phy_pool_inject_block(struct rte_mempool *mp __rte_unused, ui
         return E_BMU_PHY_POOL_INIT_FAIL;
     }
 
-    RTE_LOG(INFO, PMD, "[hns5_bmu] inject phy pool, pool_id=%u, vpp_id=%u, iova=0x%lx, len=%zu, blocks=%zu\n",
-        pool_id, vpp_id, iova, len, len / blk_size);
+    RTE_LOG(DEBUG, PMD, "[hns5_bmu] inject phy pool, pool_id=%u, vpp_id=%u, len=%zu, blocks=%zu\n",
+        pool_id, vpp_id, len, len / blk_size);
 
     u_ret = ndrv_bmu_vf_add_vpp_blk(vfhandle, vpp_id, iova, len);
     if (u_ret != 0) {
@@ -756,7 +749,7 @@ static int hns5_mp_phy_pool_inject_block(struct rte_mempool *mp __rte_unused, ui
 static int hns5_logic_pool_init(struct rte_mempool *mp, uint32_t pool_id)
 {
     uint32_t buffer_size, buf_num_per_block;
-    struct hidrv_bmu_ppe_qos_thld qos_thld;
+    struct hidrv_bmu_ppe_qos_thld qos_thld = {0};
     uint32_t i;
     int ret;
     uint32_t qos_high_wl[BMU_QOS_NUM] = { 10 << 6, 8 << 6, 6 << 6, 4 << 6, 3 << 6, 2 << 6, 1 << 6, 0, 0 };
@@ -779,7 +772,7 @@ static int hns5_logic_pool_init(struct rte_mempool *mp, uint32_t pool_id)
     }
     buf_num_per_block = blk_size / buffer_size;
 
-    RTE_LOG(INFO, PMD, "[hns5_bmu] pool_id=%u, buffer_size=%u, blk_size=%u, buf_num_per_block=%u, mp->size=%u, max_block_num=%u\n",
+    RTE_LOG(DEBUG, PMD, "[hns5_bmu] pool_id=%u, buffer_size=%u, blk_size=%u, buf_num_per_block=%u, mp->size=%u, max_block_num=%u\n",
         pool_id, buffer_size, blk_size, buf_num_per_block, mp->size, mp->size / buf_num_per_block);
 
     vlp_cfg.buffer_size = buffer_size;
@@ -837,12 +830,10 @@ static int hns5_bmu_mbuf_populate(struct rte_mempool *mp, unsigned int max_objs,
     }
 
     // Round down memory size to multiple of 4M
-    RTE_LOG(INFO, PMD, "[hns5_bmu] except mem iova:0x%lx, len:0x%zx\n", iova, len);
     len = RTE_ALIGN_FLOOR(len, align);
-    RTE_LOG(INFO, PMD, "[hns5_bmu] inject mem iova:0x%lx, len:0x%zx\n", iova, len);
 
     if (iova % align != 0 || (uint64_t)vaddr % align != 0) {
-        RTE_LOG(ERR, PMD, "[hns5_bmu] mbuf_populate addr err iova:0x%lx\n", iova);
+        RTE_LOG(ERR, PMD, "[hns5_bmu] mbuf_populate addr err\n");
         return E_BMU_INJECT_ADDR_ERR;
     }
 
@@ -862,9 +853,8 @@ static int hns5_bmu_mbuf_populate(struct rte_mempool *mp, unsigned int max_objs,
         // If a block is not a multiple of the BMU buffer size, skip the extra space
         if (align != 0) {
             off_to_align = (align - (off % align));
-            if (off_to_align < total_elt_sz) {
+            if (off_to_align < total_elt_sz)
                 off += off_to_align;
-            }
         }
     }
 
@@ -924,14 +914,12 @@ void __rte_internal hns5_mp_clean_addr_trans_tbl(void)
     uint32_t i;
     int ret;
 
-    if (g_hns5_bmu_addr_trans_tbl == NULL) {
+    if (g_hns5_bmu_addr_trans_tbl == NULL)
         return;
-    }
 
     vfhandle = hns5_mp_get_vf_handle(&g_mp_bmu_dev);
-    if (vfhandle == NULL) {
+    if (vfhandle == NULL)
         return;
-    }
 
     rte_rwlock_write_lock(&g_hns5_bmu_addr_trans_tbl->lock);
     for (i = 0; i < g_hns5_bmu_addr_trans_tbl->num; i++) {

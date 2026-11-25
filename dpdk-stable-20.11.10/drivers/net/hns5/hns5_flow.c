@@ -1248,7 +1248,7 @@ int hns5_flow_init(struct rte_eth_dev *dev)
 void hns5_flow_uninit(struct rte_eth_dev *dev)
 {
     struct rte_eth_dev_data *dev_data = NULL;
-    struct rte_flow_error error;
+    struct rte_flow_error error = {0};
 
     if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
         return;
