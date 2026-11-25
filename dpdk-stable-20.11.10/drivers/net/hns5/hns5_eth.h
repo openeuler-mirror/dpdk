@@ -7,6 +7,7 @@
 
 #include <rte_ethdev.h>
 #include <rte_ethdev_driver.h>
+#include <rte_spinlock.h>
 
 #include "native.h"
 #include "ndrv_mag_api.h"
@@ -24,6 +25,7 @@ extern "C" {
 
 #define HNS5_ETH_MAX_RXQ_NUM   64
 #define HNS5_ETH_MAX_TXQ_NUM   64
+#define HNS5_FWL_TNL_MAX_NUM   8           /* fw_tnl channels per cport */
 
 #define HNS5_ETH_RX_BURST_CNT  32
 #define HNS5_ETH_TX_BURST_CNT  32
@@ -59,6 +61,9 @@ struct rte_fw_tnl_conf {
     uint64_t rsvd : 27;
 };
 
+#define HNS5_ETH_RXQ_MODE_QUEUE 0   /* per-queue POE input, supports queue start/stop */
+#define HNS5_ETH_RXQ_MODE_GROUP 1   /* group-level POE input, per-queue start/stop unsupported */
+
 struct hns5_eth_port_param
 {
     uint32_t mport_id;                      // mac port
@@ -73,6 +78,7 @@ struct hns5_eth_port_param
     uint32_t min_frame_len;
     uint8_t fw_tnl_enable;                  // fw_tnl enable: default 1 (devargs optional), set fw_tnl=0 to disable
     uint32_t share_group;                   // RX shared group, devargs required (share_group=0~50), assigned externally to avoid conflicts
+    uint32_t rxq_mode;                      // RX queue mode: HNS5_ETH_RXQ_MODE_QUEUE (default) or _GROUP
     uint32_t base_tnl;                      // fw_tnl base, default=cport_id*8 (step HNS5_POE_CPU_GRP_QUE_NUM, 8 per cport), devargs override
 };
 
@@ -103,8 +109,6 @@ enum hns5_eth_rxq_type {
     HNS5_ETH_RXQ_TYPE_INVALID,
 };
 
-#define HNS5_ETH_RXQ_BY_GROUP  0xffff
-
 #define HNS5_ETH_MAX_MC_ADDR_NUM 32   /* max multicast address count */
 
 /**
@@ -123,9 +127,14 @@ struct hns5_eth_rx_queue {
     uint16_t pool_id;                       // RX mempool
     uint16_t port_id;                       // DPDK port id
     handle poe_vfhandle;                    // perf: set at queue init
+    uint8_t bp_drop_on;                     // 1: queue watermark + MAM source drop enabled
+    uint8_t poe_enabled;                    // 1: this port's POE queue input is enabled
     struct hns5_eth_rxq_stats stats;
-	bool is_hairpin;                        // rx queue used as hairpin
-	struct rte_eth_hairpin_conf hairpin_conf;
+    bool is_hairpin;                        // rx queue used as hairpin
+    struct rte_eth_hairpin_conf hairpin_conf;
+    struct rte_mempool *mp;                 // RX mempool
+    uint16_t nb_rx_desc;                    // configured RX descriptor count
+    struct rte_eth_rxconf conf;             // RX queue config, reported by rxq info
 } __rte_cache_aligned;
 
 struct hns5_eth_tx_queue {
@@ -137,9 +146,12 @@ struct hns5_eth_tx_queue {
     uint32_t vcpu;                          // vcpu for TX poe msg, bound in tx path
     handle poe_vfhandle;                    // perf: set at queue init
     struct hns5_eth_priv *priv;            /* priv ptr, TX path reads port-level VLAN insert flag */
+    volatile uint8_t stopped;               // data plane stop gate
     struct hns5_eth_txq_stats stats;
-	bool is_hairpin;                        // tx queue used as hairpin
-	struct rte_eth_hairpin_conf hairpin_conf;
+    bool is_hairpin;                        // tx queue used as hairpin
+    struct rte_eth_hairpin_conf hairpin_conf;
+    uint16_t nb_tx_desc;                    // configured TX descriptor count
+    struct rte_eth_txconf conf;             // TX queue config, reported by txq info
 } __rte_cache_aligned;
 
 struct hns5_flow {
@@ -202,6 +214,9 @@ struct hns5_eth_priv {
     uint8_t mcast_mode_flow_added;  /* mcast mode flow table added: 0 no, 1 yes */
     /* crc offload */
     uint8_t crc_offload;        /* CRC offload enable: 0 off, 1 on */
+    /* poe->ppe queue backpressure / per-queue watermark */
+    uint8_t bp_grp;             /* claimed bp_ppe slot, HNS5_POE_BP_SLOT_INVALID if none */
+    uint32_t bp_ppe_th;         /* group share budget (packets) used to split per-queue quota */
 };
 
 static __rte_always_inline struct hns5_eth_priv *hns5_eth_priv_get(struct rte_eth_dev *dev)
@@ -224,6 +239,12 @@ int hns5_get_fixed_mac(struct rte_ether_addr *mac);
  *       before the validity check.
  */
 bool hns5_eth_dev_is_hns5(uint16_t port_id);
+
+/*
+ * @return true when another valid hns5 port shares the same PPE device as @dev.
+ *         Such ports share a single RSS indirect table.
+ */
+bool hns5_eth_has_ppe_peer(struct rte_eth_dev *dev);
 
 int hns5_lsw_mac_table_write(uint8_t port_id, struct rte_ether_addr *mac);
 int hns5_set_ppe_bypass_mode(uint8_t port_id, enum hidrv_ppe_bypass_mode mode);

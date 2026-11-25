@@ -42,22 +42,27 @@ int hns5_ppe_fwl_tnl_config(struct rte_eth_dev *dev, const struct rte_fw_tnl_con
 {
     int ret = 0;
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
+    uint32_t i;
 
-    if (fw_tnl->enable == 0) {
+    if (fw_tnl->enable == 0)
         return 0;
-    }
     /* Dedup check: skip if fw_tnl has been initialized */
-    if (priv->fwl_tnl_inited == 1) {
+    if (priv->fwl_tnl_inited == 1)
         return 0;
+    if (fw_tnl->tnl_num > HNS5_FWL_TNL_MAX_NUM) {
+        hns5_err(dev, "fw_tnl tnl_num:%u exceeds max:%u\n",
+            fw_tnl->tnl_num, HNS5_FWL_TNL_MAX_NUM);
+        return -EINVAL;
     }
+
     /* Support batch fw_tnl programming */
-    for (uint32_t i = 0; i < fw_tnl->tnl_num; i++) {
+    for (i = 0; i < fw_tnl->tnl_num; i++) {
         struct hidrv_fw_tnl_conf hidrv_fw_conf = { 0 };
 
         hidrv_fw_conf.pool_id = pool_id;
         hidrv_fw_conf.base_vqi = fw_tnl->base_vqi;
         hidrv_fw_conf.vqi_add_qos_en = 1;     /* Enabled by default */
-        hidrv_fw_conf.poe_bp_grp_id = 0;
+        hidrv_fw_conf.poe_bp_grp_id = priv->bp_grp;  /* slot claimed at poe init */
         hidrv_fw_conf.aff_ind = 0;
         if (fw_tnl->def_qos_inc == 0) {
             hidrv_fw_conf.qos_conf.default_qos = fw_tnl->def_qos;
@@ -70,6 +75,10 @@ int hns5_ppe_fwl_tnl_config(struct rte_eth_dev *dev, const struct rte_fw_tnl_con
         hidrv_fw_conf.bmu_qos_drop_en = 1;    /* BMU QoS backpressure enabled by default */
         hidrv_fw_conf.poe_qos_drop_en = 0;
         hidrv_fw_conf.cacheline_allocate_length = 0;
+
+        hns5_info(dev, "apply fw_tnl[%u]: qos=%u base_vqi=%u pool_id=%u\n",
+                  fw_tnl->base_tnl + i, hidrv_fw_conf.qos_conf.default_qos,
+                  fw_tnl->base_vqi, pool_id);
         ret = hidrv_ppe_vf_set_fw_tnl(priv->ppe_vf_devid, fw_tnl->base_tnl + i, &hidrv_fw_conf);
         if (ret != 0) {
             hns5_err(dev, "failed to hidrv_ppe_vf_set_fw_tnl\n");
@@ -227,17 +236,14 @@ int hns5_eth_ppe_init(struct rte_eth_dev *dev)
 
     hns5_info(dev, "mport:%u cport:%u\n", priv->param.mport_id, priv->param.cport_id);
     ret = hns5_ppe_port_init(dev);
-    if (ret != 0) {
+    if (ret != 0)
         return ret;
-    }
     ret = hns5_ppe_cport_init(dev);
-    if (ret != 0) {
+    if (ret != 0)
         return ret;
-    }
     ret = hns5_ppe_mport_init(dev);
-    if (ret != 0) {
+    if (ret != 0)
         return ret;
-    }
     return 0;
 }
 
@@ -330,25 +336,20 @@ int hns5_eth_ppe_init_lsw(struct rte_eth_dev *dev)
     int ret = 0;
 
     ret = hns5_ppe_port_init(dev);
-    if (ret != 0) {
+    if (ret != 0)
         return ret;
-    }
     ret = hns5_ppe_cport_init_lsw(dev);
-    if (ret != 0) {
+    if (ret != 0)
         return ret;
-    }
     ret = hns5_ppe_mport_init_lsw(dev);
-    if (ret != 0) {
+    if (ret != 0)
         return ret;
-    }
     ret = hns5_ppe_lsw_fltr_iso_set(dev);
-    if (ret != 0) {
+    if (ret != 0)
         return ret;
-    }
     ret = hns5_ppe_lsw_set_ucast_loop(dev, 1);
-    if (ret != 0) {
+    if (ret != 0)
         return ret;
-    }
     return 0;
 }
 
@@ -361,9 +362,8 @@ int hns5_ppe_lsw_fltr_iso_set(struct rte_eth_dev *dev)
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
     struct hidrv_lsw_fltr_iso_cfg fltr_iso_cfg = {0};
 
-    if (priv == NULL) {
+    if (priv == NULL)
         return -EINVAL;
-    }
 
     if (priv->ppe_pf_devid < 0) {
         hns5_err(dev, "ppe_pf_devid is invalid(%d)\n", priv->ppe_pf_devid);
@@ -411,9 +411,8 @@ int hns5_ppe_lsw_set_ucast_loop(struct rte_eth_dev *dev, unsigned int enable)
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
     unsigned int loop_en = 0;
 
-    if (priv == NULL) {
+    if (priv == NULL)
         return -EINVAL;
-    }
 
     if (priv->ppe_pf_devid < 0) {
         hns5_err(dev, "ppe_pf_devid is invalid(%d)\n", priv->ppe_pf_devid);
@@ -599,21 +598,18 @@ int hns5_ppe_vlan_insert_config(struct rte_eth_dev *dev, uint8_t vlan_insert_en)
 
     if (vlan_insert_en) {
         /* Idempotency guard: skip if ingress flow already added */
-        if (priv->vlan_insert_flow_added) {
+        if (priv->vlan_insert_flow_added)
             return 0;
-        }
 
         /* Enable port ingress VLAN attr for VLAN Insert (reuse pvid semantics, def_vlan from port_def_vlan) */
         ret = hns5_vlan_pvid_set(dev, priv->port_def_vlan, 1);
-        if (ret != 0) {
+        if (ret != 0)
             return ret;
-        }
 
         /* Add ingress flow: match ingress_port=cport, redirect to macport */
         ret = hns5_ppe_vlan_insert_flow_add(dev);
-        if (ret != 0) {
+        if (ret != 0)
             return ret;
-        }
 
         priv->vlan_insert_flow_added = 1;
         hns5_info(dev, "vlan insert enabled: cport=%u, def_vlan=%u\n",
@@ -621,14 +617,12 @@ int hns5_ppe_vlan_insert_config(struct rte_eth_dev *dev, uint8_t vlan_insert_en)
     } else {
         /* Disable port VLAN attr, restore L2 VLAN match, delete ingress flow */
         ret = hns5_vlan_pvid_set(dev, 0, 0);
-        if (ret != 0) {
+        if (ret != 0)
             return ret;
-        }
 
         ret = hns5_ppe_vlan_insert_flow_del(dev);
-        if (ret != 0) {
+        if (ret != 0)
             return ret;
-        }
 
         priv->vlan_insert_flow_added = 0;
         hns5_info(dev, "vlan insert disabled: cport=%u\n", priv->param.cport_id);
@@ -747,25 +741,21 @@ int hns5_ppe_lsw_mcast_mode_config(struct rte_eth_dev *dev, uint8_t enable)
 
     if (enable) {
         /* Idempotency guard: skip if ingress flow already added */
-        if (priv->mcast_mode_flow_added) {
+        if (priv->mcast_mode_flow_added)
             return 0;
-        }
 
         ret = hns5_ppe_mcast_mode_flow_add(dev);
-        if (ret != 0) {
+        if (ret != 0)
             return ret;
-        }
 
         priv->mcast_mode_flow_added = 1;
     } else {
-        if (!priv->mcast_mode_flow_added) {
+        if (!priv->mcast_mode_flow_added)
             return 0;
-        }
 
         ret = hns5_ppe_mcast_mode_flow_del(dev);
-        if (ret != 0) {
+        if (ret != 0)
             return ret;
-        }
 
         priv->mcast_mode_flow_added = 0;
     }
