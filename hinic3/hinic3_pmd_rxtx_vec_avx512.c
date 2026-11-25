@@ -69,9 +69,14 @@ hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
 	 * happen once per ptype. */
 	const struct hinic3_ptype_table *ptype_tbl = nic_dev->ptype_tbl;
 
-	/* ptype=0 | pkt_len=[b3,b2,0,0] | data_len=[b3,b2]
-	 * | vlan_tci=[b10,b9] | rss=[b7..b4]
-	 * (lane0 is overwritten by the table lookup, no need to zero it) */
+	/* vpshufb byte shuffle: each element is a CQE byte index placed at
+	 * the output position it should land in -- output byte i of the
+	 * descriptor (rx_descriptor_fields1) takes CQE byte shuf_mask[i].
+	 * 
+	 * 0xFF has the high bit set: vpshufb zeroes such outputs, used to blank a field.
+	 * Output layout: [0..3]=packet_type | [4..7]=pkt_len=[b3,b2,0,0]
+	 * | [8..9]=data_len=[b3,b2] | [10..11]=vlan_tci=[b10,b9]
+	 * | [12..15]=rss=[b7..b4] */
 	const __m128i shuf_mask = _mm_setr_epi8(
 		0xFF, 0xFF, 0xFF, 0xFF,
 		3, 2, 0xFF, 0xFF,
