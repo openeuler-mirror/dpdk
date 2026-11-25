@@ -1924,6 +1924,12 @@ static int net_hns5_vdev_probe(struct rte_vdev_device *vdev)
         goto err_bp_grp;
     }
 
+    /*
+     * Record the hw counter baseline after all the initialization
+     * traffic, so xstats only report counters that happen from now on.
+     */
+    hns5_eth_xstats_baseline(dev);
+
     rte_eth_dev_probing_finish(dev);
     return 0;
 

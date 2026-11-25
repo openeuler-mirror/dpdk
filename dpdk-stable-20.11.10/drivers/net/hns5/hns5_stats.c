@@ -13,23 +13,30 @@
 #include <rte_bus_pci.h>
 
 #include "hidrv_tm_pf_api.h"
+#include "hidrv_tm_vf_api.h"
 #include "hidrv_mag_api.h"
 #include "hidrv_ppe_pf_api.h"
 #include "hidrv_ppe_vf_api.h"
 #include "ndrv_poe_vf_api.h"
+#include "ndrv_ppe_ssu_pf_api.h"
+#include "ndrv_ppe_rpu_vf_api.h"
+#include "ndrv_ppe_ppp_pf_api.h"
+#include "ndrv_ppe_lsw_pf_api.h"
+
+#include "limit.h"
 
 #include "hns5_eth.h"
 #include "hns5_stats.h"
 #include "hns5_ppe.h"
 #include "hns5_poe.h"
+#include "hns5_tm.h"
 #include "hns5_log.h"
 
 #define HNS5_ETH_PORT_OFFSET(x)        (offsetof(struct hns5_eth_port_stats, x))
 #define HNS5_MIB_STATS_OFFSET(x)       (HNS5_ETH_PORT_OFFSET(mib_stats) + offsetof(struct hidrv_mag_mac_mib_stats, x))
 #define HNS5_RXQ_STATS_OFFSET(x)       (HNS5_ETH_PORT_OFFSET(rxq_stats) + offsetof(struct hns5_eth_rxq_stats, x))
 #define HNS5_TXQ_STATS_OFFSET(x)       (HNS5_ETH_PORT_OFFSET(txq_stats) + offsetof(struct hns5_eth_txq_stats, x))
-
-#define HNS5_SOFT_STATS_CNT (sizeof(struct hns5_eth_soft_stats) / sizeof(uint64_t))
+#define HNS5_DROP_STATS_OFFSET(x)      (HNS5_ETH_PORT_OFFSET(drop_stats) + offsetof(struct hns5_eth_drop_stats, x))
 
 struct hns5_xstats_stats_name_offset {
     char name[RTE_ETH_XSTATS_NAME_SIZE];
@@ -153,6 +160,24 @@ static const struct hns5_xstats_stats_name_offset hns5_xstats_strings[] = {
     { "oerrors_txd", HNS5_TXQ_STATS_OFFSET(oerrors_txd) },
     { "oerrors_msg", HNS5_TXQ_STATS_OFFSET(oerrors_msg) },
     { "oerrors_cache_full", HNS5_TXQ_STATS_OFFSET(oerrors_cache_full) },
+
+    /* PPE hardware drop counters, refreshed from the SDK ndrv interfaces. */
+    { "ppe_ssu_ppp_send_drop_cmd", HNS5_DROP_STATS_OFFSET(ssu_ppp_send_drop_cmd) },
+    { "ppe_ssu_recv_drop_cmd", HNS5_DROP_STATS_OFFSET(ssu_recv_drop_cmd) },
+    { "ppe_ssu_rx_pkt_full_drop", HNS5_DROP_STATS_OFFSET(ssu_rx_pkt_full_drop) },
+
+    { "ppe_ppp_fw_fd_stg1_drop", HNS5_DROP_STATS_OFFSET(ppp_fw_fd_stg1_drop) },
+    { "ppe_lsw_ing_fd_drop", HNS5_DROP_STATS_OFFSET(lsw_ing_fd_drop) },
+
+    /* PPP LSW L2 table lookup miss counter */
+    { "ppe_l2_dmac_miss_drop", HNS5_DROP_STATS_OFFSET(l2_dmac_miss_drop) },
+
+    { "ppe_rpu_buf_drop_int", HNS5_DROP_STATS_OFFSET(rpu_buf_drop_int) },
+    { "ppe_rpu_recv_err_pkt", HNS5_DROP_STATS_OFFSET(rpu_recv_err_pkt) },
+    { "ppe_rpu_prep_drop_pkt", HNS5_DROP_STATS_OFFSET(rpu_prep_drop_pkt) },
+
+    { "tm_vf_tail_drop", HNS5_DROP_STATS_OFFSET(tm_vf_tail_drop) },
+    { "ppe_poe_add_fail_drop", HNS5_DROP_STATS_OFFSET(poe_add_fail_drop) },
 };
 
 #define HNS5_NUM_MAC_MIB_STATS (sizeof(struct hidrv_mag_mac_mib_stats) / sizeof(unsigned long long))
@@ -201,13 +226,147 @@ static void hns5_eth_xstats_mib_update(struct rte_eth_dev *dev)
     struct hidrv_mag_mac_mib_stats mib = { 0 };
     int ret = 0;
 
+    /* MAG is set up in dev_start; probe-time baseline runs before that. */
+    if (priv->mag_handle == NULL)
+        return;
+
     ret = hidrv_mag_mac_get_mib(priv->mag_pf_devid, priv->param.mport_id, &mib);
     if (ret != 0) {
         hns5_err(dev, "failed to hidrv_mag_mac_get_mib, ret:%d", ret);
         return;
     }
 
+    /* MIB counters are read-clear: the first read only consumes init traffic. */
+    if (priv->mib_inited == 0) {
+        priv->mib_inited = 1;
+        return;
+    }
+
     (void)hns5_eth_add_mib(&priv->xstats.mib_stats, &mib);
+}
+
+/*
+ * Accumulate the PPE drop counters. All of them (SSU/PPP/LSW/L2/RPU) are
+ * read-clear: the BSP returns the increment since the previous query, so each
+ * successful read is added as-is. A failed read leaves its fields zero and
+ * contributes nothing. The first query only consumes the counters.
+ */
+static void hns5_eth_xstats_drop_update(struct rte_eth_dev *dev)
+{
+    struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
+    struct hns5_eth_drop_stats cur = { 0 };
+    const uint64_t *curv = (const uint64_t *)&cur;
+    uint64_t *total = (uint64_t *)&priv->xstats.drop_stats;
+    const uint32_t drop_cnt = sizeof(struct hns5_eth_drop_stats) / sizeof(uint64_t);
+    int first = (priv->drop_inited == 0);
+    uint32_t i;
+    struct ndrv_ppe_ssu_pkt_drop_cnt ssu_drop = { 0 };
+    struct ndrv_ppp_pf_fw_fd_hit_cnt ppp_hit = { 0 };
+    struct ndrv_ppe_lsw_pf_ing_fd_hit_cnt lsw_hit = { 0 };
+    struct ndrv_ppe_lsw_pf_l2_pkt_cnt l2_cnt = { 0 };
+    struct ndrv_ppe_rpu_vf_err_cnt rpu_err = { 0 };
+    struct hidrv_tm_vf_total_cnt tm_cnt = { 0 };
+    struct ndrv_poe_vf_pkt_info poe_info = { 0 };
+    handle pfhandle = priv->ppe_pfhandle;
+    handle vfhandle = priv->ppe_vfhandle;
+
+    if (pfhandle == NULL || vfhandle == NULL) {
+        return;
+    }
+
+    /* SSU packet-drop counters */
+    if (ndrv_ppe_ssu_pf_get_pkt_drop_cnt(pfhandle, &ssu_drop) != 0) {
+        hns5_dbg(dev, "ndrv_ppe_ssu_pf_get_pkt_drop_cnt failed\n");
+    } else {
+        cur.ssu_ppp_send_drop_cmd = ssu_drop.ppp_send_cmd;
+        cur.ssu_recv_drop_cmd = ssu_drop.ssu_recv_cmd;
+        cur.ssu_rx_pkt_full_drop = ssu_drop.rx_pkt_full;
+    }
+
+    /* PPP stage-1 flow-table drop (rte_flow DROP without ingress attr) */
+    if (ndrv_ppe_ppp_pf_get_fw_fd_hit_cnt(pfhandle, &ppp_hit) != 0) {
+        hns5_dbg(dev, "ndrv_ppe_ppp_pf_get_fw_fd_hit_cnt failed\n");
+    } else {
+        cur.ppp_fw_fd_stg1_drop = ppp_hit.stg_1_hit_drop;
+    }
+
+    /* LSW ingress flow-table drop (rte_flow DROP with ingress attr) */
+    if (ndrv_ppe_lsw_pf_get_ing_fd_hit_cnt(pfhandle, &lsw_hit) != 0) {
+        hns5_dbg(dev, "ndrv_ppe_lsw_pf_get_ing_fd_hit_cnt failed\n");
+    } else {
+        cur.lsw_ing_fd_drop = lsw_hit.drop;
+    }
+
+    /* PPP LSW L2 table lookup miss counter */
+    if (ndrv_ppe_lsw_pf_get_l2_pkt_cnt(pfhandle, &l2_cnt) != 0) {
+        hns5_dbg(dev, "ndrv_ppe_lsw_pf_get_l2_pkt_cnt failed\n");
+    } else {
+        cur.l2_dmac_miss_drop = l2_cnt.dmac_miss;
+    }
+
+    /* RPU drop counters (packets on the way to the CPU) */
+    if (ndrv_ppe_rpu_vf_get_err_cnt(vfhandle, &rpu_err) != 0) {
+        hns5_dbg(dev, "ndrv_ppe_rpu_vf_get_err_cnt failed\n");
+    } else {
+        cur.rpu_buf_drop_int = rpu_err.buf_drop_int;
+        cur.rpu_recv_err_pkt = rpu_err.recv_err_pkt;
+        cur.rpu_prep_drop_pkt = rpu_err.prep_drop_pkt;
+    }
+
+    /* POE add-fail: not cleared on read by BSP, treated as wrapping 32-bit. */
+    if (priv->poe_vfhandle != NULL &&
+        ndrv_poe_vf_get_vf_pkt_info(priv->poe_vfhandle, &poe_info) == 0) {
+        if (priv->poe_add_fail_inited != 0)
+            priv->xstats.drop_stats.poe_add_fail_drop +=
+                (uint32_t)(poe_info.add_fail_cnt - priv->poe_add_fail_last);
+        priv->poe_add_fail_last = poe_info.add_fail_cnt;
+        priv->poe_add_fail_inited = 1;
+    }
+
+    /*
+     * TM VF tail drop. The BSP counter is a wrapped 64-bit cumulative value
+     * and is not cleared on read, so it keeps its own baseline.
+     */
+    {
+        int tm_devid = hidrv_tm_get_vf_devid(TM_DEV_ID, TM_PF_ID, TM_VF_ID);
+
+        if (tm_devid >= 0 &&
+            hidrv_tm_vf_get_total_cnt((uint32_t)tm_devid, &tm_cnt, 0) == 0) {
+            uint64_t tm_drop = tm_cnt.wred_tail_drop_cnt;
+
+            if (priv->tm_vf_tail_drop_inited != 0 && tm_drop >= priv->tm_vf_tail_drop_last)
+                priv->xstats.drop_stats.tm_vf_tail_drop +=
+                    tm_drop - priv->tm_vf_tail_drop_last;
+            priv->tm_vf_tail_drop_last = tm_drop;
+            priv->tm_vf_tail_drop_inited = 1;
+        }
+    }
+
+    /* First query only consumes the read-clear values. */
+    if (first) {
+        priv->drop_inited = 1;
+        return;
+    }
+
+    /* Every field already holds the increment since the previous query. */
+    for (i = 0; i < drop_cnt; i++)
+        total[i] += curv[i];
+}
+
+/* Consume the hw counters at probe to skip pre-existing counts. */
+void hns5_eth_xstats_baseline(struct rte_eth_dev *dev)
+{
+    struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
+
+    priv->drop_inited = 0;
+    hns5_eth_xstats_drop_update(dev);
+    memset(&priv->xstats.drop_stats, 0, sizeof(priv->xstats.drop_stats));
+
+    /*
+     * MIB counters are read-clear but MAG is not up yet at probe; the first
+     * read in hns5_eth_xstats_mib_update() consumes the init traffic instead.
+     */
+    memset(&priv->xstats.mib_stats, 0, sizeof(priv->xstats.mib_stats));
 }
 
 int hns5_eth_xstats_get(struct rte_eth_dev *dev, struct rte_eth_xstat *xstats, unsigned n)
@@ -216,16 +375,17 @@ int hns5_eth_xstats_get(struct rte_eth_dev *dev, struct rte_eth_xstat *xstats, u
     uint16_t i;
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
 
+    cnt_stats = RTE_DIM(hns5_xstats_strings);
     if (xstats == NULL) {
-        return 0;
+        return cnt_stats;
     }
 
-    cnt_stats = RTE_DIM(hns5_xstats_strings);
     if (n < cnt_stats) {
         return cnt_stats;
     }
     hns5_eth_xstats_soft_update(dev, priv);
     hns5_eth_xstats_mib_update(dev);
+    hns5_eth_xstats_drop_update(dev);
 
     count = 0;
     /* Get xstats from ge_mib_stats struct */
@@ -247,7 +407,7 @@ int hns5_eth_xstats_get_names(__rte_unused struct rte_eth_dev *dev,struct rte_et
         return cnt_stats;
     }
     if (size < cnt_stats) {
-        return -EINVAL;
+        return cnt_stats;
     }
     for (uint32_t i = 0; i < cnt_stats; i++) {
         snprintf(xstats_names[i].name, RTE_ETH_XSTATS_NAME_SIZE, "%s", hns5_xstats_strings[i].name);
@@ -290,6 +450,14 @@ int hns5_eth_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 int hns5_eth_stats_reset(struct rte_eth_dev *dev)
 {
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
+
+    /*
+     * Consume the read-clear counters and refresh the normal-counter baseline,
+     * then zero the software accumulated totals below.
+     */
+    priv->drop_inited = 0;
+    hns5_eth_xstats_drop_update(dev);
+    hns5_eth_xstats_mib_update(dev);
 
     memset(&priv->xstats, 0, sizeof(priv->xstats));
 

@@ -210,6 +210,12 @@ static int hns5_ppe_port_init(struct rte_eth_dev *dev)
     }
     priv->ppe_vf_devid = ret;
 
+    priv->ppe_vfhandle = hidrv_ppe_vf_get_ndrv_handle(priv->ppe_vf_devid);
+    if (priv->ppe_vfhandle == NULL) {
+        hns5_err(dev, "failed to hidrv_ppe_vf_get_ndrv_handle\n");
+        return -EINVAL;
+    }
+
     ret = hidrv_ppe_pf_setup(priv->ppe_pf_devid, &ppe_pf_conf, NULL);
     if (ret != 0) {
         hns5_err(dev, "failed to hidrv_ppe_pf_setup, ret:%d\n", ret);
