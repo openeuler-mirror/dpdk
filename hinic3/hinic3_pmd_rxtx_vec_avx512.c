@@ -154,8 +154,6 @@ hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
 
 			mb->data_off += data_offset;
 
-			/* pkt_len was filled by the D. wide store, same
-			 * source as the scalar path (CQE dw0 b2,b3). */
 			rx_bytes += mb->pkt_len;
 
 			/* checksum offload: csum_err is raw dw0 bit[12:11],
@@ -285,7 +283,7 @@ hinic3_recv_pkts_compact_cqe_vec_avx(void *rx_queue, struct rte_mbuf **rx_pkts,
 		return 0;
 
 	while (nb_pkts > 0) {
-		u16 n, ret;
+		u16 n, done_pkts;
 
 		n = RTE_MIN(nb_pkts, HINIC3_DEFAULT_RX_BURST);
 
@@ -302,13 +300,13 @@ hinic3_recv_pkts_compact_cqe_vec_avx(void *rx_queue, struct rte_mbuf **rx_pkts,
 		hinic3_vec_prefetch_window(rxq,
 			(u16)((sw_ci + nb_rx) & rxq->q_mask), n);
 
-		ret = hinic3_recv_burst_compact_cqe_vec_avx(rxq,
+		done_pkts = hinic3_recv_burst_compact_cqe_vec_avx(rxq,
 							    &rx_pkts[nb_rx], n);
 
-		nb_pkts -= ret;
-		nb_rx += ret;
+		nb_pkts -= done_pkts;
+		nb_rx += done_pkts;
 
-		if (ret < n)
+		if (done_pkts < n)
 			break;
 
 		if (rxq->delta > rxq->rx_free_thresh)
