@@ -1,3 +1,7 @@
 .vscode
 S920L18_SDK_*.zip
 dpdk-stable-22.11.11/drivers/net/hns5/dependency/
+
+# build outputs (hns5_compile.sh): meson build dir + flattened SDK headers/stub lib
+build/
+dpdk-stable-20.11.10/drivers/net/hns5/dependency/

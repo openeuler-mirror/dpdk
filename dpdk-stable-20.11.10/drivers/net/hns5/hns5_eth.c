@@ -2,10 +2,6 @@
  * Copyright (c) 2026-2027 Huawei Technologies Co., Ltd
  */
 
-#include <stdatomic.h>
-
-#include <syslog.h>
-
 #include <stdlib.h>
 #include <string.h>
 
@@ -24,6 +20,7 @@
 #include <rte_cycles.h>
 #include <rte_alarm.h>
 #include <rte_bitops.h>
+#include <rte_atomic.h>
 #include <rte_ethdev_vdev.h>
 
 #include "hidrv_subctrl_api.h"
@@ -219,40 +216,24 @@ static int hns5_eth_dev_mtu_set(struct rte_eth_dev *dev, uint16_t mtu)
 
 static int hns5_eth_dev_set_link_down(struct rte_eth_dev *dev)
 {
-    int ret = 0;
-    struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
+    int ret = hns5_mag_txrx_enable(dev, 0);
 
-    ret = hidrv_mag_mac_set_rx_enable(priv->mag_pf_devid, priv->param.mport_id, 0);
-    if (ret != 0) {
-        hns5_err(dev, "failed to hidrv_mag_mac_set_rx_enable, mport:%u\n", priv->param.mport_id);
-        return -EINVAL;
-    }
-    ret = hidrv_mag_mac_set_tx_enable(priv->mag_pf_devid, priv->param.mport_id, 0);
-    if (ret != 0) {
-        hns5_err(dev, "failed to hidrv_mag_mac_set_tx_enable, mport:%u\n", priv->param.mport_id);
-        return -EINVAL;
-    }
+    if (ret != 0)
+        return ret;
+
     dev->data->dev_link.link_status = ETH_LINK_DOWN;
     dev->data->dev_link.link_speed = ETH_SPEED_NUM_UNKNOWN;
-    hns5_info(dev, "port:%u succeed to linkdown\n", dev->data->port_id);
     return 0;
 }
 
 static int hns5_eth_dev_set_link_up(struct rte_eth_dev *dev)
 {
-    int ret = 0;
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
+    int ret = hns5_mag_txrx_enable(dev, 1);
 
-    ret = hidrv_mag_mac_set_rx_enable(priv->mag_pf_devid, priv->param.mport_id, 1);
-    if (ret != 0) {
-        hns5_err(dev, "failed to hidrv_mag_mac_set_rx_enable, mport:%u\n", priv->param.mport_id);
-        return -EINVAL;
-    }
-    ret = hidrv_mag_mac_set_tx_enable(priv->mag_pf_devid, priv->param.mport_id, 1);
-    if (ret != 0) {
-        hns5_err(dev, "failed to hidrv_mag_mac_set_tx_enable, mport:%u\n", priv->param.mport_id);
-        return -EINVAL;
-    }
+    if (ret != 0)
+        return ret;
+
     dev->data->dev_link.link_status = ETH_LINK_UP;
     if (priv->param.port_speed < RTE_DIM(g_mag_speed_hidrv_to_rte)) {
         dev->data->dev_link.link_speed = g_mag_speed_hidrv_to_rte[priv->param.port_speed];
@@ -262,7 +243,6 @@ static int hns5_eth_dev_set_link_up(struct rte_eth_dev *dev)
     dev->data->dev_link.link_duplex = (priv->param.duplex_mode == HIDRV_MAG_DUPLEX_MODE_FULL) ?
         ETH_LINK_FULL_DUPLEX : ETH_LINK_HALF_DUPLEX;
     dev->data->dev_link.link_autoneg = (priv->param.autoneg == 0) ? ETH_LINK_SPEED_FIXED : ETH_LINK_SPEED_AUTONEG;
-    hns5_info(dev, "port:%u succeed to linkup\n", dev->data->port_id);
     return 0;
 }
 
@@ -283,9 +263,8 @@ static void hns5_stop_rx_queues(struct rte_eth_dev *dev, uint32_t vcpu)
             rxq->poe_enabled = 0; /* group cleared below disables the input */
         if (rxq != NULL && (cleared_grp_mask & (1U << rxq->group)) == 0) {
             ret = hidrv_poe_clear_group(priv->poe_vf_devid, vcpu, rxq->group);
-            if (ret != 0) {
+            if (ret != 0)
                 hns5_warn(dev, "failed to clear group:%u, ret:%d\n", rxq->group, ret);
-            }
             cleared_grp_mask |= (1U << rxq->group);
         }
     }
@@ -556,16 +535,16 @@ static int hns5_eth_dev_stop(struct rte_eth_dev *dev)
     hns5_stop_rx_queues(dev, vcpu);
 
     for (uint32_t i = 0; i < dev->data->nb_tx_queues; i++) {
-		if (dev->data->tx_queue_state[i] != RTE_ETH_QUEUE_STATE_HAIRPIN)
+        if (dev->data->tx_queue_state[i] != RTE_ETH_QUEUE_STATE_HAIRPIN)
             dev->data->tx_queue_state[i] = RTE_ETH_QUEUE_STATE_STOPPED;
     }
     dev->data->scattered_rx = false;
     dev->rx_pkt_burst = NULL;
     dev->tx_pkt_burst = NULL;
 
-    hns5_info(dev, "port:%u succeed to stop\n", dev->data->port_id);
     return 0;
 }
+
 static int hns5_eth_dev_close(struct rte_eth_dev *dev)
 {
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
@@ -606,6 +585,7 @@ static int hns5_eth_dev_close(struct rte_eth_dev *dev)
     dev->data->mac_addrs = NULL;
     return 0;
 }
+
 static int hns5_eth_rxq_drain(struct hns5_eth_rx_queue *rxq)
 {
     struct rte_mbuf *pkts[HNS5_ETH_RX_BURST_CNT];
@@ -813,36 +793,95 @@ out:
     return ret;
 }
 
+static struct hns5_eth_tx_queue *hns5_eth_txq_get(struct rte_eth_dev *dev, uint16_t tx_queue_id)
+{
+    if (tx_queue_id >= dev->data->nb_tx_queues || dev->data->tx_queues[tx_queue_id] == NULL) {
+        hns5_err(dev, "%s, port:%u txq:%u nb_tx_queues:%u\n", strerror(EINVAL),
+            dev->data->port_id, tx_queue_id, dev->data->nb_tx_queues);
+        return NULL;
+    }
+    return dev->data->tx_queues[tx_queue_id];
+}
+
+static int hns5_eth_tx_queue_stop(struct rte_eth_dev *dev, uint16_t tx_queue_id)
+{
+    struct hns5_eth_tx_queue *txq = hns5_eth_txq_get(dev, tx_queue_id);
+
+    if (txq == NULL)
+        return -EINVAL;
+    /* hns5 relies on hardware to release mbuf, without the need for software to perform mbuf release. */
+    txq->stopped = 1;
+    dev->data->tx_queue_state[tx_queue_id] = RTE_ETH_QUEUE_STATE_STOPPED;
+    return 0;
+}
+
+static int hns5_eth_tx_queue_start(struct rte_eth_dev *dev, uint16_t tx_queue_id)
+{
+    struct hns5_eth_tx_queue *txq = hns5_eth_txq_get(dev, tx_queue_id);
+
+    if (txq == NULL)
+        return -EINVAL;
+    /* hns5 relies on hardware to release mbuf, without the need for software to perform mbuf release. */
+    txq->stopped = 0;
+    dev->data->tx_queue_state[tx_queue_id] = RTE_ETH_QUEUE_STATE_STARTED;
+    return 0;
+}
+
 static int hns5_eth_dev_start(struct rte_eth_dev *dev)
 {
     int ret = 0;
     uint16_t real_rxq_num;
+    uint32_t i;
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
     struct rte_eth_conf *dev_conf = &dev->data->dev_conf;
 
-    for (uint32_t i = 0; i < dev->data->nb_rx_queues; i++) {
-		if (dev->data->rx_queue_state[i] != RTE_ETH_QUEUE_STATE_HAIRPIN)
-            dev->data->rx_queue_state[i] = RTE_ETH_QUEUE_STATE_STARTED;
+    /* dev_start restores every queue to STARTED and hns5_config_rss() then
+     * rebuilds the default equal-share RETA over all of them (queue start/stop
+     * does the same), overwriting a customized weighting; apps must re-download
+     * RETA after such changes. */
+    for (i = 0; i < dev->data->nb_rx_queues; i++) {
+        struct hns5_eth_rx_queue *rxq = dev->data->rx_queues[i];
+
+        if (dev->data->rx_queue_state[i] == RTE_ETH_QUEUE_STATE_HAIRPIN)
+            continue;
+        if (rxq == NULL) {
+            hns5_err(dev, "invalid rxq:%u\n", i);
+            ret = -EINVAL;
+            goto err_undo_rxq;
+        }
+
+        hns5_poe_rxq_fw_tnl_drop_set(dev, rxq, false);
+        /* Both queue and group mode need every group queue input enabled. */
+        ret = hns5_poe_rxq_enable(rxq, true);
+        if (ret != 0) {
+            hns5_err(dev, "failed to initialize rxq:%u state, ret:%d\n", i, ret);
+            /* The input stayed disabled, keep steering to it dropped. */
+            hns5_poe_rxq_fw_tnl_drop_set(dev, rxq, true);
+            goto err_undo_rxq;
+        }
+        dev->data->rx_queue_state[i] = RTE_ETH_QUEUE_STATE_STARTED;
     }
-    for (uint32_t i = 0; i < dev->data->nb_tx_queues; i++) {
-		if (dev->data->tx_queue_state[i] != RTE_ETH_QUEUE_STATE_HAIRPIN)
-            dev->data->tx_queue_state[i] = RTE_ETH_QUEUE_STATE_STARTED;
+    /* Below this index every non-hairpin RX queue was enabled above. */
+    i = dev->data->nb_rx_queues;
+
+    for (uint32_t j = 0; j < dev->data->nb_tx_queues; j++) {
+        struct hns5_eth_tx_queue *txq = dev->data->tx_queues[j];
+
+        if (txq != NULL)
+            txq->stopped = 0;
+        if (dev->data->tx_queue_state[j] != RTE_ETH_QUEUE_STATE_HAIRPIN)
+            dev->data->tx_queue_state[j] = RTE_ETH_QUEUE_STATE_STARTED;
     }
-    if (dev_conf->rxmode.offloads & DEV_RX_OFFLOAD_SCATTER) {
-        dev->data->scattered_rx = true;
-    }
-    dev->rx_pkt_burst = hns5_eth_rx_burst;
-    dev->tx_pkt_burst = hns5_eth_tx_burst;
 
     ret = hns5_eth_mag_init(dev);
     if (ret != 0) {
         hns5_err(dev, "failed to hns5_eth_mag_init, ret:%d\n", ret);
-        return ret;
+        goto err_undo_txq;
     }
     ret = hns5_eth_dev_mtu_set(dev, dev->data->mtu);
     if (ret != 0) {
         hns5_err(dev, "failed to hns5_eth_dev_mtu_set, ret:%d\n", ret);
-        return ret;
+        goto err_undo_txq;
     }
 
     real_rxq_num = hns5_rss_real_rxq_num(dev);
@@ -853,21 +892,28 @@ static int hns5_eth_dev_start(struct rte_eth_dev *dev)
         ret = hns5_config_rss(dev);
         if (ret != 0) {
             hns5_err(dev, "failed to config RSS, ret:%d\n", ret);
-            return ret;
+            goto err_undo_txq;
         }
     }
 
     ret = hns5_eth_set_crc_offload(dev, priv->crc_offload);
     if (ret != 0) {
         hns5_err(dev, "failed to set CRC offload, ret:%d\n", ret);
-        return ret;
+        goto err_undo_txq;
     }
 
     ret = hns5_eth_dev_set_link_up(dev);
     if (ret != 0) {
         hns5_err(dev, "failed to linkup, ret:%d\n", ret);
-        return ret;
+        (void)hns5_eth_dev_set_link_down(dev);
+        goto err_undo_txq;
     }
+
+    if (dev_conf->rxmode.offloads & DEV_RX_OFFLOAD_SCATTER)
+        dev->data->scattered_rx = true;
+    /* Publish the data path only after every fallible step succeeded. */
+    dev->rx_pkt_burst = hns5_eth_rx_burst;
+    dev->tx_pkt_burst = hns5_eth_tx_burst;
 
     /* hw is up: register the link status change interrupt (polling fallback inside) */
     ret = hns5_intr_lsc_setup(dev);
@@ -876,6 +922,32 @@ static int hns5_eth_dev_start(struct rte_eth_dev *dev)
 
     hns5_info(dev, "port:%u succeed to start\n", dev->data->port_id);
     return 0;
+
+    /* Unwind in reverse order. ethdev marks the port started only after this
+     * returns 0, so rte_eth_dev_stop() can't be reused for rollback here. */
+err_undo_txq:
+    for (uint32_t j = 0; j < dev->data->nb_tx_queues; j++) {
+        struct hns5_eth_tx_queue *txq = dev->data->tx_queues[j];
+
+        if (txq != NULL)
+            txq->stopped = 1;
+        if (dev->data->tx_queue_state[j] != RTE_ETH_QUEUE_STATE_HAIRPIN)
+            dev->data->tx_queue_state[j] = RTE_ETH_QUEUE_STATE_STOPPED;
+    }
+    dev->data->scattered_rx = false;
+
+err_undo_rxq:
+    /* Only RX queues below @i were enabled; the failed one re-armed its drop. */
+    for (uint32_t j = 0; j < i; j++) {
+        struct hns5_eth_rx_queue *rxq = dev->data->rx_queues[j];
+
+        if (rxq == NULL || rxq->is_hairpin)
+            continue;
+        (void)hns5_poe_rxq_enable(rxq, false);
+        hns5_poe_rxq_fw_tnl_drop_set(dev, rxq, true);
+        dev->data->rx_queue_state[j] = RTE_ETH_QUEUE_STATE_STOPPED;
+    }
+    return ret;
 }
 
 static int hns5_rte_to_hidrv_port_speed(struct hns5_eth_priv *priv, uint32_t input_speed)
@@ -951,8 +1023,6 @@ static int hns5_vlan_offload_set(struct rte_eth_dev *dev, int mask)
             hns5_err(dev, "set port egress attr failed, ret=%u\n", ret);
             return -EIO;
         }
-
-        hns5_info(dev, "VLAN strip %s\n", strip ? "enabled" : "disabled");
     }
 
     return 0;
@@ -992,10 +1062,8 @@ int hns5_vlan_pvid_set(struct rte_eth_dev *dev, uint16_t vlan_id, int on)
             hns5_err(dev, "failed to set port ingress vlan attr, ret=%d\n", ret);
             return ret;
         }
-        hns5_info(dev, "port VLAN configured: cport=%u, vlan_id=%u\n", priv->param.cport_id, vlan_id);
         priv->vlan_pvid_en = 1;
     } else {
-        hns5_info(dev, "VLAN insert disabled\n");
         priv->vlan_pvid_en = 0;
     }
 
@@ -1111,6 +1179,13 @@ static int hns5_eth_dev_infos_get(struct rte_eth_dev *dev, struct rte_eth_dev_in
     return 0;
 }
 
+/* Hardware RX buffer size derived from the mempool layout. */
+static uint32_t hns5_eth_rx_buf_size(struct rte_mempool *mp)
+{
+    return rte_pktmbuf_data_room_size(mp) - RTE_PKTMBUF_HEADROOM +
+           rte_pktmbuf_ppe_skip(mp) + BMU_BD_LEN;
+}
+
 /**
  * @brief Init ppe pool
  * @attention Reentrant, guarded against duplicate init
@@ -1126,12 +1201,10 @@ static int hns5_eth_ppe_pool_init(struct rte_eth_dev *dev, struct rte_mempool *m
         hns5_err(dev, "%s\n", strerror(EINVAL));
         return -EINVAL;
     }
-    if ((priv->pool_inited & (1 << mp->pool_id)) != 0) {
-        hns5_info(dev, "pool_id:%lu already init\n", mp->pool_id);
+    if ((priv->pool_inited & (1 << mp->pool_id)) != 0)
         return 0;
-    }
     pool_cnf.align_size = 0;
-    pool_cnf.buffer_size = rte_pktmbuf_data_room_size(mp) - RTE_PKTMBUF_HEADROOM + rte_pktmbuf_ppe_skip(mp) + BMU_BD_LEN;
+    pool_cnf.buffer_size = hns5_eth_rx_buf_size(mp);
     pool_cnf.sop_skip = rte_pktmbuf_ppe_skip(mp);
     pool_cnf.not_sop_skip = rte_pktmbuf_ppe_skip(mp);
     ret = hidrv_ppe_vf_open_pool(priv->ppe_vf_devid, mp->pool_id, &pool_cnf);
@@ -1140,7 +1213,6 @@ static int hns5_eth_ppe_pool_init(struct rte_eth_dev *dev, struct rte_mempool *m
         return ret;
     }
     priv->pool_inited |= (1 << mp->pool_id);
-    hns5_info(dev, "pool_id:%lu succeed init\n", mp->pool_id);
     return 0;
 }
 
@@ -1154,9 +1226,8 @@ static int hns5_eth_rxq_pool_init(struct rte_eth_dev *dev, uint16_t rx_queue_id,
     int ret = 0;
     uint16_t pool_id = 0;
 
-    if (mp == NULL) {
+    if (mp == NULL)
         return 0;
-    }
     if (mp->pool_id >= HNS5_ETH_POOL_MAX) {
         hns5_err(dev, "%s, pool_id is more than max:%u\n", strerror(EINVAL), HNS5_ETH_POOL_MAX - 1);
         return -EINVAL;
@@ -1263,8 +1334,9 @@ err:
     return ret;
 }
 
-static int hns5_eth_tx_queue_setup(struct rte_eth_dev *dev, uint16_t tx_queue_id, uint16_t nb_tx_desc __rte_unused,
-    unsigned int socket_id __rte_unused, const struct rte_eth_txconf *tx_conf)
+static int hns5_eth_tx_queue_setup(struct rte_eth_dev *dev, uint16_t tx_queue_id,
+    uint16_t nb_tx_desc, unsigned int socket_id __rte_unused,
+    const struct rte_eth_txconf *tx_conf)
 {
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
     struct hns5_eth_tx_queue *txq = NULL;
@@ -1276,12 +1348,14 @@ static int hns5_eth_tx_queue_setup(struct rte_eth_dev *dev, uint16_t tx_queue_id
     txq = priv->txq + tx_queue_id;
     dev->data->tx_queues[tx_queue_id] = (void *)txq;
 
+    txq->is_hairpin = false;
     txq->port_id = dev->data->port_id;
     txq->tm_port = priv->param.cport_id;
     txq->tm_queue_id = priv->param.hw_txq_start + (tx_queue_id % priv->param.hw_txq_num);
     txq->poe_vfhandle = priv->poe_vfhandle;
     txq->priv = priv;
-    hns5_info(dev, "[BIND] txq[%d] bound to cport %u, tm_port = %u\n", tx_queue_id, priv->param.cport_id, txq->tm_port);
+    txq->nb_tx_desc = nb_tx_desc;
+    txq->conf = *tx_conf;
 
     hns5_eth_set_default_tx_msg(txq);
     hns5_dbg(dev, "portid:%u txq:%u tm_port:%u tm_queue:%u\n",
@@ -1289,18 +1363,37 @@ static int hns5_eth_tx_queue_setup(struct rte_eth_dev *dev, uint16_t tx_queue_id
     return 0;
 }
 
+static void hns5_eth_rxq_info_get(struct rte_eth_dev *dev, uint16_t rx_queue_id,
+                                  struct rte_eth_rxq_info *qinfo)
+{
+    struct hns5_eth_rx_queue *rxq = dev->data->rx_queues[rx_queue_id];
+
+    qinfo->mp = rxq->mp;
+    qinfo->nb_desc = rxq->nb_rx_desc;
+    qinfo->conf = rxq->conf;
+    qinfo->scattered_rx = dev->data->scattered_rx;
+    if (rxq->mp != NULL)
+        qinfo->rx_buf_size = (uint16_t)hns5_eth_rx_buf_size(rxq->mp);
+}
+
+static void hns5_eth_txq_info_get(struct rte_eth_dev *dev, uint16_t tx_queue_id,
+                                  struct rte_eth_txq_info *qinfo)
+{
+    struct hns5_eth_tx_queue *txq = dev->data->tx_queues[tx_queue_id];
+
+    qinfo->nb_desc = txq->nb_tx_desc;
+    qinfo->conf = txq->conf;
+}
+
 static int hns5_eth_fec_get_capability(struct rte_eth_dev *dev, struct rte_eth_fec_capa *speed_fec_capa,
     unsigned int num)
 {
-    if (dev == NULL) {
+    if (dev == NULL)
         return -EINVAL;
-    }
-    if (speed_fec_capa == NULL) {
+    if (speed_fec_capa == NULL)
         return RTE_DIM(g_speed_fec_capa_tbl);
-    }
-    if (num < RTE_DIM(g_speed_fec_capa_tbl)) {
+    if (num < RTE_DIM(g_speed_fec_capa_tbl))
         return -EINVAL;
-    }
     memcpy(speed_fec_capa, g_speed_fec_capa_tbl, sizeof(g_speed_fec_capa_tbl));
 
     return 0;
@@ -1429,58 +1522,23 @@ static int hns5_eth_flow_ctrl_set(struct rte_eth_dev *dev, struct rte_eth_fc_con
 
 static const char *MZ_RTE_ETH_DEV_RX_QUEUE = "rte_eth_dev_rx_queue";
 static const char *MZ_RTE_ETH_DEV_TX_QUEUE = "rte_eth_dev_tx_queue";
+
 /**
  * @brief Release RX queue
- * @note  Queue objects live in the static priv->rxq[] array, managed with priv lifetime,
- *        no memory freed here; ppe pool/poe group are shared across queues and released
- *        by dev_close, not by single-queue release; the framework
- *        (rte_eth_dev_rx_queue_release) clears dev->data->rx_queues[] references.
- * @param rxq  queue ptr from framework, NULL means queue not setup
+ * @param rxq  queue ptr from framework, unused
  */
 static void hns5_eth_rx_queue_release(void *rxq)
 {
-    struct hns5_eth_rx_queue *queue = (struct hns5_eth_rx_queue *)rxq;
-    struct rte_eth_dev *dev = NULL;
-    uint16_t port_id = 0;
-
-    if (queue == NULL) {
-        /* queue not setup or already released, return */
-        return;
-    }
-    port_id = queue->port_id;
-    dev = &rte_eth_devices[port_id];
-
-    /* reset queue object state to prevent stale data misuse */
-    memset(queue, 0, sizeof(*queue));
-    queue->type = HNS5_ETH_RXQ_TYPE_INVALID;
-
-    hns5_dbg(dev, "port:%u rxq released\n", port_id);
+    (void)rxq;
 }
 
 /**
  * @brief Release TX queue
- * @note  txq has no dynamic resources (queue object in static priv->txq[] array),
- *        only reset its state; the framework (rte_eth_dev_tx_queue_release)
- *        clears dev->data->tx_queues[] references.
- * @param txq  queue ptr from framework, NULL means queue not setup
+ * @param txq  queue ptr from framework, unused
  */
 static void hns5_eth_tx_queue_release(void *txq)
 {
-    struct hns5_eth_tx_queue *queue = (struct hns5_eth_tx_queue *)txq;
-    struct rte_eth_dev *dev = NULL;
-    uint16_t port_id = 0;
-
-    if (queue == NULL) {
-        /* queue not setup or already released, return */
-        return;
-    }
-    port_id = queue->port_id;
-    dev = &rte_eth_devices[port_id];
-
-    /* txq has no dynamic resources, just reset queue object state */
-    memset(queue, 0, sizeof(*queue));
-
-    hns5_dbg(dev, "port:%u txq released\n", port_id);
+    (void)txq;
 }
 
 /* Packet types recognized on the driver RX path (aligned with hns5_l3_l4_to_ptype L3/L4 maps) */
@@ -1522,7 +1580,11 @@ static const struct eth_dev_ops hns5_eth_dev_ops = {
     .rx_queue_start = hns5_eth_rx_queue_start,
     .rx_queue_stop = hns5_eth_rx_queue_stop,
     .tx_queue_setup = hns5_eth_tx_queue_setup,
+    .tx_queue_start = hns5_eth_tx_queue_start,
+    .tx_queue_stop = hns5_eth_tx_queue_stop,
     .tx_queue_release = hns5_eth_tx_queue_release,
+    .rxq_info_get = hns5_eth_rxq_info_get,
+    .txq_info_get = hns5_eth_txq_info_get,
     .link_update = hns5_eth_link_update,
     .stats_get = hns5_eth_stats_get,
     .stats_reset = hns5_eth_stats_reset,
@@ -1570,6 +1632,7 @@ bool hns5_eth_dev_is_hns5(uint16_t port_id)
 
 	return dev->dev_ops == &hns5_eth_dev_ops;
 }
+
 bool hns5_eth_has_ppe_peer(struct rte_eth_dev *dev)
 {
     struct rte_eth_dev *peer;
@@ -1602,15 +1665,12 @@ static struct rte_eth_dev *hns5_eth_dev_create(struct rte_vdev_device *vdev)
     const char *name = NULL;
 
     name = rte_vdev_device_name(vdev);
-    if (name == NULL) {
+    if (name == NULL)
         return NULL;
-    }
     // private data mounted on eth_dev->data->dev_private
     dev = rte_eth_vdev_allocate(vdev, sizeof(struct hns5_eth_priv));
-    if (dev == NULL) {
+    if (dev == NULL)
         return NULL;
-    }
-    hns5_info(dev, "[BIND] eth_dev allocated: port_id = %u, device_name = %s\n", dev->data->port_id, rte_vdev_device_name(vdev));
     data = dev->data;
     priv = data->dev_private;
     priv->intr_fd = -1; /* lsc irq not requested yet */
@@ -1639,6 +1699,7 @@ static struct rte_eth_dev *hns5_eth_dev_create(struct rte_vdev_device *vdev)
     data->nb_tx_queues = (uint16_t)HNS5_ETH_MAX_TXQ_NUM;
     data->numa_node = rte_socket_id();
 
+    priv->bp_grp = (uint8_t)HNS5_POE_BP_SLOT_INVALID;
     hns5_rss_set_default_args(priv);
 
     dev->dev_ops = &hns5_eth_dev_ops;
@@ -1652,19 +1713,30 @@ static int vdev_args_parse_uint32(__rte_unused const char *key, const char *valu
     char *endptr = NULL;
     unsigned long tmp = 0;
 
-    if (value == NULL || opaque == NULL) {
+    if (value == NULL || opaque == NULL)
         return -EINVAL;
-    }
     errno = 0;
     // empty third arg auto-detects number base
     tmp = strtoul(value, &endptr, 0);
 
-    if (errno != 0 || endptr == value || tmp > UINT32_MAX) {
+    if (errno != 0 || endptr == value || tmp > UINT32_MAX)
         return -EINVAL;
-    }
 
     *val = (uint32_t)tmp;
     return 0;
+}
+
+/* Read a u32 devarg; a missing optional key leaves *val untouched. */
+static int hns5_kvargs_read_u32(const struct rte_kvargs *kvlist, const char *key,
+                                uint32_t *val, bool required)
+{
+    int count = rte_kvargs_count(kvlist, key);
+
+    if (count == 0)
+        return required ? -EINVAL : 0;
+    if (count != 1)
+        return -EINVAL;
+    return rte_kvargs_process(kvlist, key, &vdev_args_parse_uint32, val);
 }
 
 static const char *
@@ -1732,92 +1804,74 @@ static int hns5_eth_params_parse(struct rte_vdev_device *vdev, struct rte_eth_de
         hns5_err(dev, "failed to rte_kvargs_parse\n");
         return -EINVAL;
     }
-    if (rte_kvargs_count(kvlist, "port") != 1) {
+    if (hns5_kvargs_read_u32(kvlist, "port", &priv->param.cport_id, true) != 0)
         goto free_kvargs;
-    }
-    ret = rte_kvargs_process(kvlist, "port", &vdev_args_parse_uint32, &priv->param.cport_id);
-    if (ret < 0) {
-        goto free_kvargs;
-    }
 
     /* share_group required, assigned externally to avoid group conflicts across ports */
     if (rte_kvargs_count(kvlist, "share_group") != 1) {
         hns5_err(dev, "share_group must be specified in devargs, assigned externally to avoid group conflicts\n");
         goto free_kvargs;
     }
-    ret = rte_kvargs_process(kvlist, "share_group", &vdev_args_parse_uint32, &priv->param.share_group);
-    if (ret < 0) {
+    if (hns5_kvargs_read_u32(kvlist, "share_group", &priv->param.share_group, true) != 0)
         goto free_kvargs;
-    }
     if (priv->param.share_group > HNS5_ETH_GROUP_MAX) {
         hns5_err(dev, "invalid share_group:%u, max:%u\n", priv->param.share_group, HNS5_ETH_GROUP_MAX);
         goto free_kvargs;
     }
 
-    ret = hns5_eth_mac_params_parse(dev, kvlist, priv);
-    if (ret != 0) {
+    /* rxq_mode optional, default queue mode (supports per-queue start/stop) */
+    priv->param.rxq_mode = HNS5_ETH_RXQ_MODE_QUEUE;
+    if (hns5_kvargs_read_u32(kvlist, "rxq_mode", &priv->param.rxq_mode, false) != 0)
+        goto free_kvargs;
+    if (priv->param.rxq_mode != HNS5_ETH_RXQ_MODE_QUEUE &&
+        priv->param.rxq_mode != HNS5_ETH_RXQ_MODE_GROUP) {
+        hns5_err(dev, "invalid rxq_mode:%u, expect 0(queue) or 1(group)\n",
+            priv->param.rxq_mode);
         goto free_kvargs;
     }
 
+    ret = hns5_eth_mac_params_parse(dev, kvlist, priv);
+    if (ret != 0)
+        goto free_kvargs;
+
     /* fw_tnl optional, enabled by default, devargs fw_tnl=0 disables */
     uint32_t fw_tnl_enable = 1;
-    if (rte_kvargs_count(kvlist, "fw_tnl") == 1) {
-        ret = rte_kvargs_process(kvlist, "fw_tnl", &vdev_args_parse_uint32, &fw_tnl_enable);
-        if (ret < 0) {
-            goto free_kvargs;
-        }
-        if (fw_tnl_enable != 0 && fw_tnl_enable != 1) {
-            hns5_err(dev, "invalid fw_tnl:%u, expect 0 or 1\n", fw_tnl_enable);
-            goto free_kvargs;
-        }
+    if (hns5_kvargs_read_u32(kvlist, "fw_tnl", &fw_tnl_enable, false) != 0)
+        goto free_kvargs;
+    if (fw_tnl_enable != 0 && fw_tnl_enable != 1) {
+        hns5_err(dev, "invalid fw_tnl:%u, expect 0 or 1\n", fw_tnl_enable);
+        goto free_kvargs;
     }
     priv->param.fw_tnl_enable = (uint8_t)fw_tnl_enable;
     /* base_tnl optional, default=cport_id*8 (step HNS5_POE_CPU_GRP_QUE_NUM, 8 per cport), devargs override */
     priv->param.base_tnl = priv->param.cport_id * HNS5_POE_CPU_GRP_QUE_NUM;
-    if (rte_kvargs_count(kvlist, "base_tnl") == 1) {
-        ret = rte_kvargs_process(kvlist, "base_tnl", &vdev_args_parse_uint32, &priv->param.base_tnl);
-        if (ret < 0) {
-            goto free_kvargs;
-        }
-    }
+    if (hns5_kvargs_read_u32(kvlist, "base_tnl", &priv->param.base_tnl, false) != 0)
+        goto free_kvargs;
 
     /* optional args, defaults used if absent */
-    if (rte_kvargs_count(kvlist, "macport") == 1) {
-        ret = rte_kvargs_process(kvlist, "macport", &vdev_args_parse_uint32, &priv->param.mport_id);
-        if (ret < 0) {
-            goto free_kvargs;
-        }
-    } else {
-        priv->param.mport_id = priv->param.cport_id;
-    }
+    priv->param.mport_id = priv->param.cport_id;
+    if (hns5_kvargs_read_u32(kvlist, "macport", &priv->param.mport_id, false) != 0)
+        goto free_kvargs;
     /* cport/mport used as port bitmap index in (1U << id) masks, must be < 32 to avoid shift UB */
     if (priv->param.cport_id >= 32 || priv->param.mport_id >= 32) {
         hns5_err(dev, "invalid cport_id:%u/mport_id:%u, must be < 32\n",
             priv->param.cport_id, priv->param.mport_id);
         goto free_kvargs;
     }
-    if (rte_kvargs_count(kvlist, "hw_txq_num") == 1) {
-        ret = rte_kvargs_process(kvlist, "hw_txq_num", &vdev_args_parse_uint32, &priv->param.hw_txq_num);
-        if (ret < 0) {
-            goto free_kvargs;
-        }
-    } else {
-        priv->param.hw_txq_num = HNS5_ETH_DEFAULT_HW_TXQ_NUM;
-    }
-    if (rte_kvargs_count(kvlist, "hw_txq_id") == 1) {
-        ret = rte_kvargs_process(kvlist, "hw_txq_id", &vdev_args_parse_uint32, &priv->param.hw_txq_start);
-        if (ret < 0) {
-            goto free_kvargs;
-        }
-    } else {
-        priv->param.hw_txq_start = priv->param.cport_id * 16; /* TM queue maps 16x port, matches default hw_txq_num=16 */
-    }
+    priv->param.hw_txq_num = HNS5_ETH_DEFAULT_HW_TXQ_NUM;
+    if (hns5_kvargs_read_u32(kvlist, "hw_txq_num", &priv->param.hw_txq_num, false) != 0)
+        goto free_kvargs;
+    priv->param.hw_txq_start = priv->param.cport_id * 16; /* TM queue maps 16x port, matches default hw_txq_num=16 */
+    if (hns5_kvargs_read_u32(kvlist, "hw_txq_id", &priv->param.hw_txq_start, false) != 0)
+        goto free_kvargs;
 
     rte_kvargs_free(kvlist);
 
-    hns5_info(dev, "cport:%u macport:%u mode:%u speed:%u share_group:%u base_tnl:%u fw_tnl_enable:%u hw_txq_start:%u hw_txq_num:%u\n",
+    hns5_info(dev, "cport:%u macport:%u mode:%u speed:%u share_group:%u rxq_mode:%s base_tnl:%u fw_tnl_enable:%u hw_txq_start:%u hw_txq_num:%u\n",
         priv->param.cport_id, priv->param.mport_id, priv->param.port_mode, priv->param.port_speed,
-        priv->param.share_group, priv->param.base_tnl, priv->param.fw_tnl_enable,
+        priv->param.share_group,
+        priv->param.rxq_mode == HNS5_ETH_RXQ_MODE_GROUP ? "group" : "queue",
+        priv->param.base_tnl, priv->param.fw_tnl_enable,
         priv->param.hw_txq_start, priv->param.hw_txq_num);
     return 0;
 
@@ -1832,9 +1886,8 @@ static int net_hns5_vdev_probe(struct rte_vdev_device *vdev)
     struct rte_eth_dev *dev = NULL;
 
     dev = hns5_eth_dev_create(vdev);
-    if (dev == NULL) {
+    if (dev == NULL)
         return -EINVAL;
-    }
     ret = hns5_eth_params_parse(vdev, dev);
     if (ret != 0) {
         hns5_err(dev, "failed to hns5_eth_params_parse\n");
@@ -1849,18 +1902,18 @@ static int net_hns5_vdev_probe(struct rte_vdev_device *vdev)
     ret = hns5_eth_ppe_init_lsw(dev);
     if (ret != 0) {
         hns5_err(dev, "failed to hns5_eth_ppe_init, ret:%d\n", ret);
-        return ret;
+        goto err_bp_grp;
     }
     ret = hns5_flow_init(dev);
     if (ret != 0) {
         hns5_err(dev, "failed to hns5_flow_init, ret:%d\n", ret);
-        return ret;
+        goto err_bp_grp;
     }
     if (hns5_get_tm_init_status() != true) {
         ret = hns5_tm_platform_dev_probe();
         if (ret != 0) {
             hns5_err(dev, "failed to hns5_tm_platform_dev_probe, ret:%d\n", ret);
-            return ret;
+            goto err_bp_grp;
         }
     }
 
@@ -1868,11 +1921,16 @@ static int net_hns5_vdev_probe(struct rte_vdev_device *vdev)
     ret = hns5_l2_mac_init(dev);
     if (ret != 0) {
         hns5_err(dev, "failed to hns5_l2_mac_init, ret:%d\n", ret);
-        return ret;
+        goto err_bp_grp;
     }
 
     rte_eth_dev_probing_finish(dev);
     return 0;
+
+err_bp_grp:
+    /* hns5_eth_poe_init() already claimed a bp slot; give it back on failure. */
+    hns5_poe_bp_grp_release(dev);
+    return ret;
 }
 
 static int net_hns5_vdev_remove(struct rte_vdev_device *vdev)
@@ -1891,19 +1949,18 @@ static int net_hns5_vdev_remove(struct rte_vdev_device *vdev)
 
     (void)hns5_eth_dev_stop(dev);
 
+    /* remove may happen without a prior close; return the bp_ppe slot here too */
     (void)hns5_poe_bp_grp_release(dev);
 
     rte_eth_dev_release_port(dev);
     snprintf(dev_name, sizeof(dev_name), "%s_%d", MZ_RTE_ETH_DEV_RX_QUEUE, dev->data->port_id);
     mz_rx = rte_memzone_lookup(dev_name);
-    if (mz_rx != NULL) {
+    if (mz_rx != NULL)
         rte_memzone_free(mz_rx);
-    }
     snprintf(dev_name, sizeof(dev_name), "%s_%d", MZ_RTE_ETH_DEV_TX_QUEUE, dev->data->port_id);
     mz_tx = rte_memzone_lookup(dev_name);
-    if (mz_tx != NULL) {
+    if (mz_tx != NULL)
         rte_memzone_free(mz_tx);
-    }
     return 0;
 }
 
@@ -1913,13 +1970,11 @@ int hns5_set_ppe_bypass_mode(uint8_t port_id, enum hidrv_ppe_bypass_mode mode)
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
     int ret;
 
-    if (priv == NULL) {
+    if (priv == NULL)
         return -EINVAL;
-    }
 
-    if (mode != HIDRV_PPE_LSW_MODE && mode != HIDRV_PPE_BYPASS_MODE) {
+    if (mode != HIDRV_PPE_LSW_MODE && mode != HIDRV_PPE_BYPASS_MODE)
         return -EINVAL;
-    }
 
     ret = hidrv_ppe_pf_set_bypass(priv->ppe_pf_devid, priv->param.mport_id, HIDRV_PPE_DIR_RX,
         priv->param.cport_id, mode);
@@ -1935,13 +1990,6 @@ int hns5_set_ppe_bypass_mode(uint8_t port_id, enum hidrv_ppe_bypass_mode mode)
         return ret;
     }
 
-    hns5_info(dev,
-        "[PPE_BYPASS] === PPE BYPASS MODE SET OK ===\n"
-        "  port_id:       %u\n"
-        "  ppe_pf_devid:  %d\n"
-        "  mode:          %u\n",
-        port_id, priv->ppe_pf_devid, mode);
-
     return 0;
 }
 
@@ -1949,16 +1997,12 @@ int hns5_lsw_mac_table_write(uint8_t port_id, struct rte_ether_addr *mac)
 {
     struct rte_eth_dev *dev = &rte_eth_devices[port_id];
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
-    struct hidrv_lsw_l2_key hidrv_key;
-    struct hidrv_lsw_l2_actn hidrv_actn;
+    struct hidrv_lsw_l2_key hidrv_key = {0};
+    struct hidrv_lsw_l2_actn hidrv_actn = {0};
     int ret;
 
-    if (priv == NULL || mac == NULL) {
+    if (priv == NULL || mac == NULL)
         return -EINVAL;
-    }
-
-    memset(&hidrv_key, 0, sizeof(hidrv_key));
-    memset(&hidrv_actn, 0, sizeof(hidrv_actn));
 
     (void)memcpy(hidrv_key.mac, mac->addr_bytes, HNS5_ETH_ALEN);
     hidrv_key.vlan_id = 0;
@@ -1982,13 +2026,11 @@ int hns5_promiscuous_enable(struct rte_eth_dev *dev)
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
     int ret;
 
-    if (priv == NULL) {
+    if (priv == NULL)
         return -EINVAL;
-    }
 
-    if (priv->promisc_mode == 1) {
+    if (priv->promisc_mode == 1)
         return 0;
-    }
 
     priv->promisc_mode = 1;
 
@@ -1999,8 +2041,7 @@ int hns5_promiscuous_enable(struct rte_eth_dev *dev)
         return ret;
     }
 
-    hns5_info(dev, "[PROMISC] port:%u promiscuous mode enabled, set PPE to HIDRV_PPE_BYPASS_MODE\n",
-        dev->data->port_id);
+    hns5_dbg(dev, "port:%u promiscuous mode enabled\n", dev->data->port_id);
 
     return 0;
 }
@@ -2010,39 +2051,22 @@ int hns5_promiscuous_disable(struct rte_eth_dev *dev)
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
     int ret;
 
-    if (priv == NULL) {
+    if (priv == NULL)
         return -EINVAL;
-    }
 
-    if (priv->promisc_mode == 0) {
+    if (priv->promisc_mode == 0)
         return 0;
-    }
-
-    hns5_info(dev,
-        "[PROMISC] === DISABLE PROMISCUOUS ===\n"
-        "  port_id:       %u\n"
-        "  mac_addr:      %02x:%02x:%02x:%02x:%02x:%02x\n"
-        "  mport_id:      %u\n"
-        "  cport_id:      %u\n"
-        "  current mode:  %u(PROMISC)\n"
-        "  target mode:   %u(NORMAL)\n",
-        dev->data->port_id,
-        priv->address.addr_bytes[0], priv->address.addr_bytes[1], priv->address.addr_bytes[2],
-        priv->address.addr_bytes[3], priv->address.addr_bytes[4], priv->address.addr_bytes[5],
-        priv->param.mport_id,
-        priv->param.cport_id,
-        priv->promisc_mode,
-        HIDRV_PPE_LSW_MODE);
 
     priv->promisc_mode = 0;
 
     ret = hns5_set_ppe_bypass_mode(dev->data->port_id, HIDRV_PPE_LSW_MODE);
     if (ret != 0) {
-        hns5_err(dev, "failed to set lsx mode, ret:%d\n", ret);
+        hns5_err(dev, "failed to set lsw mode, ret:%d\n", ret);
         priv->promisc_mode = 1;
         return ret;
     }
 
+    hns5_dbg(dev, "port:%u promiscuous mode disabled\n", dev->data->port_id);
     return 0;
 }
 
@@ -2052,9 +2076,8 @@ int hns5_allmulticast_enable(struct rte_eth_dev *dev)
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
     int ret;
 
-    if (priv == NULL) {
+    if (priv == NULL)
         return -EINVAL;
-    }
 
     ret = hns5_ppe_lsw_mcast_mode_config(dev, 1);
     if (ret != 0) {
@@ -2062,8 +2085,7 @@ int hns5_allmulticast_enable(struct rte_eth_dev *dev)
         return ret;
     }
 
-    hns5_info(dev, "[MCAST] port:%u allmulticast mode enabled, dmac I/G bit flow added\n",
-        dev->data->port_id);
+    hns5_dbg(dev, "port:%u allmulticast mode enabled\n", dev->data->port_id);
 
     return 0;
 }
@@ -2074,9 +2096,8 @@ int hns5_allmulticast_disable(struct rte_eth_dev *dev)
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
     int ret;
 
-    if (priv == NULL) {
+    if (priv == NULL)
         return -EINVAL;
-    }
 
     ret = hns5_ppe_lsw_mcast_mode_config(dev, 0);
     if (ret != 0) {
@@ -2084,8 +2105,7 @@ int hns5_allmulticast_disable(struct rte_eth_dev *dev)
         return ret;
     }
 
-    hns5_info(dev, "[MCAST] port:%u allmulticast mode disabled, dmac I/G bit flow deleted\n",
-        dev->data->port_id);
+    hns5_dbg(dev, "port:%u allmulticast mode disabled\n", dev->data->port_id);
 
     return 0;
 }
@@ -2100,6 +2120,7 @@ RTE_PMD_REGISTER_PARAM_STRING(net_hns5,
     "port=<0-31>"
     "macport=<0-31>"
     "share_group=<0-31>"
+    "rxq_mode=<0(queue)|1(group)>"
     "fw_tnl=<0|1>"
     "base_tnl=<0-4095>"
     "hw_txq_id=<N>"
