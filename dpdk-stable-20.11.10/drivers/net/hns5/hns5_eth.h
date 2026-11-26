@@ -5,6 +5,7 @@
 #ifndef _HNS5_ETH_H_
 #define _HNS5_ETH_H_
 
+#include <rte_eal.h>
 #include <rte_ethdev.h>
 #include <rte_ethdev_driver.h>
 #include <rte_spinlock.h>
@@ -44,6 +45,19 @@ extern "C" {
 #define hns5_get_field(origin, mask, shift) (((origin) & (mask)) >> (shift))
 #define hns5_set_bit(origin, shift, val) hns5_set_field((origin), (0x1UL << (shift)), (shift), (val))
 #define hns5_get_bit(origin, shift) hns5_get_field((origin), (0x1UL << (shift)), (shift))
+
+/* multi-process: only the primary process owns the device configuration */
+#define hns5_is_primary()   (rte_eal_process_type() == RTE_PROC_PRIMARY)
+#define hns5_is_secondary() (!hns5_is_primary())
+
+/* Reject a hw-touching op in a secondary; kept inline so the guard is visible. */
+#define HNS5_SECONDARY_EPERM(dev, op) \
+    do { \
+        if (hns5_is_secondary()) { \
+            hns5_err((dev), "secondary: %s must be called by the primary\n", (op)); \
+            return -EPERM; \
+        } \
+    } while (0)
 
 /**
  * @brief fw_tnl (hardware tunnel dispatch) config, vqi=base_vqi+qos selects target queue
@@ -149,6 +163,7 @@ struct hns5_eth_rx_queue {
     uint16_t queue;                         // RX queue, special queues see HNS5_ETH_RXQ_BY_*
     uint16_t pool_id;                       // RX mempool
     uint16_t port_id;                       // DPDK port id
+    uint16_t queue_id;                      // DPDK queue id
     handle poe_vfhandle;                    // perf: set at queue init
     uint8_t bp_drop_on;                     // 1: queue watermark + MAM source drop enabled
     uint8_t poe_enabled;                    // 1: this port's POE queue input is enabled
@@ -164,6 +179,7 @@ struct hns5_eth_tx_queue {
     union ndrv_poe_cpu_add_msg msgs[HNS5_ETH_TX_BURST_CNT] __rte_cache_aligned;    // perf: faster than local variable
     union ndrv_poe_cpu_add_msg default_tx_msg __rte_cache_aligned;                  // perf: reduce msg fill time per TX
     uint16_t port_id;                       // DPDK port id
+    uint16_t queue_id;                      // DPDK queue id
     uint32_t tm_port;                       // tm port
     uint32_t tm_queue_id;                   // tm queue
     uint32_t vcpu;                          // vcpu for TX poe msg, bound in tx path

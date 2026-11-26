@@ -27,7 +27,8 @@ sources = files(
     'hns5_stats.c',
     'hns5_tm.c',
     'hns5_rss.c',
-    'hns5_lsw.c'
+    'hns5_lsw.c',
+    'hns5_mp.c'
 )
 
 so_dir = join_paths(meson.source_root(), 'drivers/net/hns5/dependency/lib64')
