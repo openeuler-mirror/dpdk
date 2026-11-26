@@ -62,7 +62,7 @@ hinic3_vec_compact_cqe_addr(struct rte_mbuf *mbuf)
  * the rearm round instead of partially refilling the ring.
  */
 static inline u32
-hinic3_rx_alloc_mbuf_bulk(struct hinic3_rxq *rxq,
+hinic3_rx_alloc_mbuf_bulk_vec(struct hinic3_rxq *rxq,
 			  struct rte_mbuf **mbufs, u32 exp_mbuf_cnt)
 {
 	u32 avail_cnt;
@@ -117,7 +117,7 @@ hinic3_rearm_rxq_mbuf_vec(struct hinic3_rxq *rxq)
 	if (free_wqebbs < exp_wqebbs)
 		exp_wqebbs = free_wqebbs;
 
-	rearm_wqebbs = hinic3_rx_alloc_mbuf_bulk(rxq, rearm_mbufs,
+	rearm_wqebbs = hinic3_rx_alloc_mbuf_bulk_vec(rxq, rearm_mbufs,
 						 exp_wqebbs);
 	if (unlikely(rearm_wqebbs == 0))
 		return -ENOMEM;

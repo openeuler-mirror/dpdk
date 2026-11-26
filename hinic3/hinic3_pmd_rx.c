@@ -568,6 +568,26 @@ void hinic3_free_rxq_padding(struct hinic3_rxq *rxq)
 	rte_pktmbuf_free(mbuf);
 }
 
+static u32 hinic3_rx_alloc_mbuf_bulk(struct hinic3_rxq *rxq,
+				     struct rte_mbuf **mbufs,
+				     u32 exp_mbuf_cnt)
+{
+	u32 avail_cnt;
+	int err;
+
+	err = rte_pktmbuf_alloc_bulk(rxq->mb_pool, mbufs, exp_mbuf_cnt);
+	if (likely(err == 0)) {
+		avail_cnt = exp_mbuf_cnt;
+	} else {
+		avail_cnt = 0;
+		rxq->rxq_stats.rx_nombuf += exp_mbuf_cnt;
+	}
+#ifdef HINIC3_XSTAT_MBUF_USE
+	rxq->rxq_stats.alloc_mbuf += avail_cnt;
+#endif
+	return avail_cnt;
+}
+
 static int hinic3_rearm_rxq_mbuf(struct hinic3_rxq *rxq)
 {
 	struct hinic3_rq_wqe *rq_wqe = NULL;
