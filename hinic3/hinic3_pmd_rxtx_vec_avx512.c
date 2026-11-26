@@ -16,6 +16,12 @@
 /* Function-level ISA attribute; only reached after the AVX512F runtime probe. */
 #define HINIC3_AVX512_TARGET	__attribute__((target("avx512f")))
 
+/*
+ * RXDONE handshake bit: host dw0 bit31 in the scalar compact path
+ * (RQ_COMPACT_CQE_STATUS_RXDONE_SHIFT). The vector path reads the raw
+ * little-endian dword without byte swap, so bit31 of the big-endian
+ * word is the MSB of in-memory byte0 -- raw bit7 here.
+ */
 #define HINIC3_AVX_COMPACT_RXDONE_BIT	7
 
 /*
