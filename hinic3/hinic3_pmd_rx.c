@@ -1187,22 +1187,6 @@ int hinic3_start_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq)
 	/* lock dev queue switch  */
 	rte_spinlock_lock(&nic_dev->queue_list_lock);
 
-	/*
-	 * Allocate padding before the queue joins the driver list, the RSS
-	 * indirection table and the hardware: on failure nothing needs to be
-	 * rolled back. Allocating later would leave a half-started queue on
-	 * failure.
-	 */
-	if (nic_dev->vec_allowed) {
-		err = hinic3_alloc_rxq_padding(rxq);
-		if (err) {
-			PMD_DRV_LOG(ERR, "Fail to alloc padding mbuf, qid = %u, local_qid = %u",
-				    rxq->q_id, rxq->local_qid);
-			rte_spinlock_unlock(&nic_dev->queue_list_lock);
-			return err;
-		}
-	}
-
 	hinic3_add_rq_to_rx_queue_list(nic_dev, rxq->q_id);
 
 	if (nic_dev->rss_state == HINIC3_RSS_ENABLE) {
