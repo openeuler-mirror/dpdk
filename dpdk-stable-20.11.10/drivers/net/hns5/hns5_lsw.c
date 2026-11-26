@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include <rte_ethdev.h>
+#include <rte_eal.h>
 #include <rte_errno.h>
 
 #include "hidrv_ppe_pf_api.h"
@@ -164,6 +165,9 @@ int hns5_mac_addr_set(struct rte_eth_dev *dev, struct rte_ether_addr *addr)
     if (priv == NULL || addr == NULL) {
         return -EINVAL;
     }
+
+    /* multi-process: L2 table is owned by the primary */
+    HNS5_SECONDARY_EPERM(dev, "mac addr set");
 
     if (priv->ppe_pfhandle == NULL) {
         hns5_err(dev, "ppe_pfhandle is NULL\n");

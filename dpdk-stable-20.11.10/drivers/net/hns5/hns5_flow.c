@@ -4,6 +4,7 @@
 
 #include <stdlib.h>
 
+#include <rte_eal.h>
 #include <rte_flow_driver.h>
 #include <rte_io.h>
 #include <rte_malloc.h>
@@ -1200,11 +1201,14 @@ static const struct rte_flow_ops hns5_flow_ops = {
     .isolate = NULL,
 };
 
-int hns5_dev_filter_ctrl(struct rte_eth_dev *dev __rte_unused,
+int hns5_dev_filter_ctrl(struct rte_eth_dev *dev,
                          enum rte_filter_type filter_type,
                          enum rte_filter_op filter_op,
                          void *arg)
 {
+    /* Secondary refuses the whole rte_flow API: it writes shared hw tables. */
+    HNS5_SECONDARY_EPERM(dev, "rte_flow ops");
+
     switch (filter_type) {
     case RTE_ETH_FILTER_GENERIC:
         if (filter_op != RTE_ETH_FILTER_GET)
@@ -1222,9 +1226,9 @@ int hns5_flow_init(struct rte_eth_dev *dev)
     struct rte_eth_dev_data *dev_data = hns5_eth_get_dev_data(dev);
     pthread_mutexattr_t attr;
 
-    if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
+    if (hns5_is_secondary())
         return 0;
-    }
+
     pthread_mutexattr_init(&attr);
     pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);
     pthread_mutex_init(&dev_data->flow_ops_mutex, &attr);
@@ -1250,9 +1254,8 @@ void hns5_flow_uninit(struct rte_eth_dev *dev)
     struct rte_eth_dev_data *dev_data = NULL;
     struct rte_flow_error error = {0};
 
-    if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
+    if (hns5_is_secondary())
         return;
-    }
 
     /* Release all created flow and counter resources, symmetric to hns5_flow_init */
     (void)hns5_flow_flush(dev, &error);

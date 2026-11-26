@@ -109,8 +109,10 @@ int hns5_eth_poe_init(struct rte_eth_dev *dev)
         return ret;
     }
     ret = hns5_poe_module_init(dev); // only order timeout is set
-    if (ret != 0)
+    if (ret != 0) {
+        (void)hns5_poe_bp_grp_release(dev);
         return ret;
+    }
     return 0;
 }
 

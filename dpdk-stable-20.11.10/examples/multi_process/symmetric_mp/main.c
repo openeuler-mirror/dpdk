@@ -11,6 +11,10 @@
  * Each process will read from the same ports, given by the port-mask
  * parameter, which should be the same in each case, just using a different
  * queue per port as determined by the proc-id parameter.
+ *
+ * hns5 port: primary creates the shared BMU pool and starts the ports;
+ * a secondary looks the pool up, waits for dev_started and never starts
+ * the port itself (lcores must not overlap: vcpu = lcore * 2 + 1).
  */
 
 #include <stdio.h>
@@ -38,6 +42,7 @@
 #include <rte_ether.h>
 #include <rte_ethdev.h>
 #include <rte_mempool.h>
+#include <rte_mbuf_pool_ops.h>
 #include <rte_memcpy.h>
 #include <rte_mbuf.h>
 #include <rte_string_fns.h>
@@ -355,6 +360,37 @@ lcore_main(void *arg __rte_unused)
 	}
 }
 
+// Secondary only: wait for the primary to start the shared ports. Never call
+// rte_eth_dev_start() here: it flips the shared dev_started flag and the
+// primary would then skip its own hw start.
+static int
+wait_ports_started_by_primary(void)
+{
+	unsigned i, wait;
+#define PRIMARY_START_TIMEOUT_MS 30000
+#define PRIMARY_START_POLL_MS 100
+
+	for (i = 0; i < num_ports; i++) {
+		const uint16_t port = ports[i];
+		struct rte_eth_dev *dev = &rte_eth_devices[port];
+
+		for (wait = 0; wait < PRIMARY_START_TIMEOUT_MS / PRIMARY_START_POLL_MS; wait++) {
+			if (dev->data->dev_started != 0)
+				break;
+			rte_delay_ms(PRIMARY_START_POLL_MS);
+		}
+		if (dev->data->dev_started == 0) {
+			fprintf(stderr, "port %u not started by the primary (timeout)\n", port);
+			return -1;
+		}
+		if (dev->rx_pkt_burst == NULL || dev->tx_pkt_burst == NULL) {
+			fprintf(stderr, "port %u burst callbacks not armed in secondary\n", port);
+			return -1;
+		}
+	}
+	return 0;
+}
+
 /* Check the link status of all ports in up to 9s, and print them finally */
 static void
 check_all_ports_link_status(uint16_t port_num, uint32_t port_mask)
@@ -422,7 +458,8 @@ check_all_ports_link_status(uint16_t port_num, uint32_t port_mask)
 int
 main(int argc, char **argv)
 {
-	static const char *_SMP_MBUF_POOL = "SMP_MBUF_POOL";
+	/* hns5_bmu parses the pool id from the "bmu_pool%u" name */
+	static const char *_SMP_MBUF_POOL = "bmu_pool6";
 	int ret;
 	unsigned i;
 	enum rte_proc_type_t proc_type;
@@ -447,11 +484,12 @@ main(int argc, char **argv)
 	smp_parse_args(argc, argv);
 
 	proc_type = rte_eal_process_type();
+	/* Buffers come from the shared "hns5_bmu" pool: primary creates, secondary looks up. */
 	mp = (proc_type == RTE_PROC_SECONDARY) ?
 			rte_mempool_lookup(_SMP_MBUF_POOL) :
-			rte_pktmbuf_pool_create(_SMP_MBUF_POOL, NB_MBUFS,
+			rte_pktmbuf_pool_create_by_ops(_SMP_MBUF_POOL, NB_MBUFS,
 				MBUF_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE,
-				rte_socket_id());
+				rte_socket_id(), "hns5_bmu");
 	if (mp == NULL)
 		rte_exit(EXIT_FAILURE, "Cannot get memory pool for buffers\n");
 
@@ -461,6 +499,12 @@ main(int argc, char **argv)
 		if(proc_type == RTE_PROC_PRIMARY)
 			if (smp_port_init(ports[i], mp, (uint16_t)num_procs) < 0)
 				rte_exit(EXIT_FAILURE, "Error initialising ports\n");
+	}
+
+	/* Secondary only: wait for the primary to bring the shared ports up. */
+	if (proc_type == RTE_PROC_SECONDARY) {
+		if (wait_ports_started_by_primary() != 0)
+			rte_exit(EXIT_FAILURE, "Primary did not start the ports\n");
 	}
 
 	if (proc_type == RTE_PROC_PRIMARY)

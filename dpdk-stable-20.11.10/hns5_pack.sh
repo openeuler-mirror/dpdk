@@ -6,3 +6,4 @@ fi
 
 tar -czvf build.tgz build/drivers/*so* build/lib/*so*
 cp build/app/dpdk-testpmd ./
+cp build/examples/dpdk-symmetric_mp ./

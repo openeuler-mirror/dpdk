@@ -7,6 +7,7 @@
 
 #include <stdbool.h>
 
+#include <rte_eal.h>
 #include <rte_pci.h>
 #include <rte_bus_pci.h>
 #include <rte_gro.h>
@@ -648,6 +649,16 @@ struct mplsoudp_decap_conf {
 extern struct mplsoudp_decap_conf mplsoudp_decap_conf;
 
 extern enum rte_eth_rx_mq_mode rx_mq_mode;
+
+/* Multi-process: id of this process and total number of processes */
+extern int proc_id;
+extern unsigned int num_procs;
+
+static inline bool
+is_proc_primary(void)
+{
+	return rte_eal_process_type() == RTE_PROC_PRIMARY;
+}
 
 static inline unsigned int
 lcore_num(void)

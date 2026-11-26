@@ -117,7 +117,7 @@ main() {
         -Ddisable_drivers=net/cnxk,net/mlx4,net/mlx5,common/mlx5,regex/mlx5,vdpa/mlx5,crypto/* \
         -Dtests=true \
         -Denable_kmods=false \
-        -Dexamples=l3fwd \
+        -Dexamples=l3fwd,multi_process/symmetric_mp \
         || die "meson setup failed"
 
     # 1) compile only the hns5 objects
