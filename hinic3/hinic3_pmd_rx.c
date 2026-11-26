@@ -508,25 +508,10 @@ void hinic3_free_all_rxq_mbufs(struct hinic3_nic_dev *nic_dev)
 }
 
 /*
- * Fill the rx_info padding slots reserved by ethdev (q_depth + RX_BURST).
- * The vector RX path may overrun the ring tail by up to one burst with
- * linear indexing; padding slots carry a dummy mbuf whose integrated
- * compact CQE is zeroed so RXDONE reads 0 and the tail burst terminates
- * right after the last real packet.
- *
- * All padding slots share ONE dummy mbuf per queue. The invariants that
- * make sharing safe (do not break them):
- *   - a padding slot is never valid: RXDONE stays 0, so the burst
- *     terminates before delivering it and the fill/RXDONE-clear path
- *     never touches it;
- *   - a padding slot is never rearmed and its data_off never changes,
- *     so the dummy CQE address is constant and the zeroed CQE is
- *     read-only;
- *   - the vector descriptor store does write the dummy's
- *     rx_descriptor_fields1 from stale lanes (possibly from several
- *     RX cores concurrently), but that area is never read.
- * rte_pktmbuf_alloc is required: raw_alloc neither zeroes the buffer
- * nor sets refcnt=1, which would corrupt the mempool.
+ * Fill the rx_info padding slots (q_depth + RX_BURST, reserved by ethdev)
+ * with one dummy mbuf per queue: the vector RX path may overrun the ring
+ * tail by up to one burst with linear indexing, and the zeroed compact CQE
+ * keeps RXDONE at 0 so the tail burst terminates after the last real packet.
  */
 int hinic3_alloc_rxq_padding(struct hinic3_rxq *rxq)
 {
