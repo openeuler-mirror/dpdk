@@ -4,6 +4,7 @@
 
 #include "hns5_poe.h"
 #include "hns5_rss.h"
+#include "hidrv_ppe_vf_api.h"
 
 /* Default RSS Toeplitz hash key */
 const uint8_t hns5_default_rss_key[HNS5_RSS_KEY_SIZE] = {
@@ -20,8 +21,20 @@ static int hns5_rss_idt_to_ppe(struct rte_eth_dev *dev);
 static int hns5_rss_hash_to_ppe(struct rte_eth_dev *dev);
 static int hns5_rss_ipv4_ipv6_enable_to_ppe(struct rte_eth_dev *dev);
 static int hns5_rss_non_ip_enable_to_ppe(struct rte_eth_dev *dev);
-static int hns5_rss_fw_not_hit_actn_to_ppe(struct rte_eth_dev *dev);
 static int hns5_rss_reset_indir_table(struct rte_eth_dev *dev);
+
+/* See hns5_rss_lock() in hns5_rss.h for why this is global rather than per-port */
+static rte_spinlock_t hns5_rss_rmw_lock = RTE_SPINLOCK_INITIALIZER;
+
+void hns5_rss_lock(void)
+{
+    rte_spinlock_lock(&hns5_rss_rmw_lock);
+}
+
+void hns5_rss_unlock(void)
+{
+    rte_spinlock_unlock(&hns5_rss_rmw_lock);
+}
 
 /**
  * @brief Collect queue ids of RX queues with hardware backing
@@ -104,9 +117,9 @@ static int hns5_rss_idt_alloc_to_ppe(struct rte_eth_dev *dev)
     struct ndrv_ppp_rss_idt_alloc_cfg idt_alloc = {0};
     unsigned int ppe_tnl = (unsigned int)priv->param.cport_id;
     unsigned int ret;
-    // block must not change: hash takes low 8 bits to cover 256 entries
+    /* Fixed layout: hns5_rss_idt_to_ppe() programs block=idx/16, item=idx%16 */
     idt_alloc.block_offset = 0;
-    idt_alloc.block_num = 64;  /* 64 blocks × 4 entries/block = 256 entries */
+    idt_alloc.block_num = 64;  /* 64 blocks × 16 items/block = 1024 entries */
 
     ret = ndrv_ppe_ppp_pf_set_rss_idt_table_alloc(priv->ppe_pfhandle, ppe_tnl, &idt_alloc);
     if (ret != 0) {
@@ -117,13 +130,9 @@ static int hns5_rss_idt_alloc_to_ppe(struct rte_eth_dev *dev)
     return 0;
 }
 
-/**
- * @brief Send RSS indirect table entries to PPE hardware
- * @note Table has 1024 entries; low 8-bit index maps: block=idx/4, entry=idx%4
- * @note Each entry takes its queue id from priv->rss.reta, which only holds
- *       queue ids with hardware backing; hairpin queues are never routed to.
- *       Entries beyond reta_size reuse the table from the start.
- */
+/** @brief Send RSS indirect table entries to PPE hardware
+ *  @note 1024 entries: block=idx/16, item=idx%16; each takes its queue id from
+ *        priv->rss.reta (hardware-backed queues only), wrapping at reta_size. */
 static int hns5_rss_idt_to_ppe(struct rte_eth_dev *dev)
 {
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
@@ -131,10 +140,10 @@ static int hns5_rss_idt_to_ppe(struct rte_eth_dev *dev)
     uint16_t i;
     unsigned int tbl_idx, item_idx;
 
-	if (priv->rss.reta_size == 0) {
-		hns5_err(dev, "rss reta is not initialized, invalid to config RSS IDT table\n");
-		return -EINVAL;
-	}
+    if (priv->rss.reta_size == 0) {
+        hns5_err(dev, "rss reta is not initialized, invalid to config RSS IDT table\n");
+        return -EINVAL;
+    }
 
     for (i = 0; i < HNS5_RSS_INDIRECT_TABLE_SIZE; i++) {
         tbl_idx = i / 16;    /* 1024 / 16 = 64 blocks */
@@ -143,24 +152,69 @@ static int hns5_rss_idt_to_ppe(struct rte_eth_dev *dev)
                                                   priv->rss.reta[i % priv->rss.reta_size]);
         if (ret != 0) {
             hns5_err(dev, "failed to set RSS IDT table[%u], ret:%u\n", i, ret);
-            return -EINVAL;
+            return -EIO;
         }
     }
 
     return 0;
 }
 
-/**
- * @brief Calculate the tc_size value
- * @param rx_queue_num Number of RX queues
- * @return tc_size (2^tc_size = actual queue count, max 8 means 256 queues)
- */
+int hns5_rss_reta_write(struct rte_eth_dev *dev)
+{
+    int ret;
+
+    ret = hns5_rss_idt_alloc_to_ppe(dev);
+    if (ret != 0)
+        return ret;
+
+    return hns5_rss_idt_to_ppe(dev);
+}
+
+static void hns5_rss_reta_init(struct rte_eth_dev *dev)
+{
+    struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
+    uint16_t real_qid[HNS5_ETH_MAX_RXQ_NUM];
+    uint16_t nb_real_queues;
+    uint16_t i;
+
+    nb_real_queues = hns5_rss_real_qid_collect(dev, real_qid);
+    if (nb_real_queues == 0) {
+        priv->rss.reta_size = 0;
+        return;
+    }
+
+    for (i = 0; i < HNS5_RSS_RETA_SIZE; i++) {
+        uint16_t pos = i % nb_real_queues;
+
+        /* Do not direct initial RSS traffic to deferred-start queues. */
+        if (dev->data->rx_queue_state[real_qid[pos]] !=
+            RTE_ETH_QUEUE_STATE_STARTED) {
+            uint16_t n;
+
+            for (n = 1; n < nb_real_queues; n++) {
+                pos = (i + n) % nb_real_queues;
+                if (dev->data->rx_queue_state[real_qid[pos]] ==
+                    RTE_ETH_QUEUE_STATE_STARTED)
+                    break;
+            }
+        }
+        priv->rss.reta[i] = real_qid[pos];
+    }
+    priv->rss.reta_size = HNS5_RSS_RETA_SIZE;
+}
+
+/** @brief Calculate the tc_size value
+ *  @param rx_queue_num RX queues assigned to a TC
+ *  @return tc_size (2^tc_size = fw_tnl channels RSS can select); rounded up so
+ *          the RSS slot count is a power of two even if nb_rx_queues is not. */
 static unsigned int hns5_calc_tc_size(unsigned int rx_queue_num)
 {
-    if (rx_queue_num == 0) {
-        return 0;
-    }
-    return rte_log2_u64(rte_align64pow2(rx_queue_num));
+    unsigned int tc_size = 0;
+
+    while (tc_size < 9 && (1U << tc_size) < rx_queue_num)
+        tc_size++;
+
+    return tc_size;
 }
 
 /**
@@ -203,21 +257,21 @@ static int hns5_rss_tc_mode_to_ppe(struct rte_eth_dev *dev)
     unsigned int tc_id;
     unsigned int cport_id = (unsigned int)priv->param.cport_id;
     uint16_t rss_size_per_tc;
+    unsigned int tc_size;
     unsigned int tc_offset;
     unsigned int base_tnl_offset;
     unsigned int enabled_tc_count = 0;
 
     for (tc_id = 0; tc_id < 8; tc_id++) {
-        if (priv->hw_tc_map & (1 << tc_id)) {
+        if (priv->hw_tc_map & (1 << tc_id))
             enabled_tc_count++;
-        }
     }
 
-    if (enabled_tc_count == 0) {
+    if (enabled_tc_count == 0)
         return 0;
-    }
 
     rss_size_per_tc = hns5_rss_real_rxq_num(dev) / enabled_tc_count;
+    tc_size = hns5_calc_tc_size(rss_size_per_tc);
 
     base_tnl_offset = (priv->fwl_tnl_inited == 1) ? priv->fwl_tnl_conf.base_tnl : 0;
     tc_offset = base_tnl_offset;
@@ -225,16 +279,17 @@ static int hns5_rss_tc_mode_to_ppe(struct rte_eth_dev *dev)
     for (tc_id = 0; tc_id < 8; tc_id++) {
         if (priv->hw_tc_map & (1 << tc_id)) {
             tc_data.tc_offset = tc_offset;
-            tc_data.tc_size = hns5_calc_tc_size(rss_size_per_tc);
+            tc_data.tc_size = tc_size;
 
-            unsigned int next_offset = tc_offset + rss_size_per_tc;
+            unsigned int next_offset = tc_offset + (1U << tc_size);
             if (next_offset > 256) {
                 hns5_err(dev, "RSS TC%u config exceeds limit, "
-                    "tc_offset=%u rss_size_per_tc=%u\n",
-                    tc_id, tc_offset, rss_size_per_tc);
+                    "tc_offset=%u tc_size=%u\n",
+                    tc_id, tc_offset, tc_size);
                 return -EINVAL;
             }
             tc_offset = next_offset;
+
             ret = ndrv_ppe_ppp_pf_set_rss_tc_mode(priv->ppe_pfhandle, cport_id, tc_id, 1, &tc_data);
             if (ret != 0) {
                 hns5_err(dev, "failed to set RSS TC mode %u, ret:%u\n", tc_id, ret);
@@ -352,18 +407,17 @@ static int hns5_rss_non_ip_enable_to_ppe(struct rte_eth_dev *dev)
     return 0;
 }
 
-/**
- * @brief Send RSS fallback config for flow table miss to PPE hardware
- * @note Do not drop on flow table miss; route to RSS distribution
- */
-static int hns5_rss_fw_not_hit_actn_to_ppe(struct rte_eth_dev *dev)
+/** @brief Enable RSS distribution when no distribution flow table entry is hit
+ *  @param dev Ethernet device
+ *  @note Stopped queues rely on their own fw_tnl drop, so this never needs drop. */
+int hns5_rss_fw_not_hit_actn_to_ppe(struct rte_eth_dev *dev)
 {
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
     unsigned int ret;
 
     ret = ndrv_ppe_ppp_pf_set_fw_not_hit_actn(priv->ppe_pfhandle, 1, NULL);
     if (ret != 0) {
-        hns5_err(dev, "failed to set RSS fw not hit action, ret:%u\n", ret);
+        hns5_err(dev, "failed to set fw not hit action, ret:%u\n", ret);
         return -EINVAL;
     }
 
@@ -410,39 +464,32 @@ static int hns5_rss_enable_sequence(struct rte_eth_dev *dev)
     int ret;
 
     ret = hns5_rss_idt_alloc_to_ppe(dev);
-    if (ret != 0) {
+    if (ret != 0)
         return ret;
-    }
 
     ret = hns5_rss_idt_to_ppe(dev);
-    if (ret != 0) {
+    if (ret != 0)
         return ret;
-    }
 
     ret = hns5_rss_tc_mode_to_ppe(dev);
-    if (ret != 0) {
+    if (ret != 0)
         return ret;
-    }
 
     ret = hns5_rss_ipv4_ipv6_enable_to_ppe(dev);
-    if (ret != 0) {
+    if (ret != 0)
         return ret;
-    }
 
     ret = hns5_rss_non_ip_enable_to_ppe(dev);
-    if (ret != 0) {
+    if (ret != 0)
         return ret;
-    }
 
     ret = hns5_rss_fw_not_hit_actn_to_ppe(dev);
-    if (ret != 0) {
+    if (ret != 0)
         return ret;
-    }
 
     ret = hns5_rss_hash_to_ppe(dev);
-    if (ret != 0) {
+    if (ret != 0)
         return ret;
-    }
     return 0;
 }
 
@@ -473,9 +520,8 @@ int hns5_rss_apply_conf(struct rte_eth_dev *dev)
     int ret;
 
     ret = hns5_rss_parse_conf(dev, priv, rss_conf);
-    if (ret != 0) {
+    if (ret != 0)
         return ret;
-    }
     return 0;
 }
 
@@ -487,26 +533,22 @@ int hns5_rss_apply_conf(struct rte_eth_dev *dev)
  */
 int hns5_config_rss(struct rte_eth_dev *dev)
 {
-    struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
-	uint16_t real_qid[HNS5_POE_CPU_GRP_QUE_NUM];
     int ret;
-    uint16_t i;
-    uint16_t nb_rx_queues;
 
-    nb_rx_queues = hns5_rss_real_qid_collect(dev, real_qid);
-    if (nb_rx_queues == 0) {
+    if (hns5_rss_real_rxq_num(dev) == 0) {
         hns5_err(dev, "no hardware rx queue, invalid to config rss\n");
         return -EINVAL;
     }
 
-    if (priv->rss.reta_size == 0) {
-        for (i = 0; i < HNS5_RSS_RETA_SIZE; i++) {
-            priv->rss.reta[i] = real_qid[i % nb_rx_queues];
-        }
-        priv->rss.reta_size = HNS5_RSS_RETA_SIZE;
-    }
+    /* Serialize against peer ports that program the shared PPE indirect table */
+    hns5_rss_lock();
+    /* dev_start puts every queue back to STARTED, so always rebuild the default
+     * equal-share table over all of them; a table narrowed by a previous queue
+     * stop must not survive the restart, or those queues never get traffic. */
+    hns5_rss_reta_init(dev);
 
     ret = hns5_rss_enable_sequence(dev);
+    hns5_rss_unlock();
     if (ret != 0) {
         hns5_err(dev, "failed to init RSS, ret:%d\n", ret);
         return ret;
@@ -523,12 +565,102 @@ void hns5_rss_uninit(struct rte_eth_dev *dev)
 {
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
 
-    /* Reset the indirect table in hardware */
-    (void)hns5_rss_reset_indir_table(dev);
+    /* The IDT is shared per PPE: wipe it only for the last remaining port,
+     * else closing one port steers the siblings' traffic to queue 0. */
+    if (!hns5_eth_has_ppe_peer(dev)) {
+        hns5_rss_lock();
+        (void)hns5_rss_reset_indir_table(dev);
+        hns5_rss_unlock();
+    }
 
     /* Clear RSS config */
     priv->rss.hf = 0;
     priv->rss.reta_size = 0;
+}
+
+int hns5_rss_reta_restore(struct rte_eth_dev *dev, const uint16_t *old_reta)
+{
+    struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
+    int ret;
+
+    if (priv->rss.reta_size == 0)
+        return 0;
+
+    memcpy(priv->rss.reta, old_reta, sizeof(priv->rss.reta));
+    ret = hns5_rss_reta_write(dev);
+    if (ret != 0)
+        hns5_err(dev, "failed to roll back RSS RETA, ret:%d\n", ret);
+    return ret;
+}
+
+/* Rebuild the default equal-share RETA over the queues active after applying
+ * `started` to queue_id and program it on change. A stopped queue's traffic is
+ * discarded by its fw_tnl drop, so the PPE-wide not-hit action stays
+ * distribute. */
+static int hns5_rss_reta_rebuild(struct rte_eth_dev *dev, uint16_t queue_id, bool started)
+{
+    struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
+    uint16_t old_reta[HNS5_RSS_RETA_SIZE];
+    uint16_t active[HNS5_ETH_MAX_RXQ_NUM];
+    uint16_t active_num = 0;
+    uint16_t i, q;
+    bool changed = false;
+    int ret;
+
+    for (q = 0; q < dev->data->nb_rx_queues; q++) {
+        if (q == queue_id ? started :
+            dev->data->rx_queue_state[q] == RTE_ETH_QUEUE_STATE_STARTED)
+            active[active_num++] = q;
+    }
+    if (active_num == 0)
+        return 0;
+
+    memcpy(old_reta, priv->rss.reta, sizeof(old_reta));
+
+    /* Round-robin over the active queues gives every queue an equal share. */
+    for (i = 0; i < HNS5_RSS_RETA_SIZE; i++) {
+        q = active[i % active_num];
+        if (priv->rss.reta[i] != q) {
+            priv->rss.reta[i] = q;
+            changed = true;
+        }
+    }
+
+    if (changed) {
+        ret = hns5_rss_reta_write(dev);
+        if (ret != 0) {
+            (void)hns5_rss_reta_restore(dev, old_reta);
+            return ret;
+        }
+    }
+
+    return 0;
+}
+
+/* Detach a stopping queue from RSS: rebuild RETA evenly over the remaining
+ * started queues. Only the default equal-share layout is maintained here;
+ * weighted layouts are left to the application. */
+int hns5_rss_queue_detach(struct rte_eth_dev *dev, uint16_t queue_id)
+{
+    struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
+
+    if (priv->rss.reta_size == 0)
+        return 0;
+
+    return hns5_rss_reta_rebuild(dev, queue_id, false);
+}
+
+/* Attach a starting queue to RSS: rebuild RETA evenly over the started queues
+ * plus the queue being attached. Only the default equal-share layout is
+ * maintained here; weighted layouts are left to the application. */
+int hns5_rss_queue_attach(struct rte_eth_dev *dev, uint16_t queue_id)
+{
+    struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
+
+    if (priv->rss.reta_size == 0)
+        return 0;
+
+    return hns5_rss_reta_rebuild(dev, queue_id, true);
 }
 
 /**
@@ -538,40 +670,77 @@ void hns5_rss_uninit(struct rte_eth_dev *dev)
 int hns5_rss_reta_update(struct rte_eth_dev *dev, struct rte_eth_rss_reta_entry64 *reta_conf,
                           uint16_t reta_size)
 {
-    struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
+    struct hns5_eth_priv *priv;
+    uint16_t old_reta[HNS5_RSS_RETA_SIZE];
+    uint16_t old_reta_size;
     uint16_t i, idx, shift;
-    uint16_t nb_rx_queues = dev->data->nb_rx_queues;
+    uint16_t nb_rx_queues;
+    int ret = 0;
 
     if (dev == NULL || reta_conf == NULL) {
         hns5_err(dev, "invalid parameter\n");
         return -EINVAL;
     }
-
     if (reta_size == 0 || reta_size > HNS5_RSS_RETA_SIZE) {
         hns5_err(dev, "invalid reta_size:%u\n", reta_size);
         return -EINVAL;
     }
 
+    priv = hns5_eth_priv_get(dev);
+    nb_rx_queues = dev->data->nb_rx_queues;
+    hns5_rss_lock();
+
+    /* Validate the complete request before changing software or hardware state. */
     for (i = 0; i < reta_size; i++) {
         idx = i / HNS5_RSS_RETA_GROUP_SIZE;
         shift = i % HNS5_RSS_RETA_GROUP_SIZE;
-        if (reta_conf[idx].mask & (1ULL << shift)) {
-            uint16_t queue = (uint16_t)reta_conf[idx].reta[shift];
-            if (queue >= nb_rx_queues || priv->rxq[queue].is_hairpin) {
-                hns5_err(dev, "reta[%u] queue:%u is hairpin or out of range, nb_rx_queues:%u\n",
-                    i, queue, nb_rx_queues);
-                return -EINVAL;
-            }
-            priv->rss.reta[i] = queue;
+        if ((reta_conf[idx].mask & (1ULL << shift)) == 0)
+            continue;
+
+        uint16_t queue = (uint16_t)reta_conf[idx].reta[shift];
+        if (queue >= nb_rx_queues) {
+            hns5_err(dev, "reta[%u] queue:%u >= nb_rx_queues:%u\n",
+                i, queue, nb_rx_queues);
+            ret = -EINVAL;
+            goto out;
+        }
+        if (priv->rxq[queue].is_hairpin) {
+            hns5_err(dev, "reta[%u] queue:%u is hairpin\n", i, queue);
+            ret = -EINVAL;
+            goto out;
+        }
+        if (dev->data->dev_started &&
+            dev->data->rx_queue_state[queue] != RTE_ETH_QUEUE_STATE_STARTED) {
+            hns5_err(dev, "reta[%u] points to stopped queue:%u\n", i, queue);
+            ret = -EINVAL;
+            goto out;
         }
     }
 
-    priv->rss.reta_size = reta_size;
+    if (priv->rss.reta_size == 0)
+        hns5_rss_reta_init(dev);
+    memcpy(old_reta, priv->rss.reta, sizeof(old_reta));
+    old_reta_size = priv->rss.reta_size;
 
-    if (hns5_rss_idt_alloc_to_ppe(dev) != 0) {
-        return -EINVAL;
+    for (i = 0; i < reta_size; i++) {
+        idx = i / HNS5_RSS_RETA_GROUP_SIZE;
+        shift = i % HNS5_RSS_RETA_GROUP_SIZE;
+        if (reta_conf[idx].mask & (1ULL << shift))
+            priv->rss.reta[i] = (uint16_t)reta_conf[idx].reta[shift];
     }
-    return hns5_rss_idt_to_ppe(dev);
+    priv->rss.reta_size = HNS5_RSS_RETA_SIZE;
+
+    ret = hns5_rss_reta_write(dev);
+    if (ret != 0) {
+        memcpy(priv->rss.reta, old_reta, sizeof(priv->rss.reta));
+        priv->rss.reta_size = old_reta_size;
+        if (hns5_rss_reta_write(dev) != 0)
+            hns5_err(dev, "failed to roll back RSS RETA update\n");
+    }
+
+out:
+    hns5_rss_unlock();
+    return ret;
 }
 
 /**
@@ -580,26 +749,27 @@ int hns5_rss_reta_update(struct rte_eth_dev *dev, struct rte_eth_rss_reta_entry6
 int hns5_rss_reta_query(struct rte_eth_dev *dev, struct rte_eth_rss_reta_entry64 *reta_conf,
                          uint16_t reta_size)
 {
-    struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
+    struct hns5_eth_priv *priv;
     uint16_t i, idx, shift;
 
     if (dev == NULL || reta_conf == NULL) {
         hns5_err(dev, "invalid parameter\n");
         return -EINVAL;
     }
-
-    if (reta_size == 0) {
-        hns5_err(dev, "reta_size is 0\n");
+    if (reta_size == 0 || reta_size > HNS5_RSS_RETA_SIZE) {
+        hns5_err(dev, "invalid reta_size:%u\n", reta_size);
         return -EINVAL;
     }
 
+    priv = hns5_eth_priv_get(dev);
+    hns5_rss_lock();
     for (i = 0; i < reta_size && i < priv->rss.reta_size; i++) {
         idx = i / HNS5_RSS_RETA_GROUP_SIZE;
         shift = i % HNS5_RSS_RETA_GROUP_SIZE;
-        if (reta_conf[idx].mask & (1ULL << shift)) {
+        if (reta_conf[idx].mask & (1ULL << shift))
             reta_conf[idx].reta[shift] = priv->rss.reta[i];
-        }
     }
+    hns5_rss_unlock();
 
     return 0;
 }
@@ -619,18 +789,15 @@ int hns5_rss_hash_update(struct rte_eth_dev *dev, struct rte_eth_rss_conf *rss_c
     }
 
     ret = hns5_rss_parse_conf(dev, priv, rss_conf);
-    if (ret != 0) {
+    if (ret != 0)
         return ret;
-    }
 
     ret = hns5_rss_ipv4_ipv6_enable_to_ppe(dev);
-    if (ret != 0) {
+    if (ret != 0)
         return ret;
-    }
     ret = hns5_rss_non_ip_enable_to_ppe(dev);
-    if (ret != 0) {
+    if (ret != 0)
         return ret;
-    }
     return hns5_rss_hash_to_ppe(dev);
 }
 

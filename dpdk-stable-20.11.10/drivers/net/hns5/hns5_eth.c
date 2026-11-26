@@ -79,6 +79,7 @@
 #define HNS5_LSC_POLL_INTERVAL_US      250000  // lsc polling interval: 250ms, also the only source reporting link up
 #define HNS5_LSC_CB_UNREG_MAX_RETRIES  5       // lsc callback unregister retry count
 #define HNS5_LSC_CB_UNREG_RETRY_MS     100     // lsc callback unregister retry interval
+#define HNS5_RXQ_DRAIN_MAX_POLLS       1024
 
 static const char *g_mag_mode_maps[] = {
     [HIDRV_MAG_PORT_MODE_100BASE_FX] = "100BASE_FX",
@@ -278,6 +279,8 @@ static void hns5_stop_rx_queues(struct rte_eth_dev *dev, uint32_t vcpu)
 			continue;
 		}
 		dev->data->rx_queue_state[i] = RTE_ETH_QUEUE_STATE_STOPPED;
+        if (rxq != NULL)
+            rxq->poe_enabled = 0; /* group cleared below disables the input */
         if (rxq != NULL && (cleared_grp_mask & (1U << rxq->group)) == 0) {
             ret = hidrv_poe_clear_group(priv->poe_vf_devid, vcpu, rxq->group);
             if (ret != 0) {
@@ -603,6 +606,23 @@ static int hns5_eth_dev_close(struct rte_eth_dev *dev)
     dev->data->mac_addrs = NULL;
     return 0;
 }
+static int hns5_eth_rxq_drain(struct hns5_eth_rx_queue *rxq)
+{
+    struct rte_mbuf *pkts[HNS5_ETH_RX_BURST_CNT];
+    uint32_t polls = 0;
+
+    while (polls++ < HNS5_RXQ_DRAIN_MAX_POLLS) {
+        uint16_t nb_rx = hns5_eth_rx_burst(rxq, pkts, HNS5_ETH_RX_BURST_CNT);
+        uint16_t i;
+
+        if (nb_rx == 0)
+            return 0;
+        for (i = 0; i < nb_rx; i++)
+            rte_pktmbuf_free(pkts[i]);
+    }
+    return -EBUSY;
+}
+
 /* True when @peer is another hns5 port sharing @dev's PPE, hence its RSS IDT. */
 static bool hns5_eth_same_ppe(struct rte_eth_dev *dev, struct rte_eth_dev *peer)
 {
@@ -619,6 +639,178 @@ static bool hns5_eth_same_ppe(struct rte_eth_dev *dev, struct rte_eth_dev *peer)
     peer_priv = hns5_eth_priv_get(peer);
     return priv != NULL && peer_priv != NULL &&
         peer_priv->ppe_pf_devid == priv->ppe_pf_devid;
+}
+
+/* The RSS IDT is shared by all hns5 ports on one PPE, so queue start/stop on a
+ * port changes steering for its peers; mirror the state and RETA copy. */
+static void hns5_eth_rxq_state_sync_peers(struct rte_eth_dev *dev, uint16_t rx_queue_id,
+    uint8_t state)
+{
+    struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
+    struct hns5_eth_priv *peer_priv;
+    struct hns5_eth_rx_queue *peer_rxq;
+    struct rte_eth_dev *peer;
+    uint16_t port_id;
+
+    for (port_id = 0; port_id < RTE_MAX_ETHPORTS; port_id++) {
+        if (port_id == dev->data->port_id || !rte_eth_dev_is_valid_port(port_id))
+            continue;
+
+        peer = &rte_eth_devices[port_id];
+        if (!hns5_eth_same_ppe(dev, peer))
+            continue;
+        if (rx_queue_id >= peer->data->nb_rx_queues)
+            continue;
+
+        peer_rxq = peer->data->rx_queues[rx_queue_id];
+        if (peer_rxq == NULL || peer_rxq->type != HNS5_ETH_RXQ_TYPE_QUEUE ||
+            peer_rxq->is_hairpin)
+            continue;
+
+        /* Mirror the RETA copy the caller just wrote to hardware. */
+        peer_priv = hns5_eth_priv_get(peer);
+        memcpy(peer_priv->rss.reta, priv->rss.reta, sizeof(priv->rss.reta));
+        peer_priv->rss.reta_size = priv->rss.reta_size;
+
+        /* Keep a peer with its POE input still disabled stopped, so its own
+         * start call re-enables the input. */
+        if (state == RTE_ETH_QUEUE_STATE_STARTED && peer_rxq->poe_enabled == 0)
+            continue;
+
+        peer->data->rx_queue_state[rx_queue_id] = state;
+        hns5_dbg(peer, "sync rxq:%u state:%u from port:%u\n",
+            rx_queue_id, state, dev->data->port_id);
+    }
+}
+
+static int hns5_eth_rxq_acquire(struct rte_eth_dev *dev, uint16_t rx_queue_id,
+    struct hns5_eth_rx_queue **rxq_out)
+{
+    struct hns5_eth_rx_queue *rxq;
+
+    if (rx_queue_id >= dev->data->nb_rx_queues)
+        return -EINVAL;
+    rxq = dev->data->rx_queues[rx_queue_id];
+    if (rxq == NULL)
+        return -EINVAL;
+    if (rxq->type != HNS5_ETH_RXQ_TYPE_QUEUE || rxq->is_hairpin)
+        return -ENOTSUP;
+
+    *rxq_out = rxq;
+    return 0;
+}
+
+static int hns5_eth_rx_queue_stop(struct rte_eth_dev *dev, uint16_t rx_queue_id)
+{
+    struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
+    struct hns5_eth_rx_queue *rxq;
+    uint16_t old_reta[HNS5_RSS_RETA_SIZE];
+    int ret;
+
+    ret = hns5_eth_rxq_acquire(dev, rx_queue_id, &rxq);
+    if (ret != 0)
+        return ret;
+
+    /* RETA is shared by all ports on the PPE: the process-wide lock keeps the
+     * RETA write and peer sync below serialized across ports. */
+    hns5_rss_lock();
+    if (dev->data->rx_queue_state[rx_queue_id] == RTE_ETH_QUEUE_STATE_STOPPED) {
+        hns5_rss_unlock();
+        return 0;
+    }
+    memcpy(old_reta, priv->rss.reta, sizeof(old_reta));
+
+    /* Move future RSS traffic away before disabling the hardware queue. */
+    ret = hns5_rss_queue_detach(dev, rx_queue_id);
+    if (ret != 0)
+        goto out;
+
+    /* Arm the fw_tnl drop before closing POE, or earlier FD rules would hold
+     * packets in POE forever. */
+    hns5_poe_rxq_fw_tnl_drop_set(dev, rxq, true);
+
+    /* Keep the input enabled when a fw_tnl drop exists: dropping at q_in_en
+     * leaks the BMU buffer, and the last queue (RETA is left untouched once no
+     * queue is active) would drain the pool. The MAM drop above discards before
+     * allocation, so fall back to gating the input only without fw_tnl. */
+    if (priv->fwl_tnl_inited != 1) {
+        ret = hns5_poe_rxq_enable(rxq, false);
+        if (ret != 0) {
+            hns5_err(dev, "failed to disable rxq:%u, ret:%d\n", rx_queue_id, ret);
+            goto rollback;
+        }
+    }
+
+    /* The caller must have stopped its polling thread before this drain. */
+    ret = hns5_eth_rxq_drain(rxq);
+    if (ret != 0) {
+        hns5_err(dev, "failed to drain rxq:%u, ret:%d\n", rx_queue_id, ret);
+        if (priv->fwl_tnl_inited != 1)
+            (void)hns5_poe_rxq_enable(rxq, true);
+        goto rollback;
+    }
+
+    dev->data->rx_queue_state[rx_queue_id] = RTE_ETH_QUEUE_STATE_STOPPED;
+
+out:
+    /* Sync peers under the lock so detach + peer update stays atomic per PPE. */
+    if (ret == 0 && priv->rss.reta_size != 0)
+        hns5_eth_rxq_state_sync_peers(dev, rx_queue_id, RTE_ETH_QUEUE_STATE_STOPPED);
+    hns5_rss_unlock();
+    return ret;
+
+rollback:
+    (void)hns5_poe_rxq_fw_tnl_drop_set(dev, rxq, false);
+    (void)hns5_rss_reta_restore(dev, old_reta);
+    goto out;
+}
+
+static int hns5_eth_rx_queue_start(struct rte_eth_dev *dev, uint16_t rx_queue_id)
+{
+    struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
+    struct hns5_eth_rx_queue *rxq;
+    int ret;
+
+    ret = hns5_eth_rxq_acquire(dev, rx_queue_id, &rxq);
+    if (ret != 0)
+        return ret;
+
+    hns5_rss_lock();
+    if (dev->data->rx_queue_state[rx_queue_id] == RTE_ETH_QUEUE_STATE_STARTED) {
+        hns5_rss_unlock();
+        return 0;
+    }
+
+    /* Clear the fw_tnl drop first so the restored watermark is in effect
+     * before the queue becomes visible to RSS/FD steering again. */
+    hns5_poe_rxq_fw_tnl_drop_set(dev, rxq, false);
+
+    /* Enable first so the queue is ready before new RETA entries point to it. */
+    ret = hns5_poe_rxq_enable(rxq, true);
+    if (ret != 0) {
+        hns5_err(dev, "failed to enable rxq:%u, ret:%d\n", rx_queue_id, ret);
+        (void)hns5_poe_rxq_fw_tnl_drop_set(dev, rxq, true);
+        goto out;
+    }
+
+    ret = hns5_rss_queue_attach(dev, rx_queue_id);
+    if (ret != 0) {
+        hns5_err(dev, "failed to attach rxq:%u to RSS, ret:%d\n", rx_queue_id, ret);
+        /* attach already rolled back its RETA change on failure. */
+        (void)hns5_poe_rxq_enable(rxq, false);
+        (void)hns5_eth_rxq_drain(rxq);
+        (void)hns5_poe_rxq_fw_tnl_drop_set(dev, rxq, true);
+        goto out;
+    }
+
+    dev->data->rx_queue_state[rx_queue_id] = RTE_ETH_QUEUE_STATE_STARTED;
+
+out:
+    /* Sync peers under the shared lock, see hns5_eth_rx_queue_stop(). */
+    if (ret == 0 && priv->rss.reta_size != 0)
+        hns5_eth_rxq_state_sync_peers(dev, rx_queue_id, RTE_ETH_QUEUE_STATE_STARTED);
+    hns5_rss_unlock();
+    return ret;
 }
 
 static int hns5_eth_dev_start(struct rte_eth_dev *dev)
@@ -1327,6 +1519,8 @@ static const struct eth_dev_ops hns5_eth_dev_ops = {
     .dev_set_link_down = hns5_eth_dev_set_link_down,
     .rx_queue_setup = hns5_eth_rx_queue_setup,
     .rx_queue_release = hns5_eth_rx_queue_release,
+    .rx_queue_start = hns5_eth_rx_queue_start,
+    .rx_queue_stop = hns5_eth_rx_queue_stop,
     .tx_queue_setup = hns5_eth_tx_queue_setup,
     .tx_queue_release = hns5_eth_tx_queue_release,
     .link_update = hns5_eth_link_update,

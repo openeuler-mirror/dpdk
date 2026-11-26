@@ -34,12 +34,24 @@
 /* Default RSS key */
 extern const uint8_t hns5_default_rss_key[HNS5_RSS_KEY_SIZE];
 
+/*
+ * Process-wide lock for the RSS indirect table, shared by all hns5 ports on one
+ * PPE. Held around RETA update + hardware write + peer sync.
+ */
+void hns5_rss_lock(void);
+void hns5_rss_unlock(void);
+
 /* RSS function declarations */
 uint16_t hns5_rss_real_rxq_num(struct rte_eth_dev *dev);
 void hns5_rss_set_default_args(struct hns5_eth_priv *priv);
 void hns5_rss_uninit(struct rte_eth_dev *dev);
 int hns5_rss_apply_conf(struct rte_eth_dev *dev);
 int hns5_config_rss(struct rte_eth_dev *dev);
+int hns5_rss_reta_write(struct rte_eth_dev *dev);
+int hns5_rss_reta_restore(struct rte_eth_dev *dev, const uint16_t *old_reta);
+int hns5_rss_fw_not_hit_actn_to_ppe(struct rte_eth_dev *dev);
+int hns5_rss_queue_detach(struct rte_eth_dev *dev, uint16_t queue_id);
+int hns5_rss_queue_attach(struct rte_eth_dev *dev, uint16_t queue_id);
 int hns5_rss_reta_update(struct rte_eth_dev *dev, struct rte_eth_rss_reta_entry64 *reta_conf, uint16_t reta_size);
 int hns5_rss_reta_query(struct rte_eth_dev *dev, struct rte_eth_rss_reta_entry64 *reta_conf, uint16_t reta_size);
 int hns5_rss_hash_update(struct rte_eth_dev *dev, struct rte_eth_rss_conf *rss_conf);
