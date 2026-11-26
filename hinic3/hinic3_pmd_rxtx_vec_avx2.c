@@ -28,7 +28,7 @@
 	((((dw0) & 0xFu) << 8) | (((dw0) >> 8) & 0xFFu))
 
 static inline HINIC3_VEC_TARGET u16
-hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
+hinic3_recv_burst_compact_cqe_vec_avx2(struct hinic3_rxq *rxq,
 				      struct rte_mbuf **rx_pkts, u16 nb_pkts)
 {
 	struct hinic3_rx_info *rx_info;
@@ -196,7 +196,7 @@ hinic3_vec_prefetch(struct hinic3_rxq *rxq, u16 sw_ci, u16 nb_pkts)
 
 HINIC3_VEC_TARGET
 u16
-hinic3_recv_pkts_compact_cqe_vec_avx(void *rx_queue, struct rte_mbuf **rx_pkts,
+hinic3_recv_pkts_compact_cqe_vec_avx2(void *rx_queue, struct rte_mbuf **rx_pkts,
 				     u16 nb_pkts)
 {
 	struct hinic3_rxq *rxq = rx_queue;
@@ -234,7 +234,7 @@ hinic3_recv_pkts_compact_cqe_vec_avx(void *rx_queue, struct rte_mbuf **rx_pkts,
 		hinic3_vec_prefetch(rxq,
 			(u16)((sw_ci + nb_rx) & rxq->q_mask), n);
 
-		done_pkts = hinic3_recv_burst_compact_cqe_vec_avx(rxq,
+		done_pkts = hinic3_recv_burst_compact_cqe_vec_avx2(rxq,
 							    &rx_pkts[nb_rx], n);
 
 		nb_pkts -= done_pkts;
