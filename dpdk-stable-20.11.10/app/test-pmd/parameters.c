@@ -199,6 +199,9 @@ usage(char* progname)
 	       "enabled\n");
 	printf("  --record-core-cycles: enable measurement of CPU cycles.\n");
 	printf("  --record-burst-stats: enable display of RX and TX bursts.\n");
+	printf("  --num-procs=N: set the total number of multi-process instances.\n");
+	printf("  --proc-id=id: set the id of the current process from "
+	       "multi-process instances (0 <= id < num-procs).\n");
 	printf("  --hairpin-mode=0xXX: bitmask set the hairpin port mode.\n"
 	       "    0x10 - explicit Tx rule, 0x02 - hairpin ports paired\n"
 	       "    0x01 - hairpin ports loop, 0x00 - hairpin port self\n");
@@ -581,6 +584,8 @@ launch_args_parse(int argc, char** argv)
 		{ "rx-mq-mode",                 1, 0, 0 },
 		{ "record-core-cycles",         0, 0, 0 },
 		{ "record-burst-stats",         0, 0, 0 },
+		{ "num-procs",			1, 0, 0 },
+		{ "proc-id",			1, 0, 0 },
 		{ 0, 0, 0, 0 },
 	};
 
@@ -1335,6 +1340,13 @@ launch_args_parse(int argc, char** argv)
 				record_core_cycles = 1;
 			if (!strcmp(lgopts[opt_idx].name, "record-burst-stats"))
 				record_burst_stats = 1;
+			if (!strcmp(lgopts[opt_idx].name, "num-procs")) {
+				num_procs = (unsigned int)atoi(optarg);
+				if (num_procs == 0)
+					num_procs = 1;
+			}
+			if (!strcmp(lgopts[opt_idx].name, "proc-id"))
+				proc_id = atoi(optarg);
 			break;
 		case 'h':
 			usage(argv[0]);

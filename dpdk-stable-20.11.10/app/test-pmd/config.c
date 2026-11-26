@@ -3167,6 +3167,7 @@ rss_fwd_config_setup(void)
 	queueid_t  rxq;
 	queueid_t  nb_q;
 	streamid_t  sm_id;
+	int start;
 
 	nb_q = nb_rxq;
 	if (nb_q > nb_txq)
@@ -3174,7 +3175,7 @@ rss_fwd_config_setup(void)
 	cur_fwd_config.nb_fwd_lcores = (lcoreid_t) nb_fwd_lcores;
 	cur_fwd_config.nb_fwd_ports = nb_fwd_ports;
 	cur_fwd_config.nb_fwd_streams =
-		(streamid_t) (nb_q * cur_fwd_config.nb_fwd_ports);
+		(streamid_t) (nb_q / num_procs * cur_fwd_config.nb_fwd_ports);
 
 	if (cur_fwd_config.nb_fwd_streams < cur_fwd_config.nb_fwd_lcores)
 		cur_fwd_config.nb_fwd_lcores =
@@ -3184,7 +3185,14 @@ rss_fwd_config_setup(void)
 	init_fwd_streams();
 
 	setup_fwd_config_of_each_lcore(&cur_fwd_config);
-	rxp = 0; rxq = 0;
+
+	if (proc_id > 0 && nb_q % num_procs != 0)
+		printf("Warning! queue numbers should be multiple of processes, or packet loss will happen.\n");
+
+	/* Queues are split across processes: proc_id owns [start, end) of nb_q. */
+	start = proc_id * nb_q / num_procs;
+	rxp = 0;
+	rxq = start;
 	for (sm_id = 0; sm_id < cur_fwd_config.nb_fwd_streams; sm_id++) {
 		struct fwd_stream *fs;
 

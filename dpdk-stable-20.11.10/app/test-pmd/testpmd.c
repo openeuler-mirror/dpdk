@@ -98,6 +98,13 @@ uint8_t auto_start = 0;
 uint8_t tx_first;
 char cmdline_filename[PATH_MAX] = {0};
 
+/* Multi-process: queues are split across processes by proc_id/num_procs. */
+int proc_id;
+unsigned int num_procs = 1;
+
+/* Interval to check whether the primary process is still alive */
+#define MONITOR_INTERVAL (500 * 1000)
+
 /*
  * NUMA support configuration.
  * When set, the NUMA support attempts to dispatch the allocation of the
@@ -984,6 +991,11 @@ mbuf_pool_create(uint16_t mbuf_seg_size, unsigned nb_mbuf,
 	switch (mp_alloc_type) {
 	case MP_ALLOC_NATIVE:
 		{
+			/* secondary processes share the pool created by primary */
+			if (!is_proc_primary()) {
+				rte_mp = rte_mempool_lookup("bmu_pool6");
+				break;
+			}
 			/* wrapper to rte_mempool_create() */
 			TESTPMD_LOG(INFO, "preferred mempool ops selected: %s\n",
 					rte_mbuf_best_mempool_ops());
@@ -2524,7 +2536,21 @@ start_port(portid_t pid)
 			continue;
 		}
 
-		if (port->need_reconfig > 0) {
+		if (!is_proc_primary()) {
+			/* Secondary: queues were set up/started by the primary, mark local state. */
+			for (qi = 0; qi < nb_rxq; qi++)
+				port->rxq[qi].state =
+					port->rxq[qi].conf.rx_deferred_start ?
+					RTE_ETH_QUEUE_STATE_STOPPED :
+					RTE_ETH_QUEUE_STATE_STARTED;
+			for (qi = 0; qi < nb_txq; qi++)
+				port->txq[qi].state =
+					port->txq[qi].conf.tx_deferred_start ?
+					RTE_ETH_QUEUE_STATE_STOPPED :
+					RTE_ETH_QUEUE_STATE_STARTED;
+		}
+
+		if (is_proc_primary() && port->need_reconfig > 0) {
 			port->need_reconfig = 0;
 
 			if (flow_isolate_all) {
@@ -2559,7 +2585,7 @@ start_port(portid_t pid)
 				return -1;
 			}
 		}
-		if (port->need_reconfig_queues > 0) {
+		if (is_proc_primary() && port->need_reconfig_queues > 0) {
 			port->need_reconfig_queues = 0;
 			/* setup tx queues */
 			for (qi = 0; qi < nb_txq; qi++) {
@@ -2668,7 +2694,7 @@ start_port(portid_t pid)
 		cnt_pi++;
 
 		/* start port */
-		if (rte_eth_dev_start(pi) < 0) {
+		if (is_proc_primary() && rte_eth_dev_start(pi) < 0) {
 			printf("Fail to start port %d\n", pi);
 
 			/* Fail to setup rx queue, return */
@@ -2702,14 +2728,15 @@ start_port(portid_t pid)
 				port->eth_addr.addr_bytes[5]);
 
 		/* at least one port started, need checking link status */
-		need_check_link_status = 1;
+		if (is_proc_primary())
+			need_check_link_status = 1;
 
 		pl[cfg_pi++] = pi;
 	}
 
 	if (need_check_link_status == 1 && !no_link_check)
 		check_all_ports_link_status(RTE_PORT_ALL);
-	else if (need_check_link_status == 0)
+	else if (need_check_link_status == 0 && is_proc_primary())
 		printf("Please stop the ports first\n");
 
 	if (hairpin_mode & 0xf) {
@@ -2812,7 +2839,7 @@ stop_port(portid_t pid)
 		if (port->flow_list)
 			port_flow_flush(pi);
 
-		if (rte_eth_dev_stop(pi) != 0)
+		if (is_proc_primary() && rte_eth_dev_stop(pi) != 0)
 			RTE_LOG(ERR, EAL, "rte_eth_dev_stop failed for port %u\n",
 				pi);
 		/*
@@ -3143,6 +3170,107 @@ detach_devargs(char *identifier)
 	printf("Done\n");
 }
 
+enum testpmd_req_type {
+	TESTPMD_REQ_TYPE_EXIT,
+};
+
+struct testpmd_mp_req {
+	enum testpmd_req_type t;
+};
+
+struct testpmd_mp_resp {
+	int result;
+};
+
+#define TESTPMD_MP	"mp_testpmd"
+
+/* Send reply to this peer when testpmd exits */
+static const char *primary_name;
+
+static void
+reply_to_primary(const char *peer, int result)
+{
+	struct rte_mp_msg reply = { };
+	struct testpmd_mp_resp *resp = (struct testpmd_mp_resp *) &reply.param;
+
+	snprintf(reply.name, RTE_MP_MAX_NAME_LEN, "%s", TESTPMD_MP);
+	reply.len_param = sizeof(*resp);
+	resp->result = result;
+
+	printf("Replying %d to primary\n", result);
+	fflush(stdout);
+
+	if (rte_mp_reply(&reply, peer) < 0)
+		printf("Failed to send response to primary:%s", strerror(rte_errno));
+}
+
+/* Primary process is exiting, stop secondary process */
+static void
+pmd_notify_secondary(void)
+{
+	struct testpmd_mp_req request = {
+		.t = TESTPMD_REQ_TYPE_EXIT,
+	};
+	struct rte_mp_msg mp_req = {
+		.name = TESTPMD_MP,
+		.len_param = sizeof(request),
+	};
+	struct rte_mp_reply reply;
+	struct timespec ts = {.tv_sec = 5, .tv_nsec = 0};
+
+	printf("\nPrimary: Sending 'stop_req' request to secondary...\n");
+	fflush(stdout);
+
+	memcpy(mp_req.param, &request, sizeof(request));
+	rte_mp_request_sync(&mp_req, &reply, &ts);
+}
+
+static int
+handle_testpmd_request(const struct rte_mp_msg *request, const void *peer)
+{
+	const struct testpmd_mp_req *req =
+		(const struct testpmd_mp_req *)request->param;
+
+	if (req->t == TESTPMD_REQ_TYPE_EXIT) {
+		printf("\nReceived notification of primary exiting\n");
+		fflush(stdout);
+
+		/* Response is sent after forwarding loop exits */
+		primary_name = peer;
+
+		kill(getpid(), SIGINT);
+	} else {
+		reply_to_primary(peer, -EINVAL);
+	}
+	return 0;
+}
+
+/* Alarm signal handler, used to check that primary process is still alive */
+static void
+monitor_primary(void *arg __rte_unused)
+{
+	if (rte_eal_primary_proc_alive(NULL)) {
+		rte_eal_alarm_set(MONITOR_INTERVAL, monitor_primary, NULL);
+	} else {
+		/* Primary is gone: shared device data is invalid, do not touch it. */
+		fprintf(stderr, "\nPrimary process is no longer active, exiting...\n");
+		exit(EXIT_FAILURE);
+	}
+}
+
+/* Setup handler to check when primary exits. */
+static int
+enable_primary_monitor(void)
+{
+	return rte_eal_alarm_set(MONITOR_INTERVAL, monitor_primary, NULL);
+}
+
+static void
+disable_primary_monitor(void)
+{
+	rte_eal_alarm_cancel(monitor_primary, NULL);
+}
+
 void
 pmd_test_exit(void)
 {
@@ -3167,6 +3295,13 @@ pmd_test_exit(void)
 			fflush(stdout);
 			stop_port(pt_id);
 		}
+	}
+
+	/* Stop the data path first: secondaries must be alive to ack the stop. */
+	if (is_proc_primary())
+		pmd_notify_secondary();
+
+	if (ports != NULL) {
 		RTE_ETH_FOREACH_DEV(pt_id) {
 			printf("\nShutting down port %d...\n", pt_id);
 			fflush(stdout);
@@ -3198,7 +3333,7 @@ pmd_test_exit(void)
 		}
 	}
 	for (i = 0 ; i < RTE_DIM(mempools) ; i++) {
-		if (mempools[i])
+		if (mempools[i] && is_proc_primary())
 			rte_mempool_free(mempools[i]);
 	}
 
@@ -3526,10 +3661,8 @@ update_jumbo_frame_offload(portid_t portid)
 		}
 	}
 
-	/* If JUMBO_FRAME is set MTU conversion done by ethdev layer,
-	 * if unset do it here
-	 */
-	if ((rx_offloads & DEV_RX_OFFLOAD_JUMBO_FRAME) == 0) {
+	/* MTU is primary-owned (secondary gets -EPERM); JUMBO_FRAME converts in ethdev. */
+	if ((rx_offloads & DEV_RX_OFFLOAD_JUMBO_FRAME) == 0 && is_proc_primary()) {
 		ret = rte_eth_dev_set_mtu(portid,
 				port->dev_conf.rxmode.max_rx_pkt_len - eth_overhead);
 		if (ret)
@@ -3880,9 +4013,14 @@ main(int argc, char** argv)
 		rte_exit(EXIT_FAILURE, "Cannot init EAL: %s\n",
 			 rte_strerror(rte_errno));
 
-	if (rte_eal_process_type() == RTE_PROC_SECONDARY)
-		rte_exit(EXIT_FAILURE,
-			 "Secondary process type not supported.\n");
+	if (rte_eal_process_type() == RTE_PROC_SECONDARY) {
+		if (enable_primary_monitor() < 0)
+			rte_exit(EXIT_FAILURE, "Cannot setup primary monitor\n");
+		if (rte_mp_action_register(TESTPMD_MP,
+					   handle_testpmd_request) < 0)
+			rte_exit(EXIT_FAILURE,
+				 "Failed to register message action\n");
+	}
 
 	/* allocate port structures, and init them */
 	init_port();
@@ -3988,11 +4126,13 @@ main(int argc, char** argv)
 	}
 
 	/* set all ports to promiscuous mode by default */
-	RTE_ETH_FOREACH_DEV(port_id) {
-		ret = rte_eth_promiscuous_enable(port_id);
-		if (ret != 0)
-			printf("Error during enabling promiscuous mode for port %u: %s - ignore\n",
-				port_id, rte_strerror(-ret));
+	if (is_proc_primary()) {
+		RTE_ETH_FOREACH_DEV(port_id) {
+			ret = rte_eth_promiscuous_enable(port_id);
+			if (ret != 0)
+				printf("Error during enabling promiscuous mode for port %u: %s - ignore\n",
+					port_id, rte_strerror(-ret));
+		}
 	}
 
 	/* Init metrics library */
@@ -4072,6 +4212,15 @@ main(int argc, char** argv)
 	}
 
 	pmd_test_exit();
+
+	if (rte_eal_process_type() == RTE_PROC_SECONDARY) {
+		if (primary_name) {
+			reply_to_primary(primary_name, 0);
+			primary_name = NULL;
+		}
+		rte_mp_action_unregister(TESTPMD_MP);
+		disable_primary_monitor();
+	}
 
 #ifdef RTE_LIB_PDUMP
 	/* uninitialize packet capture framework */

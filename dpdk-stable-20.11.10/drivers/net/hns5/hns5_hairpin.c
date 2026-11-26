@@ -61,6 +61,9 @@ int hns5_eth_rx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t rx_queue_i
 	struct hns5_eth_rx_queue *rxq = NULL;
 	uint16_t peer_port = 0;
 
+	/* Secondary: queues are set up by the primary, do not write shared state */
+	HNS5_SECONDARY_EPERM(dev, "rx_hairpin_queue_setup");
+
 	if (conf->peer_count != 1) {
 		hns5_err(dev,
 			 "port %u unable to setup Rx hairpin queue index %u"
@@ -104,6 +107,7 @@ int hns5_eth_rx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t rx_queue_i
 
 	rxq = priv->rxq + rx_queue_id;
 	rxq->port_id = dev->data->port_id;
+	rxq->queue_id = rx_queue_id;
 	rxq->is_hairpin = true;
 	rxq->hairpin_conf = *conf;
 	dev->data->rx_queues[rx_queue_id] = rxq;
@@ -137,6 +141,9 @@ int hns5_eth_tx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t tx_queue_i
 	struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
 	struct hns5_eth_tx_queue *txq = NULL;
 	uint16_t peer_port = 0;
+
+	/* Secondary: queues are set up by the primary, do not write shared state */
+	HNS5_SECONDARY_EPERM(dev, "tx_hairpin_queue_setup");
 
 	if (conf->peer_count != 1) {
 		hns5_err(dev,
@@ -176,6 +183,7 @@ int hns5_eth_tx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t tx_queue_i
 
 	txq = priv->txq + tx_queue_id;
 	txq->port_id = dev->data->port_id;
+	txq->queue_id = tx_queue_id;
 	txq->priv = priv;
 	txq->is_hairpin = true;
 	txq->hairpin_conf = *conf;

@@ -2,6 +2,8 @@
  * Copyright (c) 2026-2027 Huawei Technologies Co., Ltd
  */
 
+#include <rte_eal.h>
+
 #include "hns5_poe.h"
 #include "hns5_rss.h"
 #include "hidrv_ppe_vf_api.h"
@@ -681,6 +683,8 @@ int hns5_rss_reta_update(struct rte_eth_dev *dev, struct rte_eth_rss_reta_entry6
         hns5_err(dev, "invalid parameter\n");
         return -EINVAL;
     }
+    HNS5_SECONDARY_EPERM(dev, "rss reta update");
+
     if (reta_size == 0 || reta_size > HNS5_RSS_RETA_SIZE) {
         hns5_err(dev, "invalid reta_size:%u\n", reta_size);
         return -EINVAL;
@@ -787,6 +791,8 @@ int hns5_rss_hash_update(struct rte_eth_dev *dev, struct rte_eth_rss_conf *rss_c
         hns5_err(dev, "invalid parameter\n");
         return -EINVAL;
     }
+
+    HNS5_SECONDARY_EPERM(dev, "rss hash update");
 
     ret = hns5_rss_parse_conf(dev, priv, rss_conf);
     if (ret != 0)
