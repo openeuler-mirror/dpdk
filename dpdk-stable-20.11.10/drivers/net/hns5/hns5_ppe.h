@@ -27,6 +27,10 @@ extern enum hidrv_ppe_endian_type g_ppe_endian_mode;
 int hns5_eth_ppe_init(struct rte_eth_dev *dev);
 int hns5_eth_ppe_init_lsw(struct rte_eth_dev *dev);
 
+/** @brief Read RPU/TPU endianness into g_ppe_endian_mode (idempotent per process).
+ *  @note  Called by both primary ppe init and secondary process init. */
+int hns5_ppe_endian_mode_init(struct rte_eth_dev *dev);
+
 /**
  * @brief Configure port isolation (all-open by default)
  */

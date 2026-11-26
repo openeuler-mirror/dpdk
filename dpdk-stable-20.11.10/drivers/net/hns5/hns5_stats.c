@@ -5,6 +5,7 @@
 #include <rte_mbuf.h>
 #include <rte_net.h>
 #include <rte_ethdev.h>
+#include <rte_eal.h>
 #include <rte_malloc.h>
 #include <rte_memcpy.h>
 #include <rte_memzone.h>
@@ -384,8 +385,11 @@ int hns5_eth_xstats_get(struct rte_eth_dev *dev, struct rte_eth_xstat *xstats, u
         return cnt_stats;
     }
     hns5_eth_xstats_soft_update(dev, priv);
-    hns5_eth_xstats_mib_update(dev);
-    hns5_eth_xstats_drop_update(dev);
+    /* MIB/drop reads are read-clear on hw: only the primary refreshes them. */
+    if (hns5_is_primary()) {
+        hns5_eth_xstats_mib_update(dev);
+        hns5_eth_xstats_drop_update(dev);
+    }
 
     count = 0;
     /* Get xstats from ge_mib_stats struct */
@@ -451,15 +455,16 @@ int hns5_eth_stats_reset(struct rte_eth_dev *dev)
 {
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
 
-    /*
-     * Consume the read-clear counters and refresh the normal-counter baseline,
-     * then zero the software accumulated totals below.
-     */
-    priv->drop_inited = 0;
-    hns5_eth_xstats_drop_update(dev);
-    hns5_eth_xstats_mib_update(dev);
-
-    memset(&priv->xstats, 0, sizeof(priv->xstats));
+    /* Consume read-clear counters in the primary, then zero the totals below. */
+    if (hns5_is_primary()) {
+        priv->drop_inited = 0;
+        hns5_eth_xstats_drop_update(dev);
+        hns5_eth_xstats_mib_update(dev);
+        memset(&priv->xstats.drop_stats, 0, sizeof(priv->xstats.drop_stats));
+        memset(&priv->xstats.mib_stats, 0, sizeof(priv->xstats.mib_stats));
+    }
+    memset(&priv->xstats.rxq_stats, 0, sizeof(priv->xstats.rxq_stats));
+    memset(&priv->xstats.txq_stats, 0, sizeof(priv->xstats.txq_stats));
 
     for (uint32_t i = 0; i < dev->data->nb_rx_queues; i++) {
         memset(&priv->rxq[i].stats, 0, sizeof(priv->rxq[i].stats));

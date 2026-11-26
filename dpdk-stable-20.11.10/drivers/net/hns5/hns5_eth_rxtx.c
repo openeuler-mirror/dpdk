@@ -53,6 +53,7 @@
 #include "hns5_log.h"
 #include "hns5_mempool.h"
 #include "hns5_version.h"
+#include "hns5_proc.h"
 
 #if defined(RTE_ARCH_ARM) && defined(RTE_ARCH_64)
 #define dcbz(p) { asm volatile("dc zva, %0" : : "r" (p) : "memory"); }
@@ -310,6 +311,9 @@ static uint16_t __rte_hot hns5_eth_forward_to_tm(struct hns5_eth_tx_queue *txq, 
     union ndrv_poe_cpu_add_msg *msg = NULL;
     uint32_t num;
     uint32_t lcore_id = hns5_get_lcore_id();
+    /* local only: txq is shared memory in multi-process mode, avoid cross-process writes */
+    uint32_t vcpu = lcore_id * 2 + 1;
+    struct hns5_eth_txq_stats *stats = &txq->stats;
     static rte_atomic32_t tm_inited = RTE_ATOMIC32_INIT(0);
     // TM init may not be done here; sending before TM init is hard to debug, so check before TX
 
@@ -319,7 +323,6 @@ static uint16_t __rte_hot hns5_eth_forward_to_tm(struct hns5_eth_tx_queue *txq, 
         rte_atomic32_set(&tm_inited, 1);
         hns5_rxtx(INFO, "tm is inited, allow to send pkt\n");
     }
-
     txq->vcpu = lcore_id * 2 + 1;
     if (unlikely(burst_cnt > HNS5_ETH_TX_BURST_CNT))
         burst_cnt = HNS5_ETH_TX_BURST_CNT;
@@ -335,7 +338,7 @@ static uint16_t __rte_hot hns5_eth_forward_to_tm(struct hns5_eth_tx_queue *txq, 
         msg[num].forward_tm.rel = (mbuf->nb_segs > 1) ? 1 : 0;
         ret = hns5_mbuf_to_ppe_txd(mbuf, (void **)&ppe_txd, &phys_addr);
         if (unlikely(ret != 0)) {
-            txq->stats.oerrors_txd++;
+            stats->oerrors_txd++;
             hns5_rxtx(ERR, "failed to hns5_mbuf_to_ppe_txd, paddr:0x%lx ret=%d\n", phys_addr, ret);
             break;
         }
@@ -360,9 +363,10 @@ static uint16_t __rte_hot hns5_eth_forward_to_tm(struct hns5_eth_tx_queue *txq, 
         msg[num].forward_tm.addr_31_0 = (uint32_t)phys_addr;
         msg[num].forward_tm.addr_47_32 = (uint32_t)(phys_addr >> 32); /* 32: upper 32 address bits */
 
-        ret = (int)ndrv_poe_vf_add_msg(txq->poe_vfhandle, txq->vcpu, &msg[num]);
+        /* process-local handle: shared txq->poe_vfhandle holds the primary VA */
+        ret = (int)ndrv_poe_vf_add_msg(hns5_proc.poe_vfhandle, vcpu, &msg[num]);
         if (unlikely(ret != 0)) {
-            txq->stats.oerrors_msg++;
+            stats->oerrors_msg++;
             hns5_rxtx(ERR, "failed to ndrv_poe_vf_add_msg failed, ret:%d\n", ret);
             break;
         }
@@ -559,12 +563,24 @@ construct_mbuf_with_poe_msg(const union ndrv_poe_msg *get_msg, ppe_rx_desc_t *rx
     data_len = rxd->head.data_len;
     pkt_len = rxd->head.pkt_len;
 
-    error_sign = (rxd->head.status & 0x18) | (rxd->head.l2e) | (rxd->head.l3e) | (rxd->head.l4e);
+    // L2/FCS errors drop the frame; L3/L4 checksum errors are not fatal
+    // (encrypted payloads can never match), so deliver them with ol_flags set.
+    error_sign = (rxd->head.status & 0x18) | (rxd->head.l2e);
     if (unlikely(error_sign)) {
         hns5_rxtx(ERR, "failed to check rxd, status:%d l2e:%d l3e:%d l4e:%d\n",
             rxd->head.status, rxd->head.l2e, rxd->head.l3e, rxd->head.l4e);
         (void)release_chain_rxd_buf(rxd);
         return -EINVAL;
+    }
+
+    if (unlikely(rxd->head.l3e || rxd->head.l4e)) {
+        static uint32_t cksum_logged;
+
+        if (cksum_logged++ < 3) {
+            hns5_rxtx(DEBUG, "rxd checksum error kept: l3e:%d l4e:%d "
+                "(expected when the payload is ciphertext)\n",
+                rxd->head.l3e, rxd->head.l4e);
+        }
     }
 
 
@@ -580,7 +596,10 @@ construct_mbuf_with_poe_msg(const union ndrv_poe_msg *get_msg, ppe_rx_desc_t *rx
     mbuf->data_len = data_len;
     mbuf->pkt_len = pkt_len;
     mbuf->hash.rss = get_msg->packet_msg.vqi;
-    mbuf->ol_flags = PKT_RX_L4_CKSUM_GOOD | PKT_RX_IP_CKSUM_GOOD;
+    mbuf->ol_flags = (rxd->head.l3e ? PKT_RX_IP_CKSUM_BAD :
+                      PKT_RX_IP_CKSUM_GOOD) |
+                     (rxd->head.l4e ? PKT_RX_L4_CKSUM_BAD :
+                      PKT_RX_L4_CKSUM_GOOD);
     mbuf->packet_type = hns5_l3_l4_to_ptype(rxd->head.l3_id, rxd->head.l4_id);
     *ppmbuf = mbuf;
 
@@ -596,7 +615,8 @@ construct_mbuf_with_poe_msg(const union ndrv_poe_msg *get_msg, ppe_rx_desc_t *rx
     return 0;
 }
 
-static __rte_always_inline ppe_rx_desc_t *hns5_poe_msg_to_ppe_rx_desc(struct hns5_eth_rx_queue *rxq,
+static __rte_always_inline ppe_rx_desc_t *hns5_poe_msg_to_ppe_rx_desc(
+    struct hns5_eth_rx_queue *rxq __rte_unused,
     union ndrv_poe_msg *msg, uint32_t vcpu)
 {
     uint64_t paddr = 0;
@@ -607,7 +627,7 @@ static __rte_always_inline ppe_rx_desc_t *hns5_poe_msg_to_ppe_rx_desc(struct hns
     if(unlikely(ppe_rxd == NULL)) {
         hns5_rxtx(ERR, "get addr : 0x%llx ppe rxd fail\n", (long long)paddr);
         if (unlikely(msg->packet_msg.order_bindval))
-            (void)hns5_order_dequeue(rxq->poe_vfhandle, vcpu, msg);
+            (void)hns5_order_dequeue(hns5_proc.poe_vfhandle, vcpu, msg);
         return NULL;
     }
     hns5_ppe_rxd_prev_process(ppe_rxd);
@@ -625,26 +645,28 @@ static uint32_t __rte_hot hns5_eth_rx_burst_group_queue(struct hns5_eth_rx_queue
     ppe_rx_desc_t *ppe_rxd = NULL;
     uint32_t lcore_id = hns5_get_lcore_id();
     uint32_t vcpu = lcore_id * 2 + 1;
+    struct hns5_eth_rxq_stats *stats = &rxq->stats;
 
     for (i = 0; i < nb_pkts; i++) {
+        /* process-local handle: shared rxq->poe_vfhandle holds the primary VA */
         if (by_queue) {
-            ret = ndrv_poe_vf_get_que_msg(rxq->poe_vfhandle, vcpu, rxq->group, rxq->queue, &msg);
+            ret = ndrv_poe_vf_get_que_msg(hns5_proc.poe_vfhandle, vcpu, rxq->group, rxq->queue, &msg);
         } else {
-            ret = ndrv_poe_vf_get_grp_msg(rxq->poe_vfhandle, vcpu, rxq->group, &msg);
+            ret = ndrv_poe_vf_get_grp_msg(hns5_proc.poe_vfhandle, vcpu, rxq->group, &msg);
         }
         if (unlikely(ret != 0))
             break;
         ppe_rxd = hns5_poe_msg_to_ppe_rx_desc(rxq, &msg, vcpu);
         if (unlikely(ppe_rxd == NULL)) {
-            rxq->stats.ierrors_msg++;
+            stats->ierrors_msg++;
             continue;
         }
 
         ret = construct_mbuf_with_poe_msg(&msg, ppe_rxd, &mbuf, 0);
         if (unlikely(ret != 0)) {
-            rxq->stats.ierrors_rxd++;
+            stats->ierrors_rxd++;
             if (unlikely(msg.packet_msg.order_bindval))
-                (void)hns5_order_dequeue(rxq->poe_vfhandle, vcpu, &msg);
+                (void)hns5_order_dequeue(hns5_proc.poe_vfhandle, vcpu, &msg);
         }
         if (likely(ret == 0)) {
             rx_pkts[ret_num] = mbuf;
@@ -678,6 +700,7 @@ hns5_eth_rx_pkt_burst_t hns5_eth_rx_burst_ops[HNS5_ETH_RXQ_TYPE_INVALID] = {
 uint16_t __rte_hot hns5_eth_rx_burst(void *q, struct rte_mbuf **rx_pkts, uint16_t nb_pkts)
 {
     struct hns5_eth_rx_queue *rxq = (struct hns5_eth_rx_queue *)q;
+    struct hns5_eth_rxq_stats *stats = NULL;
     uint16_t rx_num = 0;
 
     if (unlikely(rxq == NULL || rxq->type >= HNS5_ETH_RXQ_TYPE_INVALID ||
@@ -686,8 +709,9 @@ uint16_t __rte_hot hns5_eth_rx_burst(void *q, struct rte_mbuf **rx_pkts, uint16_
     }
 
     rx_num = hns5_eth_rx_burst_ops[rxq->type](rxq, rx_pkts, nb_pkts);
-    rxq->stats.ipackets += rx_num;
+    stats = &rxq->stats;
+    stats->ipackets += rx_num;
     for (uint16_t i = 0; i < rx_num; i++)
-        rxq->stats.ibytes += rx_pkts[i]->pkt_len;
+        stats->ibytes += rx_pkts[i]->pkt_len;
     return rx_num;
 }

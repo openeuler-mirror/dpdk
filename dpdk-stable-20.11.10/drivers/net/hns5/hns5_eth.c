@@ -9,6 +9,8 @@
 #include <rte_mbuf_ptype.h>
 #include <rte_net.h>
 #include <rte_ethdev.h>
+#include <rte_ethdev_driver.h>
+#include <rte_eal.h>
 #include <rte_malloc.h>
 #include <rte_memcpy.h>
 #include <rte_memzone.h>
@@ -67,6 +69,8 @@
 #include "hns5_tm.h"
 #include "hns5_rss.h"
 #include "hns5_lsw.h"
+#include "hns5_proc.h"
+#include "hns5_mp.h"
 #include "hns5_hairpin.h"
 
 #define HNS5_ETH_DEV_INFO_NAME_LEN     64
@@ -192,6 +196,7 @@ static int hns5_eth_dev_mtu_set(struct rte_eth_dev *dev, uint16_t mtu)
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
     uint32_t max_frame_len = HNS5_MAG_MTU_TO_FRAME(mtu);
 
+    HNS5_SECONDARY_EPERM(dev, "mtu_set");
     if (mtu > HNS5_MTU_MAX) {
         hns5_warn(dev, "mtu:%u is out [%u-%u], use max val\n", mtu, HNS5_MTU_MIN, HNS5_MTU_MAX);
         max_frame_len = HNS5_FRAME_MAX;
@@ -216,8 +221,8 @@ static int hns5_eth_dev_mtu_set(struct rte_eth_dev *dev, uint16_t mtu)
 
 static int hns5_eth_dev_set_link_down(struct rte_eth_dev *dev)
 {
+    HNS5_SECONDARY_EPERM(dev, "set_link_down");
     int ret = hns5_mag_txrx_enable(dev, 0);
-
     if (ret != 0)
         return ret;
 
@@ -228,12 +233,13 @@ static int hns5_eth_dev_set_link_down(struct rte_eth_dev *dev)
 
 static int hns5_eth_dev_set_link_up(struct rte_eth_dev *dev)
 {
+    HNS5_SECONDARY_EPERM(dev, "set_link_up");
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
     int ret = hns5_mag_txrx_enable(dev, 1);
 
     if (ret != 0)
         return ret;
-
+    
     dev->data->dev_link.link_status = ETH_LINK_UP;
     if (priv->param.port_speed < RTE_DIM(g_mag_speed_hidrv_to_rte)) {
         dev->data->dev_link.link_speed = g_mag_speed_hidrv_to_rte[priv->param.port_speed];
@@ -294,6 +300,10 @@ static int hns5_eth_link_update(struct rte_eth_dev *dev, int wait_to_complete __
     struct rte_eth_link *link = &(dev->data->dev_link);
     enum hidrv_mag_link_status link_status = HIDRV_MAG_LINK_INVALID;
 
+    /* Link is primary-owned and mirrored in the shared dev_link. */
+    if (hns5_is_secondary())
+        return 0;
+
     ret = hidrv_mag_mac_get_link_status(priv->mag_pf_devid, priv->param.mport_id, &link_status);
     if (ret != 0) {
         hns5_err(dev, "failed to hidrv_mag_mac_get_link_status, ret:%d\n", ret);
@@ -330,6 +340,10 @@ static void hns5_lsc_report_link(struct rte_eth_dev *dev, uint32_t cur_status)
 
     hns5_info(dev, "port:%u link status changed to %s\n", dev->data->port_id,
         (cur_status == ETH_LINK_UP) ? "up" : "down");
+
+    /* dev_link is shared; secondaries only need the event to run callbacks. */
+    (void)hns5_mp_notify_lsc_event(dev, cur_status);
+
     rte_eth_dev_callback_process(dev, RTE_ETH_EVENT_INTR_LSC, NULL);
 }
 
@@ -523,8 +537,19 @@ static int hns5_eth_dev_stop(struct rte_eth_dev *dev)
     uint32_t vcpu = lcore_id * 2 + 1;
     int ret;
 
+    /* Secondary: only this process's data path is stopped, hw stays as-is */
+    if (hns5_is_secondary()) {
+        hns5_proc_secondary_stop(dev);
+        return 0;
+    }
+
     /* hw is going down: the lsc irq would otherwise report on stale state */
     hns5_intr_lsc_teardown(dev);
+
+    /* Stop secondaries first; a dead peer must not block the hw teardown. */
+    ret = hns5_mp_req_stop_rxtx(dev);
+    if (ret != 0)
+        hns5_warn(dev, "failed to stop secondary data path, continue stop, ret:%d\n", ret);
 
     ret = hns5_eth_dev_set_link_down(dev);
     if (ret != 0) {
@@ -550,6 +575,14 @@ static int hns5_eth_dev_close(struct rte_eth_dev *dev)
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
     handle vfhandle;
     int ret;
+
+    /* Secondary: release process-local resources only, never touch the hw. */
+    if (hns5_is_secondary()) {
+        hns5_proc_secondary_close(dev);
+        return 0;
+    }
+
+    /* Primary closes only a stopped port; dev_stop() already broadcast STOP_RXTX. */
 
     vfhandle = hidrv_ppe_vf_get_ndrv_handle(priv->ppe_vf_devid);
     if (vfhandle != NULL) {
@@ -583,6 +616,8 @@ static int hns5_eth_dev_close(struct rte_eth_dev *dev)
     (void)hns5_l2_del_entry(dev, priv->address.addr_bytes, 0);
 
     dev->data->mac_addrs = NULL;
+    hns5_mp_uninit(dev);
+    hns5_info(dev, "port:%u succeed to close\n", dev->data->port_id);
     return 0;
 }
 
@@ -687,6 +722,8 @@ static int hns5_eth_rx_queue_stop(struct rte_eth_dev *dev, uint16_t rx_queue_id)
     uint16_t old_reta[HNS5_RSS_RETA_SIZE];
     int ret;
 
+    HNS5_SECONDARY_EPERM(dev, "rx_queue_stop");
+
     ret = hns5_eth_rxq_acquire(dev, rx_queue_id, &rxq);
     if (ret != 0)
         return ret;
@@ -751,6 +788,8 @@ static int hns5_eth_rx_queue_start(struct rte_eth_dev *dev, uint16_t rx_queue_id
     struct hns5_eth_rx_queue *rxq;
     int ret;
 
+    HNS5_SECONDARY_EPERM(dev, "rx_queue_start");
+
     ret = hns5_eth_rxq_acquire(dev, rx_queue_id, &rxq);
     if (ret != 0)
         return ret;
@@ -807,6 +846,8 @@ static int hns5_eth_tx_queue_stop(struct rte_eth_dev *dev, uint16_t tx_queue_id)
 {
     struct hns5_eth_tx_queue *txq = hns5_eth_txq_get(dev, tx_queue_id);
 
+    HNS5_SECONDARY_EPERM(dev, "tx_queue_stop");
+
     if (txq == NULL)
         return -EINVAL;
     /* hns5 relies on hardware to release mbuf, without the need for software to perform mbuf release. */
@@ -818,6 +859,8 @@ static int hns5_eth_tx_queue_stop(struct rte_eth_dev *dev, uint16_t tx_queue_id)
 static int hns5_eth_tx_queue_start(struct rte_eth_dev *dev, uint16_t tx_queue_id)
 {
     struct hns5_eth_tx_queue *txq = hns5_eth_txq_get(dev, tx_queue_id);
+
+    HNS5_SECONDARY_EPERM(dev, "tx_queue_start");
 
     if (txq == NULL)
         return -EINVAL;
@@ -834,6 +877,12 @@ static int hns5_eth_dev_start(struct rte_eth_dev *dev)
     uint32_t i;
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
     struct rte_eth_conf *dev_conf = &dev->data->dev_conf;
+
+    /* Secondary: arm only the local data path, hw/queue states belong to primary. */
+    if (hns5_is_secondary()) {
+        hns5_proc_secondary_start(dev);
+        return 0;
+    }
 
     /* dev_start restores every queue to STARTED and hns5_config_rss() then
      * rebuilds the default equal-share RETA over all of them (queue start/stop
@@ -920,6 +969,11 @@ static int hns5_eth_dev_start(struct rte_eth_dev *dev)
     if (ret != 0)
         hns5_warn(dev, "failed to setup lsc, link status will not be notified, ret:%d\n", ret);
 
+    /* Arm secondaries; a lost broadcast only leaves them without burst callbacks. */
+    ret = hns5_mp_req_start_rxtx(dev);
+    if (ret != 0)
+        hns5_warn(dev, "failed to start secondary data path, ret:%d\n", ret);
+
     hns5_info(dev, "port:%u succeed to start\n", dev->data->port_id);
     return 0;
 
@@ -998,6 +1052,7 @@ static int hns5_vlan_offload_set(struct rte_eth_dev *dev, int mask)
     struct ndrv_ppe_lsw_port_egr_attr egr_attr = {0};
     unsigned int ret;
 
+    HNS5_SECONDARY_EPERM(dev, "vlan_offload_set");
     if (mask == 0)
         return 0;
 
@@ -1041,6 +1096,7 @@ int hns5_vlan_pvid_set(struct rte_eth_dev *dev, uint16_t vlan_id, int on)
     struct ndrv_ppe_lsw_port_ing_vlan_attr vlan_attr = {0};
     unsigned int ret;
 
+    HNS5_SECONDARY_EPERM(dev, "vlan_pvid_set");
     if (priv->ppe_pfhandle == NULL) {
         hns5_err(dev, "ppe_pfhandle is NULL\n");
         return -EINVAL;
@@ -1082,6 +1138,12 @@ static int hns5_eth_dev_configure(struct rte_eth_dev *dev)
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
     struct rte_eth_conf *dev_conf = &dev->data->dev_conf;
     uint32_t input_speed = 0;
+
+    /* Secondary: hw config is primary-owned, accept the call to keep app flow. */
+    if (hns5_is_secondary()) {
+        hns5_info(dev, "secondary: dev_configure managed by primary, skipped\n");
+        return 0;
+    }
 
     /* default single TC config */
     priv->num_tc = 1;
@@ -1167,7 +1229,8 @@ static int hns5_eth_dev_infos_get(struct rte_eth_dev *dev, struct rte_eth_dev_in
     dev_info->max_tx_queues = (uint16_t)HNS5_ETH_MAX_TXQ_NUM;
     dev_info->min_rx_bufsize = 256;     // bmu buf granule 256 bytes
     dev_info->rx_offload_capa = DEV_RX_OFFLOAD_SCATTER | DEV_RX_OFFLOAD_RSS_HASH |
-                                DEV_RX_OFFLOAD_KEEP_CRC | DEV_RX_OFFLOAD_VLAN_STRIP;
+                                DEV_RX_OFFLOAD_KEEP_CRC | DEV_RX_OFFLOAD_VLAN_STRIP |
+                                DEV_RX_OFFLOAD_CHECKSUM;
     dev_info->tx_offload_capa = DEV_TX_OFFLOAD_IPV4_CKSUM | DEV_TX_OFFLOAD_UDP_CKSUM |
                                 DEV_TX_OFFLOAD_TCP_CKSUM | DEV_TX_OFFLOAD_VLAN_INSERT;
     dev_info->dev_capa = 0;
@@ -1263,6 +1326,8 @@ static int hns5_eth_rx_queue_setup(struct rte_eth_dev *dev, uint16_t rx_queue_id
     /* fw_tnl derived from devargs into local var, then sent via hns5_ppe_fwl_tnl_config */
     struct rte_fw_tnl_conf fw_tnl_local = { 0 };
 
+    /* Secondary: queues (poe group/fw_tnl hw programming) are set up by the primary */
+    HNS5_SECONDARY_EPERM(dev, "rx_queue_setup");
     if (rx_queue_id >= HNS5_POE_CPU_GRP_QUE_NUM) {
         hns5_err(dev, "%s, port:%u rx_queue_id:%u exceeds max:%u\n",
             strerror(EINVAL), dev->data->port_id, rx_queue_id,
@@ -1300,6 +1365,7 @@ static int hns5_eth_rx_queue_setup(struct rte_eth_dev *dev, uint16_t rx_queue_id
     rxq->is_hairpin = false;
     rxq->pool_id = (uint16_t)pool_id;
     rxq->port_id = dev->data->port_id;
+    rxq->queue_id = rx_queue_id;
     rxq->mp = mp;
     rxq->nb_rx_desc = nb_rx_desc;
     rxq->conf = *rx_conf;
@@ -1321,7 +1387,6 @@ static int hns5_eth_rx_queue_setup(struct rte_eth_dev *dev, uint16_t rx_queue_id
             dev->data->port_id, rx_queue_id, rxq->pool_id, ret);
         goto err;
     }
-
     /* per-queue share of the group bp budget; excess is dropped before buffer alloc */
     hns5_poe_rxq_bp_quota_apply(dev, rxq);
 
@@ -1341,6 +1406,7 @@ static int hns5_eth_tx_queue_setup(struct rte_eth_dev *dev, uint16_t tx_queue_id
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
     struct hns5_eth_tx_queue *txq = NULL;
     // queue spec check
+    HNS5_SECONDARY_EPERM(dev, "tx_queue_setup");
     if (tx_conf == NULL || tx_queue_id >= HNS5_ETH_MAX_TXQ_NUM) {
         hns5_err(dev, "%s\n", strerror(EINVAL));
         return -EINVAL;
@@ -1350,6 +1416,7 @@ static int hns5_eth_tx_queue_setup(struct rte_eth_dev *dev, uint16_t tx_queue_id
 
     txq->is_hairpin = false;
     txq->port_id = dev->data->port_id;
+    txq->queue_id = tx_queue_id;
     txq->tm_port = priv->param.cport_id;
     txq->tm_queue_id = priv->param.hw_txq_start + (tx_queue_id % priv->param.hw_txq_num);
     txq->poe_vfhandle = priv->poe_vfhandle;
@@ -1405,6 +1472,8 @@ static int hns5_eth_fec_get(struct rte_eth_dev *dev, uint32_t *fec_capa)
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
     enum hidrv_mag_fec_mode mag_fec_mode_hidrv = HIDRV_MAG_FEC_INVALID;
 
+    HNS5_SECONDARY_EPERM(dev, "fec get");
+
     ret = hidrv_mag_mac_get_fec_mode(priv->mag_pf_devid, priv->param.mport_id, &mag_fec_mode_hidrv);
     if (ret != 0 || mag_fec_mode_hidrv >= HIDRV_MAG_FEC_INVALID) {
         hns5_err(dev, "failed to hidrv_mag_mac_get_fec_mode, ret:%d fec_mode:%d\n", ret, mag_fec_mode_hidrv);
@@ -1421,6 +1490,7 @@ static int hns5_eth_fec_set(struct rte_eth_dev *dev, uint32_t fec_capa)
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
     enum hidrv_mag_fec_mode mag_fec_mode_hidrv = HIDRV_MAG_FEC_INVALID;
 
+    HNS5_SECONDARY_EPERM(dev, "fec_set");
     for (uint32_t i = 0; i < RTE_DIM(g_mag_fec_mode_hidrv_to_rte); i++) {
         if (g_mag_fec_mode_hidrv_to_rte[i] == fec_capa) {
             mag_fec_mode_hidrv = i;
@@ -1449,6 +1519,8 @@ static int hns5_eth_flow_ctrl_get(struct rte_eth_dev *dev, struct rte_eth_fc_con
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
     unsigned int pause_rx_enable = 0;
     unsigned int pause_tx_enable = 0;
+
+    HNS5_SECONDARY_EPERM(dev, "flow ctrl get");
 
     ret = hidrv_mag_get_pause_enable(priv->mag_pf_devid, priv->param.mport_id, HIDRV_MAG_DIR_RX, &pause_rx_enable);
     if (ret != 0) {
@@ -1481,6 +1553,8 @@ static int hns5_eth_flow_ctrl_set(struct rte_eth_dev *dev, struct rte_eth_fc_con
     unsigned int tx_enable_get = 0;
     unsigned int rx_enable_set = 0;
     unsigned int tx_enable_set = 0;
+
+    HNS5_SECONDARY_EPERM(dev, "flow ctrl set");
 
     ret = hidrv_mag_get_pause_enable(priv->mag_pf_devid, priv->param.mport_id, HIDRV_MAG_DIR_RX, &rx_enable_get);
     if (ret != 0) {
@@ -1880,10 +1954,57 @@ free_kvargs:
     return -EINVAL;
 }
 
-static int net_hns5_vdev_probe(struct rte_vdev_device *vdev)
+/* Secondary probe: attach to the primary's port and open this process's handles. */
+static int hns5_eth_dev_init_secondary(struct rte_vdev_device *vdev)
 {
-    int ret = 0;
-    struct rte_eth_dev *dev = NULL;
+    const char *name = rte_vdev_device_name(vdev);
+    struct rte_eth_dev *dev;
+    int ret;
+
+    if (name == NULL)
+        return -EINVAL;
+    dev = rte_eth_dev_attach_secondary(name);
+    if (dev == NULL) {
+        hns5_log_error("secondary: device %s not driven by the primary\n", name);
+        return -ENODEV;
+    }
+    /* attach_secondary only fills dev->data; restore the process-local device link. */
+    dev->device = &vdev->device;
+
+    /* per-process handles (idempotent devid open, no hardware setup) */
+    ret = hns5_proc_init_secondary(dev);
+    if (ret != 0) {
+        hns5_err(dev, "secondary: failed to init process handles, ret:%d\n", ret);
+        return ret;
+    }
+
+    /* per-process read of the endianness used by the rx path */
+    ret = hns5_ppe_endian_mode_init(dev);
+    if (ret != 0) {
+        hns5_err(dev, "secondary: failed to init ppe endian mode, ret:%d\n", ret);
+        return ret;
+    }
+
+    dev->dev_ops = &hns5_eth_dev_ops;
+
+    /* Port already started by primary: dev_start is a no-op, arm the data path. */
+    if (dev->data->dev_started)
+        hns5_mp_arm_datapath(dev);
+
+    ret = hns5_mp_init_secondary(dev);
+    if (ret != 0) {
+        hns5_err(dev, "secondary: failed to register mp action, ret:%d\n", ret);
+        return ret;
+    }
+    rte_eth_dev_probing_finish(dev);
+    hns5_info(dev, "secondary: attached\n");
+    return 0;
+}
+
+static int hns5_eth_dev_init_primary(struct rte_vdev_device *vdev)
+{
+    struct rte_eth_dev *dev;
+    int ret;
 
     dev = hns5_eth_dev_create(vdev);
     if (dev == NULL)
@@ -1924,6 +2045,18 @@ static int net_hns5_vdev_probe(struct rte_vdev_device *vdev)
         goto err_bp_grp;
     }
 
+    /* cache the primary handles for the local data path + mp channel */
+    ret = hns5_proc_init_primary(dev);
+    if (ret != 0) {
+        hns5_err(dev, "failed to hns5_proc_init_primary, ret:%d\n", ret);
+        goto err_bp_grp;
+    }
+    ret = hns5_mp_init_primary(dev);
+    if (ret != 0) {
+        hns5_err(dev, "failed to hns5_mp_init_primary, ret:%d\n", ret);
+        goto err_bp_grp;
+    }
+
     /*
      * Record the hw counter baseline after all the initialization
      * traffic, so xstats only report counters that happen from now on.
@@ -1939,6 +2072,13 @@ err_bp_grp:
     return ret;
 }
 
+static int net_hns5_vdev_probe(struct rte_vdev_device *vdev)
+{
+    if (hns5_is_secondary())
+        return hns5_eth_dev_init_secondary(vdev);
+    return hns5_eth_dev_init_primary(vdev);
+}
+
 static int net_hns5_vdev_remove(struct rte_vdev_device *vdev)
 {
     const char *name = rte_vdev_device_name(vdev);
@@ -1946,14 +2086,28 @@ static int net_hns5_vdev_remove(struct rte_vdev_device *vdev)
     char dev_name[HNS5_ETH_DEV_INFO_NAME_LEN] = {0};
     const struct rte_memzone *mz_rx = NULL;
     const struct rte_memzone *mz_tx = NULL;
+    int ret;
 
     if (name == NULL)
         return -EINVAL;
 
+    /* Secondary: release only the local ethdev slot, never hw or shared memory. */
+    if (hns5_is_secondary()) {
+        if (dev != NULL)
+            rte_eth_dev_release_port(dev);
+        return 0;
+    }
+
     if (dev == NULL)
         return -EINVAL;
 
-    (void)hns5_eth_dev_stop(dev);
+    /* A dead secondary must not leak the port: stop it, then release. */
+    ret = hns5_eth_dev_stop(dev);
+    if (ret != 0) {
+        hns5_err(dev, "failed to stop port:%u, abort remove, ret:%d\n",
+                 dev->data->port_id, ret);
+        return ret;
+    }
 
     /* remove may happen without a prior close; return the bp_ppe slot here too */
     (void)hns5_poe_bp_grp_release(dev);
@@ -2035,6 +2189,8 @@ int hns5_promiscuous_enable(struct rte_eth_dev *dev)
     if (priv == NULL)
         return -EINVAL;
 
+    HNS5_SECONDARY_EPERM(dev, "promiscuous enable");
+
     if (priv->promisc_mode == 1)
         return 0;
 
@@ -2059,6 +2215,8 @@ int hns5_promiscuous_disable(struct rte_eth_dev *dev)
 
     if (priv == NULL)
         return -EINVAL;
+
+    HNS5_SECONDARY_EPERM(dev, "promiscuous disable");
 
     if (priv->promisc_mode == 0)
         return 0;
@@ -2085,6 +2243,8 @@ int hns5_allmulticast_enable(struct rte_eth_dev *dev)
     if (priv == NULL)
         return -EINVAL;
 
+    HNS5_SECONDARY_EPERM(dev, "allmulticast enable");
+
     ret = hns5_ppe_lsw_mcast_mode_config(dev, 1);
     if (ret != 0) {
         hns5_err(dev, "failed to enable mcast mode, ret:%d\n", ret);
@@ -2104,6 +2264,8 @@ int hns5_allmulticast_disable(struct rte_eth_dev *dev)
 
     if (priv == NULL)
         return -EINVAL;
+
+    HNS5_SECONDARY_EPERM(dev, "allmulticast disable");
 
     ret = hns5_ppe_lsw_mcast_mode_config(dev, 0);
     if (ret != 0) {

@@ -38,6 +38,25 @@
 
 enum hidrv_ppe_endian_type g_ppe_endian_mode = HIDRV_PPE_ENDIAN_INVALID_TYPE;
 
+/* read-only MMIO query, idempotent per process (see hns5_ppe.h) */
+int hns5_ppe_endian_mode_init(struct rte_eth_dev *dev)
+{
+    struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
+    struct hidrv_ppe_endian_cfg ppe_endian_cfg = { 0 };
+    int ret;
+
+    if (g_ppe_endian_mode != HIDRV_PPE_ENDIAN_INVALID_TYPE)
+        return 0;
+    ret = hidrv_ppe_pf_get_tnl_endian_cfg(priv->ppe_pf_devid, 0, &ppe_endian_cfg);
+    if (ret != 0) {
+        hns5_err(dev, "failed to hidrv_ppe_pf_get_tnl_endian_cfg, ret:%d\n", ret);
+        return ret;
+    }
+    g_ppe_endian_mode = ppe_endian_cfg.rx_bd;
+    hns5_info(dev, "succeed to hidrv_ppe_pf_get_tnl_endian_cfg, ppe_endian:%u\n", g_ppe_endian_mode);
+    return 0;
+}
+
 int hns5_ppe_fwl_tnl_config(struct rte_eth_dev *dev, const struct rte_fw_tnl_conf *fw_tnl, uint32_t pool_id)
 {
     int ret = 0;
@@ -188,7 +207,6 @@ static int hns5_ppe_port_init(struct rte_eth_dev *dev)
     int ret = 0;
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
     struct hidrv_ppe_pf_conf ppe_pf_conf = { 0 };
-    struct hidrv_ppe_endian_cfg ppe_endian_cfg = { 0 };
 
     ret = hidrv_ppe_get_pf_devid(PPE_DIE_ID, PPE_PF_ID);
     if (ret < 0) {
@@ -223,16 +241,7 @@ static int hns5_ppe_port_init(struct rte_eth_dev *dev)
     }
 
     // RPU/TPU endianness is configured by kernel; DPDK only reads it
-    if (g_ppe_endian_mode == HIDRV_PPE_ENDIAN_INVALID_TYPE) {
-        ret = hidrv_ppe_pf_get_tnl_endian_cfg(priv->ppe_pf_devid, 0, &ppe_endian_cfg); // Get endianness
-        if (ret != 0) {
-            hns5_err(dev, "failed to hidrv_ppe_pf_get_tnl_endian_cfg, ret:%d\n", ret);
-            return ret;
-        }
-        g_ppe_endian_mode = ppe_endian_cfg.rx_bd;
-        hns5_info(dev, "succeed to hidrv_ppe_pf_get_tnl_endian_cfg, ppe_endian:%u\n", g_ppe_endian_mode);
-    }
-    return 0;
+    return hns5_ppe_endian_mode_init(dev);
 }
 
 int hns5_eth_ppe_init(struct rte_eth_dev *dev)
