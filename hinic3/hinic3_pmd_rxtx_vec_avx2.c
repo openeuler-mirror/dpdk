@@ -13,50 +13,20 @@
 #include "hinic3_pmd_rx.h"
 #include "hinic3_pmd_rxtx_vec_common.h"
 
-/*
- * Function-level ISA attribute; only reached after the AVX2 runtime probe.
- * The RX path itself is pure 128-bit SSE; avx2 (VEX encoding) is the floor
- * so GCC's auto-vectorization of the inlined rearm pointer copy stays
- * 256-bit and no SSE/AVX mixing penalty arises next to other DPDK code.
- */
+/* Function-level ISA attribute; only reached after the AVX2 runtime probe. */
 #define HINIC3_VEC_TARGET	__attribute__((target("avx2")))
 
-/*
- * RXDONE handshake bit: host dw0 bit31 in the scalar compact path
- * (RQ_COMPACT_CQE_STATUS_RXDONE_SHIFT). The vector path reads the raw
- * little-endian dword without byte swap, so bit31 of the big-endian
- * word is the MSB of in-memory byte0 -- raw bit7 here.
- */
+/* RXDONE handshake bit: host dw0 bit31 big-endian -> little-endian bit7 here. */
 #define HINIC3_AVX_COMPACT_RXDONE_BIT	7
 
-/*
- * csum_err field: host dw0 bit[20:19] -> raw dword bit[12:11].
- * Values match the scalar compact mapping:
- *   0=OK  1=L3/L4 error  2=OTHER  3=BYPASS
- */
+/* csum_err field: host dw0 bit[20:19] -> raw dword bit[12:11]. */
 #define HINIC3_AVX_COMPACT_CSUM_ERR_SHIFT	11
 
-/*
- * ptype index: host dw0 bit[27:16] -> raw bytes
- *   idx = ((dw0 & 0xF) << 8) | ((dw0 >> 8) & 0xFF)
- * indexing ptype_tbl->ptype[4096], same per-packet lookup as the
- * scalar compact path.
- */
+/* ptype index: host dw0 bit[27:16] -> raw bytes
+ *   idx = ((dw0 & 0xF) << 8) | ((dw0 >> 8) & 0xFF) */
 #define HINIC3_AVX_COMPACT_PTYPE_IDX(dw0) \
 	((((dw0) & 0xFu) << 8) | (((dw0) >> 8) & 0xFFu))
 
-/*
- * Process 4 integrated compact CQEs per iteration.
- *
- * 16B CQE layout (identical to the NEON shuf_mask):
- *   dw0: pkt_len=b2,b3 | cqe_len=b1 bit7 (raw bit15) | rxdone=b0 bit7 (raw bit7)
- *        | ptype idx = b0[3:0]<<8 | b1 (host bit[27:16])
- *   dw1: rss hash = b7..b4
- *   dw2: vlan_tci = b10,b9
- * After the shuffle, the 16B written to rx_descriptor_fields1 holds:
- *   packet_type (from the ptype table, inserted into lane0)
- *   | pkt_len | data_len | vlan_tci | rss
- */
 static inline HINIC3_VEC_TARGET u16
 hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
 				      struct rte_mbuf **rx_pkts, u16 nb_pkts)
@@ -67,27 +37,16 @@ hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
 	u16 pos, valid_pkts, nb_rx = 0;
 	u64 rx_bytes = 0;
 	u32 i;
-	/* Queue-level switches, computed once per burst. No-op when csum
-	 * offload is off (UNKNOWN=0, ol_flags cleared by rearm), same as
-	 * the scalar hinic3_rx_csum entry check. */
+
 	u16 csum_en = (nic_dev->rx_csum_en & HINIC3_DEFAULT_RX_CSUM_OFFLOAD) != 0;
 	u16 rss_en = nic_dev->rss_type.val != 0;
-	/* RSS flag is burst-wide constant; folded with the per-packet csum
-	 * flags into a single ol_flags write. */
+
 	u16 rss_flag = rss_en ? (u16)HINIC3_PKT_RX_RSS_HASH : 0;
-	/* ptype table pointer is burst-wide constant. The 4K-entry table is
-	 * cache-aligned; hot ptypes stay resident in L1 and cold misses
-	 * happen once per ptype. */
+
 	const struct hinic3_ptype_table *ptype_tbl = nic_dev->ptype_tbl;
 
-	/* vpshufb byte shuffle: each element is a CQE byte index placed at
-	 * the output position it should land in -- output byte i of the
-	 * descriptor (rx_descriptor_fields1) takes CQE byte shuf_mask[i].
-	 * 
-	 * 0xFF has the high bit set: vpshufb zeroes such outputs, used to blank a field.
-	 * Output layout: [0..3]=packet_type | [4..7]=pkt_len=[b3,b2,0,0]
-	 * | [8..9]=data_len=[b3,b2] | [10..11]=vlan_tci=[b10,b9]
-	 * | [12..15]=rss=[b7..b4] */
+	/* Used by step D.
+	 * 0xFF has the high bit set: vpshufb zeroes such outputs, used to blank a field. */
 	const __m128i shuf_mask = _mm_setr_epi8(
 		0xFF, 0xFF, 0xFF, 0xFF,
 		3, 2, 0xFF, 0xFF,
@@ -132,14 +91,11 @@ hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
 			break;
 
 		/* D. per-packet 128-bit shuffle + ptype table insert into
-		 * lane0 + 16B wide store. The insert sits between the
-		 * shuffle and the wide store so packet_type is delivered by
-		 * the same 16B store, with no narrow write after it (no
-		 * store-forwarding stall).
-		 * For not-yet-done slots status_arr holds stale values; the
-		 * 12-bit masked index keeps the lookup in bounds and the
-		 * garbage ptype only lands in slots that are never
-		 * delivered. */
+		 * lane0 + 16B wide store.
+		 * Output layout: [0..3]=packet_type | [4..7]=pkt_len=[b3,b2,0,0]
+		 * | [8..9]=data_len=[b3,b2] | [10..11]=vlan_tci=[b10,b9]
+		 * | [12..15]=rss=[b7..b4]
+		 */
 		for (i = 0; i < HINIC3_DEFAULT_DESCS_PER_LOOP; i++) {
 			u32 ptype_idx = HINIC3_AVX_COMPACT_PTYPE_IDX(
 							status_arr[i]);
@@ -153,14 +109,7 @@ hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
 		}
 
 		/* E. skip the integrated CQE and clear the RXDONE handshake
-		 * bit. cqe_len is host bit 23 of the BE status word, i.e.
-		 * raw bit15 (raw BIT(23) would hit pkt_len's MSB); see
-		 * vec_common.h. cqe_len=1 -> 8B CQE, else 16B.
-		 * RXDONE is a hardware-set/software-clear handshake, same
-		 * as the scalar rx_cqe->status = 0; leaving it set would
-		 * make the poll treat stale DD as a new completion before
-		 * the NIC writes the next CQE.
-		 * The CQE address must be computed before data_off changes. */
+		 * bit. */
 		for (i = 0; i < valid_pkts; i++) {
 			struct rte_mbuf *mb = rx_pkts[pos + i];
 			volatile u32 *cqe_status = (volatile u32 *)cqe_addr[i];
@@ -172,13 +121,6 @@ hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
 
 			rx_bytes += mb->pkt_len;
 
-			/* checksum offload: csum_err is raw dw0 bit[12:11],
-			 * aligned with the scalar hinic3_rx_csum compact
-			 * mapping:
-			 *   0 -> IP/L4 GOOD;
-			 *   1 -> IP_BAD (csum_errors++);
-			 *   2 -> OTHER_ERR (other_errors++);
-			 *   3 -> HW BYPASS -> UNKNOWN (no-op). */
 			if (csum_en) {
 				u32 csum_err = (status_arr[i] >>
 					HINIC3_AVX_COMPACT_CSUM_ERR_SHIFT) & 0x3;
@@ -213,17 +155,9 @@ hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
 	return nb_rx;
 }
 
-/*
- * Narrow the burst to the prefix confirmed done by the NIC via hw_ci.
- *
- * The completion bit lives in the packet buffer: after an mbuf returns to
- * the mempool and is reused, the CQE at buf + data_off may still carry a
- * stale RXDONE=1 from the previous round, which would be mistaken for a
- * new packet after ring wraparound. Cache hw_ci like the scalar path and
- * refresh the cache when it covers less than one burst.
- */
+/* Narrow the burst to the prefix confirmed done by the NIC via hw_ci. */
 static inline u16
-hinic3_vec_compact_cqe_limit(struct hinic3_rxq *rxq, u16 sw_ci, u16 vec_pkts)
+hinic3_vec_compact_cqe_ci_load_limit(struct hinic3_rxq *rxq, u16 sw_ci, u16 vec_pkts)
 {
 	struct hinic3_rq_ci_wb rq_ci;
 	u16 avail;
@@ -245,14 +179,8 @@ hinic3_vec_compact_cqe_limit(struct hinic3_rxq *rxq, u16 sw_ci, u16 vec_pkts)
 	return vec_pkts;
 }
 
-/*
- * Prefetch the whole window: computing a compact CQE address takes two
- * dependent loads (rx_info -> mbuf -> buf_addr/data_off), so prefetching
- * only 4 ahead cannot hide the latency. Mirror the scalar path, which
- * prefetches all mbufs and buffer heads up front (rx.c prefetch_flag).
- */
 static inline void
-hinic3_vec_prefetch_window(struct hinic3_rxq *rxq, u16 sw_ci, u16 nb_pkts)
+hinic3_vec_prefetch(struct hinic3_rxq *rxq, u16 sw_ci, u16 nb_pkts)
 {
 	u16 n = (u16)RTE_MIN(nb_pkts, (u16)HINIC3_DEFAULT_RX_BURST);
 	u16 i;
@@ -284,19 +212,12 @@ hinic3_recv_pkts_compact_cqe_vec_avx(void *rx_queue, struct rte_mbuf **rx_pkts,
 	if (rxq->delta > rxq->rx_free_thresh)
 		hinic3_rearm_rxq_mbuf_vec(rxq);
 
-	nb_pkts = hinic3_vec_compact_cqe_limit(rxq, sw_ci, nb_pkts);
+	nb_pkts = hinic3_vec_compact_cqe_ci_load_limit(rxq, sw_ci, nb_pkts);
 	if (unlikely(nb_pkts == 0))
 		return 0;
 
 	rxm = rxq->rx_info[sw_ci].mbuf;
 
-	/*
-	 * No prefetch before this load, on purpose: the CQE address is a
-	 * three-level dependent chain (rx_info -> mbuf -> address), so a
-	 * prefetch can only be issued once the address is known -- back to
-	 * back with the demand load, with no travel time to hide a miss.
-	 * The demand load itself warms the line for the burst's CQE reads.
-	 */
 	rx_cqe = (volatile struct hinic3_rq_cqe *)
 		hinic3_vec_compact_cqe_addr(rxm);
 
@@ -309,17 +230,7 @@ hinic3_recv_pkts_compact_cqe_vec_avx(void *rx_queue, struct rte_mbuf **rx_pkts,
 
 		n = RTE_MIN(nb_pkts, HINIC3_DEFAULT_RX_BURST);
 
-		/*
-		 * Prefetch the whole window before each burst (within the
-		 * hw_ci-confirmed prefix). With burst <= 32 this covers
-		 * all packets; larger bursts are covered window by window.
-		 * The window start must be masked by q_depth: nb_pkts can
-		 * be 512 (testpmd flush uses MAX_PKT_BURST), and the
-		 * accumulated sw_ci + nb_rx would otherwise run past the
-		 * rx_info padding area and read heap garbage as mbuf
-		 * pointers (SIGSEGV at mbuf->pool).
-		 */
-		hinic3_vec_prefetch_window(rxq,
+		hinic3_vec_prefetch(rxq,
 			(u16)((sw_ci + nb_rx) & rxq->q_mask), n);
 
 		done_pkts = hinic3_recv_burst_compact_cqe_vec_avx(rxq,
