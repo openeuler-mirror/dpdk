@@ -13,8 +13,13 @@
 #include "hinic3_pmd_rx.h"
 #include "hinic3_pmd_rxtx_vec_common.h"
 
-/* Function-level ISA attribute; only reached after the AVX512F runtime probe. */
-#define HINIC3_AVX512_TARGET	__attribute__((target("avx512f")))
+/*
+ * Function-level ISA attribute; only reached after the AVX2 runtime probe.
+ * The RX path itself is pure 128-bit SSE; avx2 (VEX encoding) is the floor
+ * so GCC's auto-vectorization of the inlined rearm pointer copy stays
+ * 256-bit and no SSE/AVX mixing penalty arises next to other DPDK code.
+ */
+#define HINIC3_VEC_TARGET	__attribute__((target("avx2")))
 
 /*
  * RXDONE handshake bit: host dw0 bit31 in the scalar compact path
@@ -52,7 +57,7 @@
  *   packet_type (from the ptype table, inserted into lane0)
  *   | pkt_len | data_len | vlan_tci | rss
  */
-static inline HINIC3_AVX512_TARGET u16
+static inline HINIC3_VEC_TARGET u16
 hinic3_recv_burst_compact_cqe_vec_avx(struct hinic3_rxq *rxq,
 				      struct rte_mbuf **rx_pkts, u16 nb_pkts)
 {
@@ -260,7 +265,7 @@ hinic3_vec_prefetch_window(struct hinic3_rxq *rxq, u16 sw_ci, u16 nb_pkts)
 	}
 }
 
-HINIC3_AVX512_TARGET
+HINIC3_VEC_TARGET
 u16
 hinic3_recv_pkts_compact_cqe_vec_avx(void *rx_queue, struct rte_mbuf **rx_pkts,
 				     u16 nb_pkts)
