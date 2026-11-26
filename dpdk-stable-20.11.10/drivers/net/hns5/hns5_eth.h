@@ -97,10 +97,33 @@ struct hns5_eth_rxq_stats {
     uint64_t ierrors_rxd;                   // PPE RXD errors
 };
 
+/* PPE hardware drop counters, exposed as "ppe_*" xstats. */
+struct hns5_eth_drop_stats {
+    /* SSU packet-drop counters */
+    uint64_t ssu_ppp_send_drop_cmd;
+    uint64_t ssu_recv_drop_cmd;
+    uint64_t ssu_rx_pkt_full_drop;
+    /* PPP stage-1 flow-table drop (rte_flow DROP without ingress attr) */
+    uint64_t ppp_fw_fd_stg1_drop;
+    /* LSW ingress flow-table drop (rte_flow DROP with ingress attr) */
+    uint64_t lsw_ing_fd_drop;
+    /* RPU (RX engine, packets on the way to CPU) drop counters */
+    uint64_t rpu_buf_drop_int;
+    uint64_t rpu_recv_err_pkt;
+    uint64_t rpu_prep_drop_pkt;
+    /* TM VF tail drop (queue full after the queue overflow DDR is exhausted) */
+    uint64_t tm_vf_tail_drop;
+    /* POE VF add-fail drop (group full / true-full / retry timeout) */
+    uint64_t poe_add_fail_drop;
+    /* PPP LSW L2 table lookup miss counter (64-bit) */
+    uint64_t l2_dmac_miss_drop;
+};
+
 struct hns5_eth_port_stats {
     struct hidrv_mag_mac_mib_stats mib_stats;
     struct hns5_eth_rxq_stats rxq_stats;
     struct hns5_eth_txq_stats txq_stats;
+    struct hns5_eth_drop_stats drop_stats;
 };
 
 enum hns5_eth_rxq_type {
@@ -174,11 +197,22 @@ struct hns5_eth_priv {
     struct hns5_eth_rx_queue rxq[HNS5_ETH_MAX_RXQ_NUM];
     struct hns5_eth_tx_queue txq[HNS5_ETH_MAX_TXQ_NUM];
     struct hns5_eth_port_stats xstats __rte_cache_aligned;
+    /* mib_inited gates the first MIB read so init traffic is not reported. */
+    uint8_t mib_inited;
+    /* drop_inited gates the first PPE counter read so init traffic is skipped. */
+    uint8_t drop_inited;
+    /* TM tail drop is a wrapped 64-bit cumulative value: own baseline. */
+    uint64_t tm_vf_tail_drop_last;
+    uint8_t tm_vf_tail_drop_inited;
+    /* POE add-fail is a wrapping 32-bit cumulative counter: own baseline. */
+    uint32_t poe_add_fail_last;
+    uint8_t poe_add_fail_inited;
     struct rte_ether_addr address;
     struct hns5_eth_port_param param;
     int ppe_pf_devid;
     int ppe_vf_devid;
     handle ppe_pfhandle;
+    handle ppe_vfhandle;
     int poe_pf_devid;
     int poe_vf_devid;
     handle poe_pfhandle;

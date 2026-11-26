@@ -16,5 +16,6 @@ int hns5_eth_xstats_get_names(__rte_unused struct rte_eth_dev *dev,
                                                 __rte_unused unsigned size);
 int hns5_eth_stats_reset(struct rte_eth_dev *dev);
 int hns5_eth_xstats_reset(struct rte_eth_dev *dev);
+void hns5_eth_xstats_baseline(struct rte_eth_dev *dev);
 
 #endif /* _HNS5_STATS_H_ */
