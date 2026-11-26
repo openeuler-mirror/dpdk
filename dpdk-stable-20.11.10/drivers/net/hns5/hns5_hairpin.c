@@ -81,26 +81,17 @@ int hns5_eth_rx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t rx_queue_i
 		return -rte_errno;
 	}
 
-	if (peer_port == dev->data->port_id) {
-		if (conf->peers[0].queue >= dev->data->nb_tx_queues) {
-			hns5_err(dev,
-				 "port:%u Rx hairpin queue:%u Tx peer queue:%u exceeds "
-				 "nb_tx_queues:%u\n",
-				 dev->data->port_id, rx_queue_id, conf->peers[0].queue,
-				 dev->data->nb_tx_queues);
-			rte_errno = EINVAL;
-			return -rte_errno;
-		}
-	} else if (conf->manual_bind == 0 || conf->tx_explicit == 0) {
-		/*
-			* Cross-port hairpin needs manual bind, and the user is
-			* responsible for inserting the Tx part flows (rte_flow
-			* PORT_ID/QUEUE actions), i.e. tx_explicit must be set.
-			*/
+	if (peer_port != dev->data->port_id) {
+		hns5_err(dev, "only support hairpin port self, port_id:%u, peer_port:%u\n", dev->data->port_id, peer_port);
+		rte_errno = EINVAL;
+		return -rte_errno;
+	}
+	if (conf->peers[0].queue >= dev->data->nb_tx_queues) {
 		hns5_err(dev,
-			 "port:%u Rx hairpin queue:%u peer port:%u needs manual_bind and "
-			 "tx_explicit\n",
-			 dev->data->port_id, rx_queue_id, peer_port);
+				"port:%u Rx hairpin queue:%u Tx peer queue:%u exceeds "
+				"nb_tx_queues:%u\n",
+				dev->data->port_id, rx_queue_id, conf->peers[0].queue,
+				dev->data->nb_tx_queues);
 		rte_errno = EINVAL;
 		return -rte_errno;
 	}
@@ -162,21 +153,18 @@ int hns5_eth_tx_hairpin_queue_setup(struct rte_eth_dev *dev, uint16_t tx_queue_i
 		return -rte_errno;
 	}
 
-	if (peer_port == dev->data->port_id) {
-		if (conf->peers[0].queue >= dev->data->nb_rx_queues) {
-			hns5_err(dev,
-				 "port:%u Tx hairpin queue:%u Rx peer queue:%u exceeds "
-				 "nb_rx_queues:%u\n",
-				 dev->data->port_id, tx_queue_id, conf->peers[0].queue,
-				 dev->data->nb_rx_queues);
-			rte_errno = EINVAL;
-			return -rte_errno;
-		}
-	} else if (conf->manual_bind == 0 || conf->tx_explicit == 0) {
+	if (peer_port != dev->data->port_id) {
+		hns5_err(dev, "only support hairpin port self, port_id:%u, peer_port:%u\n", dev->data->port_id, peer_port);
+		rte_errno = EINVAL;
+		return -rte_errno;
+	}
+
+	if (conf->peers[0].queue >= dev->data->nb_rx_queues) {
 		hns5_err(dev,
-			 "port:%u Tx hairpin queue:%u peer port:%u needs manual_bind and "
-			 "tx_explicit\n",
-			 dev->data->port_id, tx_queue_id, peer_port);
+				"port:%u Tx hairpin queue:%u Rx peer queue:%u exceeds "
+				"nb_rx_queues:%u\n",
+				dev->data->port_id, tx_queue_id, conf->peers[0].queue,
+				dev->data->nb_rx_queues);
 		rte_errno = EINVAL;
 		return -rte_errno;
 	}
@@ -260,17 +248,12 @@ int hns5_eth_hairpin_get_peer_ports(struct rte_eth_dev *dev, uint16_t *peer_port
 	return (int)peer_cnt;
 }
 
-/*
- * 空实现占位：本PMD的跨口转发由 rte_flow(PORT_ID/QUEUE动作)直接下发硬件重定向表项，
- * bind/unbind本身无硬件动作。必须注册，否则ethdev公共层(RTE_FUNC_PTR_OR_ERR_RET)会返回
- * ENOTSUP，导致上层认为不支持hairpin绑定而中断跨口转发流程。
- */
 int hns5_eth_hairpin_bind(struct rte_eth_dev *dev __rte_unused, uint16_t rx_port __rte_unused)
 {
-	return 0;
+	return -EINVAL;
 }
 
 int hns5_eth_hairpin_unbind(struct rte_eth_dev *dev __rte_unused, uint16_t rx_port __rte_unused)
 {
-	return 0;
+	return -EINVAL;
 }
