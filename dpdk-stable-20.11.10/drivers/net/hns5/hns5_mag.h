@@ -21,7 +21,10 @@
 #define HNS5_FRAME_DEFAULT HNS5_MAG_MTU_TO_FRAME(HNS5_MTU_DEFAULT)
 
 int hns5_eth_mag_init(struct rte_eth_dev *dev);
-
+/** @brief Enable/disable both MAC RX and TX for the port
+ *  @param dev NIC device; enable 1-enable, 0-disable
+ *  @return 0 on success, negative on failure */
+int hns5_mag_txrx_enable(struct rte_eth_dev *dev, int enable);
 int hns5_eth_set_crc_offload(struct rte_eth_dev *dev, uint32_t enable);
 
 #endif /* _HNS5_MAG_H_ */

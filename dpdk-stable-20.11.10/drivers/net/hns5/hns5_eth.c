@@ -572,17 +572,15 @@ static int hns5_eth_dev_close(struct rte_eth_dev *dev)
     vfhandle = hidrv_ppe_vf_get_ndrv_handle(priv->ppe_vf_devid);
     if (vfhandle != NULL) {
         ret = ndrv_ppe_mam_vf_disable_all_vlp(vfhandle);
-        if (ret != 0) {
+        if (ret != 0)
             hns5_warn(dev, "failed to disable all vlp, ret:%d\n", ret);
-        }
     }
 
     for (int i = 0; i < HNS5_ETH_POOL_MAX; i++) {
         if ((priv->pool_inited & (1 << i)) != 0) {
             ret = hidrv_ppe_vf_close_pool(priv->ppe_vf_devid, i);
-            if (ret != 0) {
+            if (ret != 0)
                 hns5_warn(dev, "failed to close pool:%d, ret:%d\n", i, ret);
-            }
             priv->pool_inited &= ~(1 << i);
         }
     }
@@ -592,17 +590,35 @@ static int hns5_eth_dev_close(struct rte_eth_dev *dev)
     /* Clean RSS config (write to hardware) */
     hns5_rss_uninit(dev);
 
+    /* hand back the bp_ppe slot and clear per-queue watermarks/source drop */
+    (void)hns5_poe_bp_grp_release(dev);
+
     /* Clean mcast mode ingress flow (matches DMAC I/G bit), avoid residual hw flow table after close */
-    if (priv->mcast_mode_flow_added) {
+    if (priv->mcast_mode_flow_added)
         (void)hns5_ppe_lsw_mcast_mode_config(dev, 0);
-    }
 
     /* Delete the L2 MAC entry added at probe (random MAC) */
     (void)hns5_l2_del_entry(dev, priv->address.addr_bytes, 0);
 
     dev->data->mac_addrs = NULL;
-    hns5_info(dev, "port:%u succeed to close\n", dev->data->port_id);
     return 0;
+}
+/* True when @peer is another hns5 port sharing @dev's PPE, hence its RSS IDT. */
+static bool hns5_eth_same_ppe(struct rte_eth_dev *dev, struct rte_eth_dev *peer)
+{
+    struct hns5_eth_priv *priv;
+    struct hns5_eth_priv *peer_priv;
+
+    if (dev == NULL || dev->data == NULL || peer == NULL || peer->data == NULL)
+        return false;
+    if (dev->device == NULL || peer->device == NULL ||
+        peer->device->driver != dev->device->driver)
+        return false;
+
+    priv = hns5_eth_priv_get(dev);
+    peer_priv = hns5_eth_priv_get(peer);
+    return priv != NULL && peer_priv != NULL &&
+        peer_priv->ppe_pf_devid == priv->ppe_pf_devid;
 }
 
 static int hns5_eth_dev_start(struct rte_eth_dev *dev)
@@ -971,7 +987,7 @@ static int hns5_eth_rxq_pool_init(struct rte_eth_dev *dev, uint16_t rx_queue_id,
 static int hns5_eth_rx_queue_setup(struct rte_eth_dev *dev, uint16_t rx_queue_id,
                                     uint16_t nb_rx_desc,
                                     unsigned int socket_id __rte_unused,
-                                    const struct rte_eth_rxconf *rx_conf __rte_unused,
+                                    const struct rte_eth_rxconf *rx_conf,
                                     struct rte_mempool *mp)
 {
     int ret = 0;
@@ -979,9 +995,8 @@ static int hns5_eth_rx_queue_setup(struct rte_eth_dev *dev, uint16_t rx_queue_id
     struct hns5_eth_rx_queue *rxq = NULL;
     int pool_id = 0;
     uint32_t tnl_num = 0;
-    /* share_group/share_qid derived from devargs, rx_conf from app not used */
+    /* share_group derived from devargs; rx_conf saved for rxq info */
     uint16_t group = priv->param.share_group;
-    uint16_t qid = rx_queue_id;
     /* fw_tnl derived from devargs into local var, then sent via hns5_ppe_fwl_tnl_config */
     struct rte_fw_tnl_conf fw_tnl_local = { 0 };
 
@@ -1008,45 +1023,52 @@ static int hns5_eth_rx_queue_setup(struct rte_eth_dev *dev, uint16_t rx_queue_id
     fw_tnl_local.def_qos = 0;
     fw_tnl_local.def_qos_inc = 1;
 
-    if (group > HNS5_ETH_GROUP_MAX ||
-        (qid > HNS5_POE_CPU_GRP_QUE_NUM && qid != HNS5_ETH_RXQ_BY_GROUP)) {
-        hns5_err(dev, "%s, port:%u rxq:%u share_group:0x%u share_qid:0x%u\n",
-            strerror(EINVAL), dev->data->port_id, rx_queue_id, group, qid);
+    if (group > HNS5_ETH_GROUP_MAX) {
+        hns5_err(dev, "%s, port:%u rxq:%u share_group:0x%u\n",
+            strerror(EINVAL), dev->data->port_id, rx_queue_id, group);
         return -EINVAL;
     }
     pool_id = hns5_eth_rxq_pool_init(dev, rx_queue_id, mp);
-    if (pool_id < 0) {
+    if (pool_id < 0)
         return pool_id;
-    }
 
     rxq = priv->rxq + rx_queue_id;
     dev->data->rx_queues[rx_queue_id] = rxq;
+    rxq->is_hairpin = false;
     rxq->pool_id = (uint16_t)pool_id;
     rxq->port_id = dev->data->port_id;
+    rxq->mp = mp;
+    rxq->nb_rx_desc = nb_rx_desc;
+    rxq->conf = *rx_conf;
     rxq->group = group;
-    rxq->queue = qid;
+    rxq->queue = rx_queue_id;
     rxq->poe_vfhandle = priv->poe_vfhandle;
-    if (qid == HNS5_ETH_RXQ_BY_GROUP) {
-        rxq->type = HNS5_ETH_RXQ_TYPE_GROUP;
-    } else {
-        rxq->type = HNS5_ETH_RXQ_TYPE_QUEUE;
-    }
-
+    rxq->type = (priv->param.rxq_mode == HNS5_ETH_RXQ_MODE_GROUP) ?
+        HNS5_ETH_RXQ_TYPE_GROUP : HNS5_ETH_RXQ_TYPE_QUEUE;
 
     ret = hns5_eth_rx_queue_setup_poe(dev, rxq->group, nb_rx_desc);
     if (ret != 0) {
         hns5_err(dev, "failed to hns5_eth_rx_queue_setup_poe, port:%d rxq:%u group:%u ret:%d\n",
             dev->data->port_id, rx_queue_id, rxq->group, ret);
-        return ret;
+        goto err;
     }
     ret = hns5_ppe_fwl_tnl_config(dev, &fw_tnl_local, rxq->pool_id);
     if (ret != 0) {
         hns5_err(dev, "failed to hns5_ppe_fwl_tnl_config, port:%d rxq:%u pool_id:%u ret:%d\n",
             dev->data->port_id, rx_queue_id, rxq->pool_id, ret);
-        return ret;
+        goto err;
     }
 
+    /* per-queue share of the group bp budget; excess is dropped before buffer alloc */
+    hns5_poe_rxq_bp_quota_apply(dev, rxq);
+
     return 0;
+
+err:
+    /* Don't leave a half-initialized queue visible to dev_start/stop. */
+    dev->data->rx_queues[rx_queue_id] = NULL;
+    rxq->type = HNS5_ETH_RXQ_TYPE_INVALID;
+    return ret;
 }
 
 static int hns5_eth_tx_queue_setup(struct rte_eth_dev *dev, uint16_t tx_queue_id, uint16_t nb_tx_desc __rte_unused,
@@ -1354,6 +1376,25 @@ bool hns5_eth_dev_is_hns5(uint16_t port_id)
 
 	return dev->dev_ops == &hns5_eth_dev_ops;
 }
+bool hns5_eth_has_ppe_peer(struct rte_eth_dev *dev)
+{
+    struct rte_eth_dev *peer;
+    uint16_t port_id;
+
+    if (dev == NULL || dev->data == NULL)
+        return false;
+
+    for (port_id = 0; port_id < RTE_MAX_ETHPORTS; port_id++) {
+        if (port_id == dev->data->port_id || !rte_eth_dev_is_valid_port(port_id))
+            continue;
+
+        peer = &rte_eth_devices[port_id];
+        if (hns5_eth_same_ppe(dev, peer))
+            return true;
+    }
+
+    return false;
+}
 
 static struct rte_eth_dev *hns5_eth_dev_create(struct rte_vdev_device *vdev)
 {
@@ -1655,6 +1696,8 @@ static int net_hns5_vdev_remove(struct rte_vdev_device *vdev)
         return -EINVAL;
 
     (void)hns5_eth_dev_stop(dev);
+
+    (void)hns5_poe_bp_grp_release(dev);
 
     rte_eth_dev_release_port(dev);
     snprintf(dev_name, sizeof(dev_name), "%s_%d", MZ_RTE_ETH_DEV_RX_QUEUE, dev->data->port_id);

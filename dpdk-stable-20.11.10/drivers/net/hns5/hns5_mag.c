@@ -25,9 +25,8 @@ static int hns5_mag_module_init(struct rte_eth_dev *dev)
     struct hidrv_mag_setup_params setup_param = { 0 };
     struct hidrv_mag_ext_para ext_para = { 0 };
 
-    if (inited == true) {
+    if (inited == true)
         return 0;
-    }
     ret = hidrv_mag_setup(priv->mag_pf_devid, &setup_param, &ext_para);
     if (ret != 0) {
         hns5_err(dev, "failed to hidrv_mag_setup, ret:%d\n", ret);
@@ -44,18 +43,16 @@ int hns5_eth_mag_init(struct rte_eth_dev *dev)
     struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
     static uint64_t inited = 0;
 
-    if (inited & (1ULL << priv->param.mport_id)) {
+    if (inited & (1ULL << priv->param.mport_id))
         return 0;
-    }
     priv->mag_pf_devid = hidrv_mag_get_pf_devid(MAG_DIE_ID, MAG_PF_ID);
     if (priv->mag_pf_devid < 0) {
         hns5_err(dev, "failed to hidrv_mag_get_pf_devid\n");
         return -EINVAL;
     }
     ret = hns5_mag_module_init(dev);
-    if (ret != 0) {
+    if (ret != 0)
         return ret;
-    }
 
     priv->mag_handle = hidrv_mag_get_ndrv_handle(priv->mag_pf_devid);
     if (priv->mag_handle == NULL) {
@@ -77,6 +74,24 @@ int hns5_eth_mag_init(struct rte_eth_dev *dev)
     }
     inited |= (1ULL << priv->param.mport_id);
 
+    return 0;
+}
+
+int hns5_mag_txrx_enable(struct rte_eth_dev *dev, int enable)
+{
+    struct hns5_eth_priv *priv = hns5_eth_priv_get(dev);
+    int ret;
+
+    ret = hidrv_mag_mac_set_rx_enable(priv->mag_pf_devid, priv->param.mport_id, enable);
+    if (ret != 0) {
+        hns5_err(dev, "failed to set rx_enable:%d, mport:%u\n", enable, priv->param.mport_id);
+        return -EINVAL;
+    }
+    ret = hidrv_mag_mac_set_tx_enable(priv->mag_pf_devid, priv->param.mport_id, enable);
+    if (ret != 0) {
+        hns5_err(dev, "failed to set tx_enable:%d, mport:%u\n", enable, priv->param.mport_id);
+        return -EINVAL;
+    }
     return 0;
 }
 
