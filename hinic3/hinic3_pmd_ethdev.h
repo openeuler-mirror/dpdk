@@ -321,11 +321,6 @@ struct netdev_event {
  * so that the scan cost is amortized.
  */
 #define HINIC3_SW_RSS_FLUSH_CHK_MASK 0x3F
-/* Length of the temporary array for a single hardware RX burst in the SW RSS
- * entry (nb_pkts is u16, so this length covers all of its values).
- */
-#define HINIC3_SW_RSS_HW_PKTS_MAX 65536
-
 /* IP version: the high 4 bits of the first IP byte. */
 #define HINIC3_SW_RSS_IP_VERSION_SHIFT		4
 /* IPv4 IHL: the low 4 bits of version_ihl, expressed in 4-byte words. */
