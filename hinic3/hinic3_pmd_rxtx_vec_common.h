@@ -12,7 +12,7 @@
 #include "hinic3_pmd_nic_io.h"
 
 /*
- * Helpers shared by the scalar RX path and the vector RX paths (AVX512 /
+ * Helpers shared by the scalar RX path and the vector RX paths (AVX2 /
  * NEON), following the i40e/iavf *_rxtx_vec_common.h pattern: everything
  * is static inline so each translation unit keeps its own inlined copy
  * and no cross-TU call enters the per-burst hot path.
