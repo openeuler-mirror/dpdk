@@ -194,6 +194,8 @@
 
 #define HINIC3_RQ_COMPACT_CQE_16BYTE	0
 #define HINIC3_RQ_COMPACT_CQE_8BYTE 	1
+#define HINIC3_RQ_COMPACT_CQE_8BIT 8
+#define HINIC3_RQ_COMPACT_CQE_16BIT 16
 
 /* Rx cqe checksum err */
 #define HINIC3_RX_CSUM_IP_CSUM_ERR	BIT(0)
@@ -537,6 +539,29 @@ struct hinic3_rxq {
 	struct hinic3_sw_rss_cache *sw_rss_cache; /* per-target-queue batch caches of this core (num_rqs entries) */
 	uint32_t sw_rss_flush_chk;              /* RX counter used to trigger the low-frequency timeout flush */
 } __rte_cache_aligned;
+
+struct hinic3_rx_compact_cqe {
+	union {
+		struct {
+			u16 length;
+			u8 pkt_types : 3;
+			u8 checksum_err : 2;
+			u8 pkt_mc : 2;
+			u8 cqe_len : 1;
+			u8 ip_type : 1;
+			u8 pkt_fmt : 3;
+			u8 vlan_offload : 1;
+			u8 ts_flag : 1;
+			u8 cqe_type : 1;
+			u8 rx_down : 1;
+		};
+		u32 dw0;
+	};
+	u32 rss_hash_value;
+	/* CQE dw2: bits 8-23 = VLAN, bits 24-31 = NUM_LRO. Accessed through
+	 * HINIC3_RQ_COMPACT_CQE_OFFLOAD_GET() to avoid struct padding issues. */
+	u32 dw2;
+};
 
 int hinic3_rx_fill_wqe(struct hinic3_rxq *rxq);
 

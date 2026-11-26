@@ -1388,53 +1388,6 @@ out:
 	return err;
 }
 
-static void
-hinic3_rx_get_compact_cqe_info(struct hinic3_rxq *rxq,
-			       volatile struct hinic3_rq_cqe *rx_cqe,
-			       struct hinic3_cqe_info *cqe_info)
-{
-	uint32_t dw0, dw1, dw2;
-
-	if (rxq->wqe_type != HINIC3_COMPACT_RQ_WQE) {
-		dw0 = hinic3_hw_cpu32(rx_cqe->status);
-		dw1 = hinic3_hw_cpu32(rx_cqe->vlan_len);
-		dw2 = hinic3_hw_cpu32(rx_cqe->offload_type);
-	} else {
-		/* Compact Rx CQE mode integrates cqe with packet in big endian way. */
-		dw0 = be32_to_cpu(rx_cqe->status);
-		dw1 = be32_to_cpu(rx_cqe->vlan_len);
-		dw2 = be32_to_cpu(rx_cqe->offload_type);
-	}
-
-	cqe_info->cqe_type = HINIC3_RQ_COMPACT_CQE_STATUS_GET(dw0, CQE_TYPE);
-	cqe_info->csum_err = HINIC3_RQ_COMPACT_CQE_STATUS_GET(dw0, CSUM_ERR);
-	cqe_info->vlan_offload = HINIC3_RQ_COMPACT_CQE_STATUS_GET(dw0, VLAN_EN);
-	cqe_info->cqe_len = HINIC3_RQ_COMPACT_CQE_STATUS_GET(dw0, CQE_LEN);
-	cqe_info->pkt_len = HINIC3_RQ_COMPACT_CQE_STATUS_GET(dw0, PKT_LEN);
-	cqe_info->ts_flag = HINIC3_RQ_COMPACT_CQE_STATUS_GET(dw0, TS_FLAG);
-	cqe_info->ptype = HINIC3_RQ_COMPACT_CQE_STATUS_GET(dw0, PTYPE);
-	cqe_info->rss_type = (rxq->nic_dev->rss_type.val != 0) ? 1 : 0;
-	cqe_info->rss_hash_value = dw1;
-	switch (cqe_info->csum_err) {
-	case HINIC3_RX_COMPACT_CSUM_OTHER_ERROR:
-		cqe_info->csum_err = HINIC3_RX_CSUM_IPSU_OTHER_ERR;
-		break;
-	case HINIC3_RX_COMPACT_HW_BYPASS_ERROR:
-		cqe_info->csum_err = HINIC3_RX_CSUM_HW_CHECK_NONE;
-		break;
-	default:
-		break;
-	}
-	if (cqe_info->cqe_len == HINIC3_RQ_COMPACT_CQE_16BYTE) {
-		cqe_info->lro_num = HINIC3_RQ_COMPACT_CQE_OFFLOAD_GET(dw2, NUM_LRO);
-		cqe_info->vlan_tag = HINIC3_RQ_COMPACT_CQE_OFFLOAD_GET(dw2, VLAN);
-	}
-
-	if (cqe_info->cqe_type == HINIC3_RQ_CQE_INTEGRATE)
-		cqe_info->data_offset =
-				(cqe_info->cqe_len == HINIC3_RQ_COMPACT_CQE_16BYTE) ? 16 : 8;
-}
-
 static bool
 hinic3_rx_integrated_cqe_done(struct hinic3_rxq *rxq, volatile struct hinic3_rq_cqe **rx_cqe)
 {
@@ -1490,7 +1443,6 @@ u16 hinic3_recv_pkts_compact_cqe(void *rx_queue, struct rte_mbuf **rx_pkts, u16 
 	const struct hinic3_ptype_table * const ptype_tbl = nic_dev->ptype_tbl;
 	struct hinic3_rx_info *rx_info = NULL;
 	volatile struct hinic3_rq_cqe *rx_cqe = NULL;
-	struct hinic3_cqe_info cqe_info = {0};
 	struct rte_mbuf *rxm = NULL;
 	struct rte_mbuf *prefetch_mbuf = NULL;
 	u16 sw_ci, rx_buf_len, pkts = 0;
@@ -1499,6 +1451,12 @@ u16 hinic3_recv_pkts_compact_cqe(void *rx_queue, struct rte_mbuf **rx_pkts, u16 
 	u16 nb_prefetch = 0;
 	u32 pkt_len;
 	u64 rx_bytes = 0;
+	struct hinic3_rx_compact_cqe compact_cqe;
+	u8 cqe_len;
+	bool is_sp560 = is_sp560_nic(rxq->nic_dev);
+	bool is_scattered = rxq->is_scattered_rx;
+	u32 rss_type = rxq->nic_dev->rss_type.val;
+	u16 checksum_err;
 #ifdef HINIC3_XSTAT_PROF_RX
 	uint64_t t1 = rte_get_tsc_cycles();
 	uint64_t t2;
@@ -1517,14 +1475,16 @@ u16 hinic3_recv_pkts_compact_cqe(void *rx_queue, struct rte_mbuf **rx_pkts, u16 
 			break;
 		}
 
-		hinic3_rx_get_compact_cqe_info(rxq, rx_cqe, &cqe_info);
-
-		pkt_len = cqe_info.pkt_len;
+		compact_cqe.dw0 = be32_to_cpu(rx_cqe->status);
+		compact_cqe.rss_hash_value = be32_to_cpu(rx_cqe->vlan_len);
+		compact_cqe.dw2 = be32_to_cpu(rx_cqe->offload_type);
+		cqe_len = compact_cqe.cqe_len == HINIC3_RQ_COMPACT_CQE_16BYTE ? HINIC3_RQ_COMPACT_CQE_16BIT : HINIC3_RQ_COMPACT_CQE_8BIT; 
+		pkt_len = compact_cqe.length;
 		/*
 		 * Compact Rx CQE mode integrates cqe with packet,
 		 * so mbuf length needs to remove the length of cqe.
 		 */
-		rx_buf_len = rxq->buf_len - cqe_info.data_offset;
+		rx_buf_len = rxq->buf_len - (compact_cqe.cqe_type ? cqe_len : 0);
 
 		rx_info = &rxq->rx_info[sw_ci];
 		rxm = rx_info->mbuf;
@@ -1534,10 +1494,13 @@ u16 hinic3_recv_pkts_compact_cqe(void *rx_queue, struct rte_mbuf **rx_pkts, u16 
 			hw_ci = rxq->hw_cons_idx;
 			idx = sw_ci;
 			while(idx != hw_ci && nb_prefetch++ < nb_pkts) {
+				char *buf;
 				pos = idx & rxq->q_mask;
 				prefetch_mbuf = rxq->rx_info[pos].mbuf;
 				rte_prefetch0(prefetch_mbuf);
-				rte_prefetch0(rte_mbuf_buf_addr((prefetch_mbuf), prefetch_mbuf->pool) + RTE_PKTMBUF_HEADROOM);
+				buf = rte_mbuf_buf_addr((prefetch_mbuf), prefetch_mbuf->pool) + prefetch_mbuf->data_off;
+				rte_prefetch0(buf);
+				rte_prefetch0(buf + 64);
 				idx++;
 				idx &= rxq->q_mask;
 			}
@@ -1549,7 +1512,7 @@ u16 hinic3_recv_pkts_compact_cqe(void *rx_queue, struct rte_mbuf **rx_pkts, u16 
 		sw_ci &= rxq->q_mask;
 
 		/* 3. Jumbo frame process. */
-		if (rte_eth_devices[rxq->port_id].data->scattered_rx) {
+		if (is_scattered) {
 			if (likely(pkt_len <= (u32)rx_buf_len)) {
 				rxm->data_len = (u16)pkt_len;
 				rxm->pkt_len = pkt_len;
@@ -1582,25 +1545,43 @@ u16 hinic3_recv_pkts_compact_cqe(void *rx_queue, struct rte_mbuf **rx_pkts, u16 
 		 * at the aligned address where the packet data already starts,
 		 * so the CQE length must not be added again.
 		 */
-		if (!is_sp560_nic(rxq->nic_dev) || !rxq->rx_dma_align)
-			rxm->data_off += cqe_info.data_offset;
+		if (!is_sp560 || !rxq->rx_dma_align)
+			rxm->data_off += (compact_cqe.cqe_type ? cqe_len : 0);
 		rxm->port = rxq->port_id;
 
 		/* 4. Rx checksum offload. */
-		rxm->ol_flags |= hinic3_rx_csum(cqe_info.csum_err, rxq);
+		checksum_err = 0;
+		switch (compact_cqe.checksum_err) {
+			case HINIC3_RX_COMPACT_L3_L4_CSUM_ERROR:
+				checksum_err = HINIC3_RX_CSUM_IP_CSUM_ERR;
+				break;
+			case HINIC3_RX_COMPACT_CSUM_OTHER_ERROR:
+				checksum_err = HINIC3_RX_CSUM_IPSU_OTHER_ERR;
+				break;
+			case HINIC3_RX_COMPACT_HW_BYPASS_ERROR:
+				checksum_err = HINIC3_RX_CSUM_HW_CHECK_NONE;
+				break;
+			default:
+				break;
+		}
+		rxm->ol_flags |= hinic3_rx_csum(checksum_err, rxq);
 
 		/* 5. Vlan offload. */
-		rxm->ol_flags |= hinic3_rx_vlan(cqe_info.vlan_offload, cqe_info.vlan_tag,
+		rxm->ol_flags |= hinic3_rx_vlan(compact_cqe.vlan_offload,
+						compact_cqe.cqe_len == HINIC3_RQ_COMPACT_CQE_16BYTE ?
+						(u16)HINIC3_RQ_COMPACT_CQE_OFFLOAD_GET(compact_cqe.dw2, VLAN) : 0,
 						&rxm->vlan_tci);
 		/* 6. Packet ptype */
-		rxm->packet_type = ptype_tbl->ptype[cqe_info.ptype];
+		rxm->packet_type = ptype_tbl->ptype[HINIC3_RQ_COMPACT_CQE_STATUS_GET(compact_cqe.dw0, PTYPE)];
 		/* 7. RSS. */
-		rxm->ol_flags |= hinic3_rx_rss_hash(cqe_info.rss_type, cqe_info.rss_hash_value,
+		rxm->ol_flags |= hinic3_rx_rss_hash((rss_type != 0 ? 1 : 0), compact_cqe.rss_hash_value,
 						    &rxm->hash.rss);
 		/* 8. LRO. */
-		if (unlikely(cqe_info.lro_num != 0)) {
+		u8 lro_num = compact_cqe.cqe_len == HINIC3_RQ_COMPACT_CQE_16BYTE ?
+			     (u8)HINIC3_RQ_COMPACT_CQE_OFFLOAD_GET(compact_cqe.dw2, NUM_LRO) : 0;
+		if (unlikely(lro_num != 0)) {
 			rxm->ol_flags |= HINIC3_PKT_RX_LRO;
-			rxm->tso_segsz = pkt_len / cqe_info.lro_num;
+			rxm->tso_segsz = pkt_len / lro_num;
 		}
 
 		rx_cqe->status = 0;
@@ -1621,7 +1602,8 @@ u16 hinic3_recv_pkts_compact_cqe(void *rx_queue, struct rte_mbuf **rx_pkts, u16 
 	rxq->rxq_stats.tsc = rte_get_timer_cycles();
 out:
 	/* 10. Rearm mbuf to rxq. */
-	hinic3_rearm_rxq_mbuf(rxq);
+	if (pkts && rxq->delta > rxq->rx_free_thresh)
+		hinic3_rearm_rxq_mbuf(rxq);
 
 #ifdef HINIC3_XSTAT_PROF_RX
 	/* Do profiling stats. */
@@ -1782,7 +1764,10 @@ u16 hinic3_recv_pkts_sw_rss(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pk
 {
     struct hinic3_rxq *rxq = rx_queue;
     struct hinic3_nic_dev *nic_dev = rxq->nic_dev;
-    static struct rte_mbuf *hw_pkts[HINIC3_SW_RSS_HW_PKTS_MAX];
+    /* Keep this buffer on the stack: every core runs this burst independently,
+     * so a static array would be shared and clobbered across cores. */
+    struct rte_mbuf *hw_pkts[HINIC3_DEFAULT_RX_BURST];
+    u16 remaining = nb_pkts;
     u16 hw_nb, nb_rx, i;
 
     /* Timeout cache check (low-traffic delivery guarantee).
@@ -1796,16 +1781,26 @@ u16 hinic3_recv_pkts_sw_rss(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pk
                   HINIC3_SW_RSS_FLUSH_CHK_MASK) == 0))
         hinic3_sw_rss_flush_expired(nic_dev, rxq->sw_rss_cache);
 
-    if (nic_dev->config.rx_cqe_compact_en)
-        hw_nb = hinic3_recv_pkts_compact_cqe(rx_queue, hw_pkts, nb_pkts);
-    else
-        hw_nb = hinic3_recv_pkts(rx_queue, hw_pkts, nb_pkts);
+    /* Process a bounded chunk at a time so that nb_pkts larger than the
+     * temporary buffer is still handled correctly. */
+    while (remaining) {
+        u16 n = RTE_MIN(remaining, (u16)RTE_DIM(hw_pkts));
 
-    /* Parse each packet's hash and distribute it to the target queue cache
-     * (batch enqueue when the threshold is reached) */
-    for (i = 0; i < hw_nb; i++)
-        hinic3_sw_rss_trace_hook(hw_pkts[i], nic_dev, rxq->q_id,
-                                 rxq->sw_rss_cache);
+        if (nic_dev->config.rx_cqe_compact_en)
+            hw_nb = hinic3_recv_pkts_compact_cqe(rx_queue, hw_pkts, n);
+        else
+            hw_nb = hinic3_recv_pkts(rx_queue, hw_pkts, n);
+
+        /* Parse each packet's hash and distribute it to the target queue cache
+         * (batch enqueue when the threshold is reached) */
+        for (i = 0; i < hw_nb; i++)
+            hinic3_sw_rss_trace_hook(hw_pkts[i], nic_dev, rxq->q_id,
+                                     rxq->sw_rss_cache);
+
+        remaining -= hw_nb;
+        if (hw_nb < n)
+            break;
+    }
 
     /* ===== Best-effort dequeue from this core's own MP/SC ring =====
      * Use burst rather than bulk: bulk fails as a whole and returns 0 when

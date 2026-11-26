@@ -6215,24 +6215,7 @@ static int hinic3_dev_init(struct rte_eth_dev *eth_dev)
 
 	hinic3_nic_feature_init(nic_dev);
 	
-	if (nic_dev->config.rx_sw_rss) {
-		/* SW RSS enabled: RX packets are distributed through
-		 * hinic3_recv_pkts_sw_rss, which internally selects the hardware RX
-		 * function based on rx_cqe_compact_en; the TX mode follows suit.
-		 */
-		eth_dev->rx_pkt_burst = hinic3_recv_pkts_sw_rss;
-		if (nic_dev->config.rx_cqe_compact_en)
-			eth_dev->tx_pkt_burst = hinic3_xmit_pkts_compact_cqe;
-		else
-			eth_dev->tx_pkt_burst = hinic3_xmit_pkts;
-	} else if ((nic_dev->config.rx_cqe_compact_en != HINIC3_RX_CQE_COMPACT_EN)) {
-		eth_dev->rx_pkt_burst = hinic3_recv_pkts;
-		eth_dev->tx_pkt_burst = hinic3_xmit_pkts;
-#ifdef RTE_ARCH_ARM
-		if (nic_dev->vec_allowed == 1)
-			eth_dev->rx_pkt_burst = hinic3_recv_pkts_vec;
-#endif
-	} else {
+	if (nic_dev->config.rx_cqe_compact_en == HINIC3_RX_CQE_COMPACT_EN) {
 		eth_dev->rx_pkt_burst = hinic3_recv_pkts_compact_cqe;
 		eth_dev->tx_pkt_burst = hinic3_xmit_pkts_compact_cqe;
 #ifdef RTE_ARCH_ARM
@@ -6244,6 +6227,15 @@ static int hinic3_dev_init(struct rte_eth_dev *eth_dev)
 		    rte_cpu_get_flag_enabled(RTE_CPUFLAG_AVX2)) {
 			eth_dev->rx_pkt_burst = hinic3_recv_pkts_compact_cqe_vec_avx;
 		}
+#endif
+		if (nic_dev->config.rx_sw_rss)
+			eth_dev->rx_pkt_burst = hinic3_recv_pkts_sw_rss;
+	} else {
+		eth_dev->rx_pkt_burst = hinic3_recv_pkts;
+		eth_dev->tx_pkt_burst = hinic3_xmit_pkts;
+#ifdef RTE_ARCH_ARM
+		if (nic_dev->vec_allowed == 1)
+			eth_dev->rx_pkt_burst = hinic3_recv_pkts_vec;
 #endif
 	}
 
