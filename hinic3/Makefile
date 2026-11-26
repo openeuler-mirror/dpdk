@@ -121,4 +121,8 @@ ifeq ($(CONFIG_RTE_ARCH_ARM64),y)
 	SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_rxtx_vec_neon.c
 endif
 
+ifeq ($(CONFIG_RTE_ARCH_X86_64),y)
+	SRCS-$(CONFIG_RTE_LIBRTE_HINIC3_PMD) += hinic3_pmd_rxtx_vec_avx2.c
+endif
+
 include $(RTE_SDK)/mk/rte.lib.mk

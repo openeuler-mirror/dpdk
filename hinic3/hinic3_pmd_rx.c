@@ -17,6 +17,7 @@
 #include "hinic3_pmd_ethdev.h"
 #include "hinic3_pmd_tx.h"
 #include "hinic3_pmd_rx.h"
+#include "hinic3_pmd_rxtx_vec_common.h"
 
 static uint32_t
 hinic3_get_l3_ptype(uint32_t ip_type)
@@ -503,6 +504,57 @@ void hinic3_free_all_rxq_mbufs(struct hinic3_nic_dev *nic_dev)
 		rxq = nic_dev->rxqs[qid];
 		if (rxq != NULL && !rxq->is_hairpin)
 			hinic3_free_rxq_mbufs(nic_dev->rxqs[qid]);
+	}
+}
+
+/*
+ * Fill the rx_info padding slots (q_depth + RX_BURST, reserved by ethdev)
+ * with one dummy mbuf per queue: the vector RX path may overrun the ring
+ * tail by up to one burst with linear indexing, and the zeroed compact CQE
+ * keeps RXDONE at 0 so the tail burst terminates after the last real packet.
+ */
+int hinic3_alloc_rxq_padding(struct hinic3_rxq *rxq)
+{
+	struct rte_mbuf *mbuf;
+	uint8_t *cqe;
+	u16 i;
+
+	for (i = 0; i < HINIC3_DEFAULT_RX_BURST; i++) {
+		if (rxq->rx_info[rxq->q_depth + i].mbuf != NULL)
+			continue;
+
+		mbuf = rte_pktmbuf_alloc(rxq->mb_pool);
+		if (unlikely(mbuf == NULL)) {
+			PMD_DRV_LOG(ERR, "Fail to alloc padding mbuf, qid = %u, local_qid = %u",
+				    rxq->q_id, rxq->local_qid);
+			return -ENOMEM;
+		}
+
+		mbuf->port = rxq->port_id;
+		mbuf->ol_flags = 0;
+
+		cqe = hinic3_vec_compact_cqe_addr(mbuf);
+
+		memset(cqe, 0, HINIC3_RX_DMA_ALIGN_CQE_OFFSET);
+
+		rxq->rx_info[rxq->q_depth + i].mbuf = mbuf;
+	}
+
+	return 0;
+}
+
+void hinic3_free_rxq_padding(struct hinic3_rxq *rxq)
+{
+	u16 i;
+
+	if (rxq->rx_info == NULL)
+		return;
+
+	for (i = 0; i < HINIC3_DEFAULT_RX_BURST; i++) {
+		if (rxq->rx_info[rxq->q_depth + i].mbuf == NULL)
+			break;
+		rte_pktmbuf_free(rxq->rx_info[rxq->q_depth + i].mbuf);
+		rxq->rx_info[rxq->q_depth + i].mbuf = NULL;
 	}
 }
 
@@ -1124,6 +1176,7 @@ int hinic3_start_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq)
 
 	/* lock dev queue switch  */
 	rte_spinlock_lock(&nic_dev->queue_list_lock);
+
 	hinic3_add_rq_to_rx_queue_list(nic_dev, rxq->q_id);
 
 	if (nic_dev->rss_state == HINIC3_RSS_ENABLE) {
@@ -1142,6 +1195,7 @@ int hinic3_start_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq)
 		}
 	}
 	hinic3_rearm_rxq_mbuf(rxq);
+
 	if (rxq->nic_dev->num_rss == 1) {
 		err = hinic3_set_vport_enable(nic_dev->hwdev, true);
 		if (err)
@@ -1265,10 +1319,8 @@ int hinic3_start_all_rqs(struct rte_eth_dev *eth_dev)
 {
 	struct hinic3_nic_dev *nic_dev = NULL;
 	struct hinic3_rxq *rxq = NULL;
-	struct rte_mbuf *mbuf = NULL;
 	int err = 0;
 	int i = 0;
-	int j = 0;
 
 	nic_dev = HINIC3_ETH_DEV_TO_PRIVATE_NIC_DEV(eth_dev);
 
@@ -1285,18 +1337,16 @@ int hinic3_start_all_rqs(struct rte_eth_dev *eth_dev)
 			goto out;
 		}
 
+		/* Padding slots serve the vector path tail overrun; see hinic3_alloc_rxq_padding(). */
 		if (nic_dev->vec_allowed) {
-			for (j = 0; j < HINIC3_DEFAULT_RX_BURST; j++) {
-				mbuf = rte_mbuf_raw_alloc(rxq->mb_pool);
-				if (unlikely(mbuf == NULL)) {
-					PMD_DRV_LOG(ERR, "Fail to alloc mbuf for rxq %u, qid = %u",
+			err = hinic3_alloc_rxq_padding(rxq);
+			if (err) {
+				PMD_DRV_LOG(ERR, "Fail to alloc padding mbuf for Rx queue %d, qid = %u",
 						i, rxq->q_id);
-					return -ENOMEM;
-				}
-				rxq->rx_info[rxq->q_depth + j].mbuf = mbuf;
+				goto out;
 			}
 		}
-		
+
 		if (!IS_QPOOL_MODE(nic_dev->hwdev))
 			hinic3_dev_rx_queue_intr_enable(eth_dev, rxq->q_id);
 		eth_dev->data->rx_queue_state[i] = RTE_ETH_QUEUE_STATE_STARTED;
@@ -1320,6 +1370,8 @@ out:
 			continue;
 		hinic3_remove_rq_from_rx_queue_list(nic_dev, rxq->q_id);
 		hinic3_free_rxq_mbufs(rxq);
+		/* free_rxq_mbufs only reclaims active slots; return the padding here. */
+		hinic3_free_rxq_padding(rxq);
 		hinic3_dev_rx_queue_intr_disable(eth_dev, rxq->q_id);
 		eth_dev->data->rx_queue_state[i] = RTE_ETH_QUEUE_STATE_STOPPED;
 	}

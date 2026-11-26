@@ -19,6 +19,7 @@
 #include <rte_malloc.h>
 #include <rte_mempool.h>
 #include <rte_errno.h>
+#include <rte_cpuflags.h>
 #include <rte_ether.h>
 #include <rte_interrupts.h>
 #include <rte_ring.h>
@@ -1833,6 +1834,10 @@ static void hinic3_rx_queue_release(struct rte_eth_dev *dev, uint16_t queue_id)
 	nic_dev = rxq->nic_dev;
 
 	hinic3_free_rxq_mbufs(rxq);
+
+	/* Free the padding allocated for the vector RX path. */
+	if (rxq->nic_dev->vec_allowed)
+		hinic3_free_rxq_padding(rxq);
 
 	if (IS_QPOOL_MODE(nic_dev->hwdev)) {
 		if (nic_dev->fd < 0) {
@@ -6217,8 +6222,14 @@ static int hinic3_dev_init(struct rte_eth_dev *eth_dev)
 		if (nic_dev->vec_allowed == 1)
 			eth_dev->rx_pkt_burst = hinic3_recv_pkts_compact_cqe_vec;
 #endif
-	if (nic_dev->config.rx_sw_rss)
-		eth_dev->rx_pkt_burst = hinic3_recv_pkts_sw_rss;
+#ifdef RTE_ARCH_X86_64
+		if (nic_dev->vec_allowed == 1 &&
+		    rte_cpu_get_flag_enabled(RTE_CPUFLAG_AVX2)) {
+			eth_dev->rx_pkt_burst = hinic3_recv_pkts_compact_cqe_vec_avx2;
+		}
+#endif
+		if (nic_dev->config.rx_sw_rss)
+			eth_dev->rx_pkt_burst = hinic3_recv_pkts_sw_rss;
 	} else {
 		eth_dev->rx_pkt_burst = hinic3_recv_pkts;
 		eth_dev->tx_pkt_burst = hinic3_xmit_pkts;

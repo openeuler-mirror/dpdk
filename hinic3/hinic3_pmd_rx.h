@@ -569,6 +569,9 @@ u32 hinic3_rx_fill_buffers(struct hinic3_rxq *rxq);
 
 void hinic3_free_rxq_mbufs(struct hinic3_rxq *rxq);
 
+int hinic3_alloc_rxq_padding(struct hinic3_rxq *rxq);
+void hinic3_free_rxq_padding(struct hinic3_rxq *rxq);
+
 void hinic3_free_all_rxq_mbufs(struct hinic3_nic_dev *nic_dev);
 
 int hinic3_update_rss_config(struct rte_eth_dev *dev,
@@ -583,6 +586,11 @@ int hinic3_start_rq(struct rte_eth_dev *eth_dev, struct hinic3_rxq *rxq);
 u16 hinic3_recv_pkts_compact_cqe(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts);
 
 u16 hinic3_recv_pkts_compact_cqe_vec(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts);
+
+#ifdef RTE_ARCH_X86_64
+u16 hinic3_recv_pkts_compact_cqe_vec_avx2(void *rx_queue, struct rte_mbuf **rx_pkts,
+					 u16 nb_pkts);
+#endif
 
 u16 hinic3_recv_pkts_sw_rss(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts);
 

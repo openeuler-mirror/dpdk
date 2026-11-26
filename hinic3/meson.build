@@ -78,6 +78,10 @@ if arch_subdir == 'arm'
 	sources += files('hinic3_pmd_rxtx_vec_neon.c')
 endif
 
+if arch_subdir == 'x86'
+	sources += files('hinic3_pmd_rxtx_vec_avx2.c')
+endif
+
 if arch_subdir == 'arm' and dpdk_conf.get('RTE_ARCH_64')
 	cflags  += ['-D__ARM64_NEON__']
 elif arch_subdir == 'x86' and dpdk_conf.get('RTE_ARCH_64')
