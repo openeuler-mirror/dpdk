@@ -549,7 +549,7 @@ create_ipinip_mbuf(uint16_t data_len, uint64_t ol_flags)
 	return mbuf;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: TXQ stopped ====== */
+/* ====== hinic3_xmit_pkts_compact_task: TXQ stopped ====== */
 
 static int
 test_compact_xmit_stopped(void)
@@ -566,7 +566,7 @@ test_compact_xmit_stopped(void)
 	RTE_TEST_ASSERT_NOT_NULL(pkt, "failed to create mbuf");
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 0,
 			      "xmit on stopped queue should return 0");
@@ -576,7 +576,7 @@ test_compact_xmit_stopped(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: no offload simple packet ====== */
+/* ====== hinic3_xmit_pkts_compact_task: no offload simple packet ====== */
 
 static int
 test_compact_xmit_no_offload(void)
@@ -595,7 +595,7 @@ test_compact_xmit_no_offload(void)
 	RTE_TEST_ASSERT_NOT_NULL(pkt, "failed to create mbuf");
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1, "should transmit 1 packet");
 	RTE_TEST_ASSERT_EQUAL(g_txq->txq_stats.packets, 1,
@@ -606,7 +606,7 @@ test_compact_xmit_no_offload(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: IP checksum offload ====== */
+/* ====== hinic3_xmit_pkts_compact_task: IP checksum offload ====== */
 
 static int
 test_compact_xmit_ip_cksum(void)
@@ -625,7 +625,7 @@ test_compact_xmit_ip_cksum(void)
 	RTE_TEST_ASSERT_NOT_NULL(pkt, "failed to create mbuf");
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1,
 			      "should transmit 1 IP cksum packet");
@@ -633,7 +633,7 @@ test_compact_xmit_ip_cksum(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: TCP checksum offload ====== */
+/* ====== hinic3_xmit_pkts_compact_task: TCP checksum offload ====== */
 
 static int
 test_compact_xmit_tcp_cksum(void)
@@ -654,7 +654,7 @@ test_compact_xmit_tcp_cksum(void)
 	RTE_TEST_ASSERT_NOT_NULL(pkt, "failed to create mbuf");
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1,
 			      "should transmit 1 TCP cksum packet");
@@ -662,7 +662,7 @@ test_compact_xmit_tcp_cksum(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: UDP checksum offload ====== */
+/* ====== hinic3_xmit_pkts_compact_task: UDP checksum offload ====== */
 
 static int
 test_compact_xmit_udp_cksum(void)
@@ -683,7 +683,7 @@ test_compact_xmit_udp_cksum(void)
 	RTE_TEST_ASSERT_NOT_NULL(pkt, "failed to create mbuf");
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1,
 			      "should transmit 1 UDP cksum packet");
@@ -691,7 +691,7 @@ test_compact_xmit_udp_cksum(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: VLAN offload ====== */
+/* ====== hinic3_xmit_pkts_compact_task: VLAN offload ====== */
 
 static int
 test_compact_xmit_vlan_offload(void)
@@ -711,7 +711,7 @@ test_compact_xmit_vlan_offload(void)
 	pkt->vlan_tci = 100;
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1,
 			      "should transmit 1 VLAN packet");
@@ -719,7 +719,7 @@ test_compact_xmit_vlan_offload(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: multiple packets ====== */
+/* ====== hinic3_xmit_pkts_compact_task: multiple packets ====== */
 
 static int
 test_compact_xmit_multiple(void)
@@ -742,7 +742,7 @@ test_compact_xmit_multiple(void)
 		tx_pkts[i] = pkts[i];
 	}
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 4);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 4);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 4, "should transmit 4 packets");
 	RTE_TEST_ASSERT_EQUAL(g_txq->txq_stats.packets, 4,
@@ -751,7 +751,7 @@ test_compact_xmit_multiple(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: zero-length data (sge_len0) ====== */
+/* ====== hinic3_xmit_pkts_compact_task: zero-length data (sge_len0) ====== */
 
 static int
 test_compact_xmit_zero_len(void)
@@ -772,7 +772,7 @@ test_compact_xmit_zero_len(void)
 	pkt->data_len = 0;
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 0,
 			      "zero-length mbuf should fail to xmit");
@@ -783,7 +783,7 @@ test_compact_xmit_zero_len(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: QINQ offload ====== */
+/* ====== hinic3_xmit_pkts_compact_task: QINQ offload ====== */
 
 static int
 test_compact_xmit_qinq_offload(void)
@@ -803,7 +803,7 @@ test_compact_xmit_qinq_offload(void)
 	pkt->vlan_tci = 200;
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1,
 			      "should transmit 1 QINQ packet");
@@ -811,7 +811,7 @@ test_compact_xmit_qinq_offload(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: IP + VLAN + TCP offload ====== */
+/* ====== hinic3_xmit_pkts_compact_task: IP + VLAN + TCP offload ====== */
 
 static int
 test_compact_xmit_ip_vlan_tcp_cksum(void)
@@ -834,7 +834,7 @@ test_compact_xmit_ip_vlan_tcp_cksum(void)
 	pkt->vlan_tci = 50;
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1,
 			      "should transmit 1 combined offload packet");
@@ -842,7 +842,7 @@ test_compact_xmit_ip_vlan_tcp_cksum(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: single-seg mode ====== */
+/* ====== hinic3_xmit_pkts_compact_task: single-seg mode ====== */
 
 static int
 test_compact_xmit_single_seg(void)
@@ -862,7 +862,7 @@ test_compact_xmit_single_seg(void)
 	RTE_TEST_ASSERT_NOT_NULL(pkt, "failed to create mbuf");
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1,
 			      "should transmit 1 packet in single-seg mode");
@@ -871,7 +871,7 @@ test_compact_xmit_single_seg(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: SCTP checksum offload ====== */
+/* ====== hinic3_xmit_pkts_compact_task: SCTP checksum offload ====== */
 
 static int
 test_compact_xmit_sctp_cksum(void)
@@ -926,7 +926,7 @@ test_compact_xmit_sctp_cksum(void)
 
 	tx_pkts[0] = mbuf;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1,
 			      "should transmit 1 SCTP cksum packet");
@@ -934,7 +934,7 @@ test_compact_xmit_sctp_cksum(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: IPv6 + TCP checksum ====== */
+/* ====== hinic3_xmit_pkts_compact_task: IPv6 + TCP checksum ====== */
 
 static int
 test_compact_xmit_ipv6_tcp_cksum(void)
@@ -955,7 +955,7 @@ test_compact_xmit_ipv6_tcp_cksum(void)
 	RTE_TEST_ASSERT_NOT_NULL(pkt, "failed to create mbuf");
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1,
 			      "should transmit 1 IPv6+TCP packet");
@@ -963,7 +963,7 @@ test_compact_xmit_ipv6_tcp_cksum(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: IPv6 + UDP checksum ====== */
+/* ====== hinic3_xmit_pkts_compact_task: IPv6 + UDP checksum ====== */
 
 static int
 test_compact_xmit_ipv6_udp_cksum(void)
@@ -1015,7 +1015,7 @@ test_compact_xmit_ipv6_udp_cksum(void)
 
 	tx_pkts[0] = mbuf;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1,
 			      "should transmit 1 IPv6+UDP packet");
@@ -1023,7 +1023,7 @@ test_compact_xmit_ipv6_udp_cksum(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: stats tracking ====== */
+/* ====== hinic3_xmit_pkts_compact_task: stats tracking ====== */
 
 static int
 test_compact_xmit_stats(void)
@@ -1043,7 +1043,7 @@ test_compact_xmit_stats(void)
 	RTE_TEST_ASSERT_NOT_NULL(pkt, "failed to create mbuf");
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1, "should transmit 1 packet");
 	RTE_TEST_ASSERT_EQUAL(g_txq->txq_stats.packets, 1,
@@ -1056,7 +1056,7 @@ test_compact_xmit_stats(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: packet too large for non-TSO ====== */
+/* ====== hinic3_xmit_pkts_compact_task: packet too large for non-TSO ====== */
 
 static int
 test_compact_xmit_pkt_too_large(void)
@@ -1082,7 +1082,7 @@ test_compact_xmit_pkt_too_large(void)
 	/* pkt_len (128) > non_tso_max_pkt_len (64) should trigger -EINVAL */
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 0,
 			      "packet too large for non-TSO should fail");
@@ -1095,7 +1095,7 @@ test_compact_xmit_pkt_too_large(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: IP + VLAN + UDP offload ====== */
+/* ====== hinic3_xmit_pkts_compact_task: IP + VLAN + UDP offload ====== */
 
 static int
 test_compact_xmit_ip_vlan_udp_cksum(void)
@@ -1118,7 +1118,7 @@ test_compact_xmit_ip_vlan_udp_cksum(void)
 	pkt->vlan_tci = 100;
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1,
 			      "should transmit 1 IP+VLAN+UDP packet");
@@ -1126,7 +1126,7 @@ test_compact_xmit_ip_vlan_udp_cksum(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: IP-in-IP with sp620 ====== */
+/* ====== hinic3_xmit_pkts_compact_task: IP-in-IP with sp620 ====== */
 
 static int
 test_compact_xmit_ipinip_sp620(void)
@@ -1146,7 +1146,7 @@ test_compact_xmit_ipinip_sp620(void)
 	RTE_TEST_ASSERT_NOT_NULL(pkt, "failed to create mbuf");
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1,
 			      "should transmit 1 IP-in-IP packet");
@@ -1155,7 +1155,7 @@ test_compact_xmit_ipinip_sp620(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: IP-in-IP without sp620 ====== */
+/* ====== hinic3_xmit_pkts_compact_task: IP-in-IP without sp620 ====== */
 
 static int
 test_compact_xmit_ipinip_no_sp620(void)
@@ -1175,7 +1175,7 @@ test_compact_xmit_ipinip_no_sp620(void)
 	RTE_TEST_ASSERT_NOT_NULL(pkt, "failed to create mbuf");
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1,
 			      "should transmit 1 IP-in-IP packet without sp620");
@@ -1183,7 +1183,7 @@ test_compact_xmit_ipinip_no_sp620(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: VLAN only (no cksum) ====== */
+/* ====== hinic3_xmit_pkts_compact_task: VLAN only (no cksum) ====== */
 
 static int
 test_compact_xmit_vlan_only(void)
@@ -1203,7 +1203,7 @@ test_compact_xmit_vlan_only(void)
 	pkt->vlan_tci = 300;
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1,
 			      "should transmit 1 VLAN-only packet");
@@ -1211,7 +1211,7 @@ test_compact_xmit_vlan_only(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: QINQ + TCP offload ====== */
+/* ====== hinic3_xmit_pkts_compact_task: QINQ + TCP offload ====== */
 
 static int
 test_compact_xmit_qinq_tcp_cksum(void)
@@ -1234,7 +1234,7 @@ test_compact_xmit_qinq_tcp_cksum(void)
 	pkt->vlan_tci = 100;
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1,
 			      "should transmit 1 QINQ+TCP packet");
@@ -1242,7 +1242,7 @@ test_compact_xmit_qinq_tcp_cksum(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: compact task w/ offload + 1 seg ====== */
+/* ====== hinic3_xmit_pkts_compact_task: compact task w/ offload + 1 seg ====== */
 
 static int
 test_compact_xmit_offload_single_seg(void)
@@ -1263,7 +1263,7 @@ test_compact_xmit_offload_single_seg(void)
 	RTE_TEST_ASSERT_NOT_NULL(pkt, "failed to create mbuf");
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1,
 			      "should transmit 1 offload packet");
@@ -1271,7 +1271,7 @@ test_compact_xmit_offload_single_seg(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: burst of mixed packets ====== */
+/* ====== hinic3_xmit_pkts_compact_task: burst of mixed packets ====== */
 
 static int
 test_compact_xmit_burst_mixed(void)
@@ -1301,14 +1301,14 @@ test_compact_xmit_burst_mixed(void)
 	tx_pkts[1] = pkts[1];
 	tx_pkts[2] = pkts[2];
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 3);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 3);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 3, "should transmit 3 mixed packets");
 
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: no free wqebbs (tx busy) ====== */
+/* ====== hinic3_xmit_pkts_compact_task: no free wqebbs (tx busy) ====== */
 
 static int
 test_compact_xmit_tx_busy(void)
@@ -1330,7 +1330,7 @@ test_compact_xmit_tx_busy(void)
 	RTE_TEST_ASSERT_NOT_NULL(pkt, "failed to create mbuf");
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	/* With queue full and no cleanup possible, should return 0 */
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 0,
@@ -1345,7 +1345,7 @@ test_compact_xmit_tx_busy(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: cleanup after xmit ====== */
+/* ====== hinic3_xmit_pkts_compact_task: cleanup after xmit ====== */
 
 static int
 test_compact_xmit_cleanup(void)
@@ -1364,7 +1364,7 @@ test_compact_xmit_cleanup(void)
 	RTE_TEST_ASSERT_NOT_NULL(pkt, "failed to create mbuf");
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1, "should transmit 1 packet");
 
 	/* Simulate HW completing the packet by advancing CI */
@@ -1375,13 +1375,13 @@ test_compact_xmit_cleanup(void)
 	RTE_TEST_ASSERT_NOT_NULL(pkt, "failed to create mbuf");
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1, "should transmit 1 packet after cleanup");
 
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: free txq mbufs ====== */
+/* ====== hinic3_xmit_pkts_compact_task: free txq mbufs ====== */
 
 static int
 test_compact_free_txq_mbufs(void)
@@ -1400,7 +1400,7 @@ test_compact_free_txq_mbufs(void)
 	RTE_TEST_ASSERT_NOT_NULL(pkt, "failed to create mbuf");
 
 	tx_pkts[0] = pkt;
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1, "should transmit 1 packet");
 
 	/* Free mbufs - should free the mbuf in tx_info */
@@ -1415,7 +1415,7 @@ test_compact_free_txq_mbufs(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: free all txq mbufs ====== */
+/* ====== hinic3_xmit_pkts_compact_task: free all txq mbufs ====== */
 
 static int
 test_compact_free_all_txq_mbufs(void)
@@ -1434,7 +1434,7 @@ test_compact_free_all_txq_mbufs(void)
 	RTE_TEST_ASSERT_NOT_NULL(pkt, "failed to create mbuf");
 
 	tx_pkts[0] = pkt;
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1, "should transmit 1 packet");
 
 	hinic3_free_all_txq_mbufs(g_nic_dev);
@@ -1448,7 +1448,7 @@ test_compact_free_all_txq_mbufs(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: non-compact task mode ====== */
+/* ====== hinic3_xmit_pkts_compact_task: non-compact task mode ====== */
 
 static int
 test_compact_xmit_non_compact_task(void)
@@ -1470,7 +1470,7 @@ test_compact_xmit_non_compact_task(void)
 	RTE_TEST_ASSERT_NOT_NULL(pkt, "failed to create mbuf");
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1,
 			      "should transmit 1 packet in non-compact task mode");
@@ -1479,7 +1479,7 @@ test_compact_xmit_non_compact_task(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: zero pkts ====== */
+/* ====== hinic3_xmit_pkts_compact_task: zero pkts ====== */
 
 static int
 test_compact_xmit_zero_pkts(void)
@@ -1492,14 +1492,14 @@ test_compact_xmit_zero_pkts(void)
 	g_txq->owner = 1;
 	*g_ci_vaddr = 0;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, NULL, 0);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, NULL, 0);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 0, "should return 0 for zero pkts");
 
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: offload error breaks burst ====== */
+/* ====== hinic3_xmit_pkts_compact_task: offload error breaks burst ====== */
 
 static int
 test_compact_xmit_offload_error_break(void)
@@ -1526,7 +1526,7 @@ test_compact_xmit_offload_error_break(void)
 	tx_pkts[0] = pkts[0];
 	tx_pkts[1] = pkts[1];
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 2);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 2);
 
 	/* First packet succeeds, second fails, should return 1 */
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1,
@@ -1536,7 +1536,7 @@ test_compact_xmit_offload_error_break(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: IPv6 TCP no cksum ====== */
+/* ====== hinic3_xmit_pkts_compact_task: IPv6 TCP no cksum ====== */
 
 static int
 test_compact_xmit_ipv6_tcp_no_cksum(void)
@@ -1555,7 +1555,7 @@ test_compact_xmit_ipv6_tcp_no_cksum(void)
 	RTE_TEST_ASSERT_NOT_NULL(pkt, "failed to create mbuf");
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1,
 			      "should transmit 1 IPv6 packet without cksum");
@@ -1563,7 +1563,7 @@ test_compact_xmit_ipv6_tcp_no_cksum(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: large non-offload packet ====== */
+/* ====== hinic3_xmit_pkts_compact_task: large non-offload packet ====== */
 
 static int
 test_compact_xmit_large_no_offload(void)
@@ -1582,7 +1582,7 @@ test_compact_xmit_large_no_offload(void)
 	RTE_TEST_ASSERT_NOT_NULL(pkt, "failed to create mbuf");
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1,
 			      "should transmit 1 large packet");
@@ -1592,7 +1592,7 @@ test_compact_xmit_large_no_offload(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: VLAN + QINQ combined ====== */
+/* ====== hinic3_xmit_pkts_compact_task: VLAN + QINQ combined ====== */
 
 static int
 test_compact_xmit_vlan_qinq(void)
@@ -1614,7 +1614,7 @@ test_compact_xmit_vlan_qinq(void)
 	pkt->vlan_tci = 500;
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1,
 			      "should transmit 1 VLAN+QINQ packet");
@@ -1622,7 +1622,7 @@ test_compact_xmit_vlan_qinq(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: multi-seg with offload ====== */
+/* ====== hinic3_xmit_pkts_compact_task: multi-seg with offload ====== */
 
 static int
 test_compact_xmit_multiseg_offload(void)
@@ -1654,7 +1654,7 @@ test_compact_xmit_multiseg_offload(void)
 
 	tx_pkts[0] = pkts[0];
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1,
 			      "should transmit 1 multi-seg packet");
@@ -1662,7 +1662,7 @@ test_compact_xmit_multiseg_offload(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: ipinip with TSO error ====== */
+/* ====== hinic3_xmit_pkts_compact_task: ipinip with TSO error ====== */
 
 static int
 test_compact_xmit_ipinip_tso_error(void)
@@ -1683,7 +1683,7 @@ test_compact_xmit_ipinip_tso_error(void)
 	pkt->tso_segsz = 1024;
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	/* IP-in-IP + TSO is not supported, should fail */
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 0,
@@ -1696,7 +1696,7 @@ test_compact_xmit_ipinip_tso_error(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: outer IP cksum ====== */
+/* ====== hinic3_xmit_pkts_compact_task: outer IP cksum ====== */
 
 static int
 test_compact_xmit_outer_ip_cksum(void)
@@ -1716,7 +1716,7 @@ test_compact_xmit_outer_ip_cksum(void)
 	RTE_TEST_ASSERT_NOT_NULL(pkt, "failed to create mbuf");
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1,
 			      "should transmit 1 outer IP cksum packet");
@@ -1724,7 +1724,7 @@ test_compact_xmit_outer_ip_cksum(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: unsupported tunnel type ====== */
+/* ====== hinic3_xmit_pkts_compact_task: unsupported tunnel type ====== */
 
 static int
 test_compact_xmit_unsupported_tunnel(void)
@@ -1745,11 +1745,11 @@ test_compact_xmit_unsupported_tunnel(void)
 	RTE_TEST_ASSERT_NOT_NULL(pkt, "failed to create mbuf");
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	/* GRE flag is cleared only in a local variable in
 	 * hinic3_tx_offload_pkt_prepare, not in the mbuf. In
-	 * hinic3_set_tx_offload_compact_cqe, the mbuf's ol_flags still
+	 * hinic3_set_tx_offload_compact_task, the mbuf's ol_flags still
 	 * has GRE set, and the tunnel switch rejects it (default case). */
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 0,
 			      "GRE tunnel should fail (flag not cleared in mbuf)");
@@ -1760,7 +1760,7 @@ test_compact_xmit_unsupported_tunnel(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: ipinip with inner cksums ====== */
+/* ====== hinic3_xmit_pkts_compact_task: ipinip with inner cksums ====== */
 
 static int
 test_compact_xmit_ipinip_inner_cksum(void)
@@ -1781,7 +1781,7 @@ test_compact_xmit_ipinip_inner_cksum(void)
 	RTE_TEST_ASSERT_NOT_NULL(pkt, "failed to create mbuf");
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1,
 			      "should transmit 1 IPinIP with inner cksum");
@@ -1790,7 +1790,7 @@ test_compact_xmit_ipinip_inner_cksum(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: multiple VLAN tags ====== */
+/* ====== hinic3_xmit_pkts_compact_task: multiple VLAN tags ====== */
 
 static int
 test_compact_xmit_multi_vlan(void)
@@ -1845,7 +1845,7 @@ test_compact_xmit_multi_vlan(void)
 
 	tx_pkts[0] = mbuf;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1,
 			      "should transmit 1 multi-VLAN packet");
@@ -1853,7 +1853,7 @@ test_compact_xmit_multi_vlan(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: ipinip IPv6 outer ====== */
+/* ====== hinic3_xmit_pkts_compact_task: ipinip IPv6 outer ====== */
 
 static int
 test_compact_xmit_ipinip_ipv6_outer(void)
@@ -1920,7 +1920,7 @@ test_compact_xmit_ipinip_ipv6_outer(void)
 
 	tx_pkts[0] = mbuf;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1,
 			      "should transmit 1 IPv6-over-IPv4 IPinIP packet");
@@ -1929,7 +1929,7 @@ test_compact_xmit_ipinip_ipv6_outer(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: TSO basic ====== */
+/* ====== hinic3_xmit_pkts_compact_task: TSO basic ====== */
 
 static int
 test_compact_xmit_tso_basic(void)
@@ -1951,14 +1951,14 @@ test_compact_xmit_tso_basic(void)
 	pkt->tso_segsz = 1024;
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1, "should transmit 1 TSO packet");
 
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: TSO with zero segsz ====== */
+/* ====== hinic3_xmit_pkts_compact_task: TSO with zero segsz ====== */
 
 static int
 test_compact_xmit_tso_zero_segsz(void)
@@ -1979,7 +1979,7 @@ test_compact_xmit_tso_zero_segsz(void)
 	pkt->tso_segsz = 0;
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 0,
 			      "TSO with zero segsz should fail");
@@ -1990,7 +1990,7 @@ test_compact_xmit_tso_zero_segsz(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: TSO with too large payload offset ====== */
+/* ====== hinic3_xmit_pkts_compact_task: TSO with too large payload offset ====== */
 
 static int
 test_compact_xmit_tso_large_payload_offset(void)
@@ -2019,7 +2019,7 @@ test_compact_xmit_tso_large_payload_offset(void)
 	pkt->l4_len = 220;
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 0,
 			      "TSO with too large payload offset should fail");
@@ -2030,7 +2030,7 @@ test_compact_xmit_tso_large_payload_offset(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: VxLAN tunnel ====== */
+/* ====== hinic3_xmit_pkts_compact_task: VxLAN tunnel ====== */
 
 static int
 test_compact_xmit_vxlan_tunnel(void)
@@ -2121,7 +2121,7 @@ test_compact_xmit_vxlan_tunnel(void)
 
 	tx_pkts[0] = mbuf;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1,
 			      "should transmit 1 VxLAN tunnel packet");
@@ -2129,7 +2129,7 @@ test_compact_xmit_vxlan_tunnel(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: TSO VxLAN tunnel ====== */
+/* ====== hinic3_xmit_pkts_compact_task: TSO VxLAN tunnel ====== */
 
 static int
 test_compact_xmit_tso_vxlan(void)
@@ -2222,7 +2222,7 @@ test_compact_xmit_tso_vxlan(void)
 
 	tx_pkts[0] = mbuf;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1,
 			      "should transmit 1 TSO VxLAN packet");
@@ -2230,7 +2230,7 @@ test_compact_xmit_tso_vxlan(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: ipinip with fragment ====== */
+/* ====== hinic3_xmit_pkts_compact_task: ipinip with fragment ====== */
 
 static int
 test_compact_xmit_ipinip_fragment(void)
@@ -2255,7 +2255,7 @@ test_compact_xmit_ipinip_fragment(void)
 	outer_ip->fragment_offset = rte_cpu_to_be_16(0x2000);
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	/* Fragment with non-zero offset should skip inner checksum but still succeed */
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1,
@@ -2265,7 +2265,7 @@ test_compact_xmit_ipinip_fragment(void)
 	return TEST_SUCCESS;
 }
 
-/* ====== hinic3_xmit_pkts_compact_cqe: outer UDP cksum ====== */
+/* ====== hinic3_xmit_pkts_compact_task: outer UDP cksum ====== */
 
 static int
 test_compact_xmit_outer_udp_cksum(void)
@@ -2286,7 +2286,7 @@ test_compact_xmit_outer_udp_cksum(void)
 	RTE_TEST_ASSERT_NOT_NULL(pkt, "failed to create mbuf");
 	tx_pkts[0] = pkt;
 
-	nb_tx = hinic3_xmit_pkts_compact_cqe(g_txq, tx_pkts, 1);
+	nb_tx = hinic3_xmit_pkts_compact_task(g_txq, tx_pkts, 1);
 
 	RTE_TEST_ASSERT_EQUAL(nb_tx, 1,
 			      "should transmit 1 outer UDP cksum packet");
@@ -2636,7 +2636,7 @@ static struct unit_test_suite hinic3_tx_compact_test_suite = {
 	.setup = txc_suite_setup,
 	.teardown = txc_suite_teardown,
 	.unit_test_cases = {
-		/* hinic3_xmit_pkts_compact_cqe tests */
+		/* hinic3_xmit_pkts_compact_task tests */
 		TEST_CASE_ST(txc_test_setup, txc_test_teardown, test_compact_xmit_stopped),
 		TEST_CASE_ST(txc_test_setup, txc_test_teardown, test_compact_xmit_no_offload),
 		TEST_CASE_ST(txc_test_setup, txc_test_teardown, test_compact_xmit_ip_cksum),

@@ -105,7 +105,7 @@ static inline void hinic3_put_sq_wqe(struct hinic3_txq *sq,
 	sq->prod_idx -= wqe_info->wqebb_cnt;
 }
 
-static void hinic3_set_wqe_combo_compact_cqe(struct hinic3_txq *sq,
+static void hinic3_set_wqe_combo_compact_task(struct hinic3_txq *sq,
 					     struct hinic3_sq_wqe_combo *wqe_combo,
 					     struct hinic3_wqe_info *wqe_info)
 {
@@ -764,7 +764,7 @@ static int hinic3_ipinip_cksum(struct rte_mbuf *mbuf)
 	return 0;
 }
 
-static int hinic3_set_tx_offload_compact_cqe(struct hinic3_nic_dev *nic_dev,
+static int hinic3_set_tx_offload_compact_task(struct hinic3_nic_dev *nic_dev,
 					     struct rte_mbuf *mbuf,
 					     struct hinic3_sq_wqe_combo *wqe_combo,
 					     struct hinic3_wqe_info *wqe_info)
@@ -968,7 +968,7 @@ hinic3_non_tso_pkt_pre_process(struct rte_mbuf *mbuf,
 }
 
 static int
-hinic3_get_tx_offload_compact_cqe(struct rte_mbuf *mbuf,
+hinic3_get_tx_offload_compact_task(struct rte_mbuf *mbuf,
 				  struct hinic3_wqe_info *wqe_info,
 				  u32 non_tso_max_pkt_len)
 {
@@ -1200,7 +1200,7 @@ static int hinic3_mbuf_dma_map_single(struct hinic3_txq *txq,
 	return 0;
 }
 
-static void hinic3_prepare_sq_ctrl_compact_cqe(struct hinic3_sq_wqe_combo *wqe_combo,
+static void hinic3_prepare_sq_ctrl_compact_task(struct hinic3_sq_wqe_combo *wqe_combo,
 					       struct hinic3_wqe_info *wqe_info)
 {
 	struct hinic3_queue_info *queue_info = &wqe_info->queue_info;
@@ -1243,7 +1243,7 @@ static void hinic3_prepare_sq_ctrl_compact_cqe(struct hinic3_sq_wqe_combo *wqe_c
 	wqe_desc->ctrl_len = hinic3_hw_be32(wqe_desc->ctrl_len);
 }
 
-u16 hinic3_xmit_pkts_compact_cqe(void *tx_queue, struct rte_mbuf **tx_pkts, u16 nb_pkts)
+u16 hinic3_xmit_pkts_compact_task(void *tx_queue, struct rte_mbuf **tx_pkts, u16 nb_pkts)
 {
 	struct hinic3_txq *txq = tx_queue;
 	struct hinic3_nic_dev *nic_dev = txq->nic_dev;
@@ -1276,7 +1276,7 @@ u16 hinic3_xmit_pkts_compact_cqe(void *tx_queue, struct rte_mbuf **tx_pkts, u16 
 	/* Tx loop routine */
 	for (nb_tx = 0; nb_tx < nb_pkts; nb_tx++) {
 		mbuf_pkt = *tx_pkts++;
-		if (unlikely(hinic3_get_tx_offload_compact_cqe(mbuf_pkt, &wqe_info, txq->non_tso_max_pkt_len))) {
+		if (unlikely(hinic3_get_tx_offload_compact_task(mbuf_pkt, &wqe_info, txq->non_tso_max_pkt_len))) {
 			txq->txq_stats.off_errs++;
 			break;
 		}
@@ -1309,10 +1309,10 @@ u16 hinic3_xmit_pkts_compact_cqe(void *tx_queue, struct rte_mbuf **tx_pkts, u16 
 		}
 
 		/* Task or bd section maybe warpped for one wqe */
-		hinic3_set_wqe_combo_compact_cqe(txq, &wqe_combo, &wqe_info);
+		hinic3_set_wqe_combo_compact_task(txq, &wqe_combo, &wqe_info);
 
 		/* Fill tx packet offload into qsf and task field. */
-		offload_err = hinic3_set_tx_offload_compact_cqe(txq->nic_dev, mbuf_pkt, &wqe_combo, &wqe_info);
+		offload_err = hinic3_set_tx_offload_compact_task(txq->nic_dev, mbuf_pkt, &wqe_combo, &wqe_info);
 		if (unlikely(offload_err)) {
 			hinic3_put_sq_wqe(txq, &wqe_info);
 			txq->txq_stats.off_errs++;
@@ -1340,7 +1340,7 @@ u16 hinic3_xmit_pkts_compact_cqe(void *tx_queue, struct rte_mbuf **tx_pkts, u16 
 		 * sq ctrl info.
 		 */
 
-		hinic3_prepare_sq_ctrl_compact_cqe(&wqe_combo, &wqe_info);
+		hinic3_prepare_sq_ctrl_compact_task(&wqe_combo, &wqe_info);
 
 		if (mbuf_pkt->ol_flags & HINIC3_PKT_TX_TCP_SEG) {
 			header_len = mbuf_pkt->l2_len + mbuf_pkt->l3_len + mbuf_pkt->l4_len;

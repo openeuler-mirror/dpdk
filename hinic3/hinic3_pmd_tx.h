@@ -480,7 +480,7 @@ void hinic3_free_txq_mbufs(struct hinic3_txq *txq);
 
 void hinic3_free_all_txq_mbufs(struct hinic3_nic_dev *nic_dev);
 
-u16 hinic3_xmit_pkts_compact_cqe(void *tx_queue, struct rte_mbuf **tx_pkts, u16 nb_pkts);
+u16 hinic3_xmit_pkts_compact_task(void *tx_queue, struct rte_mbuf **tx_pkts, u16 nb_pkts);
 
 u16 hinic3_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, u16 nb_pkts);
 

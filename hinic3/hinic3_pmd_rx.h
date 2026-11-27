@@ -596,6 +596,10 @@ u16 hinic3_recv_pkts_sw_rss(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pk
 
 u16 hinic3_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts);
 
+/* Separate CQE queue, compact field layout (HW compact CQE capable NICs with
+ * rx_cqe_compact_en == 0, e.g. SP230). */
+u16 hinic3_recv_pkts_sep_compact_cqe(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts);
+
 u16 hinic3_recv_pkts_vec(void *rx_queue, struct rte_mbuf **rx_pkts, u16 nb_pkts);
 
 void hinic3_add_rq_to_rx_queue_list(struct hinic3_nic_dev *nic_dev,
