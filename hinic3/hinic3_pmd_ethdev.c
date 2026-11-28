@@ -3161,6 +3161,51 @@ init_qp_fail:
 	return err;
 }
 
+/*
+ * Pick the hardware RX burst for a port: the single place that maps the
+ * CQE mode / NIC capability / vector / SW-RSS combination to a burst
+ * function. Used by hinic3_dev_init() and by the SW-RSS single-queue
+ * fallback in hinic3_dev_start() (with allow_sw_rss=false, because that
+ * path needs the plain hardware burst, not the SW-RSS wrapper).
+ *
+ *   integrated compact CQE (rx_cqe_compact_en=1): compact-cqe burst (+vec)
+ *   separate CQE queue, HW compact capable NIC : sep_compact burst
+ *   separate CQE queue, otherwise              : plain burst (+vec)
+ *
+ * SW RSS wraps whichever hardware burst was chosen: it calls it internally,
+ * so the outer entry point is hinic3_recv_pkts_sw_rss. rx_sw_rss has already
+ * been folded to 0 on non-SP230 NICs by hinic3_nic_common_config_get().
+ */
+static void hinic3_select_rx_burst(struct hinic3_nic_dev *nic_dev,
+				   struct rte_eth_dev *eth_dev, bool allow_sw_rss)
+{
+	if (nic_dev->config.rx_cqe_compact_en == HINIC3_RX_CQE_COMPACT_EN) {
+		eth_dev->rx_pkt_burst = hinic3_recv_pkts_compact_cqe;
+#ifdef RTE_ARCH_ARM
+		if (nic_dev->vec_allowed == 1)
+			eth_dev->rx_pkt_burst = hinic3_recv_pkts_compact_cqe_vec;
+#endif
+#ifdef RTE_ARCH_X86_64
+		if (nic_dev->vec_allowed == 1 &&
+		    rte_cpu_get_flag_enabled(RTE_CPUFLAG_AVX2))
+			eth_dev->rx_pkt_burst =
+				hinic3_recv_pkts_compact_cqe_vec_avx2;
+#endif
+	} else {
+		if (HINIC3_SUPPORT_RX_HW_COMPACT_CQE(nic_dev))
+			eth_dev->rx_pkt_burst = hinic3_recv_pkts_sep_compact_cqe;
+		else
+			eth_dev->rx_pkt_burst = hinic3_recv_pkts;
+#ifdef RTE_ARCH_ARM
+		if (nic_dev->vec_allowed == 1)
+			eth_dev->rx_pkt_burst = hinic3_recv_pkts_vec;
+#endif
+	}
+
+	if (allow_sw_rss && nic_dev->config.rx_sw_rss)
+		eth_dev->rx_pkt_burst = hinic3_recv_pkts_sw_rss;
+}
+
 static int hinic3_dev_start(struct rte_eth_dev *eth_dev)
 {
 	struct hinic3_nic_dev *nic_dev = NULL;
@@ -3190,6 +3235,7 @@ static int hinic3_dev_start(struct rte_eth_dev *eth_dev)
 	 * Allocate rings/caches only when rx_sw_rss is explicitly enabled:
 	 * existing users without it should not pay extra hugepage cost, nor
 	 * should this add a new dev_start failure point.
+	 * rx_sw_rss is already 0 on NICs that do not support it.
 	 */
 	if (nic_dev->config.rx_sw_rss) {
 		if (nic_dev->num_rqs > 1) {
@@ -3210,9 +3256,7 @@ static int hinic3_dev_start(struct rte_eth_dev *eth_dev)
 			 * taking the per-burst fallback path in
 			 * hinic3_recv_pkts_sw_rss().
 			 */
-			eth_dev->rx_pkt_burst =
-				nic_dev->config.rx_cqe_compact_en ?
-				hinic3_recv_pkts_compact_cqe : hinic3_recv_pkts;
+			hinic3_select_rx_burst(nic_dev, eth_dev, false);
 		}
 	}
 
@@ -4346,7 +4390,8 @@ hinic3_dev_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 		/* With SW RSS enabled, what queue i actually delivers to the
 		 * application are the packets sent up by SW RSS, so use sw_rss_pkts
 		 * as the per-queue RX count to make /ethdev/stats reflect the queue
-		 * distribution after SW RSS; keep the hardware RX count otherwise. */
+		 * distribution after SW RSS; keep the hardware RX count otherwise.
+		 */
 		q_ipackets = nic_dev->config.rx_sw_rss ?
 			     rxq->rxq_stats.sw_rss_pkts :
 			     rxq->rxq_stats.packets;
@@ -5899,6 +5944,18 @@ hinic3_nic_common_config_get(struct rte_pci_device *pci_dev,
 
 	rte_kvargs_free(kvlist);
 
+	/*
+	 * SW RSS is an SP230-only feature. Fold the NIC check into the config
+	 * here so that every downstream consumer only ever has to test
+	 * config->rx_sw_rss, instead of repeating the capability predicate at
+	 * each use site.
+	 */
+	if (config->rx_sw_rss && !is_sp230_pci_dev(pci_dev)) {
+		PMD_DRV_LOG(WARNING,
+			    "rx_sw_rss is only supported on SP230, ignoring it.");
+		config->rx_sw_rss = 0;
+	}
+
 	PMD_DRV_LOG(
 		INFO, "tx_pending_limit:%upkt, tx_coalescing_time:%uus, rx_cqe_coalesce_num:%upkt, rx_cqe_timer_loop:%uus, rx_dma_align:%u, rx_empty_loop:%u.",
 		config->tx_pending_limit * HINIC3_CI_PENDING_LIMIT_UNIT, config->tx_coalescing_time * HINIC3_CI_COALESCING_TIME_UNIT,
@@ -6214,30 +6271,21 @@ static int hinic3_dev_init(struct rte_eth_dev *eth_dev)
 	}
 
 	hinic3_nic_feature_init(nic_dev);
-	
-	if (nic_dev->config.rx_cqe_compact_en == HINIC3_RX_CQE_COMPACT_EN) {
-		eth_dev->rx_pkt_burst = hinic3_recv_pkts_compact_cqe;
-		eth_dev->tx_pkt_burst = hinic3_xmit_pkts_compact_cqe;
-#ifdef RTE_ARCH_ARM
-		if (nic_dev->vec_allowed == 1)
-			eth_dev->rx_pkt_burst = hinic3_recv_pkts_compact_cqe_vec;
-#endif
-#ifdef RTE_ARCH_X86_64
-		if (nic_dev->vec_allowed == 1 &&
-		    rte_cpu_get_flag_enabled(RTE_CPUFLAG_AVX2)) {
-			eth_dev->rx_pkt_burst = hinic3_recv_pkts_compact_cqe_vec_avx2;
-		}
-#endif
-		if (nic_dev->config.rx_sw_rss)
-			eth_dev->rx_pkt_burst = hinic3_recv_pkts_sw_rss;
-	} else {
-		eth_dev->rx_pkt_burst = hinic3_recv_pkts;
+
+	hinic3_select_rx_burst(nic_dev, eth_dev, true);
+
+	/*
+	 * TX burst selection follows the firmware capability bit, NOT the RX
+	 * CQE mode: SP230/SP560 report NIC_F_TX_WQE_COMPACT_TASK and use the
+	 * compact-task burst whose task-info layout is SQ_TASK_INFO_*; SP620
+	 * uses the scalar burst with the SQ_TASK_INFO0_* layout. Mixing them
+	 * up corrupts bit 19 of pkt_info0 (TUNNEL_FLAG vs VLAN_VALID), which
+	 * breaks VLAN insertion / tunnel offload.
+	 */
+	if (HINIC3_SUPPORT_TX_WQE_COMPACT_TASK(nic_dev))
+		eth_dev->tx_pkt_burst = hinic3_xmit_pkts_compact_task;
+	else
 		eth_dev->tx_pkt_burst = hinic3_xmit_pkts;
-#ifdef RTE_ARCH_ARM
-		if (nic_dev->vec_allowed == 1)
-			eth_dev->rx_pkt_burst = hinic3_recv_pkts_vec;
-#endif
-	}
 
 	return err;
 }
